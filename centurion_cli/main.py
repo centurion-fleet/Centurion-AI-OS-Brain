@@ -1663,21 +1663,6 @@ def cmd_chat(args):
         resolved = _resolve_session_by_name_or_id(resume_val)
         if resolved:
             args.resume = resolved
-        # If resolution fails, keep the original value — _init_agent will
-        # report "Session not found" with the original input
-
-    except Exception:
-        pass
-
-    # Centurion subscription validation — non-blocking, cached 24h
-    try:
-        from centurion_cli.cloud_client import check_subscription_on_startup
-        from centurion_cli.config import load_config as _load_cfg_sub
-
-        check_subscription_on_startup(_load_cfg_sub())
-    except Exception:
-        pass
-
     # xAI retirement warning — one-shot, non-blocking, never fails startup
     try:
         from centurion_cli.xai_retirement import (
