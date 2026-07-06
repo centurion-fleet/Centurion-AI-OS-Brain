@@ -4736,6 +4736,13 @@ def start_server(
             "authentication. Only use on trusted networks.", host,
         )
 
+    # Start Bonjour/mDNS advertisement for iPhone discovery
+    try:
+        from centurion_cli.bonjour import start_advertisement
+        start_advertisement(port=port)
+    except Exception as exc:
+        _log.warning("Failed to start Bonjour advertisement: %s", exc)
+
     # Record the bound host so host_header_middleware can validate incoming
     # Host headers against it. Defends against DNS rebinding (GHSA-ppp5-vxwm-4cf7).
     # bound_port is also stashed so /api/pty can build the back-WS URL the
