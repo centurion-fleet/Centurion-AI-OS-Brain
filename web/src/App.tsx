@@ -67,8 +67,8 @@ import ProfilesPage from "@/pages/ProfilesPage";
 import SkillsPage from "@/pages/SkillsPage";
 import PluginsPage from "@/pages/PluginsPage";
 import ChatPage from "@/pages/ChatPage";
-import MissionPortfolioPage from "@/pages/mission/PortfolioPage";
-import MissionProjectPage from "@/pages/mission/ProjectPage";
+//import MissionPortfolioPage from "@/pages/mission/PortfolioPage";
+//import MissionProjectPage from "@/pages/mission/ProjectPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useI18n } from "@/i18n";
@@ -120,8 +120,8 @@ const BUILTIN_ROUTES_CORE: Record<string, ComponentType> = {
   "/config": ConfigPage,
   "/env": EnvPage,
   "/docs": DocsPage,
-  "/mission": MissionPortfolioPage,
-  "/mission/:projectId": MissionProjectPage,
+  //"/mission": MissionPortfolioPage,
+  //"/mission/:projectId": MissionProjectPage,
 };
 
 // Route placeholder for /chat.  The persistent ChatPage host (rendered

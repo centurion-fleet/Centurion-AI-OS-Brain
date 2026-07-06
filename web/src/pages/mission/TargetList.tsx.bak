@@ -17,7 +17,6 @@ import { Badge } from "@centurion-fleet/ui/ui/components/badge";
 import { Button } from "@centurion-fleet/ui/ui/components/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useMission } from "./context";
 import {
@@ -102,7 +101,7 @@ export function TargetList({ projectId, targets, tasks }: TargetListProps) {
         </span>
       </h3>
 
-      {targets.map((target, index) => {
+      {targets.map((target, _index) => {
         const typeMeta = TARGET_TYPES.find((t) => t.key === target.targetType);
         const statusMeta = TARGET_STATUSES.find((s) => s.key === target.status);
         const targetTasks = tasks.filter((t) => t.targetId === target.id);

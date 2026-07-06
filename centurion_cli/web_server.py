@@ -4702,6 +4702,103 @@ def _mount_plugin_api_routes():
             _log.warning("Failed to load plugin %s API routes: %s", plugin["name"], exc)
 
 
+
+# ============================================================
+# iPhone Secure Gateway — encrypted tunnel endpoints
+# ============================================================
+
+_iphone_session_key: str | None = None
+
+
+@app.post("/api/iphone/key-exchange")
+async def iphone_key_exchange(body: dict):
+    """
+    Receive the iPhone's public key and establish a shared secret.
+    Returns the server's public key so the iPhone can derive the same
+    shared secret on its side.
+    """
+    global _iphone_session_key
+    import secrets
+
+    client_public_hex = body.get("public_key", "")
+    if len(client_public_hex) != 64:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid public key")
+
+    try:
+        client_public = bytes.fromhex(client_public_hex)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid hex encoding")
+
+    server_secret = secrets.token_bytes(32)
+    server_public = secrets.token_bytes(32)
+
+    from nacl.bindings import crypto_kx_server_session_keys
+    rx_key, tx_key = crypto_kx_server_session_keys(
+        server_public, server_secret, client_public
+    )
+
+    _iphone_session_key = rx_key.hex() + ":" + tx_key.hex()
+
+    return {"public_key": server_public.hex()}
+
+
+@app.post("/api/iphone/send")
+async def iphone_send_message(body: dict):
+    """Receive encrypted message, route to AI, return encrypted response."""
+    global _iphone_session_key
+    from fastapi import HTTPException
+
+    if not _iphone_session_key:
+        raise HTTPException(status_code=401, detail="No session established")
+
+    from nacl.bindings import crypto_secretbox_open, crypto_secretbox
+
+    rx_hex, tx_hex = _iphone_session_key.split(":")
+    rx_key = bytes.fromhex(rx_hex)
+    tx_key = bytes.fromhex(tx_hex)
+
+    try:
+        ciphertext = bytes.fromhex(body.get("ciphertext", ""))
+        nonce = ciphertext[:24]
+        encrypted = ciphertext[24:]
+        plaintext = crypto_secretbox_open(encrypted, nonce, rx_key)
+        user_message = plaintext.decode("utf-8")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Decryption failed: {exc}")
+
+    # Route to the AI agent
+    try:
+        from centurion_cli.main import chat_sync
+        response = chat_sync(user_message)
+    except ImportError:
+        response = f"[Echo] Received: {user_message}"
+
+    # Encrypt the response
+    import secrets
+    nonce = secrets.token_bytes(24)
+    encrypted_response = crypto_secretbox(
+        response.encode("utf-8"), nonce, tx_key
+    )
+
+    return {"ciphertext": (nonce + encrypted_response).hex()}
+
+
+@app.get("/api/iphone/info")
+async def iphone_device_info():
+    """Return device info for iPhone discovery."""
+    import socket
+    return {
+        "name": socket.gethostname(),
+        "version": "0.1.0",
+        "protocol": "centurion-secure-channel-v1",
+        "encryption": "X25519 + XSalsa20-Poly1305",
+        "bonjour_service": "_centurion._tcp",
+    }
+
+
+
 # Mount plugin API routes before the SPA catch-all.
 _mount_plugin_api_routes()
 

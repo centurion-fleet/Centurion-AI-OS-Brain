@@ -16,9 +16,6 @@ import type {
   MissionProject,
   MissionTarget,
   MissionTask,
-  SwarmTaskStatus,
-  TargetType,
-  TargetStatus,
 } from "./types";
 
 /* ---- Seed data ---- */
