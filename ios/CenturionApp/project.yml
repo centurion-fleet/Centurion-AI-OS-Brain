@@ -30,4 +30,3 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.iphone
     dependencies:
       - framework: Sodium  # from SPM
-      - framework: TailscaleClient  # from SPM
