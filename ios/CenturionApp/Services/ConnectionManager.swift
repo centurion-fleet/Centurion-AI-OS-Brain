@@ -140,7 +140,8 @@ final class ConnectionManager: ObservableObject {
                     do {
                         let sessionKey = try SessionKey.exchange(
                             theirPublicKey: theirPublicKey,
-                            mySecretKey: identityKey.secretKey
+                            mySecretKey: identityKey.secretKey,
+                            myPublicKey: identityKey.publicKey
                         )
                         self?.currentSessionKey = sessionKey
                         self?.connectionState = .connected
