@@ -27,7 +27,6 @@ targets:
       - path: CenturionApp-Bridging-Header.h
     settings:
       base:
-        INFOPLIST_FILE: Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
