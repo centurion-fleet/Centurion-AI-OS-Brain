@@ -7,10 +7,6 @@ import Foundation
 /// - XSalsa20-Poly1305 authenticated encryption
 /// - Perfect Forward Secrecy via ephemeral key exchange
 /// - No session keys ever written to disk
-///
-/// This exceeds Signal's protocol by eliminating the server:
-/// there is no routing server, no metadata to leak, and no
-/// third party that even knows a conversation exists.
 
 enum CryptoError: Error, LocalizedError {
     case keyGenerationFailed
@@ -36,27 +32,27 @@ struct SessionKey {
     let createdAt: Date
     
     /// Performs X25519 ECDH key exchange
-    static func exchange(theirPublicKey: Data, mySecretKey: Data) throws -> SessionKey {
-        var sharedSecret = Data(count: 32)
+    static func exchange(theirPublicKey: Data, mySecretKey: Data, myPublicKey: Data) throws -> SessionKey {
+        var rx = Data(count: 32)
+        var tx = Data(count: 32)
         
-        let result = sharedSecret.withUnsafeMutableBytes { sharedBuf in
-            theirPublicKey.withUnsafeBytes { theirBuf in
-                mySecretKey.withUnsafeBytes { myBuf in
-                    crypto_kx_client_session_keys(
-                        nil, nil,
-                        sharedBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        myBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                        theirBuf.baseAddress?.assumingMemoryBound(to: UInt8.self)
-                    )
-                }
-            }
-        }
+        let result = crypto_kx_client_session_keys(
+            rx: &rx, tx: &tx,
+            clientPk: myPublicKey,
+            clientSk: mySecretKey,
+            serverPk: theirPublicKey
+        )
         
         guard result == 0 else {
             throw CryptoError.keyExchangeFailed
         }
         
-        return SessionKey(key: sharedSecret, createdAt: Date())
+        // Combine rx + tx into a session key
+        var combined = Data()
+        combined.append(rx)
+        combined.append(tx)
+        
+        return SessionKey(key: combined, createdAt: Date())
     }
 }
 
@@ -69,14 +65,7 @@ struct IdentityKey {
         var pk = Data(count: 32)
         var sk = Data(count: 32)
         
-        let result = pk.withUnsafeMutableBytes { pkBuf in
-            sk.withUnsafeMutableBytes { skBuf in
-                crypto_box_keypair(
-                    pkBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                    skBuf.baseAddress?.assumingMemoryBound(to: UInt8.self)
-                )
-            }
-        }
+        let result = crypto_box_keypair(pk: &pk, sk: &sk)
         
         guard result == 0 else {
             throw CryptoError.keyGenerationFailed

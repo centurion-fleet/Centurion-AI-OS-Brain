@@ -6,34 +6,26 @@ import Foundation
 /// with Perfect Forward Secrecy. Each session generates fresh
 /// ephemeral keys so that compromising today's key cannot decrypt
 /// yesterday's messages.
-///
-/// This is the same construction WireGuard uses — audited,
-/// battle-tested, and implementable in <500 lines of code.
 
 final class SecureChannel {
     private var sessionKey: SessionKey?
-    private let nonceSize = 24  // crypto_secretbox_NONCEBYTES
+    private let nonceSize = 24
     
     /// Encrypt a message for transit to the Centurion
     func encrypt(_ message: Data, using key: SessionKey) throws -> Data {
         let nonce = randomNonce()
-        var ciphertext = Data(count: message.count + crypto_secretbox_MACBYTES)
+        let ciphertextLength = message.count + crypto_secretbox_MACBYTES
+        var ciphertext = Data(count: ciphertextLength)
         
-        let result = ciphertext.withUnsafeMutableBytes { ctBuf in
-            nonce.withUnsafeBytes { nBuf in
-                message.withUnsafeBytes { mBuf in
-                    key.key.withUnsafeBytes { kBuf in
-                        crypto_secretbox_easy(
-                            ctBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            mBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            UInt64(message.count),
-                            nBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            kBuf.baseAddress?.assumingMemoryBound(to: UInt8.self)
-                        )
-                    }
-                }
-            }
-        }
+        // Use rx part of session key (first 32 bytes)
+        let encryptionKey = key.key.prefix(32)
+        
+        let result = crypto_secretbox_easy(
+            ciphertext: &ciphertext,
+            message: message,
+            nonce: nonce,
+            key: encryptionKey
+        )
         
         guard result == 0 else {
             throw CryptoError.encryptionFailed
@@ -45,30 +37,29 @@ final class SecureChannel {
     
     /// Decrypt a message received from the Centurion
     func decrypt(_ ciphertextWithNonce: Data, using key: SessionKey) throws -> Data {
-        guard ciphertextWithNonce.count >= nonceSize + crypto_secretbox_MACBYTES else {
+        guard ciphertextWithNonce.count >= nonceSize else {
             throw CryptoError.decryptionFailed
         }
         
         let nonce = ciphertextWithNonce[..<nonceSize]
         let ciphertext = ciphertextWithNonce[nonceSize...]
         
-        var plaintext = Data(count: ciphertext.count - crypto_secretbox_MACBYTES)
-        
-        let result = plaintext.withUnsafeMutableBytes { ptBuf in
-            ciphertext.withUnsafeBytes { ctBuf in
-                nonce.withUnsafeBytes { nBuf in
-                    key.key.withUnsafeBytes { kBuf in
-                        crypto_secretbox_open_easy(
-                            ptBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            ctBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            UInt64(ciphertext.count),
-                            nBuf.baseAddress?.assumingMemoryBound(to: UInt8.self),
-                            kBuf.baseAddress?.assumingMemoryBound(to: UInt8.self)
-                        )
-                    }
-                }
-            }
+        let plaintextLength = ciphertext.count - crypto_secretbox_MACBYTES
+        guard plaintextLength >= 0 else {
+            throw CryptoError.decryptionFailed
         }
+        
+        var plaintext = Data(count: plaintextLength)
+        
+        // Use tx part of session key (second 32 bytes) for decrypting responses
+        let decryptionKey = key.key.dropFirst(32).prefix(32)
+        
+        let result = crypto_secretbox_open_easy(
+            plaintext: &plaintext,
+            ciphertext: Data(ciphertext),
+            nonce: Data(nonce),
+            key: decryptionKey
+        )
         
         guard result == 0 else {
             throw CryptoError.decryptionFailed
@@ -80,9 +71,7 @@ final class SecureChannel {
     /// Generate a random nonce for each message (PFS requirement)
     private func randomNonce() -> Data {
         var nonce = Data(count: nonceSize)
-        nonce.withUnsafeMutableBytes { buf in
-            randombytes_buf(buf.baseAddress, nonceSize)
-        }
+        randombytes_buf(&nonce)
         return nonce
     }
 }
