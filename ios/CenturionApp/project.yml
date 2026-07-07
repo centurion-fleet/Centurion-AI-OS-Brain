@@ -16,16 +16,19 @@ targets:
     platform: iOS
     sources:
       - path: .
+        excludes:
+          - "project.yml"
+          - "Info.plist"
     settings:
       base:
-        INFOPLIST_FILE: CenturionApp/Info.plist
+        INFOPLIST_FILE: Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
     dependencies:
       - package: swift-sodium
     info:
-      path: CenturionApp/Info.plist
+      path: Info.plist
       properties:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
