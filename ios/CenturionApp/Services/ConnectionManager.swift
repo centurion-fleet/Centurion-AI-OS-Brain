@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import Clibsodium
 
 /// Manages the encrypted connection between iPhone and Centurion.
 ///
