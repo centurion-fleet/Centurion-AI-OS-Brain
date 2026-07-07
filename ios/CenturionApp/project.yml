@@ -15,10 +15,16 @@ targets:
     type: application
     platform: iOS
     sources:
-      - path: .
-        excludes:
-          - "project.yml"
-          - "Info.plist"
+      - path: CenturionApp.swift
+      - path: ContentView.swift
+      - path: Views
+      - path: Models
+      - path: Services
+      - path: Crypto
+      - path: Utils
+      - path: sodium_stubs.c
+      - path: sodium_stubs.h
+      - path: CenturionApp-Bridging-Header.h
     settings:
       base:
         INFOPLIST_FILE: Info.plist
