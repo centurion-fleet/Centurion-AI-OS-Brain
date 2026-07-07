@@ -1,5 +1,4 @@
 import Foundation
-import Clibsodium
 
 /// Centurion's encryption layer — built on libsodium (NaCl).
 ///

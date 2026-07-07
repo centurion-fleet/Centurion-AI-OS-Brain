@@ -1,5 +1,4 @@
 import Foundation
-import Clibsodium
 
 /// Encrypted bidirectional channel between iPhone and Centurion.
 ///
