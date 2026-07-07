@@ -151,7 +151,7 @@ final class ConnectionManager: ObservableObject {
                     }
                 }
             }
-        })
+        }))
     }
     
     private func sendData(_ data: Data, over connection: NWConnection) async throws {
