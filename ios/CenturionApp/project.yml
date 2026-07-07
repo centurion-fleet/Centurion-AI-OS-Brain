@@ -8,9 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    TARGETED_DEVICE_FAMILY: "1"  # iPhone only
     DEVELOPMENT_TEAM: ""
-    CODE_SIGN_STYLE: Automatic
 
 targets:
   CenturionApp:
@@ -18,15 +16,30 @@ targets:
     platform: iOS
     sources:
       - path: .
-        excludes:
-          - "Package.swift"
-          - "project.yml"
-          - "README.md"
-    info:
-      path: Info.plist
     settings:
       base:
-        INFOPLIST_FILE: Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.centurion.iphone
+        INFOPLIST_FILE: CenturionApp/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
     dependencies:
-      - framework: Sodium  # from SPM
+      - package: swift-sodium
+    info:
+      path: CenturionApp/Info.plist
+      properties:
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocalNetworkUsageDescription: "Centurion needs local network access to discover your Centurion on the local network via Bonjour."
+        NSBonjourServices:
+          - _centurion._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: false
+
+packages:
+  swift-sodium:
+    url: https://github.com/jedisct1/swift-sodium.git
+    from: 0.10.0
