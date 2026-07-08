@@ -8,7 +8,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ChatView(conversation: nil)
+            ChatView()
                 .tabItem { Label("Chat", systemImage: "message.fill") }
                 .tag(0)
 
