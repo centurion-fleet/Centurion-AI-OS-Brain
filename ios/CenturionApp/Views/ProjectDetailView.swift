@@ -29,7 +29,9 @@ struct ProjectDetailView: View {
                     targetsList
                 }
             }
+            .frame(maxWidth: 428)
             .padding()
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle(program.name)
         .navigationBarTitleDisplayMode(.inline)

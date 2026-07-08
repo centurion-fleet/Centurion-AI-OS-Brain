@@ -31,7 +31,9 @@ struct MissionPortfolioView: View {
                     focusActionsSection
                     targetsSection
                 }
+                .frame(maxWidth: 428)
                 .padding()
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("My Mission")
             .toolbar {

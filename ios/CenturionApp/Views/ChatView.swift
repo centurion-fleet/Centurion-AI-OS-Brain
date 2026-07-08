@@ -256,20 +256,24 @@ struct ChatView: View {
     private var emptyState: some View {
         VStack(spacing: Spacing.md) {
             Spacer()
-            Image(systemName: "message.fill")
-                .font(.system(size: 40))
-                .foregroundColor(ColorTheme.mutedText())
 
-            Text("Centurion Pulse")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(ColorTheme.primaryText())
+            VStack(spacing: Spacing.md) {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(ColorTheme.mutedText())
 
-            Text("Tap the title above to browse your conversations.\nAll messages from Mission Control appear here.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.xl)
+                Text("Centurion Pulse")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(ColorTheme.primaryText())
+
+                Text("Tap the title above to browse your conversations.\nAll messages from Mission Control appear here.")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Spacing.xl)
+            }
+            .frame(maxWidth: 428)
 
             Spacer()
         }
