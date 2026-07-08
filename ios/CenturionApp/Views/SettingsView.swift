@@ -20,16 +20,19 @@ struct SettingsView: View {
                 Section("Identity") {
                     HStack {
                         Label("Device Name", systemImage: "iphone")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text(UIDevice.current.name)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     
                     HStack {
                         Label("Public Key", systemImage: "key.fill")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Button("Show") { showKeyExport = true }
                             .font(.caption)
+                            .foregroundColor(ColorTheme.accent())
                     }
                 }
                 
@@ -37,18 +40,20 @@ struct SettingsView: View {
                 Section("Connection") {
                     HStack {
                         Label("Transport", systemImage: "network")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text(connectionManager.connectedDevice?.connectionMethod.rawValue.uppercased()
                              ?? "—")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     
                     HStack {
                         Label("Encryption", systemImage: "lock.shield.fill")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text("X25519 + XSalsa20-Poly1305")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     
                     if connectionManager.connectionState == .connected {
@@ -68,6 +73,7 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .tint(ColorTheme.accent())
                 }
                 
                 // Security section
@@ -86,17 +92,19 @@ struct SettingsView: View {
                 Section("About") {
                     HStack {
                         Label("Version", systemImage: "info.circle")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text("0.1.0")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     
                     HStack {
                         Label("Protocol", systemImage: "arrow.triangle.branch")
+                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text("Centurion Secure Channel v1")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                 }
                 
@@ -130,9 +138,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.subheadline)
+                .foregroundColor(ColorTheme.primaryText())
             Text(description)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
         }
         .padding(.vertical, 2)
     }
@@ -146,25 +155,29 @@ struct KeyExportView: View {
             VStack(spacing: 20) {
                 Image(systemName: "key.fill")
                     .font(.system(size: 48))
-                    .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                    .foregroundColor(ColorTheme.accent())
                 
                 Text("Centurion Identity Key")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .foregroundColor(ColorTheme.primaryText())
                 
                 Text("Share this public key with your Centurion to establish a secure connection.")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
                 
-                // In production: display the actual public key
                 Text("Not yet connected")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color(.systemGray6))
+                    .background(ColorTheme.surface())
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(ColorTheme.border(), lineWidth: 0.5)
+                    )
                 
                 Spacer()
             }
@@ -172,6 +185,7 @@ struct KeyExportView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .foregroundColor(ColorTheme.accent())
                 }
             }
         }

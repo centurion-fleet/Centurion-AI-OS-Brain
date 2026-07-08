@@ -1,14 +1,16 @@
 import SwiftUI
 
 /// Mission Control project detail — targets and tasks
+/// Premium card-based design with amber accents.
 struct ProjectDetailView: View {
     let project: MissionProject
     @State private var selectedTarget: MissionTarget?
     @State private var showTargetDetail = false
+    @State private var isAppeared = false
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: Spacing.md) {
                 // Project header
                 projectHeader
                 
@@ -30,112 +32,108 @@ struct ProjectDetailView: View {
                 TargetDetailView(target: target)
             }
         }
+        .onAppear {
+            withAnimation(Motion.appear.delay(0.05)) {
+                isAppeared = true
+            }
+        }
     }
     
     private var projectHeader: some View {
-        VStack(spacing: 8) {
-            HStack {
+        VStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xs) {
                 Image(systemName: project.status.icon)
                     .foregroundColor(statusColor)
+                    .font(.title3)
                 Text(project.name)
                     .font(.title2)
                     .fontWeight(.bold)
+                    .foregroundColor(ColorTheme.primaryText())
             }
             
             Text(project.description)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
             
-            // Progress
-            VStack(spacing: 4) {
+            // Progress bar
+            VStack(spacing: Spacing.xxs) {
                 ProgressView(value: Double(project.completedTaskCount), total: Double(max(project.taskCount, 1)))
-                    .tint(Color(red: 1.0, green: 0.84, blue: 0.0))
+                    .tint(ColorTheme.accent())
                 Text("\(project.completedTaskCount) of \(project.taskCount) tasks complete")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
             }
-            .padding(.top, 4)
+            .padding(.top, Spacing.xxs)
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .cardStyle()
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : 8)
     }
     
     private var securityStatus: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.sm) {
             Image(systemName: "lock.shield.fill")
-                .foregroundColor(.green)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("This project is end-to-end encrypted")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                Text("Data synced via encrypted channel to your Centurion")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
+                .foregroundColor(ColorTheme.success())
+                .font(.caption)
+            Text("This project is end-to-end encrypted")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(ColorTheme.primaryText())
             Spacer()
+            StatusDot(isConnected: true)
         }
-        .padding(12)
-        .background(Color.green.opacity(0.08))
+        .padding(Spacing.sm)
+        .background(ColorTheme.success().opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
     
     private var targetsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Targets", systemImage: "target")
-                    .font(.headline)
-                Spacer()
-                Text("\(project.targetCount)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            SectionHeader(title: "Targets", icon: "target")
             
-            // Note: In production, targets would come from the actual API
-            // For now showing preview structure
-            VStack(spacing: 8) {
-                targetRow(title: "Q3 Go-to-Market", status: "Active", tasks: "3 tasks")
-                targetRow(title: "Partner Onboarding", status: "Backlog", tasks: "0 tasks")
-                targetRow(title: "Content Strategy", status: "In Review", tasks: "5 tasks")
+            VStack(spacing: Spacing.xs) {
+                targetRow(title: "Q3 Go-to-Market", status: "Active", tasks: "3 tasks", color: ColorTheme.accent())
+                targetRow(title: "Partner Onboarding", status: "Backlog", tasks: "0 tasks", color: .gray)
+                targetRow(title: "Content Strategy", status: "In Review", tasks: "5 tasks", color: ColorTheme.accent().opacity(0.7))
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cardStyle()
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : 12)
+        .animation(Motion.appear.delay(0.1), value: isAppeared)
     }
     
-    private func targetRow(title: String, status: String, tasks: String) -> some View {
-        HStack {
+    private func targetRow(title: String, status: String, tasks: String, color: Color) -> some View {
+        HStack(spacing: Spacing.sm) {
             Circle()
-                .fill(statusColor(status))
+                .fill(color)
                 .frame(width: 8, height: 8)
+            
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .foregroundColor(ColorTheme.primaryText())
                 Text("\(status) • \(tasks)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
         }
-        .padding(10)
-        .background(Color(.systemBackground))
+        .padding(Spacing.sm)
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     
     private var recentActivity: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Recent Activity", systemImage: "clock.arrow.circlepath")
-                    .font(.headline)
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            SectionHeader(title: "Recent Activity", icon: "clock.arrow.circlepath")
             
             activityRow("Task completed: Research market positioning", time: "2h ago")
             activityRow("Target status changed: Q3 GTM → Active", time: "1d ago")
@@ -143,36 +141,30 @@ struct ProjectDetailView: View {
             
             Text("All activity logs are encrypted end-to-end")
                 .font(.caption2)
-                .foregroundColor(.secondary)
-                .padding(.top, 4)
+                .foregroundColor(ColorTheme.mutedText())
+                .padding(.top, Spacing.xxs)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cardStyle()
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : 16)
+        .animation(Motion.appear.delay(0.2), value: isAppeared)
     }
     
     private func activityRow(_ text: String, time: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: Spacing.xs) {
             Circle()
-                .fill(Color(red: 1.0, green: 0.84, blue: 0.0))
+                .fill(ColorTheme.accent())
                 .frame(width: 6, height: 6)
                 .padding(.top, 6)
+            
             VStack(alignment: .leading, spacing: 2) {
                 Text(text)
                     .font(.caption)
+                    .foregroundColor(ColorTheme.primaryText())
                 Text(time)
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
             }
-        }
-    }
-    
-    private func statusColor(_ status: String) -> Color {
-        switch status.lowercased() {
-        case "active": return .green
-        case "backlog": return .gray
-        case "in review": return .blue
-        default: return .secondary
         }
     }
     
@@ -180,7 +172,7 @@ struct ProjectDetailView: View {
         switch project.status {
         case .active: return .green
         case .onHold: return .orange
-        case .completed: return .blue
+        case .completed: return ColorTheme.accent()
         case .archived: return .gray
         }
     }
@@ -203,13 +195,14 @@ struct TargetDetailView: View {
                     ForEach(target.tasks) { task in
                         HStack {
                             Image(systemName: task.status == .done ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(task.status == .done ? .green : .secondary)
+                                .foregroundColor(task.status == .done ? ColorTheme.success() : ColorTheme.mutedText())
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(task.title)
                                     .font(.subheadline)
+                                    .foregroundColor(ColorTheme.primaryText())
                                 Text(task.status.rawValue)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(ColorTheme.mutedText())
                             }
                         }
                     }
@@ -218,7 +211,7 @@ struct TargetDetailView: View {
                 Section {
                     Text("All targets and tasks are end-to-end encrypted")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ColorTheme.mutedText())
                 }
             }
             .navigationTitle(target.title)
