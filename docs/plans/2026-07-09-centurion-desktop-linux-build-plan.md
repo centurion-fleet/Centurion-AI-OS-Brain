@@ -1,5 +1,7 @@
 # Centurion Desktop (Linux) — Native Application Build Plan
 
+> **Version lockstep:** This app is released **in lockstep with Centurion AI OS** and the **CenturionAI Remote** (iPhone app). When a new Centurion version ships (e.g. **Centurion v3 — Mission Horizon** / v3.0.0), all three — the OS, the iPhone app, and the desktop app — carry the same version number and release at the same time.
+
 > **Architecture:** The Linux desktop app IS Centurion. It runs the full Centurion AI OS Python core — agent loop, tools, memory, model providers, cron, gateways — and wraps it in a native Tauri 2 desktop shell with terminal emulator, dashboard, and a WebSocket server for the CenturionAI Remote (iPhone) app to connect to.
 
 **Tech stack:** Tauri 2 (Rust + WebView), React + TypeScript + Tailwind, xterm.js + node-pty, Python core via Unix socket IPC (existing `tui_gateway/`).

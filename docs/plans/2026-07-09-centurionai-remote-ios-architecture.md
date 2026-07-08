@@ -1,5 +1,7 @@
 # CenturionAI Remote (iOS) — Architecture & Build Plan
 
+> **Version lockstep:** This app is released **in lockstep with Centurion AI OS** and the **Centurion Desktop App**. When a new Centurion version ships (e.g. **Centurion v3 — Mission Horizon** / v3.0.0), all three — the OS, the iPhone app, and the desktop app — carry the same version number and release at the same time.
+
 > **Architecture:** The iPhone app is a **thin client / conduit** to the Linux brain. It does NOT run the AI — it connects to the Centurion AI OS running on the Linux machine (Ships_AI). All chat, tools, memory, and execution happens on Linux; the iPhone displays results and sends input.
 
 **Goal:** Rewrite the iOS app from a local-only mock into a real remote control that discovers, pairs, and securely communicates with the Linux Centurion instance.

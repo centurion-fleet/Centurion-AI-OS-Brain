@@ -3,6 +3,15 @@
 
 Generates changelogs and creates GitHub releases with CalVer tags.
 
+⚠️ VERSION LOCKSTEP POLICY:
+    Centurion AI OS, the Centurion Desktop App (Tauri), and the CenturionAI Remote
+    (iPhone app) are released as a bundle with the SAME version number. When this
+    script creates a release for the OS, the iOS Info.plist and desktop Cargo.toml
+    MUST be bumped to match before the tag is pushed.
+
+    The next major release is **Centurion v3 — Mission Horizon** (v3.0.0), jumping from
+    the current 0.x series to unify all three products under one version.
+
 Usage:
     # Preview changelog (dry run)
     python scripts/release.py

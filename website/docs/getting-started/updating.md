@@ -6,6 +6,10 @@ description: "How to update Centurion AI OS to the latest version or uninstall i
 
 # Updating & Uninstalling
 
+## Version Lockstep
+
+Centurion AI OS, the **Centurion Desktop App** (Linux native), and the **CenturionAI Remote** (iPhone) are **versioned in lockstep** — all three carry the same version number and release together. The next major release is **Centurion v3 — Mission Horizon** (v3.0.0).
+
 ## Updating
 
 ### Git installs

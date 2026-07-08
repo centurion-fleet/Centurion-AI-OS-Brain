@@ -119,6 +119,18 @@ Centurion AI OS documentation is in progress. Use `centurion --help`, `centurion
 
 ---
 
+## Versioning & Releases
+
+Centurion AI OS, the **Centurion Desktop App** (Tauri/Linux), and the **CenturionAI Remote** (iPhone app) are **versioned in lockstep** — all three products carry the same version number and are released together under a single release tag.
+
+| Version | Codename | Products |
+|---------|----------|----------|
+| v3.0.0 | **Centurion v3 — Mission Horizon** | Centurion AI OS + Desktop App + iPhone App |
+
+Releases are tagged in this repository. The version number is defined in `centurion_cli/__init__.py` (`__version__`) and `pyproject.toml`. When a new release ships, the iOS app and desktop app tags or version metadata are updated to match.
+
+---
+
 ## Migrating from OpenClaw
 
 If you're coming from OpenClaw, Centurion AI OS can automatically import your settings, memories, skills, and API keys.

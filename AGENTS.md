@@ -1123,3 +1123,19 @@ not the specific names.
 
 Reviewers should reject new change-detector tests; authors should convert
 them into invariants before re-requesting review.
+
+## Version Lockstep Policy
+
+Centurion AI OS, the **Centurion Desktop App** (Tauri, `desktop/`), and the **CenturionAI Remote** (iPhone, `ios/CenturionApp/`) are **versioned in lockstep**. All three products share the same version number and are released together.
+
+| Product | Location | Version Source |
+|---------|----------|---------------|
+| Centurion AI OS | `centurion_cli/__init__.py` | `__version__` |
+| Centurion AI OS | `pyproject.toml` | `project.version` |
+| Desktop App | `desktop/src-tauri/Cargo.toml` | `package.version` |
+| iPhone App | `ios/CenturionApp/CenturionApp/Info.plist` | `CFBundleShortVersionString` |
+
+**Rules:**
+1. No product is bumped independently — the OS version is the source of truth.
+2. Before any release tag is created, ALL three version sources must match.
+3. The next major release is **Centurion v3 — Mission Horizon** (v3.0.0), jumping from the current 0.x series.

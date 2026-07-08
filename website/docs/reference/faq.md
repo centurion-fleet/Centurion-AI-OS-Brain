@@ -114,6 +114,10 @@ Centurion AI OS itself is **free and open-source** (MIT license). You pay only f
 
 Yes. The [messaging gateway](../user-guide/messaging/index.md) lets multiple users interact with the same Centurion AI OS instance via Telegram, Discord, Slack, WhatsApp, or Home Assistant. Access is controlled through allowlists (specific user IDs) and DM pairing (first user to message claims access).
 
+### How does versioning work across the OS, desktop app, and iPhone app?
+
+Centurion AI OS, the **Centurion Desktop App** (Linux native, Tauri), and the **CenturionAI Remote** (iPhone) are **versioned in lockstep**. All three carry the same version number and release together. The next major release is **Centurion v3 — Mission Horizon** (v3.0.0).
+
 ### What's the difference between memory and skills?
 
 - **Memory** stores **facts** — things the agent knows about you, your projects, and preferences. Memories are retrieved automatically based on relevance.
