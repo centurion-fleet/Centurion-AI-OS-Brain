@@ -30,19 +30,19 @@ enum Motion {
 /// From the Not Boring philosophy: every touch should feel physical.
 enum Haptics {
     static func lightTap() {
-        UIImpactFeedbackGenerator(style: .soft, intensity: 0.7).impactOccurred()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
     
     static func mediumTap() {
-        UIImpactFeedbackGenerator(style: .medium, intensity: 0.8).impactOccurred()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
     
     static func heavyTap() {
-        UIImpactFeedbackGenerator(style: .heavy, intensity: 1.0).impactOccurred()
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
     }
     
     static func connectionEstablished() {
-        UIImpactFeedbackGenerator(style: .rigid, intensity: 0.6).impactOccurred()
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
     
     static func success() {
@@ -55,9 +55,9 @@ enum Haptics {
     
     static func messageSent() {
         // Light + medium cascade for send
-        UIImpactFeedbackGenerator(style: .soft, intensity: 0.7).impactOccurred()
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            UIImpactFeedbackGenerator(style: .light, intensity: 0.5).impactOccurred()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 }
