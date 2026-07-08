@@ -78,13 +78,47 @@ struct MissionPortfolioView: View {
         showChat = true
     }
 
+    private func openMissionChat() {
+        Haptics.lightTap()
+        chatContext = .standalone(title: "My Mission")
+        showChat = true
+    }
+
+    private func openAlertsChat() {
+        Haptics.lightTap()
+        chatContext = .standalone(title: "Alerts & Pulse")
+        showChat = true
+    }
+
+    private func openFocusChat() {
+        Haptics.lightTap()
+        chatContext = .standalone(title: "Focus Today")
+        showChat = true
+    }
+
     // MARK: - Mission Header
 
     private var missionHeader: some View {
         VStack(spacing: Spacing.xs) {
-            Image(systemName: "target")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(ColorTheme.accent())
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "target")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(ColorTheme.accent())
+
+                Spacer()
+
+                // Chat about My Mission
+                Button(action: { openMissionChat() }) {
+                    Image(systemName: "message.fill")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.accent())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(ColorTheme.accent().opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
 
             Text(mission.statement)
                 .font(.system(size: 20, weight: .bold, design: .serif))
@@ -237,13 +271,24 @@ struct MissionPortfolioView: View {
                             .font(.headline)
                             .foregroundColor(ColorTheme.primaryText())
                         Spacer()
-                        Text("\\(alertThoughts.count)")
+                        Text("\(alertThoughts.count)")
                             .font(.caption)
                             .foregroundColor(.orange)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.1))
                             .clipShape(Capsule())
+                        // Chat about alerts
+                        Button(action: { openAlertsChat() }) {
+                            Image(systemName: "message.fill")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.orange.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     ForEach(alertThoughts) { thought in
@@ -292,9 +337,20 @@ struct MissionPortfolioView: View {
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
-                Text("\\(focusActions.filter { !$0.isDone }.count) remaining")
+                Text("\(focusActions.filter { !$0.isDone }.count) remaining")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
+                // Chat about focus
+                Button(action: { openFocusChat() }) {
+                    Image(systemName: "message.fill")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.accent())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(ColorTheme.accent().opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
 
             ForEach(focusActions) { action in

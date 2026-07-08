@@ -235,7 +235,7 @@ struct ProjectDetailView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(ColorTheme.primaryText())
-                        Text("\\(target.status.rawValue) • \\(target.tasks.count) tasks")
+                        Text("\(target.status.rawValue) • \(target.tasks.count) tasks")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     }
