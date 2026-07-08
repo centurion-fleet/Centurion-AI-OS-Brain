@@ -119,10 +119,10 @@ struct ProjectDetailView: View {
             Image(systemName: "target")
                 .font(.system(size: 36))
                 .foregroundColor(ColorTheme.mutedText())
-            Text("No targets yet")
+            Text("No milestones yet")
                 .font(.headline)
                 .foregroundColor(ColorTheme.primaryText())
-            Text("Targets will appear here once the Centurion creates them")
+            Text("Milestones will appear here once the Centurion creates them")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -134,7 +134,7 @@ struct ProjectDetailView: View {
 
     private var targetsList: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            SectionHeader(title: "Targets", icon: "target")
+            SectionHeader(title: "Milestones", icon: "target")
 
             VStack(spacing: Spacing.xs) {
                 ForEach(targets) { target in

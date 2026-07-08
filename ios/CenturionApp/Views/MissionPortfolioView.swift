@@ -301,7 +301,7 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 24)
     }
 
-    // MARK: - Targets (Programs)
+    // MARK: - Milestones (Programs)
 
     private var targetsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
