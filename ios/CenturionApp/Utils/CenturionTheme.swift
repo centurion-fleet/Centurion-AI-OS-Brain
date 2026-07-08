@@ -54,12 +54,12 @@ enum ColorTheme {
     
     // MARK: - Accent
     
-    /// Primary accent — amber gold (bright in dark, classic gold in light)
+    /// Primary accent — amber gold (dark) / Centurion blue (light)
     static func accent() -> Color {
         Color(uiColor: UIColor { traitCollection in
             traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 1.0, green: 0.843, blue: 0.0, alpha: 1.0)       // #ffd700
-                : UIColor(red: 0.722, green: 0.525, blue: 0.043, alpha: 1.0)   // #b8860b
+                : UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 1.0)   // #2563eb
         })
     }
     
@@ -68,7 +68,7 @@ enum ColorTheme {
         Color(uiColor: UIColor { traitCollection in
             traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 0.722, green: 0.588, blue: 0.239, alpha: 1.0)   // #b8963d
-                : UIColor(red: 0.627, green: 0.463, blue: 0.039, alpha: 1.0)   // #a0760a
+                : UIColor(red: 0.376, green: 0.647, blue: 0.980, alpha: 1.0)   // #60a5fa
         })
     }
     
@@ -117,7 +117,7 @@ enum ColorTheme {
         Color(uiColor: UIColor { traitCollection in
             traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 0.039, green: 0.165, blue: 0.165, alpha: 0.6)   // rgba(10,42,42,0.6)
-                : UIColor(red: 0.722, green: 0.525, blue: 0.043, alpha: 0.05)  // rgba(184,134,11,0.05)
+                : UIColor(red: 0.145, green: 0.388, blue: 0.922, alpha: 0.05)  // rgba(37,99,235,0.05)
         })
     }
     
