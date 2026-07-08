@@ -55,10 +55,6 @@ struct MissionPortfolioView: View {
                     isAppeared = true
                 }
             }
-            // Context chat FAB — floating button to talk to Centurion
-            .overlay(alignment: .bottomTrailing) {
-                contextChatButton
-            }
         }
     }
     
@@ -179,31 +175,11 @@ struct MissionPortfolioView: View {
     
     /// Find the index to drop at based on vertical drag offset
     private func indexFor(y offset: CGFloat, draggedId: UUID) -> Int? {
-        let cardHeight: CGFloat = 160 // approximate card height
+        let cardHeight: CGFloat = 160
         let moveCount = Int(offset / cardHeight)
         guard let currentIndex = programs.firstIndex(where: { $0.id == draggedId }) else { return nil }
         let newIndex = currentIndex + moveCount
         return max(0, min(newIndex, programs.count - 1))
-    }
-    
-    // MARK: - Context Chat FAB
-    
-    private var contextChatButton: some View {
-        Button(action: {
-            Haptics.mediumTap()
-            // Present context chat sheet (future enhancement)
-        }) {
-            Image(systemName: "message.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 48, height: 48)
-                .background(ColorTheme.accent())
-                .clipShape(Circle())
-                .shadow(color: ColorTheme.accent().opacity(0.3), radius: 8, y: 4)
-        }
-        .padding(.trailing, Spacing.md)
-        .padding(.bottom, 70) // Above tab bar
-        .opacity(isAppeared ? 1 : 0)
     }
 }
 
