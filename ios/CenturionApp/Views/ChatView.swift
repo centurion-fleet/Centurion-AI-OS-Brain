@@ -432,6 +432,8 @@ struct ChatView: View {
     }
 }
 
+}
+
 // MARK: - Bubble Shape
 
 struct BubbleShape: Shape {
