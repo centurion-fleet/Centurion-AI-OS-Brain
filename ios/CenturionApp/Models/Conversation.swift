@@ -151,3 +151,10 @@ struct Conversation: Identifiable, Codable, Equatable {
     var icon: String { context.icon }
     var missionBadge: (name: String, color: Color) { context.missionBadge }
 }
+
+extension ConversationContext {
+    var isStandalone: Bool {
+        if case .standalone = self { return true }
+        return false
+    }
+}

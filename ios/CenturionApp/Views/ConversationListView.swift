@@ -21,9 +21,10 @@ struct ConversationListView: View {
             if messageService.conversations.isEmpty {
                 emptyState
             } else {
+                let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
+                let standaloneConvs = messageService.conversations.filter { $0.context.isStandalone }
                 List {
                     // Mission context conversations
-                    let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
                     if !missionConvs.isEmpty {
                         Section {
                             ForEach(missionConvs) { conversation in
@@ -35,7 +36,6 @@ struct ConversationListView: View {
                     }
 
                     // Standalone conversations
-                    let standaloneConvs = messageService.conversations.filter { $0.context.isStandalone }
                     if !standaloneConvs.isEmpty {
                         Section {
                             ForEach(standaloneConvs) { conversation in
