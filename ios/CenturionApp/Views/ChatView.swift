@@ -1,110 +1,191 @@
 import SwiftUI
 
-/// Full chat view — physics-based message bubbles with spring animations.
-/// Every message enters with weight and bounce, like real objects.
+/// Unified chat view — used both in the Chat tab (global stream)
+/// and as a context-aware sheet from Mission Control.
+///
+/// In **stream mode** (no contextFilter): shows every message chronologically
+/// with mission-context badges.
+///
+/// In **context mode** (contextFilter set): shows only messages for one conversation,
+/// hiding badges (the context is already obvious).
 struct ChatView: View {
-    let conversation: Conversation
+    let conversation: Conversation?
+
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var messageText = ""
     @State private var isSending = false
-    @State private var lastMessageId: UUID?
     @FocusState private var isFocused: Bool
-    
+
+    /// For GROK-style hamburger navigation
     let onSwitchConversation: ((Conversation) -> Void)?
-    
-    init(conversation: Conversation, onSwitchConversation: ((Conversation) -> Void)? = nil) {
+
+    init(conversation: Conversation? = nil, onSwitchConversation: ((Conversation) -> Void)? = nil) {
         self.conversation = conversation
         self.onSwitchConversation = onSwitchConversation
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
+            if let conversation = conversation {
+                // Context header — shows where this conversation lives in the mission hierarchy
+                contextHeader(conversation: conversation)
+            }
+
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: Spacing.sm) {
-                        // Encryption banner
-                        encryptionBanner
-                        
-                        ForEach(messageService.currentMessages) { message in
-                            MessageBubblePhysics(message: message)
-                                .id(message.id)
-                                .transition(.asymmetric(
-                                    insertion: .scale(scale: 0.85, anchor: message.role == .user ? .bottomTrailing : .bottomLeading)
-                                        .combined(with: .opacity)
-                                        .animation(Motion.appear),
-                                    removal: .opacity.animation(Motion.light)
-                                ))
+                        if let conversation = conversation {
+                            // Context mode — single conversation messages
+                            let msgs = messageService.messages(for: conversation.id)
+                            if msgs.isEmpty {
+                                emptyChatState(context: conversation.context)
+                                    .padding(.top, Spacing.xxl)
+                            } else {
+                                ForEach(msgs) { message in
+                                    MessageRow(message: message, showContext: false)
+                                        .id(message.id)
+                                }
+                            }
+                        } else {
+                            // Stream mode — ALL messages chronologically with context badges
+                            if messageService.allMessages.isEmpty {
+                                emptyGlobalStream
+                                    .padding(.top, Spacing.xxl)
+                            } else {
+                                // Date grouping headers
+                                let grouped = groupByDate(messageService.allMessages)
+                                ForEach(grouped.keys.sorted(by: >), id: \.self) { date in
+                                    Section {
+                                        ForEach(grouped[date]!) { message in
+                                            MessageRow(message: message, showContext: true)
+                                                .id(message.id)
+                                        }
+                                    } header: {
+                                        dateHeader(date)
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: messageService.currentMessages.count) { _, newCount in
-                    if let last = messageService.currentMessages.last {
-                        withAnimation(Motion.heavy) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
+                .onChange(of: messageService.allMessages.count) { _, _ in
+                    scrollToLast(proxy)
                 }
                 .onAppear {
-                    if let last = messageService.currentMessages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    scrollToLast(proxy)
                 }
             }
-            
+
             // Input bar
             inputBar
         }
-        .navigationTitle(conversation.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            messageService.loadConversation(conversation.id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isFocused = true
-            }
-        }
     }
-    
-    // MARK: - Encryption Banner
-    
-    private var encryptionBanner: some View {
+
+    // MARK: - Context Header
+
+    private func contextHeader(conversation: Conversation) -> some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: conversation.icon)
+                .font(.caption)
+                .foregroundColor(conversation.missionBadge.color)
+            Text(conversation.contextPath)
+                .font(.caption)
+                .foregroundColor(conversation.missionBadge.color)
+                .lineLimit(1)
+            Spacer()
+            Image(systemName: conversation.context.isStandalone ? "lock.fill" : "target")
+                .font(.system(size: 8))
+                .foregroundColor(ColorTheme.accent())
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(ColorTheme.accent().opacity(0.05))
+    }
+
+    // MARK: - Empty States
+
+    private func emptyChatState(context: ConversationContext) -> some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 36))
+                .foregroundColor(ColorTheme.mutedText())
+
+            Text("Chat about \(context.displayTitle)")
+                .font(.headline)
+                .foregroundColor(ColorTheme.primaryText())
+                .multilineTextAlignment(.center)
+
+            Text("Messages here appear in the full chat stream too.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    private var emptyGlobalStream: some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: "message.fill")
+                .font(.system(size: 40))
+                .foregroundColor(ColorTheme.mutedText())
+
+            Text("No messages yet")
+                .font(.headline)
+                .foregroundColor(ColorTheme.primaryText())
+
+            Text("Start a conversation from Mission Control or send a message below.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    // MARK: - Date Header
+
+    private func dateHeader(_ date: Date) -> some View {
         HStack(spacing: Spacing.xs) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 9, weight: .bold))
-            Text("End-to-end encrypted")
-                .font(.system(size: 11, weight: .medium, design: .default))
+            Rectangle()
+                .fill(ColorTheme.border())
+                .frame(height: 0.5)
+            Text(date, style: .date)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(ColorTheme.mutedText())
+                .padding(.horizontal, Spacing.xs)
+            Rectangle()
+                .fill(ColorTheme.border())
+                .frame(height: 0.5)
         }
-        .foregroundColor(ColorTheme.accent())
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, Spacing.xxs + 2)
-        .background(ColorTheme.accent().opacity(0.08))
-        .clipShape(Capsule())
-        .padding(.top, Spacing.xs)
-        .padding(.bottom, Spacing.xxs)
+        .padding(.vertical, Spacing.xs)
     }
-    
+
     // MARK: - Input Bar
-    
+
     private var inputBar: some View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(ColorTheme.border())
                 .frame(height: 0.5)
-            
+
             HStack(spacing: Spacing.sm) {
-                // Text field with amber accent
                 HStack(spacing: 0) {
-                    TextField("Message your Centurion…", text: $messageText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 16))
-                        .focused($isFocused)
-                        .disabled(connectionManager.connectionState != .connected || isSending)
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.vertical, Spacing.sm)
+                    TextField(
+                        conversation != nil
+                            ? "Message about \(conversation!.displayTitle)…"
+                            : "Message your Centurion…",
+                        text: $messageText
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .focused($isFocused)
+                    .disabled(isSending)
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.vertical, Spacing.sm)
                 }
                 .background(ColorTheme.chatInput())
                 .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -113,8 +194,7 @@ struct ChatView: View {
                         .stroke(isFocused ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
                 )
                 .animation(Motion.light, value: isFocused)
-                
-                // Send button
+
                 if isSending {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -125,14 +205,11 @@ struct ChatView: View {
                             .font(.system(size: 32))
                             .foregroundColor(
                                 messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                                || connectionManager.connectionState != .connected
                                 ? ColorTheme.mutedText()
                                 : ColorTheme.accent()
                             )
                     }
-                    .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                              || connectionManager.connectionState != .connected)
-                    .scaleEffect(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? 1.0 : 1.0)
+                    .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
                     .animation(Motion.light, value: messageText)
                 }
             }
@@ -142,122 +219,169 @@ struct ChatView: View {
         }
         .padding(.bottom, Spacing.lg)
     }
-    
+
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
-        
+
         Haptics.messageSent()
         messageText = ""
         isSending = true
-        
+
         Task {
             do {
-                try await messageService.sendMessage(text, to: conversation.id)
+                if let conversation = conversation {
+                    try await messageService.sendMessage(text, in: conversation.context)
+                } else {
+                    // When sending from the global stream, create a standalone conversation
+                    let context = ConversationContext.standalone(title: "Quick Chat")
+                    try await messageService.sendMessage(text, in: context)
+                }
             } catch {
                 Haptics.error()
-                print("Failed to send: \(error)")
             }
             isSending = false
         }
     }
-}
 
-// MARK: - Physics Message Bubble
+    // MARK: - Helpers
 
-/// A message bubble with spring-physics animation on appearance.
-/// Enters with weight, bounce, and purpose.
-struct MessageBubblePhysics: View {
-    let message: Message
-    @State private var isAppeared = false
-    
-    var body: some View {
-        HStack(alignment: .bottom, spacing: Spacing.xs) {
-            if message.role == .user { Spacer(minLength: 48) }
-            
-            if message.role == .centurion {
-                // Centurion avatar — small amber sphere
-                ZStack {
-                    Circle()
-                        .fill(ColorTheme.accent().opacity(0.15))
-                        .frame(width: 28, height: 28)
-                    Circle()
-                        .fill(ColorTheme.accent())
-                        .frame(width: 8, height: 8)
-                }
-                .padding(.bottom, 4)
-            }
-            
-            // Bubble content
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
-                if message.role == .centurion {
-                    Text("Centurion")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(ColorTheme.accent())
-                        .padding(.horizontal, 4)
-                }
-                
-                Text(message.content)
-                    .font(.system(size: 16))
-                    .foregroundColor(ColorTheme.primaryText())
-                    .padding(.horizontal, Spacing.md)
-                    .padding(.vertical, Spacing.sm)
-                    .background(message.role == .user
-                                ? ColorTheme.accent().opacity(0.12)
-                                : ColorTheme.surface())
-                    .clipShape(BubbleShape(role: message.role))
-                    .overlay(
-                        BubbleShape(role: message.role)
-                            .stroke(ColorTheme.border(), lineWidth: message.role == .user ? 0 : 0.5)
-                    )
-            }
-            .offset(y: isAppeared ? 0 : 12)
-            .opacity(isAppeared ? 1 : 0)
-            .onAppear {
-                withAnimation(Motion.appear) {
-                    isAppeared = true
-                }
-            }
-            
-            if message.role == .centurion { Spacer(minLength: 48) }
-            
-            if message.role == .user {
-                // User avatar — small amber sphere
-                ZStack {
-                    Circle()
-                        .fill(ColorTheme.accent().opacity(0.15))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(ColorTheme.accent())
-                }
-                .padding(.bottom, 4)
+    private func scrollToLast(_ proxy: ScrollViewProxy) {
+        let messages = conversation != nil
+            ? messageService.messages(for: conversation!.id)
+            : messageService.allMessages
+        if let last = messages.last {
+            withAnimation(Motion.heavy) {
+                proxy.scrollTo(last.id, anchor: .bottom)
             }
         }
+    }
+
+    private func groupByDate(_ messages: [Message]) -> [Date: [Message]] {
+        Dictionary(grouping: messages) { message in
+            Calendar.current.startOfDay(for: message.timestamp)
+        }
+    }
+}
+
+// MARK: - Message Row
+
+/// A single message in the stream — either in context mode (badge hidden)
+/// or stream mode (badge shows mission level).
+struct MessageRow: View {
+    let message: Message
+    let showContext: Bool
+
+    @EnvironmentObject private var messageService: MessageService
+    @State private var isAppeared = false
+
+    private var conversation: Conversation? {
+        messageService.conversations.first { $0.id == message.conversationId }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Context badge (only in stream mode)
+            if showContext, let conv = conversation {
+                HStack(spacing: 4) {
+                    Image(systemName: conv.icon)
+                        .font(.system(size: 8))
+                    Text(conv.contextPath)
+                        .font(.system(size: 9, weight: .medium))
+                }
+                .foregroundColor(conv.missionBadge.color)
+                .padding(.leading, 4)
+            }
+
+            // Message bubble
+            HStack(alignment: .bottom, spacing: Spacing.xs) {
+                if message.role == .user { Spacer(minLength: 48) }
+
+                if message.role == .centurion {
+                    centurionAvatar
+                }
+
+                VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
+                    if message.role == .centurion {
+                        Text("Centurion")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(ColorTheme.accent())
+                            .padding(.horizontal, 4)
+                    }
+
+                    Text(message.content)
+                        .font(.system(size: 16))
+                        .foregroundColor(ColorTheme.primaryText())
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.vertical, Spacing.sm)
+                        .background(message.role == .user
+                            ? ColorTheme.accent().opacity(0.12)
+                            : ColorTheme.surface())
+                        .clipShape(BubbleShape(role: message.role))
+                        .overlay(
+                            BubbleShape(role: message.role)
+                                .stroke(ColorTheme.border(), lineWidth: message.role == .user ? 0 : 0.5)
+                        )
+                }
+                .offset(y: isAppeared ? 0 : 12)
+                .opacity(isAppeared ? 1 : 0)
+
+                if message.role == .centurion { Spacer(minLength: 48) }
+
+                if message.role == .user {
+                    userAvatar
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(Motion.appear.delay(Double.random(in: 0.05...0.15))) {
+                isAppeared = true
+            }
+        }
+    }
+
+    private var centurionAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(ColorTheme.accent().opacity(0.15))
+                .frame(width: 28, height: 28)
+            Circle()
+                .fill(ColorTheme.accent())
+                .frame(width: 8, height: 8)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private var userAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(ColorTheme.accent().opacity(0.15))
+                .frame(width: 28, height: 28)
+            Image(systemName: "person.fill")
+                .font(.system(size: 11))
+                .foregroundColor(ColorTheme.accent())
+        }
+        .padding(.bottom, 4)
     }
 }
 
 // MARK: - Bubble Shape
 
-/// Custom chat bubble shape with tailored corners per role.
 struct BubbleShape: Shape {
     let role: MessageRole
-    
+
     func path(in rect: CGRect) -> Path {
         let radius: CGFloat = 18
         var path = Path()
-        
+
         switch role {
         case .user:
-            // User bubble — square bottom-right
             path = Path(roundedRect: rect,
                        cornerSize: CGSize(width: radius, height: radius),
                        style: .continuous)
-            // Flatten bottom-right
             path.addRect(CGRect(x: rect.maxX - radius, y: rect.maxY - radius,
                                width: radius, height: radius))
         case .centurion:
-            // Centurion bubble — square bottom-left
             path = Path(roundedRect: rect,
                        cornerSize: CGSize(width: radius, height: radius),
                        style: .continuous)
@@ -266,7 +390,16 @@ struct BubbleShape: Shape {
         case .system:
             path = Path(roundedRect: rect, cornerRadius: radius)
         }
-        
+
         return path
+    }
+}
+
+// MARK: - Context Extensions
+
+extension ConversationContext {
+    var isStandalone: Bool {
+        if case .standalone = self { return true }
+        return false
     }
 }

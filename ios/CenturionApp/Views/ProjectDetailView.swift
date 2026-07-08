@@ -1,34 +1,29 @@
 import SwiftUI
 
 /// Mission Control program detail — targets expand inline to show tasks.
-/// Drag-to-reorder targets with haptic feedback.
-/// Tasks show their status at a glance: amber dots = done, outlined = in progress, gray = todo.
+/// Everything is chat-able. Tap 💬 on any target or task to open the unified chat.
 struct ProjectDetailView: View {
     let program: MissionProgram
+    @EnvironmentObject private var messageService: MessageService
     @State private var targets: [MissionTarget] = []
-    @State private var selectedTarget: MissionTarget?
-    @State private var showTargetDetail = false
     @State private var isAppeared = false
-    
-    /// Inline expansion — tap a target to see its tasks
+
+    /// Inline expansion
     @State private var expandedTargetId: UUID?
-    
+
     /// Drag reorder state
     @State private var draggedTarget: MissionTarget?
     @State private var dragOffset: CGSize = .zero
-    
-    /// Task commenting
-    @State private var commentingOnTask: MissionTask?
-    @State private var taskComment: String = ""
-    
-    /// Target commenting
-    @State private var commentingOnTarget: MissionTarget?
-    
+
+    /// Unified chat sheet state
+    @State private var chatContext: ConversationContext?
+    @State private var showChat = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
                 programHeader
-                
+
                 if targets.isEmpty {
                     emptyTargets
                 } else {
@@ -45,45 +40,47 @@ struct ProjectDetailView: View {
                 isAppeared = true
             }
         }
-        .sheet(item: $commentingOnTask) { task in
-            MissionCommentSheet(
-                title: task.title,
-                contextPath: "\(program.name) > Task",
-                comments: Binding(
-                    get: { task.comments },
-                    set: { newComments in
-                        // Update task comments in the targets array
-                        for ti in targets.indices {
-                            if let taskIdx = targets[ti].tasks.firstIndex(where: { $0.id == task.id }) {
-                                targets[ti].tasks[taskIdx].comments = newComments
-                            }
-                        }
-                    }
-                )
-            )
-        }
-        .sheet(item: $commentingOnTarget) { target in
-            MissionCommentSheet(
-                title: target.title,
-                contextPath: "\(program.name) > Target",
-                comments: Binding(
-                    get: { target.comments },
-                    set: { newComments in
-                        if let idx = targets.firstIndex(where: { $0.id == target.id }) {
-                            targets[idx].comments = newComments
-                        }
-                    }
-                )
-            )
+        .sheet(isPresented: $showChat) {
+            if let context = chatContext {
+                chatSheet(for: context)
+            }
         }
     }
-    
+
+    // MARK: - Chat Sheet (unified)
+
+    private func chatSheet(for context: ConversationContext) -> some View {
+        let conversation = messageService.findOrCreateConversation(for: context)
+        return NavigationStack {
+            ChatView(conversation: conversation)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showChat = false }
+                    }
+                }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func openTargetChat(_ target: MissionTarget) {
+        Haptics.lightTap()
+        chatContext = ConversationContext.target(id: target.id, name: target.title, programName: program.name)
+        showChat = true
+    }
+
+    private func openTaskChat(_ task: MissionTask, in target: MissionTarget) {
+        Haptics.lightTap()
+        chatContext = ConversationContext.task(id: task.id, name: task.title, targetName: target.title, programName: program.name)
+        showChat = true
+    }
+
     private func loadPreviewTargets() {
         targets = MissionTarget.preview()
     }
-    
+
     // MARK: - Program Header
-    
+
     private var programHeader: some View {
         VStack(spacing: Spacing.sm) {
             HStack(spacing: Spacing.xs) {
@@ -96,16 +93,16 @@ struct ProjectDetailView: View {
                     .fontWeight(.bold)
                     .foregroundColor(ColorTheme.primaryText())
             }
-            
+
             Text(program.description)
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
-            
+
             VStack(spacing: Spacing.xxs) {
                 ProgressView(value: Double(program.completedTaskCount), total: Double(max(program.taskCount, 1)))
                     .tint(ColorTheme.accent())
-                Text("\(program.completedTaskCount) of \(program.taskCount) tasks complete")
+                Text("\\(program.completedTaskCount) of \\(program.taskCount) tasks complete")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -117,9 +114,9 @@ struct ProjectDetailView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 8)
     }
-    
+
     // MARK: - Empty State
-    
+
     private var emptyTargets: some View {
         VStack(spacing: Spacing.md) {
             Image(systemName: "target")
@@ -135,22 +132,20 @@ struct ProjectDetailView: View {
         }
         .padding(.vertical, Spacing.xxl)
     }
-    
+
     // MARK: - Targets with Inline Tasks + Drag Reorder
-    
+
     private var targetsList: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             SectionHeader(title: "Targets", icon: "target")
-            
+
             VStack(spacing: Spacing.xs) {
                 ForEach(targets) { target in
                     VStack(spacing: 0) {
-                        // Target row (tappable + draggable)
                         targetRow(target)
-                        
-                        // Inline tasks — shown when expanded
+
                         if expandedTargetId == target.id {
-                            inlineTasks(for: target)
+                            inlineTasks(for: target, target: target)
                                 .transition(.asymmetric(
                                     insertion: .opacity.combined(with: .move(edge: .top)),
                                     removal: .opacity
@@ -183,16 +178,13 @@ struct ProjectDetailView: View {
                                 guard let dragged = draggedTarget else { return }
                                 let cardHeight: CGFloat = 52
                                 let moveCount = Int(dragOffset.height / cardHeight)
-                                
                                 withAnimation(Motion.heavy) {
                                     if let fromIndex = targets.firstIndex(where: { $0.id == dragged.id }) {
                                         let toIndex = max(0, min(fromIndex + moveCount, targets.count - 1))
                                         if toIndex != fromIndex {
                                             targets.move(fromOffsets: IndexSet(integer: fromIndex),
                                                          toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
-                                            for (i, _) in targets.enumerated() {
-                                                targets[i].order = i
-                                            }
+                                            for (i, _) in targets.enumerated() { targets[i].order = i }
                                         }
                                     }
                                     dragOffset = .zero
@@ -211,80 +203,77 @@ struct ProjectDetailView: View {
         }
         .cardStyle()
     }
-    
+
     // MARK: - Target Row
-    
+
     private func targetRow(_ target: MissionTarget) -> some View {
         let isExpanded = expandedTargetId == target.id
-        
-        return Button(action: {
-            Haptics.lightTap()
-            withAnimation(Motion.heavy) {
-                if isExpanded {
-                    expandedTargetId = nil
-                } else {
-                    expandedTargetId = target.id
-                }
-            }
-        }) {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "line.horizontal.3")
-                    .font(.caption2)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .padding(.trailing, 2)
-                
-                Circle()
-                    .fill(targetStatusColor(target.status))
-                    .frame(width: 8, height: 8)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(target.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(ColorTheme.primaryText())
-                    Text("\(target.status.rawValue) • \(target.tasks.count) tasks")
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.mutedText())
-                }
-                
-                Spacer()
-                
-                // Comment button
-                Button(action: {
-                    Haptics.lightTap()
-                    commentingOnTarget = target
-                }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.caption2)
-                        if !target.comments.isEmpty {
-                            Text("\(target.comments.count)")
-                                .font(.caption2)
-                        }
+
+        return VStack(spacing: 0) {
+            Button(action: {
+                Haptics.lightTap()
+                withAnimation(Motion.heavy) {
+                    if isExpanded {
+                        expandedTargetId = nil
+                    } else {
+                        expandedTargetId = target.id
                     }
-                    .foregroundColor(ColorTheme.mutedText())
                 }
-                .buttonStyle(.plain)
-                .padding(.trailing, 4)
-                
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2)
-                    .foregroundColor(ColorTheme.accent())
+            }) {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "line.horizontal.3")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .padding(.trailing, 2)
+
+                    Circle()
+                        .fill(targetStatusColor(target.status))
+                        .frame(width: 8, height: 8)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(target.title)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(ColorTheme.primaryText())
+                        Text("\\(target.status.rawValue) • \\(target.tasks.count) tasks")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+
+                    Spacer()
+
+                    // Chat button — opens unified chat context for this target
+                    Button(action: { openTargetChat(target) }) {
+                        Image(systemName: "message.fill")
+                            .font(.caption2)
+                            .foregroundColor(ColorTheme.accent())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(ColorTheme.accent().opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 4)
+
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.accent())
+                }
+                .padding(Spacing.sm)
+                .background(isExpanded ? ColorTheme.accent().opacity(0.04) : ColorTheme.surface())
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isExpanded ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: isExpanded ? 1 : 0.5)
+                )
             }
-            .padding(Spacing.sm)
-            .background(isExpanded ? ColorTheme.accent().opacity(0.04) : ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isExpanded ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: isExpanded ? 1 : 0.5)
-            )
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
-    
+
     // MARK: - Inline Tasks
-    
-    private func inlineTasks(for target: MissionTarget) -> some View {
+
+    private func inlineTasks(for target: MissionTarget, target: MissionTarget) -> some View {
         VStack(spacing: 0) {
             if target.tasks.isEmpty {
                 Text("No tasks yet")
@@ -294,7 +283,7 @@ struct ProjectDetailView: View {
                     .frame(maxWidth: .infinity)
             } else {
                 ForEach(target.tasks) { task in
-                    taskRow(task)
+                    taskRow(task, in: target)
                     if task.id != target.tasks.last?.id {
                         Divider()
                             .padding(.leading, 44)
@@ -307,32 +296,31 @@ struct ProjectDetailView: View {
         .background(ColorTheme.surface().opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
-    
-    private func taskRow(_ task: MissionTask) -> some View {
+
+    private func taskRow(_ task: MissionTask, in target: MissionTarget) -> some View {
         HStack(spacing: Spacing.sm) {
-            // Status indicator — amber filled/outlined/gray
             taskStatusIcon(task.status)
-            
+
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(task.title)
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.primaryText())
-                    
+
                     if task.isBlocked {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption2)
                             .foregroundColor(.orange)
                     }
                 }
-                
+
                 Text(task.status.rawValue)
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
             }
-            
+
             Spacer()
-            
+
             if task.isBlocked, let reason = task.blockedReason {
                 Text(reason)
                     .font(.caption2)
@@ -340,24 +328,25 @@ struct ProjectDetailView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 100, alignment: .trailing)
             }
-            
-            // Comment button
-            Button(action: {
-                Haptics.lightTap()
-                commentingOnTask = task
-                taskComment = ""
-            }) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
+
+            // Chat button — opens unified chat context for this task
+            Button(action: { openTaskChat(task, in: target) }) {
+                Image(systemName: "message.fill")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.dimAccent())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(ColorTheme.dimAccent().opacity(0.1))
+                    .clipShape(Capsule())
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
     }
-    
-    /// Three-dot status system — like Things 3
+
+    // MARK: - Three-Dot Status System
+
     private func taskStatusIcon(_ status: MissionTask.TaskStatus) -> some View {
         Group {
             switch status {
@@ -393,9 +382,9 @@ struct ProjectDetailView: View {
         }
         .frame(width: 24)
     }
-    
+
     // MARK: - Helpers
-    
+
     private func targetStatusColor(_ status: MissionTarget.TargetStatus) -> Color {
         switch status {
         case .active: return ColorTheme.accent()
@@ -411,18 +400,18 @@ struct ProjectDetailView: View {
 extension MissionTarget {
     static func preview() -> [MissionTarget] {
         let tasks = [
-            MissionTask(id: UUID(), targetId: UUID(), title: "Research market positioning", description: "Analyse competitive landscape", status: .done, order: 0, isBlocked: false, createdAt: Date(), comments: []),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Draft messaging framework", description: "Core narrative and key messages", status: .inProgress, order: 1, isBlocked: true, blockedReason: "Awaiting feedback", createdAt: Date(), comments: []),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Design visual assets", description: "Brand deck and one-pager", status: .todo, order: 2, isBlocked: false, createdAt: Date(), comments: []),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Finalise budget allocation", description: "Q3 spend approval", status: .todo, order: 3, isBlocked: true, blockedReason: "Pending director review", createdAt: Date(), comments: []),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Research market positioning", description: "Analyse competitive landscape", status: .done, order: 0, isBlocked: false, createdAt: Date()),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Draft messaging framework", description: "Core narrative and key messages", status: .inProgress, order: 1, isBlocked: true, blockedReason: "Awaiting feedback", createdAt: Date()),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Design visual assets", description: "Brand deck and one-pager", status: .todo, order: 2, isBlocked: false, createdAt: Date()),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Finalise budget allocation", description: "Q3 spend approval", status: .todo, order: 3, isBlocked: true, blockedReason: "Pending director review", createdAt: Date()),
         ]
-        
+
         return [
-            MissionTarget(id: UUID(), programId: UUID(), title: "Q3 Go-to-Market", description: "Launch campaign", status: .active, order: 0, tasks: tasks, createdAt: Date(), comments: []),
-            MissionTarget(id: UUID(), programId: UUID(), title: "Partner Onboarding", description: "Onboard partners", status: .backlog, order: 1, tasks: [], createdAt: Date(), comments: []),
+            MissionTarget(id: UUID(), programId: UUID(), title: "Q3 Go-to-Market", description: "Launch campaign", status: .active, order: 0, tasks: tasks, createdAt: Date()),
+            MissionTarget(id: UUID(), programId: UUID(), title: "Partner Onboarding", description: "Onboard partners", status: .backlog, order: 1, tasks: [], createdAt: Date()),
             MissionTarget(id: UUID(), programId: UUID(), title: "Content Strategy", description: "Blog and whitepapers", status: .review, order: 2, tasks: [
-                MissionTask(id: UUID(), targetId: UUID(), title: "Write Q3 thought leadership piece", description: "", status: .todo, order: 0, isBlocked: false, createdAt: Date(), comments: []),
-            ], createdAt: Date(), comments: []),
+                MissionTask(id: UUID(), targetId: UUID(), title: "Write Q3 thought leadership piece", description: "", status: .todo, order: 0, isBlocked: false, createdAt: Date()),
+            ], createdAt: Date()),
         ]
     }
 }

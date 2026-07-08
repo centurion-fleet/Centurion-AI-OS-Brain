@@ -1,15 +1,9 @@
 import SwiftUI
 
-/// Mission Control — the Life Mission Dashboard.
-/// 
-/// This is not a project management tool. It is the cockpit where the human
-/// aligns with their Centurion on what actually advances their life mission.
-/// 
-/// Principles from the Target Series:
-/// - The vital statistic is the only number that matters
-/// - Targets must be few, clear, and measurable
-/// - The Centurion's thoughts live here, not in a separate chat
-/// - The human steers, the Centurion executes and alerts
+/// Mission Control — the cockpit where the human aligns with their Centurion.
+///
+/// Everything is chat-able. Tap 💬 on any program to chat about it.
+/// Those messages flow into the unified chat stream automatically.
 struct MissionPortfolioView: View {
     @State private var mission: LifeMission = LifeMission.preview()
     @State private var programs: [MissionProgram] = MissionProgram.preview()
@@ -17,35 +11,26 @@ struct MissionPortfolioView: View {
     @State private var focusActions: [FocusAction] = FocusAction.preview()
     @State private var searchText = ""
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var messageService: MessageService
     @State private var isAppeared = false
-    
+
     /// Drag reorder state
     @State private var draggedProgram: MissionProgram?
     @State private var dragOffset: CGSize = .zero
-    
-    /// Comment state
-    @State private var commentingProgram: MissionProgram?
-    
+
+    /// Unified chat sheet state
+    @State private var chatContext: ConversationContext?
+    @State private var showChat = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.md) {
-                    // 1. Mission Statement — the highest level
                     missionHeader
-                    
-                    // 2. Vital Statistic — the one number
                     vitalStatCard
-                    
-                    // 3. Centurion Pulse — thoughts live here
                     centurionPulse
-                    
-                    // 4. Alerts — blocked items, risks
                     alertsSection
-                    
-                    // 5. Focus Actions — what the human does today
                     focusActionsSection
-                    
-                    // 6. Current Targets — the programs
                     targetsSection
                 }
                 .padding()
@@ -64,36 +49,49 @@ struct MissionPortfolioView: View {
                 }
             }
         }
-        .sheet(item: $commentingProgram) { program in
-            MissionCommentSheet(
-                title: program.name,
-                contextPath: "Program",
-                comments: Binding(
-                    get: { program.comments },
-                    set: { newComments in
-                        if let idx = self.programs.firstIndex(where: { $0.id == program.id }) {
-                            self.programs[idx].comments = newComments
-                        }
-                    }
-                )
-            )
+        .sheet(isPresented: $showChat) {
+            if let context = chatContext {
+                chatSheet(for: context)
+            }
         }
     }
-    
+
+    // MARK: - Chat Sheet (unified)
+
+    private func chatSheet(for context: ConversationContext) -> some View {
+        let conversation = messageService.findOrCreateConversation(for: context)
+        return NavigationStack {
+            ChatView(conversation: conversation)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showChat = false }
+                    }
+                }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func openChat(for program: MissionProgram) {
+        Haptics.lightTap()
+        chatContext = ConversationContext.program(id: program.id, name: program.name)
+        showChat = true
+    }
+
     // MARK: - Mission Header
-    
+
     private var missionHeader: some View {
         VStack(spacing: Spacing.xs) {
             Image(systemName: "target")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(ColorTheme.accent())
-            
+
             Text(mission.statement)
                 .font(.system(size: 20, weight: .bold, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-            
+
             Rectangle()
                 .fill(ColorTheme.accent())
                 .frame(width: 40, height: 2)
@@ -104,12 +102,11 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 10)
     }
-    
+
     // MARK: - Vital Statistic
-    
+
     private var vitalStatCard: some View {
         HStack(spacing: Spacing.md) {
-            // Ring
             ZStack {
                 Circle()
                     .stroke(ColorTheme.border(), lineWidth: 4)
@@ -120,11 +117,11 @@ struct MissionPortfolioView: View {
                     .frame(width: 60, height: 60)
                     .rotationEffect(.degrees(-90))
                     .animation(Motion.heavy, value: mission.vitalProgress)
-                Text("\(Int(mission.vitalProgress * 100))%")
+                Text("\\(Int(mission.vitalProgress * 100))%")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ColorTheme.accent())
             }
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("Vital Statistic")
                     .font(.caption)
@@ -134,16 +131,16 @@ struct MissionPortfolioView: View {
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 HStack(spacing: 4) {
-                    Text("\(mission.vitalStatCurrent, format: .number)")
+                    Text("\\(mission.vitalStatCurrent, format: .number)")
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(ColorTheme.accent())
-                    Text("of \(mission.vitalStatTarget, format: .number)")
+                    Text("of \\(mission.vitalStatTarget, format: .number)")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                 }
             }
-            
+
             Spacer()
         }
         .padding()
@@ -151,9 +148,9 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 8)
     }
-    
+
     // MARK: - Centurion Pulse
-    
+
     private var centurionPulse: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack(spacing: Spacing.xs) {
@@ -172,7 +169,7 @@ struct MissionPortfolioView: View {
                     .background(ColorTheme.accent().opacity(0.1))
                     .clipShape(Capsule())
             }
-            
+
             ForEach(thoughts) { thought in
                 thoughtRow(thought)
             }
@@ -182,20 +179,20 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 16)
     }
-    
+
     private func thoughtRow(_ thought: CenturionThought) -> some View {
         HStack(alignment: .top, spacing: Spacing.sm) {
             Image(systemName: thought.type.icon)
                 .font(.caption)
                 .foregroundColor(thoughtTypeColor(thought.type))
                 .frame(width: 16)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(thought.text)
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.primaryText())
                     .fixedSize(horizontal: false, vertical: true)
-                
+
                 HStack(spacing: 8) {
                     Text(thought.type.rawValue)
                         .font(.caption2)
@@ -213,7 +210,7 @@ struct MissionPortfolioView: View {
         }
         .padding(.vertical, 4)
     }
-    
+
     private func thoughtTypeColor(_ type: CenturionThought.ThoughtType) -> Color {
         switch type {
         case .alert: return .orange
@@ -223,12 +220,12 @@ struct MissionPortfolioView: View {
         case .question: return ColorTheme.accent().opacity(0.7)
         }
     }
-    
+
     // MARK: - Alerts
-    
+
     private var alertsSection: some View {
         let alertThoughts = thoughts.filter { $0.type == .alert }
-        
+
         return Group {
             if !alertThoughts.isEmpty {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -240,7 +237,7 @@ struct MissionPortfolioView: View {
                             .font(.headline)
                             .foregroundColor(ColorTheme.primaryText())
                         Spacer()
-                        Text("\(alertThoughts.count)")
+                        Text("\\(alertThoughts.count)")
                             .font(.caption)
                             .foregroundColor(.orange)
                             .padding(.horizontal, 6)
@@ -248,13 +245,13 @@ struct MissionPortfolioView: View {
                             .background(Color.orange.opacity(0.1))
                             .clipShape(Capsule())
                     }
-                    
+
                     ForEach(alertThoughts) { thought in
                         HStack(spacing: Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption)
                                 .foregroundColor(.orange)
-                            
+
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(thought.text)
                                     .font(.subheadline)
@@ -266,7 +263,7 @@ struct MissionPortfolioView: View {
                                         .foregroundColor(ColorTheme.accent())
                                 }
                             }
-                            
+
                             Spacer()
                         }
                         .padding(Spacing.sm)
@@ -282,9 +279,9 @@ struct MissionPortfolioView: View {
             }
         }
     }
-    
+
     // MARK: - Focus Actions
-    
+
     private var focusActionsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack(spacing: Spacing.xs) {
@@ -295,11 +292,11 @@ struct MissionPortfolioView: View {
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
-                Text("\(focusActions.filter { !$0.isDone }.count) remaining")
+                Text("\\(focusActions.filter { !$0.isDone }.count) remaining")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
-            
+
             ForEach(focusActions) { action in
                 Button(action: {
                     Haptics.lightTap()
@@ -313,7 +310,7 @@ struct MissionPortfolioView: View {
                         Image(systemName: action.isDone ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 20))
                             .foregroundColor(action.isDone ? ColorTheme.accent() : ColorTheme.mutedText())
-                        
+
                         VStack(alignment: .leading, spacing: 1) {
                             Text(action.title)
                                 .font(.subheadline)
@@ -324,7 +321,7 @@ struct MissionPortfolioView: View {
                                 .font(.caption2)
                                 .foregroundColor(ColorTheme.accent())
                         }
-                        
+
                         Spacer()
                     }
                     .contentShape(Rectangle())
@@ -337,19 +334,16 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 24)
     }
-    
+
     // MARK: - Targets (Programs)
-    
+
     private var targetsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             SectionHeader(title: "Current Targets", icon: "target")
-            
+
             VStack(spacing: Spacing.sm) {
                 ForEach(programs) { program in
-                    ProgramCard(program: program, onComment: {
-                        Haptics.lightTap()
-                        commentingProgram = program
-                    })
+                    ProgramCard(program: program, onChat: { openChat(for: program) })
                         .overlay(alignment: .topTrailing) {
                             Image(systemName: "line.horizontal.3")
                                 .font(.caption)
@@ -401,7 +395,7 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 32)
     }
-    
+
     private func indexFor(y offset: CGFloat, draggedId: UUID) -> Int? {
         let cardHeight: CGFloat = 120
         let moveCount = Int(offset / cardHeight)
@@ -428,8 +422,8 @@ extension CenturionThought {
 
 struct ProgramCard: View {
     let program: MissionProgram
-    var onComment: (() -> Void)?
-    
+    var onChat: (() -> Void)?
+
     var body: some View {
         NavigationLink(destination: ProjectDetailView(program: program)) {
             HStack(spacing: Spacing.sm) {
@@ -437,7 +431,7 @@ struct ProgramCard: View {
                     .font(.title3)
                     .foregroundColor(ColorTheme.accent())
                     .opacity(program.status.iconOpacity)
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(program.name)
                         .font(.headline)
@@ -447,26 +441,26 @@ struct ProgramCard: View {
                         .foregroundColor(ColorTheme.mutedText())
                         .lineLimit(1)
                 }
-                
+
                 Spacer()
-                
+
                 HStack(spacing: 8) {
-                    // Comment button
-                    Button(action: { onComment?() }) {
+                    // Chat button — opens unified chat context for this program
+                    Button(action: { onChat?() }) {
                         HStack(spacing: 3) {
-                            Image(systemName: "bubble.left.and.bubble.right")
+                            Image(systemName: "message.fill")
                                 .font(.caption)
-                            if !program.comments.isEmpty {
-                                Text("\(program.comments.count)")
-                                    .font(.caption2)
-                            }
                         }
-                        .foregroundColor(ColorTheme.mutedText())
+                        .foregroundColor(ColorTheme.accent())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(ColorTheme.accent().opacity(0.1))
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    
+
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(program.completedTaskCount)/\(program.taskCount)")
+                        Text("\\(program.completedTaskCount)/\\(program.taskCount)")
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                             .foregroundColor(ColorTheme.accent())
                         Text("tasks")
