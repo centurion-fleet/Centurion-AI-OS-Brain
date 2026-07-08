@@ -9,8 +9,6 @@ struct ContentView: View {
     @State private var showConversations = false
     @State private var selectedConversation: Conversation?
     
-    private let accentGold = Color(red: 1.0, green: 0.84, blue: 0.0)
-    
     var body: some View {
         // Main content area with safe area inset for the custom tab bar
         TabView(selection: $selectedTab) {

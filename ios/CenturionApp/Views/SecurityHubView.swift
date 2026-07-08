@@ -83,7 +83,7 @@ struct SecurityHubView: View {
                 
                 detailRow(
                     icon: "lock.shield",
-                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
+                    iconColor: ColorTheme.accent(),
                     title: "No Server Discovery",
                     detail: "Centurions discovered via mDNS/Bonjour on your local network. No cloud registry, no central directory."
                 )
@@ -173,7 +173,7 @@ struct SecurityHubView: View {
                 .font(.system(size: 14, weight: .medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            supportDot(centurion, color: Color(red: 1.0, green: 0.84, blue: 0.0))
+            supportDot(centurion, color: ColorTheme.accent())
                 .frame(width: 68, alignment: .center)
             supportDot(signal, color: .secondary)
                 .frame(width: 68, alignment: .center)
@@ -261,7 +261,7 @@ struct SecurityHubView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                .foregroundColor(ColorTheme.accent())
             Text(text)
                 .font(.headline)
         }
@@ -291,11 +291,11 @@ struct SecurityHubView: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color(red: 1.0, green: 0.84, blue: 0.0).opacity(0.15))
+                    .fill(ColorTheme.accent().opacity(0.15))
                     .frame(width: 24, height: 24)
                 Text("\(number)")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                    .foregroundColor(ColorTheme.accent())
             }
             
             VStack(alignment: .leading, spacing: 2) {
@@ -315,7 +315,7 @@ struct SecurityHubView: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                .foregroundColor(ColorTheme.accent())
             Text(text)
                 .foregroundColor(.secondary)
         }

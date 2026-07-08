@@ -19,21 +19,22 @@ struct MissionProject: Identifiable, Codable, Equatable {
         case completed = "Completed"
         case archived = "Archived"
         
+        /// SF Symbol — filled for active, outlined for inactive
         var icon: String {
             switch self {
             case .active: return "play.circle.fill"
-            case .onHold: return "pause.circle.fill"
+            case .onHold: return "pause.circle"
             case .completed: return "checkmark.circle.fill"
-            case .archived: return "archivebox.fill"
+            case .archived: return "archivebox"
             }
         }
         
-        var color: String {
+        /// Icon opacity — full for active states, reduced for inactive
+        var iconOpacity: Double {
             switch self {
-            case .active: return "green"
-            case .onHold: return "orange"
-            case .completed: return "blue"
-            case .archived: return "gray"
+            case .active, .completed: return 1.0
+            case .onHold: return 0.6
+            case .archived: return 0.4
             }
         }
     }

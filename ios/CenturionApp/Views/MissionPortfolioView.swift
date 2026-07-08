@@ -120,9 +120,12 @@ struct ProjectCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: project.status.icon)
-                    .foregroundColor(statusColor)
+                    .font(.title3)
+                    .foregroundColor(ColorTheme.accent())
+                    .opacity(project.status.iconOpacity)
                 Text(project.name)
                     .font(.headline)
+                    .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 if project.isEncrypted {
                     Image(systemName: "lock.fill")
@@ -170,14 +173,5 @@ struct ProjectCard: View {
     
     private var progressColor: Color {
         progress > 0.7 ? ColorTheme.accent() : progress > 0.3 ? ColorTheme.accent().opacity(0.7) : ColorTheme.mutedText()
-    }
-    
-    private var statusColor: Color {
-        switch project.status {
-        case .active: return .green
-        case .onHold: return .orange
-        case .completed: return .blue
-        case .archived: return .gray
-        }
     }
 }

@@ -28,8 +28,8 @@ enum MessageRole: String, Codable {
     var tintColor: Color {
         switch self {
         case .user: return .accentColor
-        case .centurion: return Color(red: 1.0, green: 0.84, blue: 0.0) // Centurion gold
-        case .system: return .secondary
+        case .centurion: return ColorTheme.accent()
+        case .system: return ColorTheme.mutedText()
         }
     }
     

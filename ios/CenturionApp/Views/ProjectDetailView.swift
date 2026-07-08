@@ -43,7 +43,8 @@ struct ProjectDetailView: View {
         VStack(spacing: Spacing.sm) {
             HStack(spacing: Spacing.xs) {
                 Image(systemName: project.status.icon)
-                    .foregroundColor(statusColor)
+                    .foregroundColor(ColorTheme.accent())
+                    .opacity(project.status.iconOpacity)
                     .font(.title3)
                 Text(project.name)
                     .font(.title2)
@@ -165,15 +166,6 @@ struct ProjectDetailView: View {
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
             }
-        }
-    }
-    
-    private var statusColor: Color {
-        switch project.status {
-        case .active: return .green
-        case .onHold: return .orange
-        case .completed: return ColorTheme.accent()
-        case .archived: return .gray
         }
     }
 }
