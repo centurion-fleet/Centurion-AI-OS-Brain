@@ -152,7 +152,7 @@ struct ProjectDetailView: View {
                         y: draggedTarget?.id == target.id ? dragOffset.height : 0
                     )
                     .zIndex(draggedTarget?.id == target.id ? 100 : 0)
-                    .gesture(
+                    .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.2)
                             .sequenced(before: DragGesture())
                             .onChanged { value in

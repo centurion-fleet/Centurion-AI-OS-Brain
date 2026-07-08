@@ -303,7 +303,7 @@ struct MissionPortfolioView: View {
 
     private var targetsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            SectionHeader(title: "Current Targets", icon: "target")
+            SectionHeader(title: "Mission Programs", icon: "target")
 
             VStack(spacing: Spacing.sm) {
                 ForEach(programs) { program in
@@ -319,7 +319,7 @@ struct MissionPortfolioView: View {
                             y: draggedProgram?.id == program.id ? dragOffset.height : 0
                         )
                         .zIndex(draggedProgram?.id == program.id ? 100 : 0)
-                        .gesture(
+                        .simultaneousGesture(
                             LongPressGesture(minimumDuration: 0.3)
                                 .sequenced(before: DragGesture())
                                 .onChanged { value in
