@@ -11,8 +11,6 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var showConversations = false
     @State private var selectedConversation: Conversation?
-    @State private var showContextChat = false
-    @State private var contextChatMessage = ""
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -30,12 +28,6 @@ struct ContentView: View {
         }
         .safeAreaInset(edge: .bottom) {
             customTabBar
-        }
-        .overlay(alignment: .bottomTrailing) {
-            contextChatButton
-        }
-        .sheet(isPresented: $showContextChat) {
-            contextChatSheet
         }
         .onAppear {
             if selectedConversation == nil {
@@ -186,135 +178,6 @@ struct ContentView: View {
                 showConversations = false
             }
         }
-    }
-
-    // MARK: - Context Chat FAB
-
-    private var contextChatButton: some View {
-        Button(action: {
-            Haptics.mediumTap()
-            contextChatMessage = ""
-            withAnimation(Motion.heavy) {
-                showContextChat = true
-            }
-        }) {
-            Image(systemName: "message.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 48, height: 48)
-                .background(ColorTheme.accent())
-                .clipShape(Circle())
-                .shadow(color: ColorTheme.accent().opacity(0.3), radius: 8, y: 4)
-        }
-        .padding(.trailing, Spacing.md)
-        .padding(.bottom, 80)
-        .transition(.scale.combined(with: .opacity))
-    }
-
-    private var contextChatSheet: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                contextHeader
-
-                Divider()
-
-                VStack(spacing: Spacing.md) {
-                    ScrollView {
-                        Text("Share your thoughts with your Centurion. It will know you were looking at \\(currentTabContext).")
-                            .font(.subheadline)
-                            .foregroundColor(ColorTheme.mutedText())
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, Spacing.md)
-                    }
-
-                    HStack(spacing: Spacing.sm) {
-                        TextField("Share your thoughts…", text: $contextChatMessage)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 16))
-                            .padding(.horizontal, Spacing.md)
-                            .padding(.vertical, Spacing.sm)
-                            .background(ColorTheme.chatInput())
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(ColorTheme.border(), lineWidth: 1)
-                            )
-
-                        Button(action: sendContextMessage) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(
-                                    contextChatMessage.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? ColorTheme.mutedText() : ColorTheme.accent()
-                                )
-                        }
-                        .disabled(contextChatMessage.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                    .padding(.bottom, Spacing.md)
-                }
-                .padding(.horizontal, Spacing.md)
-            }
-            .navigationTitle("Tell your Centurion")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showContextChat = false }
-                }
-            }
-        }
-        .presentationDetents([.height(280)])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var contextHeader: some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: tabContextIcon)
-                .font(.caption)
-                .foregroundColor(ColorTheme.accent())
-            Text(currentTabContext)
-                .font(.caption)
-                .foregroundColor(ColorTheme.accent())
-            Spacer()
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .background(ColorTheme.accent().opacity(0.05))
-    }
-
-    private var currentTabContext: String {
-        switch selectedTab {
-        case 0: return "Mission Chat"
-        case 1: return "Mission Control"
-        case 2: return "Security"
-        case 3: return "Settings"
-        default: return "the app"
-        }
-    }
-
-    private var tabContextIcon: String {
-        switch selectedTab {
-        case 0: return "message.fill"
-        case 1: return "target"
-        case 2: return "shield.fill"
-        case 3: return "gearshape.fill"
-        default: return "app.fill"
-        }
-    }
-
-    private func sendContextMessage() {
-        let message = contextChatMessage.trimmingCharacters(in: .whitespaces)
-        guard !message.isEmpty else { return }
-
-        Haptics.messageSent()
-
-        // Create a standalone conversation and send the message into the unified stream
-        let context = ConversationContext.standalone(title: "Quick Thought")
-        Task {
-            try? await messageService.sendMessage(message, in: context)
-        }
-
-        contextChatMessage = ""
-        showContextChat = false
     }
 
     private func selectDefaultConversation() {

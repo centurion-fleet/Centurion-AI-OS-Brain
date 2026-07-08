@@ -102,7 +102,7 @@ struct ProjectDetailView: View {
             VStack(spacing: Spacing.xxs) {
                 ProgressView(value: Double(program.completedTaskCount), total: Double(max(program.taskCount, 1)))
                     .tint(ColorTheme.accent())
-                Text("\\(program.completedTaskCount) of \\(program.taskCount) tasks complete")
+                Text("\(program.completedTaskCount) of \(program.taskCount) tasks complete")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }

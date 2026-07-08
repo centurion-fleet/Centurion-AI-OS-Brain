@@ -117,7 +117,7 @@ struct MissionPortfolioView: View {
                     .frame(width: 60, height: 60)
                     .rotationEffect(.degrees(-90))
                     .animation(Motion.heavy, value: mission.vitalProgress)
-                Text("\\(Int(mission.vitalProgress * 100))%")
+                Text("\(Int(mission.vitalProgress * 100))%")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(ColorTheme.accent())
             }
@@ -131,11 +131,11 @@ struct MissionPortfolioView: View {
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 HStack(spacing: 4) {
-                    Text("\\(mission.vitalStatCurrent, format: .number)")
+                    Text("\(mission.vitalStatCurrent, format: .number)")
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(ColorTheme.accent())
-                    Text("of \\(mission.vitalStatTarget, format: .number)")
+                    Text("of \(mission.vitalStatTarget, format: .number)")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                 }
@@ -460,7 +460,7 @@ struct ProgramCard: View {
                     .buttonStyle(.plain)
 
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\\(program.completedTaskCount)/\\(program.taskCount)")
+                        Text("\(program.completedTaskCount)/\(program.taskCount)")
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                             .foregroundColor(ColorTheme.accent())
                         Text("tasks")
