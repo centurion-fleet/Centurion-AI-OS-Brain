@@ -140,9 +140,7 @@ struct ChatView: View {
             .padding(.vertical, Spacing.sm)
             .background(.ultraThinMaterial)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: 4)
-        }
+        .padding(.bottom, Spacing.lg)
     }
     
     private func sendMessage() {
