@@ -17,6 +17,10 @@ struct ProjectDetailView: View {
     @State private var draggedTarget: MissionTarget?
     @State private var dragOffset: CGSize = .zero
     
+    /// Task commenting
+    @State private var commentingOnTask: MissionTask?
+    @State private var taskComment: String = ""
+    
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
@@ -37,6 +41,9 @@ struct ProjectDetailView: View {
             withAnimation(Motion.appear.delay(0.05)) {
                 isAppeared = true
             }
+        }
+        .sheet(item: $commentingOnTask) { task in
+            taskCommentSheet(task)
         }
     }
     
@@ -284,6 +291,18 @@ struct ProjectDetailView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 100, alignment: .trailing)
             }
+            
+            // Comment button
+            Button(action: {
+                Haptics.lightTap()
+                commentingOnTask = task
+                taskComment = ""
+            }) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xs)
@@ -335,6 +354,93 @@ struct ProjectDetailView: View {
         case .backlog: return ColorTheme.mutedText()
         case .completed: return ColorTheme.accent()
         }
+    }
+    
+    // MARK: - Task Commenting
+    
+    private func taskCommentSheet(_ task: MissionTask) -> some View {
+        NavigationStack {
+            VStack(spacing: Spacing.md) {
+                // Context header
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.accent())
+                    Text("From: \(program.name) > task")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.accent())
+                    Spacer()
+                }
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.sm)
+                .background(ColorTheme.accent().opacity(0.05))
+                
+                VStack(spacing: Spacing.sm) {
+                    // Task info
+                    HStack {
+                        taskStatusIcon(task.status)
+                        Text(task.title)
+                            .font(.headline)
+                            .foregroundColor(ColorTheme.primaryText())
+                        Spacer()
+                    }
+                    
+                    Text("Leave a comment for your Centurion about this task. They'll see your message in context.")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                    
+                    // Comment input
+                    HStack(spacing: Spacing.sm) {
+                        TextField("Write your comment…", text: $taskComment)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 16))
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.sm)
+                            .background(ColorTheme.chatInput())
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(ColorTheme.border(), lineWidth: 1)
+                            )
+                        
+                        Button(action: { sendTaskComment(task) }) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(
+                                    taskComment.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? ColorTheme.mutedText() : ColorTheme.accent()
+                                )
+                        }
+                        .disabled(taskComment.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+                
+                Spacer()
+            }
+            .navigationTitle("Comment on Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Cancel") { commentingOnTask = nil }
+                }
+            }
+        }
+        .presentationDetents([.height(320)])
+        .presentationDragIndicator(.visible)
+    }
+    
+    private func sendTaskComment(_ task: MissionTask) {
+        let comment = taskComment.trimmingCharacters(in: .whitespaces)
+        guard !comment.isEmpty else { return }
+        
+        Haptics.messageSent()
+        // In production: send to Centurion with full context
+        // [User was viewing: $program.name > $expandedTarget (find target name) > $task.title]
+        // User comment: $comment
+        
+        taskComment = ""
+        commentingOnTask = nil
     }
 }
 
