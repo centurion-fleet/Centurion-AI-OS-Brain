@@ -31,7 +31,9 @@ final class BonjourDiscoverer {
         browser?.stateUpdateHandler = { [weak self] state in
             if case .failed(let error) = state {
                 print("[Bonjour] Discovery failed: \(error)")
-                self?.browser?.restart()
+                self?.browser?.cancel()
+                // Restart by creating a new browser
+                self?.startDiscovery()
             }
         }
         
@@ -51,7 +53,7 @@ final class BonjourDiscoverer {
     }
     
     func stopDiscovery() {
-        browser?.stop()
+        browser?.cancel()
         browser = nil
         discoveredDevices.removeAll()
         print("[Bonjour] Stopped discovery")
@@ -66,7 +68,7 @@ final class BonjourDiscoverer {
         
         if case .service(let name, let type, let domain, let interface) = result.endpoint {
             // Resolve the service to get IP address and port
-            let resolver = NWConnection.Endpoint.service(name: name, type: type, domain: domain, interface: interface)
+            let resolver = NWEndpoint.service(name: name, type: type, domain: domain, interface: interface)
             
             let params = NWParameters.tcp
             let connection = NWConnection(to: resolver, using: params)
