@@ -3,7 +3,7 @@ import SwiftUI
 /// Clean chat interface with a pull-down conversation tray.
 ///
 /// The default view shows a minimal empty state — just the brand header
-/// and an input bar. Tap the "Centurion Pulse" title bar to drop down
+/// and an input bar. Tap the "Centurion Remote" title bar to drop down
 /// the conversation tray, which groups conversations by mission area.
 ///
 /// This pattern keeps the top half clean while making all conversations
@@ -92,7 +92,7 @@ struct ChatView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(ColorTheme.accent())
 
-                Text("Centurion Pulse")
+                Text("Centurion Remote")
                     .font(.system(size: 15, weight: .semibold, design: .default))
                     .foregroundColor(ColorTheme.primaryText())
 
@@ -262,7 +262,7 @@ struct ChatView: View {
                     .font(.system(size: 40))
                     .foregroundColor(ColorTheme.mutedText())
 
-                Text("Centurion Pulse")
+                Text("Centurion Remote")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(ColorTheme.primaryText())

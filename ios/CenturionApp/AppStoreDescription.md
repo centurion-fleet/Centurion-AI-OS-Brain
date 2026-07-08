@@ -40,7 +40,7 @@ Built entirely on Apple frameworks: Bonjour/mDNS for discovery, Network framewor
 
 - Life Mission statement — your north star
 - Vital statistic — the one number that matters
-- Centurion Pulse — contextual AI thoughts, not just reactive answers
+- Centurion Remote — contextual AI thoughts, not just reactive answers
 - Focus Today — what moves your mission forward
 - Drag-reorderable programs with inline targets and tasks
 - Three-dot amber status system (Things 3 inspired)

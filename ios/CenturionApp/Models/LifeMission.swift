@@ -27,7 +27,7 @@ struct LifeMission: Identifiable, Codable {
     }
 }
 
-/// A Centurion thought — appears in the mission pulse stream
+/// A Centurion thought — appears in the remote thought stream
 struct CenturionThought: Identifiable {
     let id: UUID
     let text: String

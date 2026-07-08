@@ -191,7 +191,7 @@ This is the top of Mission Control. Everything else is subordinate.
 
 ---
 
-## 9. Centurion Pulse
+## 9. Centurion Remote
 
 Contextual thoughts from the Centurion appear in Mission Control — not just reactive answers:
 
