@@ -15,6 +15,7 @@ targets:
     type: application
     platform: iOS
     sources:
+      - path: Assets.xcassets
       - path: CenturionApp.swift
       - path: ContentView.swift
       - path: Views
