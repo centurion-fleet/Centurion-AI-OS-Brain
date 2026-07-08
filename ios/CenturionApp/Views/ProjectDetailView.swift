@@ -411,18 +411,18 @@ struct ProjectDetailView: View {
 extension MissionTarget {
     static func preview() -> [MissionTarget] {
         let tasks = [
-            MissionTask(id: UUID(), targetId: UUID(), title: "Research market positioning", description: "Analyse competitive landscape", status: .done, order: 0, isBlocked: false, createdAt: Date()),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Draft messaging framework", description: "Core narrative and key messages", status: .inProgress, order: 1, isBlocked: true, blockedReason: "Awaiting feedback", createdAt: Date()),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Design visual assets", description: "Brand deck and one-pager", status: .todo, order: 2, isBlocked: false, createdAt: Date()),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Finalise budget allocation", description: "Q3 spend approval", status: .todo, order: 3, isBlocked: true, blockedReason: "Pending director review", createdAt: Date()),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Research market positioning", description: "Analyse competitive landscape", status: .done, order: 0, isBlocked: false, createdAt: Date(), comments: []),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Draft messaging framework", description: "Core narrative and key messages", status: .inProgress, order: 1, isBlocked: true, blockedReason: "Awaiting feedback", createdAt: Date(), comments: []),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Design visual assets", description: "Brand deck and one-pager", status: .todo, order: 2, isBlocked: false, createdAt: Date(), comments: []),
+            MissionTask(id: UUID(), targetId: UUID(), title: "Finalise budget allocation", description: "Q3 spend approval", status: .todo, order: 3, isBlocked: true, blockedReason: "Pending director review", createdAt: Date(), comments: []),
         ]
         
         return [
-            MissionTarget(id: UUID(), programId: UUID(), title: "Q3 Go-to-Market", description: "Launch campaign", status: .active, order: 0, tasks: tasks, createdAt: Date()),
-            MissionTarget(id: UUID(), programId: UUID(), title: "Partner Onboarding", description: "Onboard partners", status: .backlog, order: 1, tasks: [], createdAt: Date()),
+            MissionTarget(id: UUID(), programId: UUID(), title: "Q3 Go-to-Market", description: "Launch campaign", status: .active, order: 0, tasks: tasks, createdAt: Date(), comments: []),
+            MissionTarget(id: UUID(), programId: UUID(), title: "Partner Onboarding", description: "Onboard partners", status: .backlog, order: 1, tasks: [], createdAt: Date(), comments: []),
             MissionTarget(id: UUID(), programId: UUID(), title: "Content Strategy", description: "Blog and whitepapers", status: .review, order: 2, tasks: [
-                MissionTask(id: UUID(), targetId: UUID(), title: "Write Q3 thought leadership piece", description: "", status: .todo, order: 0, isBlocked: false, createdAt: Date()),
-            ], createdAt: Date()),
+                MissionTask(id: UUID(), targetId: UUID(), title: "Write Q3 thought leadership piece", description: "", status: .todo, order: 0, isBlocked: false, createdAt: Date(), comments: []),
+            ], createdAt: Date(), comments: []),
         ]
     }
 }
