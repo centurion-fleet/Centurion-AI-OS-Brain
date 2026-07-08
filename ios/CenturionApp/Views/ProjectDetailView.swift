@@ -210,26 +210,29 @@ struct ProjectDetailView: View {
         let isExpanded = expandedTargetId == target.id
 
         return VStack(spacing: 0) {
-            Button(action: {
-                Haptics.lightTap()
-                withAnimation(Motion.heavy) {
-                    if isExpanded {
-                        expandedTargetId = nil
-                    } else {
-                        expandedTargetId = target.id
+            HStack(spacing: Spacing.sm) {
+                // Drag handle
+                Image(systemName: "line.horizontal.3")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .padding(.trailing, 2)
+
+                // Status dot
+                Circle()
+                    .fill(targetStatusColor(target.status))
+                    .frame(width: 8, height: 8)
+
+                // Title/status — tappable to expand
+                Button(action: {
+                    Haptics.lightTap()
+                    withAnimation(Motion.heavy) {
+                        if isExpanded {
+                            expandedTargetId = nil
+                        } else {
+                            expandedTargetId = target.id
+                        }
                     }
-                }
-            }) {
-                HStack(spacing: Spacing.sm) {
-                    Image(systemName: "line.horizontal.3")
-                        .font(.caption2)
-                        .foregroundColor(ColorTheme.mutedText())
-                        .padding(.trailing, 2)
-
-                    Circle()
-                        .fill(targetStatusColor(target.status))
-                        .frame(width: 8, height: 8)
-
+                }) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(target.title)
                             .font(.subheadline)
@@ -239,31 +242,32 @@ struct ProjectDetailView: View {
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     }
-
-                    Spacer()
-
-                    // Chat button — thin grey line icon
-                    Button(action: { openTargetChat(target) }) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 4)
-
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundColor(ColorTheme.accent())
                 }
-                .padding(Spacing.sm)
-                .background(isExpanded ? ColorTheme.accent().opacity(0.04) : ColorTheme.surface())
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isExpanded ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: isExpanded ? 1 : 0.5)
-                )
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Chat button — NOT nested inside another Button
+                Button(action: { openTargetChat(target) }) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+
+                // Chevron
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.accent())
             }
-            .buttonStyle(.plain)
+            .padding(Spacing.sm)
+            .background(isExpanded ? ColorTheme.accent().opacity(0.04) : ColorTheme.surface())
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isExpanded ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: isExpanded ? 1 : 0.5)
+            )
         }
     }
 

@@ -91,7 +91,7 @@ struct ContentView: View {
     private var mainConversationsView: some View {
         NavigationStack {
             chatContent
-                .navigationTitle(selectedConversation?.displayTitle ?? "Mission Chat")
+                .navigationTitle(selectedConversation?.displayTitle ?? "All Chat")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
                 .toolbar {
