@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Security Hub — every privacy and encryption detail, front and centre.
 /// Designed to answer "how is this better than Signal/Telegram?" before the user asks.
+/// Award-winning visual language: calm, minimal, amber-tinted, no emoji text.
 struct SecurityHubView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var showCryptoDetail = false
@@ -19,22 +20,14 @@ struct SecurityHubView: View {
                     // Encryption details
                     encryptionDetailsCard
                     
-                    // Comparison table
-                    comparisonCard
+                    // Comparison — card-based, no table, no emoji text
+                    comparisonSection
                     
                     // Zero trust explanation
                     zeroTrustCard
                     
-                    // Technical details
-                    if showCryptoDetail {
-                        cryptoDetailCard
-                    }
-                    
-                    Button(showCryptoDetail ? "Hide Technical Details" : "Show Technical Details") {
-                        withAnimation { showCryptoDetail.toggle() }
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    // Technical specifications
+                    cryptoFooter
                 }
                 .padding()
             }
@@ -42,24 +35,28 @@ struct SecurityHubView: View {
         }
     }
     
+    // MARK: - Hero
+    
     private var securityHero: some View {
         VStack(spacing: 16) {
             Image(systemName: connectionManager.connectionState == .connected
                   ? "lock.shield.fill" : "shield.fill")
-                .font(.system(size: 60))
+                .font(.system(size: 56))
                 .foregroundColor(connectionManager.connectionState == .connected ? .green : .secondary)
             
             Text("Your Centurion connection is")
-                .font(.title3)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
             
             Text(connectionManager.connectionState == .connected ? "SECURE" : "NOT CONNECTED")
-                .font(.largeTitle)
-                .fontWeight(.black)
-                .foregroundColor(connectionManager.connectionState == .connected ? .green : .secondary)
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(connectionManager.connectionState == .connected
+                    ? Color(red: 1.0, green: 0.84, blue: 0.0) : .secondary)
             
             if connectionManager.connectionState == .connected {
-                Text("X25519 + XSalsa20-Poly1305 • Perfect Forward Secrecy")
-                    .font(.caption)
+                Text("X25519 + XSalsa20-Poly1305 • PFS")
+                    .font(.caption2)
                     .foregroundColor(.secondary)
             }
         }
@@ -69,31 +66,25 @@ struct SecurityHubView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
     
+    // MARK: - Connection Security
+    
     private var connectionSecurityCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Connection Security", systemImage: "antenna.radiowaves.left.and.right")
-                .font(.headline)
+            sectionHeader("Connection Security", icon: "antenna.radiowaves.left.and.right")
             
             VStack(spacing: 12) {
-                securityRow(
+                detailRow(
                     icon: "wifi",
                     iconColor: .green,
                     title: "Local Network (LAN)",
-                    detail: "Direct connection to your Centurion. Zero internet required. Zero cloud dependency. Physically unreachable from outside your network."
+                    detail: "Direct connection to your Centurion. Zero internet. Zero cloud. Physically unreachable from outside your network."
                 )
                 
-                securityRow(
-                    icon: "shield.fill",
-                    iconColor: .blue,
-                    title: "Tailscale Tunnel (Remote)",
-                    detail: "WireGuard-based tunnel when away from home. No open ports, no VPN configuration, no third-party routing."
-                )
-                
-                securityRow(
-                    icon: "magnifyingglass.circle.fill",
-                    iconColor: .orange,
+                detailRow(
+                    icon: "lock.shield",
+                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
                     title: "No Server Discovery",
-                    detail: "Centurions are discovered via mDNS/Bonjour on your local network. No cloud registry, no central directory, no phone-home."
+                    detail: "Centurions discovered via mDNS/Bonjour on your local network. No cloud registry, no central directory."
                 )
             }
         }
@@ -101,40 +92,25 @@ struct SecurityHubView: View {
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
+    
+    // MARK: - Encryption Details
     
     private var encryptionDetailsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Encryption", systemImage: "key.fill")
-                .font(.headline)
+            sectionHeader("Encryption Stack", icon: "key.fill")
             
             VStack(spacing: 12) {
-                securityRow(
-                    icon: "1.circle.fill",
-                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
-                    title: "X25519 Key Exchange",
-                    detail: "Curve25519 ECDH — the same elliptic curve cryptography used by WireGuard, Signal, and Apple's iMessage. NSA-resistant."
-                )
+                stepRow(number: 1, title: "X25519 Key Exchange",
+                        detail: "Curve25519 ECDH — the same elliptic curve cryptography used by WireGuard, Signal, and Apple's iMessage.")
                 
-                securityRow(
-                    icon: "2.circle.fill",
-                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
-                    title: "XSalsa20-Poly1305 Encryption",
-                    detail: "Authenticated encryption with fast stream cipher. Each message gets a unique nonce. Tamper-proof and eavesdrop-proof."
-                )
+                stepRow(number: 2, title: "XSalsa20-Poly1305",
+                        detail: "Authenticated encryption with a unique nonce per message. Tamper-proof and eavesdrop-proof.")
                 
-                securityRow(
-                    icon: "3.circle.fill",
-                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
-                    title: "Perfect Forward Secrecy",
-                    detail: "Every session generates fresh ephemeral keys. Compromising today's key cannot decrypt yesterday's messages. Even we can't go back and read old conversations."
-                )
+                stepRow(number: 3, title: "Perfect Forward Secrecy",
+                        detail: "Every session generates fresh ephemeral keys. Today's key cannot decrypt yesterday's messages.")
                 
-                securityRow(
-                    icon: "4.circle.fill",
-                    iconColor: Color(red: 1.0, green: 0.84, blue: 0.0),
-                    title: "Zero Server Metadata",
-                    detail: "Unlike every other messaging platform, Centurion has no routing server. There is no log of who talked to who, when, or how much data moved. That metadata literally cannot exist."
-                )
+                stepRow(number: 4, title: "Zero Server Metadata",
+                        detail: "No routing server. No logs of who talked to who, when, or how much. That metadata cannot exist.")
             }
         }
         .padding()
@@ -142,43 +118,105 @@ struct SecurityHubView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
-    private var comparisonCard: some View {
+    // MARK: - Comparison (replaces old emoji table)
+    
+    private var comparisonSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("How We Compare", systemImage: "arrow.left.arrow.right")
-                .font(.headline)
+            sectionHeader("How We Compare", icon: "arrow.left.arrow.right")
             
             VStack(spacing: 0) {
-                comparisonRow(feature: "End-to-end encrypted", centurion: "✅ Always", signal: "✅ Yes", telegram: "⚠️ Secret chats")
-                Divider().padding(.leading, 100)
-                comparisonRow(feature: "Zero server metadata", centurion: "✅ Yes", signal: "❌ Has phone#", telegram: "❌ Has IP")
-                Divider().padding(.leading, 100)
-                comparisonRow(feature: "Forward secrecy", centurion: "✅ Yes", signal: "✅ Yes", telegram: "❌ No")
-                Divider().padding(.leading, 100)
-                comparisonRow(feature: "No cloud dependency", centurion: "✅ Yes", signal: "❌ Needs servers", telegram: "❌ Needs servers")
-                Divider().padding(.leading, 100)
-                comparisonRow(feature: "No phone number required", centurion: "✅ Yes", signal: "❌ Required", telegram: "❌ Required")
+                // Column header row
+                HStack(spacing: 0) {
+                    Text("")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    headerLabel("Centurion")
+                    headerLabel("Signal")
+                    headerLabel("Telegram")
+                }
+                .padding(.bottom, 8)
+                
+                Divider()
+                    .padding(.bottom, 4)
+                
+                // Feature rows
+                compareRow(feature: "End-to-end encrypted",
+                           centurion: .full, signal: .full, telegram: .partial)
+                compareRow(feature: "Zero server metadata",
+                           centurion: .full, signal: .none, telegram: .none)
+                compareRow(feature: "Forward secrecy",
+                           centurion: .full, signal: .full, telegram: .none)
+                compareRow(feature: "No cloud dependency",
+                           centurion: .full, signal: .none, telegram: .none)
+                compareRow(feature: "No phone number required",
+                           centurion: .full, signal: .none, telegram: .none)
             }
-            .font(.caption)
         }
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
+    
+    private func headerLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold, design: .default))
+            .textCase(.uppercase)
+            .foregroundColor(.secondary)
+            .frame(width: 68, alignment: .center)
+    }
+    
+    private enum SupportLevel { case full, partial, none }
+    
+    private func compareRow(feature: String, centurion: SupportLevel, signal: SupportLevel, telegram: SupportLevel) -> some View {
+        HStack(spacing: 0) {
+            Text(feature)
+                .font(.system(size: 14, weight: .medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            supportDot(centurion, color: Color(red: 1.0, green: 0.84, blue: 0.0))
+                .frame(width: 68, alignment: .center)
+            supportDot(signal, color: .secondary)
+                .frame(width: 68, alignment: .center)
+            supportDot(telegram, color: .secondary)
+                .frame(width: 68, alignment: .center)
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private func supportDot(_ level: SupportLevel, color: Color) -> some View {
+        Group {
+            switch level {
+            case .full:
+                Circle()
+                    .fill(color)
+                    .frame(width: 10, height: 10)
+            case .partial:
+                Circle()
+                    .stroke(color, lineWidth: 1.5)
+                    .frame(width: 10, height: 10)
+            case .none:
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+    }
+    
+    // MARK: - Zero Trust
     
     private var zeroTrustCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Zero Trust Architecture", systemImage: "hand.raised.fill")
-                .font(.headline)
+            sectionHeader("Zero Trust Architecture", icon: "hand.raised")
             
-            Text("Centurion has no backdoors, no admin access to your data, and no ability to read your conversations — even if compelled by law enforcement.")
+            Text("Centurion has no backdoors, no admin access to your data, and no ability to read your conversations — even if compelled.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             
-            VStack(spacing: 8) {
-                trustRow("All encryption keys generated on-device")
-                trustRow("No cloud backup of keys (optional local export)")
-                trustRow("Open source cryptographic library (libsodium)")
-                trustRow("Auditable: the entire crypto stack is ~500 lines of Swift")
+            VStack(spacing: 6) {
+                trustRow("Encryption keys generated on-device")
+                trustRow("No cloud backup of keys")
+                trustRow("Open source (libsodium)")
+                trustRow("Auditable crypto stack — ~500 lines of Swift")
             }
             .font(.caption)
         }
@@ -187,35 +225,53 @@ struct SecurityHubView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
-    private var cryptoDetailCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Technical Specifications", systemImage: "doc.text.fill")
+    // MARK: - Technical Footer
+    
+    private var cryptoFooter: some View {
+        VStack(spacing: 8) {
+            Button(showCryptoDetail ? "Hide Technical Details" : "Show Technical Details") {
+                withAnimation { showCryptoDetail.toggle() }
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+            
+            if showCryptoDetail {
+                VStack(spacing: 6) {
+                    specRow("Key Exchange", "X25519 (Curve25519 ECDH)")
+                    specRow("Encryption", "XSalsa20-Poly1305")
+                    specRow("Nonce Size", "24 bytes (192 bits)")
+                    specRow("Key Size", "32 bytes (256 bits)")
+                    specRow("Auth Tag", "Poly1305 (16 bytes)")
+                    specRow("Library", "libsodium (NaCl)")
+                    specRow("PFS", "Ephemeral keys, never persisted")
+                    specRow("Transport", "TCP over LAN (mDNS/Bonjour)")
+                }
+                .font(.caption)
+                .padding()
+                .background(Color(.systemGray5))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+    
+    // MARK: - Shared Components
+    
+    private func sectionHeader(_ text: String, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+            Text(text)
                 .font(.headline)
-            
-            Group {
-                detailRow("Key Exchange", "X25519 (Curve25519 ECDH)")
-                detailRow("Encryption", "XSalsa20-Poly1305")
-                detailRow("Nonce Size", "24 bytes (192 bits)")
-                detailRow("Key Size", "32 bytes (256 bits)")
-                detailRow("Auth Tag", "Poly1305 (16 bytes)")
-                detailRow("Library", "libsodium (NaCl)")
-                detailRow("PFS", "Ephemeral session keys, never persisted")
-                detailRow("Transport", "TCP over LAN or WireGuard (Tailscale)")
-                detailRow("Discovery", "mDNS/Bonjour (_centurion._tcp)")
-            }
-            .font(.caption)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
-    private func securityRow(icon: String, iconColor: Color, title: String, detail: String) -> some View {
+    private func detailRow(icon: String, iconColor: Color, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(iconColor)
                 .font(.title3)
-                .frame(width: 24)
+                .frame(width: 20)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -225,36 +281,46 @@ struct SecurityHubView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
     
-    private func comparisonRow(feature: String, centurion: String, signal: String, telegram: String) -> some View {
-        HStack(spacing: 0) {
-            Text(feature)
-                .frame(width: 100, alignment: .leading)
-                .fontWeight(.medium)
-            Text(centurion)
-                .frame(width: 60, alignment: .center)
-                .foregroundColor(.green)
-            Text(signal)
-                .frame(width: 60, alignment: .center)
-            Text(telegram)
-                .frame(width: 70, alignment: .center)
+    private func stepRow(number: Int, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.84, blue: 0.0).opacity(0.15))
+                    .frame(width: 24, height: 24)
+                Text("\(number)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.vertical, 6)
     }
     
     private func trustRow(_ text: String) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.shield.fill")
-                .foregroundColor(.green)
-                .font(.caption)
+            Image(systemName: "checkmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
             Text(text)
+                .foregroundColor(.secondary)
         }
     }
     
-    private func detailRow(_ label: String, _ value: String) -> some View {
+    private func specRow(_ label: String, _ value: String) -> some View {
         HStack {
             Text(label)
                 .foregroundColor(.secondary)
@@ -263,6 +329,7 @@ struct SecurityHubView: View {
             Text(value)
                 .fontWeight(.medium)
                 .fontDesign(.monospaced)
+                .font(.caption)
         }
     }
 }

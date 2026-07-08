@@ -108,10 +108,9 @@ struct ConnectionView: View {
                 .font(.headline)
             
             VStack(alignment: .leading, spacing: 8) {
-                privacyRow("End-to-end encrypted", "Messages are encrypted before they leave your phone")
-                privacyRow("No cloud dependency", "Connects directly to your Centurion, no servers involved")
-                privacyRow("Zero metadata", "No one can see who you talk to, when, or how much")
-                privacyRow("Tailscale away from home", "Secure WireGuard tunnel when you're on the go")
+                privacyRow("No metadata", "Messages encrypted before they leave your phone")
+                privacyRow("No cloud servers", "Connects directly to your Centurion")
+                privacyRow("Zero logs", "No one sees who you talk to or when")
             }
             .font(.caption)
             .foregroundColor(.secondary)

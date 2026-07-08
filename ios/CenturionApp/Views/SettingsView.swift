@@ -56,7 +56,7 @@ struct SettingsView: View {
                 Section("Security") {
                     privacyRow("Messages are encrypted end-to-end",
                                "Your Centurion is the only device that can decrypt them")
-                    privacyRow("No server metadata",
+                    privacyRow("No metadata in transit",
                                "Unlike Signal or Telegram, there is no routing server")
                     privacyRow("Forward secrecy",
                                "Today's keys can't decrypt yesterday's messages")
