@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Mission Control portfolio — list of all your projects
+/// Mission Control portfolio — premium project overview with amber accents
 struct MissionPortfolioView: View {
     @State private var projects: [MissionProject] = MissionProject.preview()
     @State private var searchText = ""
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @State private var isAppeared = false
     
     var filteredProjects: [MissionProject] {
         if searchText.isEmpty { return projects }
@@ -14,9 +15,11 @@ struct MissionPortfolioView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: Spacing.md) {
                     // Security banner
                     securityBanner
+                        .opacity(isAppeared ? 1 : 0)
+                        .offset(y: isAppeared ? 0 : 10)
                     
                     // Stats summary
                     statsSummary
@@ -37,13 +40,16 @@ struct MissionPortfolioView: View {
             .searchable(text: $searchText, prompt: "Search projects…")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    // Only visible when connected
                     if connectionManager.connectionState == .connected {
-                        Image(systemName: "lock.shield.fill")
-                            .foregroundColor(.green)
-                            .font(.caption)
+                        StatusDot(isConnected: true)
                     }
                 }
+            }
+            .onAppear {
+                withAnimation(Motion.appear.delay(0.1)) {
+                    isAppeared = true
+                }
+            }
             }
         }
     }

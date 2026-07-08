@@ -42,17 +42,18 @@ struct SecurityHubView: View {
             Image(systemName: connectionManager.connectionState == .connected
                   ? "lock.shield.fill" : "shield.fill")
                 .font(.system(size: 56))
-                .foregroundColor(connectionManager.connectionState == .connected ? .green : .secondary)
+                .foregroundColor(connectionManager.connectionState == .connected
+                    ? ColorTheme.success() : ColorTheme.mutedText())
             
             Text("Your Centurion connection is")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
             
             Text(connectionManager.connectionState == .connected ? "SECURE" : "NOT CONNECTED")
                 .font(.title)
                 .fontWeight(.bold)
                 .foregroundColor(connectionManager.connectionState == .connected
-                    ? Color(red: 1.0, green: 0.84, blue: 0.0) : .secondary)
+                    ? ColorTheme.accent() : ColorTheme.mutedText())
             
             if connectionManager.connectionState == .connected {
                 Text("X25519 + XSalsa20-Poly1305 • PFS")

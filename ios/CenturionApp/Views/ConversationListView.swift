@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Conversation list — used both as the main inbox and as a GROK-style
-/// side panel sheet accessible via the ☰ hamburger button.
+/// Conversation list — premium side panel with amber-accented rows.
+/// Each row feels like a physical card with spring touch feedback.
 struct ConversationListView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
     
-    /// Called when a conversation is selected from the list
     let onSelect: ((Conversation) -> Void)?
     
     init(onSelect: ((Conversation) -> Void)? = nil) {
@@ -19,14 +18,21 @@ struct ConversationListView: View {
                 emptyState
             } else {
                 List(messageService.conversations) { conversation in
-                    Button(action: { onSelect?(conversation) }) {
-                        ConversationRow(conversation: conversation)
+                    Button(action: {
+                        Haptics.mediumTap()
+                        onSelect?(conversation)
+                    }) {
+                        ConversationRowPremium(conversation: conversation)
                     }
                     .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
                 }
                 .listStyle(.plain)
             }
         }
+        .navigationTitle("Conversations")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             if connectionManager.connectionState == .disconnected {
                 connectionManager.startDiscovery()
@@ -35,61 +41,84 @@ struct ConversationListView: View {
     }
     
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Spacing.md) {
             Image(systemName: connectionManager.connectionState == .connected
                   ? "message.fill"
                   : "antenna.radiowaves.left.and.right")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .font(.system(size: 40))
+                .foregroundColor(ColorTheme.mutedText())
             
             if connectionManager.connectionState == .connected {
                 Text("No conversations yet")
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(ColorTheme.primaryText())
                 Text("Your first message will start a new conversation")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15))
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
             } else if connectionManager.connectionState == .discovering {
                 ProgressView()
+                    .tint(ColorTheme.accent())
                 Text("Looking for your Centurion…")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 15))
+                    .foregroundColor(ColorTheme.mutedText())
             } else {
                 Text("Not connected")
-                    .font(.headline)
-                Text("Go to the Settings tab to connect")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 17, weight: .semibold))
+                Text("Go to Settings to connect")
+                    .font(.system(size: 14))
+                    .foregroundColor(ColorTheme.mutedText())
             }
         }
         .padding()
     }
 }
 
-/// A single row in the conversation list
-struct ConversationRow: View {
+// MARK: - Premium Conversation Row
+
+struct ConversationRowPremium: View {
     let conversation: Conversation
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(conversation.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                if conversation.isEncrypted {
-                    Image(systemName: "lock.fill")
-                        .font(.caption2)
-                        .foregroundColor(.green)
-                }
-                Text(conversation.lastActive, style: .relative)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+        HStack(spacing: Spacing.sm) {
+            // Amber accent indicator
+            ZStack {
+                Circle()
+                    .fill(ColorTheme.accent().opacity(0.10))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "message.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(ColorTheme.accent())
             }
-            Text(conversation.lastMessage)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            
+            // Content
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(conversation.title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(ColorTheme.primaryText())
+                        .lineLimit(1)
+                    
+                    if conversation.isEncrypted {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(ColorTheme.success())
+                    }
+                    
+                    Spacer()
+                    
+                    Text(conversation.lastActive, style: .relative)
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                
+                Text(conversation.lastMessage)
+                    .font(.system(size: 14))
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(1)
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Spacing.xxs)
+        .contentShape(Rectangle())
     }
 }

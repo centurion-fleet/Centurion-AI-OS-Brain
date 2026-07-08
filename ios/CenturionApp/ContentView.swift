@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Main application entry — shows conversation list as a slide-over panel
-/// accessible via a hamburger button, GROK-style.
+/// Main application entry — GROK-style with hamburger conversations
+/// and a premium custom tab bar.
 struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
@@ -9,47 +9,100 @@ struct ContentView: View {
     @State private var showConversations = false
     @State private var selectedConversation: Conversation?
     
+    private let accentGold = Color(red: 1.0, green: 0.84, blue: 0.0)
+    
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Conversations (main screen — hamburger ☰ to open list)
-            mainConversationsView
-                .tabItem {
-                    Label("Chat", systemImage: "message.fill")
-                }
-                .tag(0)
+        ZStack(alignment: .bottom) {
+            // Main content area
+            TabView(selection: $selectedTab) {
+                mainConversationsView
+                    .tag(0)
+                
+                MissionPortfolioView()
+                    .tag(1)
+                
+                SecurityHubView()
+                    .tag(2)
+                
+                SettingsView()
+                    .tag(3)
+            }
+            .ignoresSafeArea(.keyboard)
             
-            // Mission Control
-            MissionPortfolioView()
-                .tabItem {
-                    Label("Mission", systemImage: "target")
-                }
-                .tag(1)
-            
-            // Security Hub
-            SecurityHubView()
-                .tabItem {
-                    Label("Security", systemImage: connectionManager.connectionState == .connected
-                          ? "lock.shield.fill" : "shield")
-                }
-                .tag(2)
-            
-            // Settings
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.fill")
-                }
-                .tag(3)
+            // Custom tab bar overlay
+            VStack(spacing: 0) {
+                Spacer()
+                customTabBar
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
-        .tint(Color(red: 1.0, green: 0.84, blue: 0.0)) // Centurion gold
         .onAppear {
-            // Load or create default conversation
             if selectedConversation == nil {
                 selectDefaultConversation()
             }
         }
     }
     
-    /// The main chat screen with hamburger access to conversation list
+    // MARK: - Custom Tab Bar
+    
+    private var customTabBar: some View {
+        HStack(spacing: 0) {
+            tabBarItem(index: 0, icon: "message.fill", label: "Chat")
+            tabBarItem(index: 1, icon: "target", label: "Mission")
+            tabBarItem(index: 2, icon: "shield.fill", label: "Security")
+            tabBarItem(index: 3, icon: "gearshape.fill", label: "Settings")
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.sm)
+        .padding(.bottom, Spacing.xxs + 4)
+        .background(
+            .regularMaterial,
+            in: UnevenRoundedRectangle(
+                topLeadingRadius: 24,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 24
+            )
+        )
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(ColorTheme.border())
+                .frame(height: 0.5)
+        }
+    }
+    
+    private func tabBarItem(index: Int, icon: String, label: String) -> some View {
+        let isSelected = selectedTab == index
+        return Button(action: {
+            Haptics.lightTap()
+            withAnimation(Motion.light) {
+                selectedTab = index
+            }
+        }) {
+            VStack(spacing: 4) {
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .fill(ColorTheme.accent().opacity(0.15))
+                            .frame(width: 44, height: 32)
+                    }
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
+                }
+                
+                Text(label)
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Main Conversations
+    
     private var mainConversationsView: some View {
         NavigationStack {
             Group {
@@ -64,20 +117,22 @@ struct ContentView: View {
             }
             .navigationTitle(selectedConversation?.title ?? "Centurion")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: { showConversations.toggle() }) {
+                    Button(action: {
+                        Haptics.mediumTap()
+                        showConversations.toggle()
+                    }) {
                         Image(systemName: "line.3.horizontal")
-                            .font(.title3)
-                            .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(ColorTheme.accent())
                     }
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
                     if connectionManager.connectionState == .connected {
-                        Image(systemName: "lock.fill")
-                            .font(.caption2)
-                            .foregroundColor(.green)
+                        StatusDot(isConnected: true)
                     }
                 }
             }
@@ -87,45 +142,50 @@ struct ContentView: View {
         }
     }
     
-    /// Conversation list presented as a sheet (GROK-style side panel)
     private var conversationListSheet: some View {
         NavigationStack {
             ConversationListView { conversation in
+                Haptics.mediumTap()
                 selectedConversation = conversation
                 showConversations = false
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showConversations = false }
+                    Button("Done") {
+                        Haptics.lightTap()
+                        showConversations = false
+                    }
                 }
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
     
-    /// Empty state when no conversation is selected
     private var emptyConversationState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Spacing.md) {
             Image(systemName: "message.fill")
                 .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
             
             Text("No conversation selected")
-                .font(.headline)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(ColorTheme.primaryText())
             
             Text("Tap ☰ to choose a conversation")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(.system(size: 15))
+                .foregroundColor(ColorTheme.mutedText())
             
             Button("Browse Conversations") {
+                Haptics.mediumTap()
                 showConversations = true
             }
-            .buttonStyle(.bordered)
-            .tint(Color(red: 1.0, green: 0.84, blue: 0.0))
+            .buttonStyle(AmberButtonStyle())
+            .padding(.top, Spacing.xs)
         }
         .padding()
     }
     
-    /// Select the most recent conversation or create one
     private func selectDefaultConversation() {
         if let first = messageService.conversations.first {
             selectedConversation = first

@@ -1,0 +1,171 @@
+import SwiftUI
+
+/// Design system — the physics, rhythm, and soul of the Centurion app.
+/// Every number, curve, and gesture is intentional. Nothing is default.
+
+// MARK: - Motion Design
+
+/// Spring-driven motion that gives UI elements physical weight.
+/// Inspired by the Not Boring suite and Things 3.
+enum Motion {
+    /// Standard spring for most interactions — responsive with natural overshoot
+    static let standard: Animation = .spring(response: 0.45, dampingFraction: 0.70, blendDuration: 0.1)
+    
+    /// For elements that enter the screen (bubbles, cards appearing)
+    static let appear: Animation = .spring(response: 0.55, dampingFraction: 0.65, blendDuration: 0.15)
+    
+    /// For heavy elements (sheets, transitions)
+    static let heavy: Animation = .spring(response: 0.65, dampingFraction: 0.60, blendDuration: 0.2)
+    
+    /// For light elements (badges, indicators) — snappy
+    static let light: Animation = .spring(response: 0.30, dampingFraction: 0.75, blendDuration: 0.05)
+    
+    /// Celebratory bouncy spring
+    static let celebratory: Animation = .spring(response: 0.50, dampingFraction: 0.50, blendDuration: 0.1)
+}
+
+// MARK: - Haptic Design
+
+/// Physics-grounded haptic feedback for every meaningful interaction.
+/// From the Not Boring philosophy: every touch should feel physical.
+enum Haptics {
+    static func lightTap() {
+        UIImpactFeedbackGenerator(style: .soft, intensity: 0.7).impactOccurred()
+    }
+    
+    static func mediumTap() {
+        UIImpactFeedbackGenerator(style: .medium, intensity: 0.8).impactOccurred()
+    }
+    
+    static func heavyTap() {
+        UIImpactFeedbackGenerator(style: .heavy, intensity: 1.0).impactOccurred()
+    }
+    
+    static func connectionEstablished() {
+        UIImpactFeedbackGenerator(style: .rigid, intensity: 0.6).impactOccurred()
+    }
+    
+    static func success() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+    
+    static func error() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+    
+    static func messageSent() {
+        // Light + medium cascade for send
+        UIImpactFeedbackGenerator(style: .soft, intensity: 0.7).impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            UIImpactFeedbackGenerator(style: .light, intensity: 0.5).impactOccurred()
+        }
+    }
+}
+
+// MARK: - Spacing Scale
+
+/// Consistent visual rhythm — every space is a multiple of 4.
+/// No magic numbers. No guessing.
+enum Spacing {
+    static let xxs: CGFloat = 4
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 12
+    static let md: CGFloat = 16
+    static let lg: CGFloat = 24
+    static let xl: CGFloat = 32
+    static let xxl: CGFloat = 48
+}
+
+// MARK: - Card Style
+
+/// Reusable card modifier — every surface card in the app uses this.
+struct CardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(Spacing.md)
+            .background(ColorTheme.surface())
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(ColorTheme.border(), lineWidth: 0.5)
+            )
+    }
+}
+
+extension View {
+    func cardStyle() -> some View {
+        modifier(CardStyle())
+    }
+}
+
+// MARK: - Section Header
+
+/// Premium section header with amber accent line
+struct SectionHeader: View {
+    let title: String
+    let icon: String
+    
+    var body: some View {
+        HStack(spacing: Spacing.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(ColorTheme.accent())
+            
+            Text(title)
+                .font(.system(size: 14, weight: .semibold, design: .default))
+                .textCase(.uppercase)
+                .foregroundColor(ColorTheme.mutedText())
+            
+            Spacer()
+            
+            Rectangle()
+                .fill(ColorTheme.border())
+                .frame(height: 1)
+                .frame(maxWidth: 60)
+        }
+    }
+}
+
+// MARK: - Premium Button Styles
+
+struct AmberButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.sm)
+            .background(ColorTheme.accent())
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(Motion.light, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Connection Status Dot
+
+/// Animated connection indicator — glowing amber pulse
+struct StatusDot: View {
+    let isConnected: Bool
+    
+    @State private var isPulsing = false
+    
+    var body: some View {
+        Circle()
+            .fill(isConnected ? ColorTheme.success() : ColorTheme.mutedText())
+            .frame(width: 8, height: 8)
+            .overlay(
+                Circle()
+                    .stroke(isConnected ? ColorTheme.success() : Color.clear, lineWidth: 2)
+                    .scaleEffect(isPulsing ? 1.6 : 1.0)
+                    .opacity(isPulsing ? 0.0 : 0.6)
+            )
+            .onAppear {
+                if isConnected {
+                    withAnimation(Motion.heavy.repeatForever(autoreverses: false)) {
+                        isPulsing = true
+                    }
+                }
+            }
+    }
+}
