@@ -145,7 +145,7 @@ struct ProjectDetailView: View {
                         targetRow(target)
 
                         if expandedTargetId == target.id {
-                            inlineTasks(for: target, target: target)
+                            inlineTasks(for: target, parentTarget: target)
                                 .transition(.asymmetric(
                                     insertion: .opacity.combined(with: .move(edge: .top)),
                                     removal: .opacity
@@ -273,7 +273,7 @@ struct ProjectDetailView: View {
 
     // MARK: - Inline Tasks
 
-    private func inlineTasks(for target: MissionTarget, target: MissionTarget) -> some View {
+    private func inlineTasks(for target: MissionTarget, parentTarget: MissionTarget) -> some View {
         VStack(spacing: 0) {
             if target.tasks.isEmpty {
                 Text("No tasks yet")

@@ -107,6 +107,31 @@ enum ConversationContext: Codable, Equatable, Hashable {
     }
 }
 
+/// A Centurion device discovered on the local network via Bonjour.
+struct CenturionDevice: Identifiable, Codable, Equatable {
+    let id: UUID
+    let name: String
+    let hostname: String
+    let ipAddress: String
+    let port: Int
+    let publicKey: Data?
+    let isConnected: Bool
+    let connectionMethod: ConnectionMethod
+    let lastSeen: Date
+
+    enum ConnectionMethod: String, Codable {
+        case lan      // Local network (mDNS)
+        case tailscale // Tailscale tunnel
+
+        var icon: String {
+            switch self {
+            case .lan: return "wifi"
+            case .tailscale: return "shield.fill"
+            }
+        }
+    }
+}
+
 /// A conversation thread — always tied to a mission context.
 /// The gold grouping unit in the app.
 struct Conversation: Identifiable, Codable, Equatable {
