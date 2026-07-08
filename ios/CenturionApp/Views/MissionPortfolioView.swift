@@ -50,7 +50,6 @@ struct MissionPortfolioView: View {
                     isAppeared = true
                 }
             }
-            }
         }
     }
     
