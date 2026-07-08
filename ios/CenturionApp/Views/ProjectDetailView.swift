@@ -15,9 +15,8 @@ struct ProjectDetailView: View {
     @State private var draggedTarget: MissionTarget?
     @State private var dragOffset: CGSize = .zero
 
-    /// Unified chat sheet state
-    @State private var chatContext: ConversationContext?
-    @State private var showChat = false
+    /// Unified chat sheet state — single source of truth
+    @State private var chatTarget: ChatSheetTarget?
 
     var body: some View {
         ScrollView {
@@ -40,10 +39,8 @@ struct ProjectDetailView: View {
                 isAppeared = true
             }
         }
-        .sheet(isPresented: $showChat) {
-            if let context = chatContext {
-                chatSheet(for: context)
-            }
+        .sheet(item: $chatTarget) { target in
+            chatSheet(for: target.context)
         }
     }
 
@@ -55,7 +52,7 @@ struct ProjectDetailView: View {
             ChatView(conversation: conversation)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showChat = false }
+                        Button("Done") { chatTarget = nil }
                     }
                 }
         }
@@ -65,14 +62,12 @@ struct ProjectDetailView: View {
 
     private func openTargetChat(_ target: MissionTarget) {
         Haptics.lightTap()
-        chatContext = ConversationContext.target(id: target.id, name: target.title, programName: program.name)
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .target(id: target.id, name: target.title, programName: program.name))
     }
 
     private func openTaskChat(_ task: MissionTask, in target: MissionTarget) {
         Haptics.lightTap()
-        chatContext = ConversationContext.task(id: task.id, name: task.title, targetName: target.title, programName: program.name)
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .task(id: task.id, name: task.title, targetName: target.title, programName: program.name))
     }
 
     private func loadPreviewTargets() {

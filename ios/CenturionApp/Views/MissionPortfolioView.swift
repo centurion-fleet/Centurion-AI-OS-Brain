@@ -19,8 +19,7 @@ struct MissionPortfolioView: View {
     @State private var dragOffset: CGSize = .zero
 
     /// Unified chat sheet state
-    @State private var chatContext: ConversationContext?
-    @State private var showChat = false
+    @State private var chatTarget: ChatSheetTarget?
 
     var body: some View {
         NavigationStack {
@@ -48,10 +47,8 @@ struct MissionPortfolioView: View {
                 }
             }
         }
-        .sheet(isPresented: $showChat) {
-            if let context = chatContext {
-                chatSheet(for: context)
-            }
+        .sheet(item: $chatTarget) { target in
+            chatSheet(for: target.context)
         }
     }
 
@@ -63,7 +60,7 @@ struct MissionPortfolioView: View {
             ChatView(conversation: conversation)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showChat = false }
+                        Button("Done") { chatTarget = nil }
                     }
                 }
         }
@@ -73,26 +70,22 @@ struct MissionPortfolioView: View {
 
     private func openChat(for program: MissionProgram) {
         Haptics.lightTap()
-        chatContext = ConversationContext.program(id: program.id, name: program.name)
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .program(id: program.id, name: program.name))
     }
 
     private func openMissionChat() {
         Haptics.lightTap()
-        chatContext = .standalone(title: "My Mission")
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .standalone(title: "My Mission"))
     }
 
     private func openAlertsChat() {
         Haptics.lightTap()
-        chatContext = .standalone(title: "Alerts & Pulse")
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .standalone(title: "Alerts & Pulse"))
     }
 
     private func openFocusChat() {
         Haptics.lightTap()
-        chatContext = .standalone(title: "Focus Today")
-        showChat = true
+        chatTarget = ChatSheetTarget(context: .standalone(title: "Focus Today"))
     }
 
     // MARK: - Mission Header

@@ -1,6 +1,13 @@
 import Foundation
 import SwiftUI
 
+/// Wrapper for sheet(item:) presentation — avoids timing issues with separate
+/// chatContext + showChat state vars.
+struct ChatSheetTarget: Identifiable {
+    let id = UUID()
+    let context: ConversationContext
+}
+
 /// Where in the mission hierarchy a conversation lives.
 /// Every chat is attached to a mission element — or standalone.
 enum ConversationContext: Codable, Equatable, Hashable {
