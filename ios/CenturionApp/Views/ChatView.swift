@@ -9,6 +9,12 @@ import SwiftUI
 /// This pattern keeps the top half clean while making all conversations
 /// one tap away — inspired by Apple Maps, Fantastical, and Things 3.
 struct ChatView: View {
+    /// Initialize with an optional conversation to open immediately.
+    /// Pass nil (default) for the clean empty state.
+    init(conversation: Conversation? = nil) {
+        _selectedConversation = State(initialValue: conversation)
+    }
+
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var messageText = ""
