@@ -28,7 +28,6 @@ struct MissionPortfolioView: View {
                 VStack(spacing: Spacing.md) {
                     missionHeader
                     vitalStatCard
-                    centurionPulse
                     alertsSection
                     focusActionsSection
                     targetsSection
@@ -68,7 +67,7 @@ struct MissionPortfolioView: View {
                     }
                 }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(380), .large])
         .presentationDragIndicator(.visible)
     }
 
@@ -109,13 +108,9 @@ struct MissionPortfolioView: View {
 
                 // Chat about My Mission
                 Button(action: { openMissionChat() }) {
-                    Image(systemName: "message.fill")
-                        .font(.caption2)
-                        .foregroundColor(ColorTheme.accent())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(ColorTheme.accent().opacity(0.1))
-                        .clipShape(Capsule())
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(ColorTheme.mutedText())
                 }
                 .buttonStyle(.plain)
             }
@@ -183,78 +178,6 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 8)
     }
 
-    // MARK: - Centurion Pulse
-
-    private var centurionPulse: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: "waveform.path.ecg")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.accent())
-                Text("Centurion Pulse")
-                    .font(.headline)
-                    .foregroundColor(ColorTheme.primaryText())
-                Spacer()
-                Text("Live")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(ColorTheme.accent())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(ColorTheme.accent().opacity(0.1))
-                    .clipShape(Capsule())
-            }
-
-            ForEach(thoughts) { thought in
-                thoughtRow(thought)
-            }
-        }
-        .padding()
-        .cardStyle()
-        .opacity(isAppeared ? 1 : 0)
-        .offset(y: isAppeared ? 0 : 16)
-    }
-
-    private func thoughtRow(_ thought: CenturionThought) -> some View {
-        HStack(alignment: .top, spacing: Spacing.sm) {
-            Image(systemName: thought.type.icon)
-                .font(.caption)
-                .foregroundColor(thoughtTypeColor(thought.type))
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(thought.text)
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.primaryText())
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Text(thought.type.rawValue)
-                        .font(.caption2)
-                        .foregroundColor(thoughtTypeColor(thought.type))
-                    if let target = thought.relatedTarget {
-                        Text(target)
-                            .font(.caption2)
-                            .foregroundColor(ColorTheme.accent())
-                    }
-                    Text(thought.timestamp, style: .relative)
-                        .font(.caption2)
-                        .foregroundColor(ColorTheme.mutedText())
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func thoughtTypeColor(_ type: CenturionThought.ThoughtType) -> Color {
-        switch type {
-        case .alert: return .orange
-        case .insight: return ColorTheme.accent()
-        case .progress: return ColorTheme.success()
-        case .suggestion: return ColorTheme.accent()
-        case .question: return ColorTheme.accent().opacity(0.7)
-        }
-    }
-
     // MARK: - Alerts
 
     private var alertsSection: some View {
@@ -280,13 +203,9 @@ struct MissionPortfolioView: View {
                             .clipShape(Capsule())
                         // Chat about alerts
                         Button(action: { openAlertsChat() }) {
-                            Image(systemName: "message.fill")
-                                .font(.caption2)
-                                .foregroundColor(.orange)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(Color.orange.opacity(0.1))
-                                .clipShape(Capsule())
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundColor(ColorTheme.mutedText())
                         }
                         .buttonStyle(.plain)
                     }
@@ -342,13 +261,9 @@ struct MissionPortfolioView: View {
                     .foregroundColor(ColorTheme.mutedText())
                 // Chat about focus
                 Button(action: { openFocusChat() }) {
-                    Image(systemName: "message.fill")
-                        .font(.caption2)
-                        .foregroundColor(ColorTheme.accent())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(ColorTheme.accent().opacity(0.1))
-                        .clipShape(Capsule())
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(ColorTheme.mutedText())
                 }
                 .buttonStyle(.plain)
             }
@@ -501,17 +416,11 @@ struct ProgramCard: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    // Chat button — opens unified chat context for this program
+                    // Chat button — thin grey line icon
                     Button(action: { onChat?() }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "message.fill")
-                                .font(.caption)
-                        }
-                        .foregroundColor(ColorTheme.accent())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(ColorTheme.accent().opacity(0.1))
-                        .clipShape(Capsule())
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     .buttonStyle(.plain)
 

@@ -59,7 +59,7 @@ struct ProjectDetailView: View {
                     }
                 }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(380), .large])
         .presentationDragIndicator(.visible)
     }
 
@@ -242,15 +242,11 @@ struct ProjectDetailView: View {
 
                     Spacer()
 
-                    // Chat button — opens unified chat context for this target
+                    // Chat button — thin grey line icon
                     Button(action: { openTargetChat(target) }) {
-                        Image(systemName: "message.fill")
-                            .font(.caption2)
-                            .foregroundColor(ColorTheme.accent())
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(ColorTheme.accent().opacity(0.1))
-                            .clipShape(Capsule())
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, 4)
@@ -329,15 +325,11 @@ struct ProjectDetailView: View {
                     .frame(maxWidth: 100, alignment: .trailing)
             }
 
-            // Chat button — opens unified chat context for this task
+            // Chat button — thin grey line icon
             Button(action: { openTaskChat(task, in: target) }) {
-                Image(systemName: "message.fill")
-                    .font(.caption2)
-                    .foregroundColor(ColorTheme.dimAccent())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(ColorTheme.dimAccent().opacity(0.1))
-                    .clipShape(Capsule())
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(ColorTheme.mutedText())
             }
             .buttonStyle(.plain)
         }

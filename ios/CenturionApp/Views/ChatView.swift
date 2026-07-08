@@ -50,7 +50,29 @@ struct ChatView: View {
                             }
                         } else {
                             // Stream mode — ALL messages chronologically with context badges
-                            if messageService.allMessages.isEmpty {
+                            VStack(spacing: 0) {
+                                // Centurion Pulse header
+                                HStack(spacing: Spacing.xs) {
+                                    Image(systemName: "waveform.path.ecg")
+                                        .font(.caption)
+                                        .foregroundColor(ColorTheme.accent())
+                                    Text("Centurion Pulse")
+                                        .font(.system(size: 13, weight: .semibold, design: .default))
+                                        .foregroundColor(ColorTheme.accent())
+                                    Spacer()
+                                    Text("\(messageService.allMessages.count)")
+                                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                        .foregroundColor(ColorTheme.mutedText())
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(ColorTheme.border())
+                                        .clipShape(Capsule())
+                                }
+                                .padding(.horizontal, Spacing.md)
+                                .padding(.top, Spacing.sm)
+                                .padding(.bottom, Spacing.xxs)
+
+                                if messageService.allMessages.isEmpty {
                                 emptyGlobalStream
                                     .padding(.top, Spacing.xxl)
                             } else {
