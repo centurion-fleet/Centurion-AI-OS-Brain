@@ -1,39 +1,35 @@
 import SwiftUI
 
+/// Conversation list — used both as the main inbox and as a GROK-style
+/// side panel sheet accessible via the ☰ hamburger button.
 struct ConversationListView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
-    @State private var showNewChat = false
+    
+    /// Called when a conversation is selected from the list
+    let onSelect: ((Conversation) -> Void)?
+    
+    init(onSelect: ((Conversation) -> Void)? = nil) {
+        self.onSelect = onSelect
+    }
     
     var body: some View {
-        NavigationStack {
-            Group {
-                if messageService.conversations.isEmpty {
-                    emptyState
-                } else {
-                    List(messageService.conversations) { conversation in
-                        NavigationLink {
-                            ChatView(conversation: conversation)
-                        } label: {
-                            ConversationRow(conversation: conversation)
-                        }
+        Group {
+            if messageService.conversations.isEmpty {
+                emptyState
+            } else {
+                List(messageService.conversations) { conversation in
+                    Button(action: { onSelect?(conversation) }) {
+                        ConversationRow(conversation: conversation)
                     }
-                    .listStyle(.plain)
+                    .buttonStyle(.plain)
                 }
+                .listStyle(.plain)
             }
-            .navigationTitle("Centurion")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showNewChat = true }) {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .disabled(connectionManager.connectionState != .connected)
-                }
-            }
-            .onAppear {
-                if connectionManager.connectionState == .disconnected {
-                    connectionManager.startDiscovery()
-                }
+        }
+        .onAppear {
+            if connectionManager.connectionState == .disconnected {
+                connectionManager.startDiscovery()
             }
         }
     }
@@ -47,9 +43,9 @@ struct ConversationListView: View {
                 .foregroundColor(.secondary)
             
             if connectionManager.connectionState == .connected {
-                Text("Connected to your Centurion")
+                Text("No conversations yet")
                     .font(.headline)
-                Text("Tap + to start a conversation")
+                Text("Your first message will start a new conversation")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             } else if connectionManager.connectionState == .discovering {
@@ -60,7 +56,7 @@ struct ConversationListView: View {
             } else {
                 Text("Not connected")
                     .font(.headline)
-                Text("Go to the Connect tab to find your Centurion")
+                Text("Go to the Settings tab to connect")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -69,6 +65,7 @@ struct ConversationListView: View {
     }
 }
 
+/// A single row in the conversation list
 struct ConversationRow: View {
     let conversation: Conversation
     

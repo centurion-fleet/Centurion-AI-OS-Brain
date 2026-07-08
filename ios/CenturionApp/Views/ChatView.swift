@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Full chat view for a single conversation — message bubbles, input bar,
+/// and GROK-style top navigation.
 struct ChatView: View {
     let conversation: Conversation
     @EnvironmentObject private var messageService: MessageService
@@ -7,6 +9,14 @@ struct ChatView: View {
     @State private var messageText = ""
     @State private var isSending = false
     @FocusState private var isFocused: Bool
+    
+    /// Optional callback when switching to a different conversation
+    let onSwitchConversation: ((Conversation) -> Void)?
+    
+    init(conversation: Conversation, onSwitchConversation: ((Conversation) -> Void)? = nil) {
+        self.conversation = conversation
+        self.onSwitchConversation = onSwitchConversation
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -91,6 +101,7 @@ struct ChatView: View {
     }
 }
 
+/// A single message bubble in the chat
 struct MessageBubble: View {
     let message: Message
     
