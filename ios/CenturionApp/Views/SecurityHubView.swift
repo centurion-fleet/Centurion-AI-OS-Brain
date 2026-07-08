@@ -76,7 +76,7 @@ struct SecurityHubView: View {
             VStack(spacing: 12) {
                 detailRow(
                     icon: "wifi",
-                    iconColor: .green,
+                    iconColor: ColorTheme.accent(),
                     title: "Local Network (LAN)",
                     detail: "Direct connection to your Centurion. Zero internet. Zero cloud. Physically unreachable from outside your network."
                 )

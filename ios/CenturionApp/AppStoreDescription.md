@@ -4,32 +4,32 @@
 Centurion
 
 ## Subtitle
-Live Your Personal Mission
+Your Personal-Centurion in Your Pocket
 
 ## Description
 
-**Centurion is the world's first mission-driven communication platform.**
+**Centurion is the communication interface to your Personal-Centurion — a private AI that lives on your desk, knows your mission, and helps you live it. Every conversation advances what matters.**
 
-Not a chat app with a to-do list bolted on. Not a project manager with messaging. A single unified stream where every conversation is anchored to what advances your mission.
+Not a chatbot. Not a project manager with messaging. Your Personal-Centurion is a dedicated AI that belongs to you alone — no cloud, no subscription, no one else's data mixed in. It runs on your hardware, on your network, encrypted end-to-end. This iPhone app is how you talk to it.
 
 **CHAT IS THE INTERFACE**
 
-Every program, target, and task in Mission Control has a 💬 button. Tap it — you're chatting with your Centurion about that specific mission element, with full context preserved.
+Every program, target, and task in Mission Control has a 💬 button. Tap it — you're talking to your Centurion about that specific mission element, with full context preserved. The Centurion knows what you were looking at and responds accordingly.
 
 **THE UNIFIED STREAM**
 
-All messages — from every mission context — appear in one chronological "All Chat" feed. Each message carries a context badge so you always know where it belongs: Program, Target, Task, or Standalone. Nothing is hidden in sub-menus.
+All messages — from every mission context — appear in one chronological "All Chat" feed. Each message carries a context badge so you always know where it belongs: Program, Target, Task, or Standalone. Nothing is hidden in sub-menus. This is your complete dialogue with your Personal-Centurion.
 
 **CONVERSATIONS THAT ORGANIZE THEMSELVES**
 
-No folders. No tags. No manual organisation. Conversations auto-group by mission context because that's how humans think: "What did I say about Q3 Go-to-Market?" → find it under Active Missions.
+No folders. No tags. No manual organisation. Conversations auto-group by mission context because that's how humans think: "What did my Centurion say about Q3 Go-to-Market?" → find it under Active Missions.
 
 **MILITARY-GRADE ENCRYPTION**
 
 - X25519 ECDH key exchange (Curve25519 — same as WireGuard and Signal)
 - XSalsa20-Poly1305 authenticated encryption
 - Perfect Forward Secrecy — per-session ephemeral keys
-- Zero server infrastructure — the iPhone talks directly to your Centurion
+- Zero server infrastructure — the iPhone talks directly to your Personal-Centurion
 - No metadata, no logs, no cloud dependency
 
 **APPLE-NATIVE, NO SERVERS**
@@ -53,10 +53,10 @@ Spring physics on every message. Haptic feedback on every interaction. Flat fros
 
 Centurion has no backdoors, no admin access, no ability to read your conversations — even if compelled. The encryption is so complete there's nothing to hack. There's nothing there.
 
-**A Centurion is required.** This app connects to your personal Centurion AI OS device on your local network or via Tailscale. Visit centurionfleet.com to learn more.
+**A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit centurionfleet.com to learn more.
 
 ## Keywords
-encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger
+encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
 
 ## Support URL
 https://centurionfleet.com/support
@@ -68,4 +68,4 @@ https://centurionfleet.com
 https://centurionfleet.com/privacy
 
 ## Promotional Text
-The most private messenger on earth. No servers. No metadata. Every conversation anchored to your mission.
+The communication interface to your Personal-Centurion. A private AI that lives on your desk, knows your mission, and helps you live it. No servers. No metadata.
