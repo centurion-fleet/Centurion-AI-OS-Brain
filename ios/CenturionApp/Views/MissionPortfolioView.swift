@@ -403,3 +403,44 @@ extension CenturionThought {
         ]
     }
 }
+
+// MARK: - Program Card
+
+struct ProgramCard: View {
+    let program: MissionProgram
+    
+    var body: some View {
+        NavigationLink(destination: ProjectDetailView(program: program)) {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: program.status.icon)
+                    .font(.title3)
+                    .foregroundColor(ColorTheme.accent())
+                    .opacity(program.status.iconOpacity)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(program.name)
+                        .font(.headline)
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text(program.description)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(program.completedTaskCount)/\(program.taskCount)")
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundColor(ColorTheme.accent())
+                    Text("tasks")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+            }
+            .padding()
+            .cardStyle()
+        }
+        .buttonStyle(.plain)
+    }
+}
