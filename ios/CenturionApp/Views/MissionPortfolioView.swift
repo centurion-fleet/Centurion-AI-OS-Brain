@@ -57,22 +57,23 @@ struct MissionPortfolioView: View {
         HStack(spacing: 12) {
             Image(systemName: "lock.shield.fill")
                 .font(.title2)
-                .foregroundColor(.green)
+                .foregroundColor(ColorTheme.accent())
             VStack(alignment: .leading, spacing: 2) {
                 Text("End-to-end encrypted")
                     .font(.caption)
                     .fontWeight(.semibold)
+                    .foregroundColor(ColorTheme.primaryText())
                 Text("All project data encrypted before transmission")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
             }
             Spacer()
             Image(systemName: "checkmark.shield.fill")
-                .foregroundColor(.green)
+                .foregroundColor(ColorTheme.accent())
                 .font(.caption)
         }
         .padding(12)
-        .background(Color.green.opacity(0.1))
+        .background(ColorTheme.accent().opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     
@@ -99,13 +100,14 @@ struct StatItem: View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundColor(Color(red: 1.0, green: 0.84, blue: 0.0))
+                .foregroundColor(ColorTheme.accent())
             Text(value)
                 .font(.title3)
                 .fontWeight(.bold)
+                .foregroundColor(ColorTheme.primaryText())
             Text(label)
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
         }
         .frame(maxWidth: .infinity)
     }
@@ -125,16 +127,16 @@ struct ProjectCard: View {
                 if project.isEncrypted {
                     Image(systemName: "lock.fill")
                         .font(.caption2)
-                        .foregroundColor(.green)
+                        .foregroundColor(ColorTheme.accent())
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ColorTheme.mutedText())
             }
             
             Text(project.description)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
                 .lineLimit(2)
             
             HStack(spacing: 16) {
@@ -142,13 +144,13 @@ struct ProjectCard: View {
                 Label("\(project.completedTaskCount)/\(project.taskCount) tasks", systemImage: "checklist")
             }
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundColor(ColorTheme.mutedText())
             
             // Progress bar
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                        .fill(ColorTheme.border())
                         .frame(height: 6)
                     RoundedRectangle(cornerRadius: 4)
                         .fill(progressColor)
@@ -158,8 +160,7 @@ struct ProjectCard: View {
             .frame(height: 6)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cardStyle()
     }
     
     private var progress: Double {
@@ -168,7 +169,7 @@ struct ProjectCard: View {
     }
     
     private var progressColor: Color {
-        progress > 0.7 ? .green : progress > 0.3 ? Color(red: 1.0, green: 0.84, blue: 0.0) : .orange
+        progress > 0.7 ? ColorTheme.accent() : progress > 0.3 ? ColorTheme.accent().opacity(0.7) : ColorTheme.mutedText()
     }
     
     private var statusColor: Color {

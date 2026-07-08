@@ -78,10 +78,10 @@ struct ChatView: View {
             Text("End-to-end encrypted")
                 .font(.system(size: 11, weight: .medium, design: .default))
         }
-        .foregroundColor(ColorTheme.success())
+        .foregroundColor(ColorTheme.accent())
         .padding(.horizontal, Spacing.sm)
         .padding(.vertical, Spacing.xxs + 2)
-        .background(ColorTheme.success().opacity(0.08))
+        .background(ColorTheme.accent().opacity(0.08))
         .clipShape(Capsule())
         .padding(.top, Spacing.xs)
         .padding(.bottom, Spacing.xxs)

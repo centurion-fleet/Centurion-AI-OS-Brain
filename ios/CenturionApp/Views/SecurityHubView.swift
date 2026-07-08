@@ -43,7 +43,7 @@ struct SecurityHubView: View {
                   ? "lock.shield.fill" : "shield.fill")
                 .font(.system(size: 56))
                 .foregroundColor(connectionManager.connectionState == .connected
-                    ? ColorTheme.success() : ColorTheme.mutedText())
+                    ? ColorTheme.accent() : ColorTheme.mutedText())
             
             Text("Your Centurion connection is")
                 .font(.subheadline)
