@@ -16,7 +16,6 @@ struct CenturionApp: App {
             ContentView()
                 .environmentObject(connectionManager)
                 .environmentObject(messageService)
-                .preferredColorScheme(.dark)
         }
     }
 }

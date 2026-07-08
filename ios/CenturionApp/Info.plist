@@ -30,8 +30,6 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
-    <key>UIUserInterfaceStyle</key>
-    <string>Dark</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Centurion needs local network access to discover your Centurion on your home network.</string>
     <key>NSBonjourServices</key>
