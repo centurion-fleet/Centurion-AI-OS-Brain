@@ -19,9 +19,12 @@ struct MissionPortfolioView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var isAppeared = false
     
-    /// Drag reorder
+    /// Drag reorder state
     @State private var draggedProgram: MissionProgram?
     @State private var dragOffset: CGSize = .zero
+    
+    /// Comment state
+    @State private var commentingProgram: MissionProgram?
     
     var body: some View {
         NavigationStack {
@@ -60,6 +63,20 @@ struct MissionPortfolioView: View {
                     isAppeared = true
                 }
             }
+        }
+        .sheet(item: $commentingProgram) { program in
+            MissionCommentSheet(
+                title: program.name,
+                contextPath: "Program",
+                comments: Binding(
+                    get: { program.comments },
+                    set: { newComments in
+                        if let idx = self.programs.firstIndex(where: { $0.id == program.id }) {
+                            self.programs[idx].comments = newComments
+                        }
+                    }
+                )
+            )
         }
     }
     
@@ -329,7 +346,10 @@ struct MissionPortfolioView: View {
             
             VStack(spacing: Spacing.sm) {
                 ForEach(programs) { program in
-                    ProgramCard(program: program)
+                    ProgramCard(program: program, onComment: {
+                        Haptics.lightTap()
+                        commentingProgram = program
+                    })
                         .overlay(alignment: .topTrailing) {
                             Image(systemName: "line.horizontal.3")
                                 .font(.caption)
@@ -408,6 +428,7 @@ extension CenturionThought {
 
 struct ProgramCard: View {
     let program: MissionProgram
+    var onComment: (() -> Void)?
     
     var body: some View {
         NavigationLink(destination: ProjectDetailView(program: program)) {
@@ -429,13 +450,29 @@ struct ProgramCard: View {
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(program.completedTaskCount)/\(program.taskCount)")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(ColorTheme.accent())
-                    Text("tasks")
-                        .font(.caption2)
+                HStack(spacing: 8) {
+                    // Comment button
+                    Button(action: { onComment?() }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.caption)
+                            if !program.comments.isEmpty {
+                                Text("\(program.comments.count)")
+                                    .font(.caption2)
+                            }
+                        }
                         .foregroundColor(ColorTheme.mutedText())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(program.completedTaskCount)/\(program.taskCount)")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundColor(ColorTheme.accent())
+                        Text("tasks")
+                            .font(.caption2)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
                 }
             }
             .padding()

@@ -21,6 +21,9 @@ struct ProjectDetailView: View {
     @State private var commentingOnTask: MissionTask?
     @State private var taskComment: String = ""
     
+    /// Target commenting
+    @State private var commentingOnTarget: MissionTarget?
+    
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
@@ -43,7 +46,35 @@ struct ProjectDetailView: View {
             }
         }
         .sheet(item: $commentingOnTask) { task in
-            taskCommentSheet(task)
+            MissionCommentSheet(
+                title: task.title,
+                contextPath: "\(program.name) > Task",
+                comments: Binding(
+                    get: { task.comments },
+                    set: { newComments in
+                        // Update task comments in the targets array
+                        for ti in targets.indices {
+                            if let taskIdx = targets[ti].tasks.firstIndex(where: { $0.id == task.id }) {
+                                targets[ti].tasks[taskIdx].comments = newComments
+                            }
+                        }
+                    }
+                )
+            )
+        }
+        .sheet(item: $commentingOnTarget) { target in
+            MissionCommentSheet(
+                title: target.title,
+                contextPath: "\(program.name) > Target",
+                comments: Binding(
+                    get: { target.comments },
+                    set: { newComments in
+                        if let idx = targets.firstIndex(where: { $0.id == target.id }) {
+                            targets[idx].comments = newComments
+                        }
+                    }
+                )
+            )
         }
     }
     
@@ -218,6 +249,24 @@ struct ProjectDetailView: View {
                 
                 Spacer()
                 
+                // Comment button
+                Button(action: {
+                    Haptics.lightTap()
+                    commentingOnTarget = target
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.caption2)
+                        if !target.comments.isEmpty {
+                            Text("\(target.comments.count)")
+                                .font(.caption2)
+                        }
+                    }
+                    .foregroundColor(ColorTheme.mutedText())
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+                
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.accent())
@@ -354,93 +403,6 @@ struct ProjectDetailView: View {
         case .backlog: return ColorTheme.mutedText()
         case .completed: return ColorTheme.accent()
         }
-    }
-    
-    // MARK: - Task Commenting
-    
-    private func taskCommentSheet(_ task: MissionTask) -> some View {
-        NavigationStack {
-            VStack(spacing: Spacing.md) {
-                // Context header
-                HStack(spacing: Spacing.sm) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.accent())
-                    Text("From: \(program.name) > task")
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.accent())
-                    Spacer()
-                }
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .background(ColorTheme.accent().opacity(0.05))
-                
-                VStack(spacing: Spacing.sm) {
-                    // Task info
-                    HStack {
-                        taskStatusIcon(task.status)
-                        Text(task.title)
-                            .font(.headline)
-                            .foregroundColor(ColorTheme.primaryText())
-                        Spacer()
-                    }
-                    
-                    Text("Leave a comment for your Centurion about this task. They'll see your message in context.")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.mutedText())
-                    
-                    // Comment input
-                    HStack(spacing: Spacing.sm) {
-                        TextField("Write your comment…", text: $taskComment)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 16))
-                            .padding(.horizontal, Spacing.md)
-                            .padding(.vertical, Spacing.sm)
-                            .background(ColorTheme.chatInput())
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(ColorTheme.border(), lineWidth: 1)
-                            )
-                        
-                        Button(action: { sendTaskComment(task) }) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(
-                                    taskComment.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? ColorTheme.mutedText() : ColorTheme.accent()
-                                )
-                        }
-                        .disabled(taskComment.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
-                .padding(.horizontal, Spacing.md)
-                
-                Spacer()
-            }
-            .navigationTitle("Comment on Task")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Cancel") { commentingOnTask = nil }
-                }
-            }
-        }
-        .presentationDetents([.height(320)])
-        .presentationDragIndicator(.visible)
-    }
-    
-    private func sendTaskComment(_ task: MissionTask) {
-        let comment = taskComment.trimmingCharacters(in: .whitespaces)
-        guard !comment.isEmpty else { return }
-        
-        Haptics.messageSent()
-        // In production: send to Centurion with full context
-        // [User was viewing: $program.name > $expandedTarget (find target name) > $task.title]
-        // User comment: $comment
-        
-        taskComment = ""
-        commentingOnTask = nil
     }
 }
 
