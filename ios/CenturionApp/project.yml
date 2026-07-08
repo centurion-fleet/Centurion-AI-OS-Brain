@@ -33,6 +33,8 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen: {}
+        UIApplicationSupportsAllInterfaceOrientations: true
+        UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: "Centurion needs local network access to discover your Centurion on the local network via Bonjour."
