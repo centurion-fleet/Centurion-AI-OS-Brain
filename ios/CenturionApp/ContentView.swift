@@ -15,20 +15,30 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             mainConversationsView
+                .tabItem {
+                    Label("Chat", systemImage: "message.fill")
+                }
                 .tag(0)
 
             MissionPortfolioView()
+                .tabItem {
+                    Label("Mission", systemImage: "target")
+                }
                 .tag(1)
 
             SecurityHubView()
+                .tabItem {
+                    Label("Security", systemImage: "shield.fill")
+                }
                 .tag(2)
 
             SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
                 .tag(3)
         }
-        .safeAreaInset(edge: .bottom) {
-            customTabBar
-        }
+        .tint(ColorTheme.accent())
         .onAppear {
             // Seed sample data after view has appeared (avoids freeze from
             // rendering 15+ message rows during launch)
@@ -36,56 +46,6 @@ struct ContentView: View {
                 messageService.seedInitialData()
             }
         }
-    }
-
-    // MARK: - Custom Tab Bar (flat — award-winning minimal style)
-
-    private var customTabBar: some View {
-        HStack(spacing: 0) {
-            tabBarItem(index: 0, icon: "message.fill", label: "Chat")
-            tabBarItem(index: 1, icon: "target", label: "Mission")
-            tabBarItem(index: 2, icon: "shield.fill", label: "Security")
-            tabBarItem(index: 3, icon: "gearshape.fill", label: "Settings")
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.top, Spacing.sm)
-        .padding(.bottom, Spacing.xxs + 4)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(ColorTheme.border())
-                .frame(height: 0.5)
-        }
-    }
-
-    private func tabBarItem(index: Int, icon: String, label: String) -> some View {
-        let isSelected = selectedTab == index
-        return Button(action: {
-            Haptics.lightTap()
-            withAnimation(Motion.light) {
-                selectedTab = index
-            }
-        }) {
-            VStack(spacing: 4) {
-                ZStack {
-                    if isSelected {
-                        Capsule()
-                            .fill(ColorTheme.accent().opacity(0.15))
-                            .frame(width: 44, height: 32)
-                    }
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
-                }
-
-                Text(label)
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Main Chat (unified stream + context filter)
