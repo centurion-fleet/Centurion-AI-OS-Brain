@@ -9,10 +9,17 @@ import SwiftUI
 /// screen." The system launch screen (UILaunchScreen in Info.plist) uses the
 /// same deep forest background. When this view appears, it feels like the app
 /// was already running — then the glow, globe, and type enter with spring physics.
+///
+/// Remote Control theme: The iPhone is a remote for the Linux brain. The concentric
+/// signal rings, the pairing ceremony feel, and the "REMOTE CONTROL" descriptor all
+/// reinforce that this app isn't an AI — it's a conduit to one.
 struct SplashView: View {
     @State private var phase: SplashPhase = .hidden
     @State private var glowPulse = false
+    @State private var signalRingScale: CGFloat = 0.0
+    @State private var signalRingOpacity: Double = 0.0
     @State private var taglineOpacity = 0.0
+    @State private var missionHorizonOpacity = 0.0
 
     let onComplete: () -> Void
 
@@ -21,6 +28,7 @@ struct SplashView: View {
         case glow       // Amber glow emerges
         case globe      // Centurion globe forms
         case title      // Brand name appears
+        case horizon    // Mission Horizon tag appears
         case complete   // Transition to app
     }
 
@@ -37,6 +45,29 @@ struct SplashView: View {
                 .blur(radius: 40)
                 .scaleEffect(glowPulse ? 1.2 : 0.8)
                 .opacity(phase == .hidden ? 0 : 1)
+
+            // Remote control signal rings — concentric circles that pulse outward
+            // like a remote control broadcasting its presence
+            ZStack {
+                // Outer ring
+                Circle()
+                    .stroke(ColorTheme.accent().opacity(signalRingOpacity * 0.15), lineWidth: 1)
+                    .frame(width: 160, height: 160)
+                    .scaleEffect(signalRingScale)
+
+                // Middle ring
+                Circle()
+                    .stroke(ColorTheme.accent().opacity(signalRingOpacity * 0.25), lineWidth: 1.5)
+                    .frame(width: 130, height: 130)
+                    .scaleEffect(signalRingScale * 0.85)
+
+                // Inner ring
+                Circle()
+                    .stroke(ColorTheme.accent().opacity(signalRingOpacity * 0.4), lineWidth: 2)
+                    .frame(width: 105, height: 105)
+                    .scaleEffect(signalRingScale * 0.7)
+            }
+            .opacity(phase == .globe || phase == .title || phase == .horizon ? 1 : 0)
 
             // Centurion glass globe — amber sphere with impressed pattern
             ZStack {
@@ -69,8 +100,8 @@ struct SplashView: View {
             .opacity(phase == .hidden ? 0 : 1)
             .rotationEffect(.degrees(phase == .complete ? 360 : 0))
 
-            // Brand name
-            VStack(spacing: 4) {
+            // Brand name + Mission Horizon
+            VStack(spacing: 0) {
                 Spacer()
                     .frame(height: 140)
 
@@ -87,11 +118,33 @@ struct SplashView: View {
                     .tracking(3)
                     .opacity(taglineOpacity)
                     .offset(y: phase == .title ? 0 : 8)
+
+                // Thin amber divider
+                Rectangle()
+                    .fill(ColorTheme.accent().opacity(0.3))
+                    .frame(width: 60, height: 1)
+                    .padding(.top, 18)
+                    .padding(.bottom, 12)
+
+                // Mission Horizon — the release codename
+                Text("MISSION HORIZON")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(ColorTheme.accent())
+                    .tracking(8)
+                    .opacity(missionHorizonOpacity)
+
+                // Remote Control descriptor
+                Text("REMOTE CONTROL  ·  v3.0.0")
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundColor(ColorTheme.dimAccent())
+                    .tracking(4)
+                    .opacity(missionHorizonOpacity * 0.7)
+                    .padding(.top, 6)
             }
             .animation(Motion.appear.delay(0.2), value: phase)
 
             // Tap to continue hint
-            if phase == .title || phase == .globe {
+            if phase == .title || phase == .globe || phase == .horizon {
                 VStack {
                     Spacer()
                     Text("Tap anywhere to begin")
@@ -107,7 +160,7 @@ struct SplashView: View {
             animateThroughPhases()
         }
         .onTapGesture {
-            guard phase == .title || phase == .globe else { return }
+            guard phase == .title || phase == .globe || phase == .horizon else { return }
             completeSplash()
         }
     }
@@ -118,6 +171,14 @@ struct SplashView: View {
             withAnimation(Motion.heavy) { phase = .glow }
             withAnimation(Motion.heavy.repeatForever(autoreverses: true)) {
                 glowPulse = true
+            }
+        }
+
+        // Signal rings pulse outward like a remote searching for its console
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation(.spring(response: 1.0, dampingFraction: 0.6).repeatForever(autoreverses: true)) {
+                signalRingScale = 1.0
+                signalRingOpacity = 1.0
             }
         }
 
@@ -138,8 +199,16 @@ struct SplashView: View {
             }
         }
 
-        // Auto-complete quickly
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        // Phase 4: Mission Horizon + Remote Control reveal
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(Motion.appear) {
+                phase = .horizon
+                missionHorizonOpacity = 1.0
+            }
+        }
+
+        // Auto-complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             completeSplash()
         }
     }
