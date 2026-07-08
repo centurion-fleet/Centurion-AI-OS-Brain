@@ -5,7 +5,6 @@ struct CenturionApp: App {
     @StateObject private var connectionManager = ConnectionManager()
     @StateObject private var messageService: MessageService
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
-    @State private var showSplash = true
 
     init() {
         let cm = ConnectionManager()
@@ -15,21 +14,10 @@ struct CenturionApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if showSplash {
-                SplashView {
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                        showSplash = false
-                    }
-                }
+            ContentView()
+                .environmentObject(connectionManager)
+                .environmentObject(messageService)
                 .preferredColorScheme(appearanceMode.colorScheme)
-                .transition(.opacity.combined(with: .scale(scale: 1.05)))
-            } else {
-                ContentView()
-                    .environmentObject(connectionManager)
-                    .environmentObject(messageService)
-                    .preferredColorScheme(appearanceMode.colorScheme)
-                    .transition(.opacity)
-            }
         }
     }
 }
