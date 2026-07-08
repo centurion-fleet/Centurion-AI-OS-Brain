@@ -75,6 +75,7 @@ struct ChatView: View {
             // MARK: - Input Bar
             inputBar
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Title Bar
