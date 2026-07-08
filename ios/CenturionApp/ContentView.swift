@@ -12,29 +12,22 @@ struct ContentView: View {
     private let accentGold = Color(red: 1.0, green: 0.84, blue: 0.0)
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Main content area
-            TabView(selection: $selectedTab) {
-                mainConversationsView
-                    .tag(0)
-                
-                MissionPortfolioView()
-                    .tag(1)
-                
-                SecurityHubView()
-                    .tag(2)
-                
-                SettingsView()
-                    .tag(3)
-            }
-            .ignoresSafeArea(.keyboard)
+        // Main content area with safe area inset for the custom tab bar
+        TabView(selection: $selectedTab) {
+            mainConversationsView
+                .tag(0)
             
-            // Custom tab bar overlay
-            VStack(spacing: 0) {
-                Spacer()
-                customTabBar
-            }
-            .ignoresSafeArea(.keyboard, edges: .bottom)
+            MissionPortfolioView()
+                .tag(1)
+            
+            SecurityHubView()
+                .tag(2)
+            
+            SettingsView()
+                .tag(3)
+        }
+        .safeAreaInset(edge: .bottom) {
+            customTabBar
         }
         .onAppear {
             if selectedConversation == nil {
@@ -43,7 +36,7 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Custom Tab Bar
+    // MARK: - Custom Tab Bar (flat — award-winning minimal style)
     
     private var customTabBar: some View {
         HStack(spacing: 0) {
@@ -55,15 +48,7 @@ struct ContentView: View {
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.sm)
         .padding(.bottom, Spacing.xxs + 4)
-        .background(
-            .regularMaterial,
-            in: UnevenRoundedRectangle(
-                topLeadingRadius: 24,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 24
-            )
-        )
+        .background(.regularMaterial)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(ColorTheme.border())
