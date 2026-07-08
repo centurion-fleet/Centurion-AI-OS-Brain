@@ -113,33 +113,33 @@ struct SplashView: View {
     }
 
     private func animateThroughPhases() {
-        // Phase 1: Ambient glow emerges (matches launch screen → feels instant)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        // Phase 1: Ambient glow emerges immediately
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             withAnimation(Motion.heavy) { phase = .glow }
             withAnimation(Motion.heavy.repeatForever(autoreverses: true)) {
                 glowPulse = true
             }
         }
 
-        // Phase 2: Globe springs in
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.6, blendDuration: 0.3)) {
+        // Phase 2: Globe springs in quickly
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.65, blendDuration: 0.2)) {
                 phase = .globe
             }
         }
 
         // Phase 3: Title appears
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
             withAnimation(Motion.appear) {
                 phase = .title
             }
-            withAnimation(Motion.appear.delay(0.4)) {
+            withAnimation(Motion.appear.delay(0.3)) {
                 taglineOpacity = 1.0
             }
         }
 
-        // Auto-complete after enough time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+        // Auto-complete quickly
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             completeSplash()
         }
     }
