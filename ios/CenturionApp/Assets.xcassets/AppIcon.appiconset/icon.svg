@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Deep forest gradient background -->
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0a2a2a"/>
+      <stop offset="100%" stop-color="#041c1c"/>
+    </radialGradient>
+
+    <!-- Amber glass globe gradient -->
+    <radialGradient id="globe" cx="40%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#ffe6cb" stop-opacity="0.95"/>
+      <stop offset="30%" stop-color="#ffd700" stop-opacity="0.85"/>
+      <stop offset="60%" stop-color="#e6b800" stop-opacity="0.75"/>
+      <stop offset="85%" stop-color="#c49100" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#8b6500" stop-opacity="0.4"/>
+    </radialGradient>
+
+    <!-- Glass reflection -->
+    <linearGradient id="reflect" x1="30%" y1="20%" x2="70%" y2="80%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- Inner glow -->
+    <radialGradient id="innerGlow" cx="50%" cy="50%" r="40%">
+      <stop offset="0%" stop-color="#ffd700" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffd700" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Metal leg gradient -->
+    <linearGradient id="leg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4a4a4a"/>
+      <stop offset="30%" stop-color="#7a7a7a"/>
+      <stop offset="50%" stop-color="#8a8a8a"/>
+      <stop offset="70%" stop-color="#6a6a6a"/>
+      <stop offset="100%" stop-color="#3a3a3a"/>
+    </linearGradient>
+
+    <!-- Vent gradient -->
+    <linearGradient id="vent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a1a"/>
+      <stop offset="100%" stop-color="#1a1a0a"/>
+    </linearGradient>
+
+    <!-- Outer glow filter -->
+    <filter id="outerGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0.84 0 0 0 0  0 0 0 0 0  0 0 0 0.3 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Ambient glow -->
+    <filter id="ambientGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle (app icon shape) -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <!-- Ambient outer glow -->
+  <circle cx="512" cy="420" r="280" fill="#ffd700" opacity="0.08" filter="url(#ambientGlow)"/>
+
+  <!-- 4 Metal legs -->
+  <!-- Front-left leg -->
+  <path d="M412 560 Q400 620 388 700 Q382 740 390 760 L420 760 Q428 740 422 700 Q434 620 440 560" fill="url(#leg)"/>
+  <!-- Front-right leg -->
+  <path d="M584 560 Q596 620 608 700 Q614 740 606 760 L634 760 Q642 740 636 700 Q624 620 620 560" fill="url(#leg)"/>
+  <!-- Back-left leg -->
+  <path d="M440 540 Q432 580 426 640 Q422 670 428 685 L452 685 Q458 670 454 640 Q460 580 464 540" fill="url(#leg)" opacity="0.6"/>
+  <!-- Back-right leg -->
+  <path d="M560 540 Q568 580 574 640 Q578 670 572 685 L596 685 Q602 670 598 640 Q592 580 588 540" fill="url(#leg)" opacity="0.6"/>
+
+  <!-- Glass globe shadow (underneath) -->
+  <ellipse cx="512" cy="570" rx="160" ry="20" fill="#000000" opacity="0.2" filter="url(#ambientGlow)"/>
+
+  <!-- Glass globe body -->
+  <circle cx="512" cy="420" r="180" fill="url(#globe)" filter="url(#outerGlow)"/>
+
+  <!-- Inner glow -->
+  <circle cx="512" cy="420" r="120" fill="url(#innerGlow)"/>
+
+  <!-- Impressed geometric pattern — lat/long lines -->
+  <!-- Horizontal bands -->
+  <ellipse cx="512" cy="350" rx="168" ry="28" fill="none" stroke="#ffe6cb" stroke-width="1.2" opacity="0.25"/>
+  <ellipse cx="512" cy="420" rx="178" ry="30" fill="none" stroke="#ffe6cb" stroke-width="1.2" opacity="0.25"/>
+  <ellipse cx="512" cy="490" rx="168" ry="28" fill="none" stroke="#ffe6cb" stroke-width="1.2" opacity="0.25"/>
+
+  <!-- Vertical bands -->
+  <ellipse cx="512" cy="420" rx="28" ry="175" fill="none" stroke="#ffe6cb" stroke-width="1.2" opacity="0.2"/>
+  <ellipse cx="440" cy="420" rx="20" ry="165" fill="none" stroke="#ffe6cb" stroke-width="1" opacity="0.15"/>
+  <ellipse cx="584" cy="420" rx="20" ry="165" fill="none" stroke="#ffe6cb" stroke-width="1" opacity="0.15"/>
+
+  <!-- Diagonal impressed lines -->
+  <line x1="370" y1="300" x2="654" y2="540" stroke="#ffe6cb" stroke-width="0.8" opacity="0.15"/>
+  <line x1="654" y1="300" x2="370" y2="540" stroke="#ffe6cb" stroke-width="0.8" opacity="0.15"/>
+
+  <!-- Vents — metal slits on the globe surface -->
+  <!-- Top vent row -->
+  <rect x="472" y="335" width="12" height="24" rx="3" fill="url(#vent)" opacity="0.5"/>
+  <rect x="500" y="332" width="14" height="26" rx="3" fill="url(#vent)" opacity="0.5"/>
+  <rect x="530" y="335" width="12" height="24" rx="3" fill="url(#vent)" opacity="0.5"/>
+
+  <!-- Middle vent row -->
+  <rect x="465" y="410" width="10" height="20" rx="2" fill="url(#vent)" opacity="0.4"/>
+  <rect x="492" y="407" width="14" height="26" rx="3" fill="url(#vent)" opacity="0.5"/>
+  <rect x="520" y="405" width="16" height="28" rx="3" fill="url(#vent)" opacity="0.5"/>
+  <rect x="550" y="410" width="10" height="20" rx="2" fill="url(#vent)" opacity="0.4"/>
+
+  <!-- Bottom vent row -->
+  <rect x="480" y="480" width="12" height="22" rx="3" fill="url(#vent)" opacity="0.45"/>
+  <rect x="510" y="478" width="14" height="24" rx="3" fill="url(#vent)" opacity="0.5"/>
+  <rect x="538" y="480" width="12" height="22" rx="3" fill="url(#vent)" opacity="0.45"/>
+
+  <!-- Glass highlight reflection -->
+  <ellipse cx="470" cy="360" rx="80" ry="50" fill="url(#reflect)" transform="rotate(-20, 470, 360)"/>
+
+  <!-- Small bright specular highlight -->
+  <ellipse cx="450" cy="340" rx="40" ry="20" fill="#ffffff" opacity="0.15" transform="rotate(-25, 450, 340)"/>
+
+  <!-- Glass edge rim (thin bright stroke) -->
+  <circle cx="512" cy="420" r="178" fill="none" stroke="#ffe6cb" stroke-width="0.8" opacity="0.2"/>
+</svg>
