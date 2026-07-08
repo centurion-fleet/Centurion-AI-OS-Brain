@@ -134,7 +134,7 @@ final class ConnectionManager: ObservableObject {
                     return
                 }
                 
-                let theirPublicKey = data.dropFirst(1)
+                let theirPublicKey = Data(data.dropFirst(1))
                 
                 Task { @MainActor in
                     do {
