@@ -30,8 +30,10 @@ struct ContentView: View {
             customTabBar
         }
         .onAppear {
-            if selectedConversation == nil {
-                selectDefaultConversation()
+            // Seed sample data after view has appeared (avoids freeze from
+            // rendering 15+ message rows during launch)
+            DispatchQueue.main.async {
+                messageService.seedInitialData()
             }
         }
     }

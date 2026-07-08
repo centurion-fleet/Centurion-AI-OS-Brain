@@ -28,6 +28,13 @@ final class MessageService: ObservableObject {
 
     init(connectionManager: ConnectionManager) {
         self.connectionManager = connectionManager
+        // Sample data seeded on first appearance, not in init,
+        // to avoid rendering 15+ message rows during launch
+    }
+
+    /// Call after the view has appeared to seed initial data
+    func seedInitialData() {
+        guard conversations.isEmpty else { return }
         seedSampleData()
     }
 
