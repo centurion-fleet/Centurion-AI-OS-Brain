@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Combine
 
 /// Unified message service — the single source of truth for ALL messages in the app.

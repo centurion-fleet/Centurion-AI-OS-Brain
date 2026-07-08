@@ -98,23 +98,11 @@ struct ContentView: View {
 
     private var mainConversationsView: some View {
         NavigationStack {
-            if let conversation = selectedConversation {
-                // A specific conversation is selected — show only its messages
-                ChatView(conversation: conversation) { selected in
-                    selectedConversation = selected
-                    showConversations = false
-                }
-            } else {
-                // No conversation selected — show the FULL chronological stream
-                ChatView(conversation: nil) { selected in
-                    selectedConversation = selected
-                    showConversations = false
-                }
-            }
-            .navigationTitle(selectedConversation?.displayTitle ?? "Mission Chat")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbar {
+            chatContent
+                .navigationTitle(selectedConversation?.displayTitle ?? "Mission Chat")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: Spacing.xs) {
                         Button(action: {
@@ -180,6 +168,24 @@ struct ContentView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// The chat view content — either stream mode or context mode.
+    /// Extracted to a computed property to avoid Swift type-checker issues
+    /// with conditional ChatView trailing closures.
+    @ViewBuilder
+    private var chatContent: some View {
+        if let conversation = selectedConversation {
+            ChatView(conversation: conversation) { selected in
+                selectedConversation = selected
+                showConversations = false
+            }
+        } else {
+            ChatView(conversation: nil) { selected in
+                selectedConversation = selected
+                showConversations = false
+            }
+        }
     }
 
     // MARK: - Context Chat FAB
