@@ -2,8 +2,16 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
+    
+    private var appearanceBinding: Binding<AppearanceMode> {
+        Binding(
+            get: { appearanceMode },
+            set: { appearanceMode = $0 }
+        )
+    }
     
     var body: some View {
         NavigationStack {
@@ -50,6 +58,16 @@ struct SettingsView: View {
                             Label("Disconnect", systemImage: "power")
                         }
                     }
+                }
+                
+                // Appearance section
+                Section("Appearance") {
+                    Picker("Theme", selection: appearanceBinding) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
                 
                 // Security section
