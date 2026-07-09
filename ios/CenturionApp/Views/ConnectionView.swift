@@ -15,6 +15,10 @@ struct ConnectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Brand header
+                    BrandHeader()
+                        .padding(.bottom, Spacing.sm)
+
                     // Remote Control hero
                     remoteControlHero
 
@@ -38,13 +42,8 @@ struct ConnectionView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Remote Control")
+            .navigationTitle("Connect")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    RemoteControlToolbar()
-                }
-            }
             .onAppear {
                 if connectionManager.discoveredDevices.isEmpty
                     && connectionManager.connectionState == .disconnected {

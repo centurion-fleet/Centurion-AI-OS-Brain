@@ -170,46 +170,27 @@ struct StatusDot: View {
     }
 }
 
-// MARK: - Remote Control Brand Toolbar
+// MARK: - App Brand Header
 
-/// Reusable branded toolbar — the app theme header that appears on every page.
-/// Shows the connected icon + "REMOTE CONTROL" label, matching the Connect page.
-struct RemoteControlToolbar: View {
-    @EnvironmentObject private var connectionManager: ConnectionManager
-
+/// Consistent brand header for every page — Icon + name + version.
+/// Replaces all toolbar principals and page titles with one unified layout.
+struct BrandHeader: View {
     var body: some View {
-        HStack(spacing: 6) {
+        VStack(spacing: 6) {
             Image(systemName: "app.connected.to.app.below.fill")
-                .font(.caption)
+                .font(.system(size: 32))
                 .foregroundColor(ColorTheme.accent())
-            Text("REMOTE CONTROL")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+
+            Text("PERSONAL-CENTURION AI REMOTE")
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(ColorTheme.accent())
                 .tracking(4)
-            if case .connected = connectionManager.connectionState {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 6, height: 6)
-            }
-        }
-    }
-}
 
-/// Page section title — used below the branded toolbar on each screen
-struct PageSectionTitle: View {
-    let title: String
-    let icon: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(ColorTheme.accent())
-            Text(title)
-                .font(.system(size: 22, weight: .bold, design: .default))
-                .foregroundColor(ColorTheme.primaryText())
-            Spacer()
+            Text("MISSION HORIZON  ·  v3.0.0")
+                .font(.system(size: 9, weight: .regular, design: .monospaced))
+                .foregroundColor(ColorTheme.dimAccent())
+                .tracking(3)
         }
-        .padding(.bottom, Spacing.sm)
+        .frame(maxWidth: .infinity)
     }
 }

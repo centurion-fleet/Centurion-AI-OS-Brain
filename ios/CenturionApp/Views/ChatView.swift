@@ -293,6 +293,10 @@ struct ChatView: View {
         VStack(spacing: Spacing.md) {
             Spacer()
 
+            // Brand header
+            BrandHeader()
+                .padding(.bottom, Spacing.md)
+
             VStack(spacing: Spacing.md) {
                 Image(systemName: "message.fill")
                     .font(.system(size: 40))

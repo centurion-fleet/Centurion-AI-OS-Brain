@@ -16,34 +16,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Page section title
-                PageSectionTitle(title: "Settings", icon: "gearshape.fill")
+                // Brand header
+                BrandHeader()
                     .listRowBackground(Color.clear)
-
-                // Mission Horizon branding
-                Section {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 6) {
-                            Image(systemName: "app.connected.to.app.below.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(ColorTheme.accent())
-
-                            Text("CENTURIONAI REMOTE")
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundColor(ColorTheme.accent())
-                                .tracking(4)
-
-                            Text("MISSION HORIZON  ·  v3.0.0")
-                                .font(.system(size: 9, weight: .regular, design: .monospaced))
-                                .foregroundColor(ColorTheme.dimAccent())
-                                .tracking(3)
-                        }
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                    .listRowBackground(Color.clear)
-                }
+                    .padding(.vertical, Spacing.sm)
 
                 // Identity section
                 Section("Identity") {
@@ -176,11 +152,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    RemoteControlToolbar()
-                }
-            }
             .alert("Reset Identity?", isPresented: $showResetConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {

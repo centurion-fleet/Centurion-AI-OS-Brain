@@ -102,8 +102,9 @@ struct MissionPortfolioView: View {
 
                 ScrollView {
                     VStack(spacing: Spacing.md) {
-                        // Page section title
-                        PageSectionTitle(title: "Pulse", icon: "waveform.path.ecg")
+                        // Brand header
+                        BrandHeader()
+                            .padding(.bottom, Spacing.xs)
 
                         // Only the selected category renders
                         switch selectedCategory {
@@ -134,11 +135,6 @@ struct MissionPortfolioView: View {
             }
             .navigationTitle("Pulse")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    RemoteControlToolbar()
-                }
-            }
             .onAppear {
                 withAnimation(Motion.appear.delay(0.1)) {
                     isAppeared = true
