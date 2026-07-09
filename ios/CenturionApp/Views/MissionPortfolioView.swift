@@ -18,11 +18,11 @@ enum PulseCategory: String, CaseIterable {
 
     var icon: String {
         switch self {
-        case .live: return "bolt.fill"
-        case .wins: return "star.fill"
-        case .outputs: return "doc.text.fill"
-        case .decisions: return "hand.raised.fill"
-        case .pulse: return "waveform.path.ecg"
+        case .live:      return "bolt.circle.fill"
+        case .wins:      return "trophy.fill"
+        case .outputs:   return "doc.richtext.fill"
+        case .decisions: return "lightbulb.fill"
+        case .pulse:     return "waveform.path.ecg"
         }
     }
 }
