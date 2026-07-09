@@ -298,16 +298,7 @@ struct ChatView: View {
                 .padding(.bottom, Spacing.md)
 
             VStack(spacing: Spacing.md) {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(ColorTheme.mutedText())
-
-                Text("Centurion Remote")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(ColorTheme.primaryText())
-
-                Text("Tap the title above to browse your conversations.\nAll messages from your Centurion appear here.")
+                Text("All messages from your Centurion appear here.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)

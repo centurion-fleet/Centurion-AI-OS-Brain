@@ -70,7 +70,7 @@ struct SecurityHubView: View {
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.systemGray6))
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
     
@@ -97,7 +97,7 @@ struct SecurityHubView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
@@ -122,7 +122,7 @@ struct SecurityHubView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
@@ -160,7 +160,7 @@ struct SecurityHubView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
@@ -168,7 +168,7 @@ struct SecurityHubView: View {
         Text(text)
             .font(.system(size: 11, weight: .semibold, design: .default))
             .textCase(.uppercase)
-            .foregroundColor(.secondary)
+            .foregroundColor(ColorTheme.mutedText())
             .frame(width: 68, alignment: .center)
     }
     
@@ -182,9 +182,9 @@ struct SecurityHubView: View {
             
             supportDot(centurion, color: ColorTheme.accent())
                 .frame(width: 68, alignment: .center)
-            supportDot(signal, color: .secondary)
+            supportDot(signal, color: ColorTheme.mutedText())
                 .frame(width: 68, alignment: .center)
-            supportDot(telegram, color: .secondary)
+            supportDot(telegram, color: ColorTheme.mutedText())
                 .frame(width: 68, alignment: .center)
         }
         .padding(.vertical, 8)
@@ -204,7 +204,7 @@ struct SecurityHubView: View {
             case .none:
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(.gray.opacity(0.5))
+                    .foregroundColor(ColorTheme.mutedText().opacity(0.5))
             }
         }
     }
@@ -217,7 +217,7 @@ struct SecurityHubView: View {
             
             Text("Centurion has no backdoors, no admin access to your data, and no ability to read your conversations — even if compelled.")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(ColorTheme.mutedText())
                 .fixedSize(horizontal: false, vertical: true)
             
             VStack(spacing: 6) {
@@ -229,7 +229,7 @@ struct SecurityHubView: View {
             .font(.caption)
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
@@ -241,7 +241,7 @@ struct SecurityHubView: View {
                 withAnimation { showCryptoDetail.toggle() }
             }
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundColor(ColorTheme.accent())
             
             if showCryptoDetail {
                 VStack(spacing: 6) {
@@ -256,7 +256,7 @@ struct SecurityHubView: View {
                 }
                 .font(.caption)
                 .padding()
-                .background(Color(.systemGray5))
+                .background(ColorTheme.accent().opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
