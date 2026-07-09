@@ -133,9 +133,6 @@ struct MissionPortfolioView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
-                        if let activity = liveActivity, selectedCategory == .live {
-                            LoopPhaseBadge(phase: activity.phase)
-                        }
                         if connectionManager.connectionState == .connected {
                             StatusDot(isConnected: true)
                         }
@@ -968,25 +965,5 @@ struct PulseDot: View {
                     isAnimating = true
                 }
             }
-    }
-}
-
-// MARK: - Loop Phase Badge (toolbar)
-
-struct LoopPhaseBadge: View {
-    let phase: LoopPhase
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: phase.icon)
-                .font(.system(size: 7))
-            Text(phase.rawValue)
-                .font(.system(size: 7, weight: .semibold, design: .monospaced))
-        }
-        .foregroundColor(ColorTheme.accent())
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2)
-        .background(ColorTheme.accent().opacity(0.1))
-        .clipShape(Capsule())
     }
 }
