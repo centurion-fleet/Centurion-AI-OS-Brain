@@ -238,9 +238,9 @@ struct MissionPortfolioView: View {
 
     // MARK: - Loop Phase Bar
 
-    private func loopPhaseBar(currentPhase: LiveActivity.LoopPhase) -> some View {
+    private func loopPhaseBar(currentPhase: LoopPhase) -> some View {
         HStack(spacing: 0) {
-            ForEach(LiveActivity.LoopPhase.allCases.filter { $0 != .idle }, id: \.self) { phase in
+            ForEach(LoopPhase.allCases.filter { $0 != .idle }, id: \.self) { phase in
                 let isActive = phase == currentPhase
                 let isPast = phaseIndex(phase) < phaseIndex(currentPhase)
 
@@ -282,8 +282,8 @@ struct MissionPortfolioView: View {
         }
     }
 
-    private func phaseIndex(_ phase: LiveActivity.LoopPhase) -> Int {
-        LiveActivity.LoopPhase.allCases.firstIndex(of: phase) ?? 0
+    private func phaseIndex(_ phase: LoopPhase) -> Int {
+        LoopPhase.allCases.firstIndex(of: phase) ?? 0
     }
 
     // MARK: - Sub-Agent Row
@@ -651,7 +651,7 @@ struct PulseDot: View {
 // MARK: - Loop Phase Badge (toolbar)
 
 struct LoopPhaseBadge: View {
-    let phase: LiveActivity.LoopPhase
+    let phase: LoopPhase
 
     var body: some View {
         HStack(spacing: 3) {

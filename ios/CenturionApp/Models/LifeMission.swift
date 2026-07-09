@@ -14,6 +14,25 @@ struct LifeMission: Identifiable, Codable {
     }
 }
 
+/// The phases of a Centurion mission loop — from discovery through to verification.
+enum LoopPhase: String, CaseIterable {
+    case discovering = "Discovering"
+    case planning = "Planning"
+    case executing = "Executing"
+    case verifying = "Verifying"
+    case idle = "Idle"
+    
+    var icon: String {
+        switch self {
+        case .discovering: return "magnifyingglass"
+        case .planning: return "map"
+        case .executing: return "bolt.fill"
+        case .verifying: return "checkmark.shield.fill"
+        case .idle: return "pause.circle"
+        }
+    }
+}
+
 /// What the Centurion is doing RIGHT NOW — the live loop.
 /// This is the primary UI. The human watches this.
 struct LiveActivity: Identifiable {
@@ -25,24 +44,6 @@ struct LiveActivity: Identifiable {
     let startedAt: Date
     let subAgents: [SubAgentActivity]
     let estimatedCompletion: TimeInterval?   // seconds remaining
-
-    enum LoopPhase: String, CaseIterable {
-        case discovering = "Discovering"
-        case planning = "Planning"
-        case executing = "Executing"
-        case verifying = "Verifying"
-        case idle = "Idle"
-        
-        var icon: String {
-            switch self {
-            case .discovering: return "magnifyingglass"
-            case .planning: return "map"
-            case .executing: return "bolt.fill"
-            case .verifying: return "checkmark.shield.fill"
-            case .idle: return "pause.circle"
-            }
-        }
-    }
 }
 
 /// A sub-agent working on part of a loop
