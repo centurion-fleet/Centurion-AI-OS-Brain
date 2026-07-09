@@ -169,3 +169,47 @@ struct StatusDot: View {
             }
     }
 }
+
+// MARK: - Remote Control Brand Toolbar
+
+/// Reusable branded toolbar — the app theme header that appears on every page.
+/// Shows the connected icon + "REMOTE CONTROL" label, matching the Connect page.
+struct RemoteControlToolbar: View {
+    @EnvironmentObject private var connectionManager: ConnectionManager
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "app.connected.to.app.below.fill")
+                .font(.caption)
+                .foregroundColor(ColorTheme.accent())
+            Text("REMOTE CONTROL")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(ColorTheme.accent())
+                .tracking(4)
+            if case .connected = connectionManager.connectionState {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+            }
+        }
+    }
+}
+
+/// Page section title — used below the branded toolbar on each screen
+struct PageSectionTitle: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(ColorTheme.accent())
+            Text(title)
+                .font(.system(size: 22, weight: .bold, design: .default))
+                .foregroundColor(ColorTheme.primaryText())
+            Spacer()
+        }
+        .padding(.bottom, Spacing.sm)
+    }
+}

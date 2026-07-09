@@ -42,20 +42,7 @@ struct ConnectionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "app.connected.to.app.below.fill")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.accent())
-                        Text("REMOTE CONTROL")
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundColor(ColorTheme.accent())
-                            .tracking(4)
-                        if case .connected = connectionManager.connectionState {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 6, height: 6)
-                        }
-                    }
+                    RemoteControlToolbar()
                 }
             }
             .onAppear {

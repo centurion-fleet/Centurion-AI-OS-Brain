@@ -16,6 +16,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Page section title
+                PageSectionTitle(title: "Settings", icon: "gearshape.fill")
+                    .listRowBackground(Color.clear)
+
                 // Mission Horizon branding
                 Section {
                     HStack {
@@ -172,6 +176,11 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    RemoteControlToolbar()
+                }
+            }
             .alert("Reset Identity?", isPresented: $showResetConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {

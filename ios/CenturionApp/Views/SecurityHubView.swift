@@ -11,6 +11,9 @@ struct SecurityHubView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // Page section title
+                    PageSectionTitle(title: "Security", icon: "lock.shield.fill")
+
                     // Hero shield
                     securityHero
 
@@ -35,6 +38,11 @@ struct SecurityHubView: View {
             }
             .navigationTitle("Security")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    RemoteControlToolbar()
+                }
+            }
         }
     }
     
