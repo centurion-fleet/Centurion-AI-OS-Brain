@@ -243,3 +243,79 @@ extension LiveActivity {
         )
     }
 }
+
+/// A document the Centurion has created — research, content, analysis, plans.
+/// These are surfaced in the Pulse tab's OUTPUTS section and as inline cards in Chat.
+struct CenturionOutput: Identifiable {
+    let id: UUID
+    let title: String
+    let summary: String
+    let content: String             // The full document body (markdown)
+    let type: OutputType
+    let sourceLoop: String          // Which loop created this
+    let relatedMission: String?
+    let createdAt: Date
+    let wordCount: Int
+    let filePath: String            // Where it lives on the Centurion
+
+    enum OutputType: String, CaseIterable {
+        case research = "Research"
+        case analysis = "Analysis"
+        case content = "Content"
+        case plan = "Plan"
+        case report = "Report"
+        case code = "Code"
+
+        var icon: String {
+            switch self {
+            case .research: return "magnifyingglass"
+            case .analysis: return "chart.bar.fill"
+            case .content: return "doc.text.fill"
+            case .plan: return "list.clipboard"
+            case .report: return "doc.richtext"
+            case .code: return "chevron.left.forwardslash.chevron.right"
+            }
+        }
+    }
+
+    static func preview() -> [CenturionOutput] {
+        [
+            CenturionOutput(
+                id: UUID(),
+                title: "Q3 Market Positioning Analysis",
+                summary: "Identified 3 underserved positioning angles across 14 competitors. Includes recommended messaging pillars and target segments.",
+                content: "# Q3 Market Positioning Analysis\n\n## Executive Summary\n\nAnalysed 14 competitors across 3 market segments. Found 3 underserved positioning angles with high purchase intent.\n\n## Key Findings\n\n1. **The Compliance-First Approach** — $2.4M unserved segment. No competitor owns this.\n2. **The Durability Narrative** — $1.8M segment. Two competitors, but weak messaging.\n3. **The Australian-Made Story** — $1.2M segment. Growing 15% YoY.\n\n## Recommended Positioning\n\n**Lead with Compliance.** It addresses the #1 pain point for mining and construction buyers and has zero competitive overlap.",
+                type: .research,
+                sourceLoop: "Market Research",
+                relatedMission: "Q3 Go-to-Market",
+                createdAt: Date().addingTimeInterval(-3600),
+                wordCount: 1240,
+                filePath: "/outputs/positioning/analysis.md"
+            ),
+            CenturionOutput(
+                id: UUID(),
+                title: "Customer Sentiment Report",
+                summary: "Processed 127 customer reviews. Extracted 9 feature requests and 4 recurring complaints with severity scoring.",
+                content: "# Customer Sentiment Analysis\n\n## Overview\n\nProcessed 127 reviews from G2, Capterra, and Reddit.\n\n## Top Feature Requests\n\n1. **Mobile dashboard** — requested 23 times\n2. **API access** — requested 18 times\n3. **Custom reporting** — requested 14 times\n\n## Top Complaints\n\n1. **Onboarding complexity** — severity: high, frequency: 31%\n2. **Integration limitations** — severity: medium, frequency: 22%",
+                type: .analysis,
+                sourceLoop: "Sentiment Analysis",
+                relatedMission: "Product Development",
+                createdAt: Date().addingTimeInterval(-7200),
+                wordCount: 890,
+                filePath: "/outputs/sentiment/report.md"
+            ),
+            CenturionOutput(
+                id: UUID(),
+                title: "Weekly Content Brief — The Hidden Cost of Enterprise AI",
+                summary: "Full content brief with keyword targets, outline, and source links for the writer.",
+                content: "# Content Brief: The Hidden Cost of Enterprise AI\n\n## Target Keywords\n- enterprise AI cost, AI ROI, private AI vs public AI\n\n## Angle\n\nMost enterprises don't realise that public AI APIs cost 3x more than private deployment at scale.\n\n## Outline\n1. The sticker shock story\n2. Hidden costs: compliance, data egress, retraining\n3. The private AI alternative\n4. Case study: 60% savings with on-premise deployment",
+                type: .content,
+                sourceLoop: "Content Strategy",
+                relatedMission: "Content Strategy",
+                createdAt: Date().addingTimeInterval(-14400),
+                wordCount: 450,
+                filePath: "/outputs/content/weekly-brief-12.md"
+            ),
+        ]
+    }
+}

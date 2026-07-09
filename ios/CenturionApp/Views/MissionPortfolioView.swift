@@ -17,6 +17,7 @@ struct MissionPortfolioView: View {
     @State private var liveActivity: LiveActivity? = LiveActivity.preview()
     @State private var completedLoops: [CompletedLoop] = CompletedLoop.preview()
     @State private var decisions: [DecisionItem] = DecisionItem.preview()
+    @State private var outputs: [CenturionOutput] = CenturionOutput.preview()
     @State private var thoughts: [CenturionThought] = CenturionThought.preview()
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
@@ -39,7 +40,12 @@ struct MissionPortfolioView: View {
                     // 2. WINS — portfolio of completed loops
                     completedLoopsSection
 
-                    // 3. DECISIONS — only when human input is needed
+                    // 3. OUTPUTS — documents the Centurion created
+                    if !outputs.isEmpty {
+                        outputsSection
+                    }
+
+                    // 4. DECISIONS — only when human input is needed
                     if !decisions.isEmpty {
                         decisionsSection
                     }
@@ -444,7 +450,84 @@ struct MissionPortfolioView: View {
         return "\(minutes / 60)h \(minutes % 60)m"
     }
 
-    // MARK: - 3. DECISIONS — Only When Human Input Is Needed
+    // MARK: - 3. OUTPUTS — Documents the Centurion Created
+
+    private var outputsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "doc.text.fill")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.accent())
+                Text("Outputs")
+                    .font(.headline)
+                    .foregroundColor(ColorTheme.primaryText())
+                Spacer()
+                Text("\(outputs.count) documents")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            ForEach(outputs) { output in
+                NavigationLink(destination: DocumentViewer(output: output)) {
+                    outputCard(output)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : 30)
+    }
+
+    private func outputCard(_ output: CenturionOutput) -> some View {
+        HStack(spacing: Spacing.sm) {
+            // Type icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(ColorTheme.accent().opacity(0.1))
+                    .frame(width: 36, height: 36)
+                Image(systemName: output.type.icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(ColorTheme.accent())
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(output.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ColorTheme.primaryText())
+                    .lineLimit(1)
+
+                Text(output.summary)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(2)
+
+                HStack(spacing: 8) {
+                    Text(output.type.rawValue)
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundColor(ColorTheme.accent())
+                    Text("\(output.wordCount) words")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(ColorTheme.mutedText())
+                    if let mission = output.relatedMission {
+                        Text(mission)
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+        }
+        .padding()
+        .cardStyle()
+    }
+
+    // MARK: - 4. DECISIONS — Only When Human Input Is Needed
 
     private var decisionsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
