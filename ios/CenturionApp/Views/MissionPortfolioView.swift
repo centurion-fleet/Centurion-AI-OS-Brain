@@ -102,10 +102,6 @@ struct MissionPortfolioView: View {
 
                 ScrollView {
                     VStack(spacing: Spacing.md) {
-                        // Brand header
-                        BrandHeader()
-                            .padding(.bottom, Spacing.sm)
-
                         // Only the selected category renders
                         switch selectedCategory {
                         case .live:
