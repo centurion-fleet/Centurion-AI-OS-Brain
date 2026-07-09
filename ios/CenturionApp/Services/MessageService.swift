@@ -4,7 +4,7 @@ import Combine
 
 /// Unified message service — the single source of truth for ALL messages in the app.
 ///
-/// Messages flow from any entry point (Mission Control chat, direct Chat tab) into
+/// Messages flow from any entry point (Pulse tab chat, direct Chat tab) into
 /// a single chronological stream. They are grouped into conversations by their
 /// mission context (program / target / task / standalone).
 ///

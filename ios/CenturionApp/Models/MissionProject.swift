@@ -1,6 +1,6 @@
 import Foundation
 
-/// A Mission Control program — the most senior element in the project hierarchy.
+/// A Mission program — the most senior element in the project hierarchy.
 /// Every program can be chatted about. That chat lives in the unified message stream.
 struct MissionProgram: Identifiable, Codable, Equatable {
     let id: UUID

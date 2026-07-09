@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Mission Control program detail — targets expand inline to show tasks.
+/// Mission program detail — milestones expand inline to show tasks.
 /// Everything is chat-able. Tap 💬 on any target or task to open the unified chat.
 struct ProjectDetailView: View {
     let program: MissionProgram

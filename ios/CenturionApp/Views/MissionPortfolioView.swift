@@ -131,13 +131,7 @@ struct MissionPortfolioView: View {
             }
             .navigationTitle("Centurion Remote")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 8) {
-                        if connectionManager.connectionState == .connected {
-                            StatusDot(isConnected: true)
-                        }
-                    }
-                }
+                // No toolbar items — clean title only
             }
             .onAppear {
                 withAnimation(Motion.appear.delay(0.1)) {

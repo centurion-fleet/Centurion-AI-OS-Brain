@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Main application entry — four tabs.
+/// Main application entry — five tabs.
 ///
 /// The tab bar encodes the Remote Control theme:
-/// - Remote tab (antenna / connected icon) — the pairing ceremony
-/// - Chat tab — the mission stream
+/// - Connect tab — the pairing ceremony (was "Remote")
+/// - Remote tab — the unified mission stream (was "Chat")
+/// - Pulse tab — live AI activity, wins, decisions
 /// - Security tab — encryption dashboard
 /// - Settings tab — identity and configuration
 struct ContentView: View {
@@ -14,11 +15,11 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Remote Control — pair and connect
+            // Connect — pair and connect to your Centurion
             ConnectionView()
                 .tabItem {
                     Label(
-                        "Remote",
+                        "Connect",
                         systemImage: connectionManager.connectionState == .connected
                             ? "app.connected.to.app.below.fill"
                             : "antenna.radiowaves.left.and.right"
@@ -26,21 +27,21 @@ struct ContentView: View {
                 }
                 .tag(0)
 
-            // Chat — the unified mission stream
+            // Remote — the conversation stream with your Centurion
             ChatView()
                 .tabItem {
-                    Label("Chat", systemImage: "message.fill")
+                    Label("Remote", systemImage: "message.fill")
                 }
                 .tag(1)
 
-            // Centurion Pulse — live AI activity, wins, decisions
+            // Pulse — live AI dashboard
             MissionPortfolioView()
                 .tabItem {
                     Label("Pulse", systemImage: "waveform.path.ecg")
                 }
                 .tag(2)
 
-            // Security Hub — encryption and trust
+            // Security — encryption and trust
             SecurityHubView()
                 .tabItem {
                     Label("Security", systemImage: connectionManager.connectionState == .connected

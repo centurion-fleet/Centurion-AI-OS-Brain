@@ -303,7 +303,7 @@ struct ChatView: View {
                     .fontWeight(.bold)
                     .foregroundColor(ColorTheme.primaryText())
 
-                Text("Tap the title above to browse your conversations.\nAll messages from Mission Control appear here.")
+                Text("Tap the title above to browse your conversations.\nAll messages from your Centurion appear here.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
