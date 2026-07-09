@@ -194,7 +194,6 @@ struct MissionPortfolioView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
         }
-        .background(ColorTheme.background())
     }
 
     // MARK: - Chat Sheet
