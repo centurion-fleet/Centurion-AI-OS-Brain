@@ -238,12 +238,22 @@ struct MissionPortfolioView: View {
             .buttonStyle(.plain)
 
             if liveExpanded, let activity = liveActivity {
-                // Loop phase progress bar
+                // Orbital agent visualization — mesmerising to watch
+                LoopVisualizationView(activity: activity)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(ColorTheme.surface())
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(ColorTheme.border(), lineWidth: 0.5)
+                    )
+
+                // Loop phase bar
                 loopPhaseBar(currentPhase: activity.phase)
 
-                // Main activity card
+                // Activity details
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    // Summary
                     Text(activity.summary)
                         .font(.subheadline)
                         .fontWeight(.semibold)
