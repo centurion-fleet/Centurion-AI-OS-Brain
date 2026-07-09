@@ -16,7 +16,7 @@ struct SoulDocument: Codable {
     var yourValues: [String] = []
     var yourPersonality: String = ""       // How you'd describe yourself
     var yourStrengths: [String] = []
-    var yourCommunicationStyle: String = ""
+    var communicationStyle: String = ""
 
     // MARK: - Your Mission
     var missionStatement: String = ""      // "Live your personal mission"
