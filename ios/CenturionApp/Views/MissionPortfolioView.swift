@@ -2,17 +2,24 @@ import SwiftUI
 
 /// Mission Control — the cockpit where the human aligns with their Centurion.
 ///
-/// Everything is chat-able. Tap 💬 on any program to chat about it.
-/// Those messages flow into the unified chat stream automatically.
+/// Two layers of time live here:
+///   • HUMAN SPEED — mission statement, vital stat, programs, milestones — days/weeks/months
+///   • AI SPEED — the Centurion's live loops, sub-agents, discoveries — seconds/minutes
+///
+/// The Centurion Pulse section makes the invisible visible: your AI is working
+/// at the speed of thought, and you can see every cycle, every agent, every insight.
+/// Everything is chat-able. Tap 💬 on anything to open the unified stream.
 struct MissionPortfolioView: View {
     @State private var mission: LifeMission = LifeMission.preview()
     @State private var programs: [MissionProgram] = MissionProgram.preview()
+    @State private var activity: CenturionActivity? = CenturionActivity.preview()
     @State private var thoughts: [CenturionThought] = CenturionThought.preview()
     @State private var focusActions: [FocusAction] = FocusAction.preview()
     @State private var searchText = ""
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
     @State private var isAppeared = false
+    @State private var pulseExpanded = true
 
     /// Drag reorder state
     @State private var draggedProgram: MissionProgram?
@@ -26,6 +33,7 @@ struct MissionPortfolioView: View {
             ScrollView {
                 VStack(spacing: Spacing.md) {
                     missionHeader
+                    centurionPulseSection      // 🆕 AI-speed visibility
                     vitalStatCard
                     alertsSection
                     focusActionsSection
@@ -38,8 +46,13 @@ struct MissionPortfolioView: View {
             .navigationTitle("My Mission")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if connectionManager.connectionState == .connected {
-                        StatusDot(isConnected: true)
+                    HStack(spacing: 8) {
+                        if activity != nil {
+                            LoopPhaseIndicator(phase: activity!.phase)
+                        }
+                        if connectionManager.connectionState == .connected {
+                            StatusDot(isConnected: true)
+                        }
                     }
                 }
             }
@@ -90,7 +103,12 @@ struct MissionPortfolioView: View {
         chatTarget = ChatSheetTarget(context: .standalone(title: "Focus Today"))
     }
 
-    // MARK: - Mission Header
+    private func openPulseChat() {
+        Haptics.lightTap()
+        chatTarget = ChatSheetTarget(context: .standalone(title: "Centurion Remote"))
+    }
+
+    // MARK: - Mission Header (Human Speed)
 
     private var missionHeader: some View {
         VStack(spacing: Spacing.xs) {
@@ -101,7 +119,6 @@ struct MissionPortfolioView: View {
 
                 Spacer()
 
-                // Chat about My Mission
                 Button(action: { openMissionChat() }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 12, weight: .regular))
@@ -127,7 +144,185 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 10)
     }
 
-    // MARK: - Vital Statistic
+    // MARK: - Centurion Pulse (AI Speed) 🆕
+
+    private var centurionPulseSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            // Header with expand/collapse
+            Button(action: {
+                withAnimation(Motion.heavy) { pulseExpanded.toggle() }
+            }) {
+                HStack(spacing: Spacing.xs) {
+                    if let activity = activity {
+                        // Animated phase indicator
+                        PulseDot(phase: activity.phase)
+                            .frame(width: 10, height: 10)
+                    }
+
+                    Text("Centurion Remote")
+                        .font(.headline)
+                        .foregroundColor(ColorTheme.primaryText())
+
+                    Spacer()
+
+                    if let activity = activity {
+                        Text("\(Int(activity.progress * 100))%")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .rotationEffect(.degrees(pulseExpanded ? 180 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+
+            if pulseExpanded, let activity = activity {
+                // Loop phase indicator bar
+                loopPhaseBar(currentPhase: activity.phase)
+
+                // Activity detail card
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(activity.summary)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ColorTheme.primaryText())
+                            Text(activity.detail)
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                                .lineLimit(2)
+                        }
+
+                        Spacer()
+
+                        // Chat about current activity
+                        Button(action: { openPulseChat() }) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundColor(ColorTheme.mutedText())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Progress bar
+                    ProgressView(value: activity.progress)
+                        .tint(ColorTheme.accent())
+
+                    // Sub-agents working in parallel
+                    if !activity.subAgents.isEmpty {
+                        VStack(spacing: Spacing.xs) {
+                            Text("\(activity.agentCount) agents working in parallel")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundColor(ColorTheme.mutedText())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            ForEach(activity.subAgents) { agent in
+                                subAgentRow(agent)
+                            }
+                        }
+                        .padding(Spacing.sm)
+                        .background(ColorTheme.accent().opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding()
+                .cardStyle()
+            }
+        }
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : 12)
+    }
+
+    // MARK: - Loop Phase Bar
+
+    private func loopPhaseBar(currentPhase: CenturionActivity.LoopPhase) -> some View {
+        HStack(spacing: 0) {
+            ForEach(CenturionActivity.LoopPhase.allCases.filter { $0 != .idle }, id: \.self) { phase in
+                let isActive = phase == currentPhase
+                let isPast = phaseIndex(phase) < phaseIndex(currentPhase)
+
+                VStack(spacing: 4) {
+                    ZStack {
+                        Circle()
+                            .fill(isPast ? ColorTheme.accent() : (isActive ? ColorTheme.accent().opacity(0.2) : Color.clear))
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Circle()
+                                    .stroke(isActive ? ColorTheme.accent() : ColorTheme.border(), lineWidth: 1.5)
+                            )
+
+                        if isPast {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.black)
+                        } else {
+                            Image(systemName: phase.icon)
+                                .font(.system(size: 11))
+                                .foregroundColor(isActive ? ColorTheme.accent() : ColorTheme.mutedText())
+                        }
+                    }
+
+                    Text(phase.rawValue)
+                        .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                        .foregroundColor(isActive ? ColorTheme.accent() : ColorTheme.mutedText())
+                        .tracking(0.5)
+                }
+                .frame(maxWidth: .infinity)
+
+                if phase != .verifying {
+                    Rectangle()
+                        .fill(isPast ? ColorTheme.accent() : ColorTheme.border())
+                        .frame(height: 1)
+                        .frame(maxWidth: 16)
+                }
+            }
+        }
+    }
+
+    private func phaseIndex(_ phase: CenturionActivity.LoopPhase) -> Int {
+        CenturionActivity.LoopPhase.allCases.firstIndex(of: phase) ?? 0
+    }
+
+    // MARK: - Sub-Agent Row
+
+    private func subAgentRow(_ agent: SubAgentActivity) -> some View {
+        HStack(spacing: Spacing.xs) {
+            Image(systemName: agent.status.icon)
+                .font(.caption)
+                .foregroundColor(agent.status == .active ? ColorTheme.accent()
+                               : agent.status == .completed ? .green
+                               : agent.status == .error ? .red
+                               : ColorTheme.mutedText())
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(agent.name)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text(agent.role)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundColor(ColorTheme.dimAccent())
+                }
+                Text(agent.summary)
+                    .font(.system(size: 9))
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("\(Int(agent.progress * 100))%")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(ColorTheme.accent())
+        }
+    }
+
+    // MARK: - Vital Statistic (Human Speed)
 
     private var vitalStatCard: some View {
         HStack(spacing: Spacing.md) {
@@ -196,7 +391,6 @@ struct MissionPortfolioView: View {
                             .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.1))
                             .clipShape(Capsule())
-                        // Chat about alerts
                         Button(action: { openAlertsChat() }) {
                             Image(systemName: "bubble.left.and.bubble.right")
                                 .font(.system(size: 12, weight: .regular))
@@ -239,7 +433,7 @@ struct MissionPortfolioView: View {
         }
     }
 
-    // MARK: - Focus Actions
+    // MARK: - Focus Today (Human Speed)
 
     private var focusActionsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -254,7 +448,6 @@ struct MissionPortfolioView: View {
                 Text("\(focusActions.filter { !$0.isDone }.count) remaining")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
-                // Chat about focus
                 Button(action: { openFocusChat() }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 12, weight: .regular))
@@ -301,7 +494,7 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 24)
     }
 
-    // MARK: - Milestones (Programs)
+    // MARK: - Mission Programs (Human Speed)
 
     private var targetsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -371,15 +564,65 @@ struct MissionPortfolioView: View {
     }
 }
 
+// MARK: - Pulse Dot
+
+/// An animated dot that indicates the Centurion is actively looping.
+struct PulseDot: View {
+    let phase: CenturionActivity.LoopPhase
+    @State private var isAnimating = false
+
+    var body: some View {
+        Circle()
+            .fill(phaseColor)
+            .opacity(isAnimating ? 1.0 : 0.3)
+            .scaleEffect(isAnimating ? 1.0 : 0.6)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    isAnimating = true
+                }
+            }
+    }
+
+    private var phaseColor: Color {
+        switch phase {
+        case .discovering: return ColorTheme.accent()
+        case .planning: return ColorTheme.accent()
+        case .executing: return ColorTheme.accent()
+        case .verifying: return .green
+        case .idle: return ColorTheme.mutedText()
+        }
+    }
+}
+
+// MARK: - Loop Phase Indicator
+
+struct LoopPhaseIndicator: View {
+    let phase: CenturionActivity.LoopPhase
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: phase.icon)
+                .font(.system(size: 8))
+            Text(phase.rawValue)
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+        }
+        .foregroundColor(ColorTheme.accent())
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(ColorTheme.accent().opacity(0.1))
+        .clipShape(Capsule())
+    }
+}
+
 // MARK: - Centurion Thought Preview
 
 extension CenturionThought {
     static func preview() -> [CenturionThought] {
         [
-            CenturionThought(id: UUID(), text: "Q3 Go-to-Market target is on track. Revenue at 74% of quarterly target with 6 weeks remaining.", type: .progress, timestamp: Date().addingTimeInterval(-300), relatedTarget: "Q3 Go-to-Market"),
-            CenturionThought(id: UUID(), text: "Content Strategy target is blocked. 'Draft messaging framework' awaiting stakeholder feedback for 8 days.", type: .alert, timestamp: Date().addingTimeInterval(-600), relatedTarget: "Content Strategy"),
-            CenturionThought(id: UUID(), text: "I suggest we reprioritise Partner Onboarding ahead of Content Strategy given the revenue impact.", type: .suggestion, timestamp: Date().addingTimeInterval(-3600), relatedTarget: "Partner Onboarding"),
-            CenturionThought(id: UUID(), text: "Cashflow projection updated. Next 30 days look stable.", type: .insight, timestamp: Date().addingTimeInterval(-7200), relatedTarget: nil),
+            CenturionThought(id: UUID(), text: "Q3 Go-to-Market target is on track. Revenue at 74% of quarterly target with 6 weeks remaining.", type: .progress, timestamp: Date().addingTimeInterval(-300), relatedTarget: "Q3 Go-to-Market", phase: .verifying),
+            CenturionThought(id: UUID(), text: "Content Strategy target is blocked. 'Draft messaging framework' awaiting stakeholder feedback for 8 days.", type: .alert, timestamp: Date().addingTimeInterval(-600), relatedTarget: "Content Strategy", phase: .executing),
+            CenturionThought(id: UUID(), text: "I suggest we reprioritise Partner Onboarding ahead of Content Strategy given the revenue impact.", type: .suggestion, timestamp: Date().addingTimeInterval(-3600), relatedTarget: "Partner Onboarding", phase: .planning),
+            CenturionThought(id: UUID(), text: "Cashflow projection updated. Next 30 days look stable.", type: .insight, timestamp: Date().addingTimeInterval(-7200), relatedTarget: nil, phase: .discovering),
         ]
     }
 }
@@ -411,7 +654,6 @@ struct ProgramCard: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    // Chat button — thin grey line icon
                     Button(action: { onChat?() }) {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 14, weight: .regular))

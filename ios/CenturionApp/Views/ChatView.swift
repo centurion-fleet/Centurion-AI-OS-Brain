@@ -68,6 +68,9 @@ struct ChatView: View {
                     }
                 }
             } else {
+                // Mission context banner — what mission we're advancing
+                missionContextBanner
+
                 // Clean empty state — no conversation selected
                 emptyState
             }
@@ -249,6 +252,39 @@ struct ChatView: View {
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .background(ColorTheme.accent().opacity(0.05))
+    }
+
+    // MARK: - Mission Context Banner
+
+    /// Shows the current mission being advanced by this conversation.
+    /// Every chat in Centurion is mission-contextual — never idle chatter.
+    private var missionContextBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "target")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(ColorTheme.accent())
+
+            Text("Advancing: Build Australia's leading OEM lighting tower provider")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(ColorTheme.mutedText())
+                .lineLimit(1)
+
+            Spacer()
+
+            if connectionManager.connectionState == .connected {
+                PulseDot(phase: .executing)
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, 6)
+        .background(ColorTheme.accent().opacity(0.04))
+        .overlay(
+            Rectangle()
+                .fill(ColorTheme.accent().opacity(0.15))
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
     }
 
     // MARK: - Empty States
