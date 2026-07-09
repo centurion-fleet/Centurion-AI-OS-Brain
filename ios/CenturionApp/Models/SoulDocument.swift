@@ -55,7 +55,7 @@ struct SoulDocument: Codable {
         soul.yourValues = ["Reliability", "Directness", "Craftsmanship", "Loyalty", "Progress"]
         soul.yourPersonality = "Direct, pragmatic, impatient with bullshit. I trust people who deliver. I value straight talk over polished conversation."
         soul.yourStrengths = ["Strategic thinking", "Building relationships", "Seeing the market", "Making decisions"]
-        soul.yourCommunicationStyle = "Direct and concise. Say what you mean. Don't waste words."
+        soul.communicationStyle = "Direct and concise. Say what you mean. Don't waste words."
         soul.missionStatement = "Build Australia's leading OEM lighting tower provider"
         soul.whyThisMission = "Australian mining and construction deserve world-class equipment built by Australians, not imported from halfway around the world."
         soul.vitalStatName = "Revenue Target"
