@@ -61,6 +61,23 @@ struct SettingsView: View {
                     }
                 }
 
+                // Soul Document
+                Section {
+                    NavigationLink(destination: SoulDocumentView(soul: SoulDocument.preview())) {
+                        HStack {
+                            Image(systemName: "heart.text.square.fill")
+                                .foregroundColor(ColorTheme.accent())
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("My Soul")
+                                    .foregroundColor(ColorTheme.primaryText())
+                                Text("Who you are, what you're building")
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.mutedText())
+                            }
+                        }
+                    }
+                }
+
                 // Remote Control section
                 Section("Remote Control") {
                     HStack {
