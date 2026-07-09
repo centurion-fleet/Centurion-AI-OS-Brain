@@ -7,13 +7,8 @@ import SwiftUI
 /// no milestones to track, no human-speed progress bars. This is the Centurion's
 /// cockpit — showing live loops, completed wins, and decisions that need the human.
 ///
-/// Three sections:
-///   1. LIVE — what the Centurion is doing RIGHT NOW (the magic happening)
-///   2. WINS — what has been completed (the portfolio to show others)
-///   3. DECISIONS — only when the human needs to decide something
-///   4. THOUGHTS — the Centurion's ongoing stream of consciousness
-/// Five categories, one screen at a time.
-/// Chosen via horizontal pill navigation — each category gets the full viewport.
+/// Notification system: each category has a badge count for items newer than
+/// the user's last visit to that category. Badges clear when you tap the pill.
 enum PulseCategory: String, CaseIterable {
     case live = "LIVE"
     case wins = "WINS"
@@ -47,6 +42,55 @@ struct MissionPortfolioView: View {
 
     /// Unified chat sheet state
     @State private var chatTarget: ChatSheetTarget?
+
+    // MARK: - Notification tracking
+    // Stores the last time each category was viewed. Items newer than this date
+    // show a "new" indicator and contribute to the pill badge count.
+    @AppStorage("pulse_note_live")     private var lastSeenLive: TimeInterval = 0
+    @AppStorage("pulse_note_wins")     private var lastSeenWins: TimeInterval = 0
+    @AppStorage("pulse_note_outputs")  private var lastSeenOutputs: TimeInterval = 0
+    @AppStorage("pulse_note_decisions") private var lastSeenDecisions: TimeInterval = 0
+    @AppStorage("pulse_note_pulse")    private var lastSeenThoughts: TimeInterval = 0
+
+    /// Count of unseen items per category
+    private var badgeCounts: [PulseCategory: Int] {
+        let wins = Date(timeIntervalSinceReferenceDate: lastSeenWins)
+        let outputs = Date(timeIntervalSinceReferenceDate: lastSeenOutputs)
+        let decisions = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
+        let thoughts = Date(timeIntervalSinceReferenceDate: lastSeenThoughts)
+        return [
+            .live: 0,
+            .wins: completedLoops.filter { $0.completedAt > wins }.count,
+            .outputs: self.outputs.filter { $0.createdAt > outputs }.count,
+            .decisions: self.decisions.filter { $0.createdAt > decisions }.count,
+            .pulse: self.thoughts.filter { $0.timestamp > thoughts }.count,
+        ]
+    }
+
+    /// Mark a category as seen — clear its badge
+    private func markSeen(_ category: PulseCategory) {
+        let now = Date.timeIntervalSinceReferenceDate
+        switch category {
+        case .live:     lastSeenLive = now
+        case .wins:     lastSeenWins = now
+        case .outputs:  lastSeenOutputs = now
+        case .decisions: lastSeenDecisions = now
+        case .pulse:    lastSeenThoughts = now
+        }
+    }
+
+    /// Whether an item with the given date is new (unseen) in its category
+    private func isNew(_ date: Date, category: PulseCategory) -> Bool {
+        let threshold: Date
+        switch category {
+        case .live:     threshold = Date(timeIntervalSinceReferenceDate: lastSeenLive)
+        case .wins:     threshold = Date(timeIntervalSinceReferenceDate: lastSeenWins)
+        case .outputs:  threshold = Date(timeIntervalSinceReferenceDate: lastSeenOutputs)
+        case .decisions: threshold = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
+        case .pulse:    threshold = Date(timeIntervalSinceReferenceDate: lastSeenThoughts)
+        }
+        return date > threshold
+    }
 
     var body: some View {
         NavigationStack {
@@ -118,6 +162,7 @@ struct MissionPortfolioView: View {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                             selectedCategory = category
                         }
+                        markSeen(category)
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: category.icon)
@@ -125,6 +170,21 @@ struct MissionPortfolioView: View {
                             Text(category.rawValue)
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                 .tracking(1)
+
+                            // Badge count
+                            if let count = badgeCounts[category], count > 0 {
+                                Text("\(count)")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .foregroundColor(selectedCategory == category ? .black : .white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(
+                                        selectedCategory == category
+                                            ? Color.black.opacity(0.3)
+                                            : ColorTheme.accent()
+                                    )
+                                    .clipShape(Capsule())
+                            }
                         }
                         .foregroundColor(selectedCategory == category
                             ? .black
@@ -430,6 +490,13 @@ struct MissionPortfolioView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             // Result header — golden, celebratory
             HStack(spacing: Spacing.xs) {
+                // New indicator dot
+                if isNew(loop.completedAt, category: .wins) {
+                    Circle()
+                        .fill(ColorTheme.accent())
+                        .frame(width: 6, height: 6)
+                }
+
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundColor(.green)
@@ -554,6 +621,13 @@ struct MissionPortfolioView: View {
 
     private func outputCard(_ output: CenturionOutput) -> some View {
         HStack(spacing: Spacing.sm) {
+            // New indicator dot
+            if isNew(output.createdAt, category: .outputs) {
+                Circle()
+                    .fill(ColorTheme.accent())
+                    .frame(width: 6, height: 6)
+            }
+
             // Type icon
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
@@ -633,6 +707,13 @@ struct MissionPortfolioView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             // Urgency badge
             HStack(spacing: 6) {
+                // New indicator dot
+                if isNew(decision.createdAt, category: .decisions) {
+                    Circle()
+                        .fill(ColorTheme.accent())
+                        .frame(width: 6, height: 6)
+                }
+
                 urgencyBadge(decision.urgency)
                 if let mission = decision.relatedMission {
                     Text(mission)
@@ -753,6 +834,13 @@ struct MissionPortfolioView: View {
 
             ForEach(thoughts) { thought in
                 HStack(spacing: Spacing.sm) {
+                    // New indicator dot
+                    if isNew(thought.timestamp, category: .pulse) {
+                        Circle()
+                            .fill(ColorTheme.accent())
+                            .frame(width: 6, height: 6)
+                    }
+
                     Image(systemName: thought.type.icon)
                         .font(.caption)
                         .foregroundColor(thoughtTypeColor(thought.type))
