@@ -12,6 +12,26 @@ import SwiftUI
 ///   2. WINS — what has been completed (the portfolio to show others)
 ///   3. DECISIONS — only when the human needs to decide something
 ///   4. THOUGHTS — the Centurion's ongoing stream of consciousness
+/// Five categories, one screen at a time.
+/// Chosen via horizontal pill navigation — each category gets the full viewport.
+enum PulseCategory: String, CaseIterable {
+    case live = "LIVE"
+    case wins = "WINS"
+    case outputs = "OUTPUTS"
+    case decisions = "DECISIONS"
+    case pulse = "PULSE"
+
+    var icon: String {
+        switch self {
+        case .live: return "bolt.fill"
+        case .wins: return "star.fill"
+        case .outputs: return "doc.text.fill"
+        case .decisions: return "hand.raised.fill"
+        case .pulse: return "waveform.path.ecg"
+        }
+    }
+}
+
 struct MissionPortfolioView: View {
     @State private var mission: LifeMission = LifeMission.preview()
     @State private var liveActivity: LiveActivity? = LiveActivity.preview()
@@ -23,45 +43,51 @@ struct MissionPortfolioView: View {
     @EnvironmentObject private var messageService: MessageService
     @State private var isAppeared = false
     @State private var liveExpanded = true
+    @State private var selectedCategory: PulseCategory = .live
 
     /// Unified chat sheet state
     @State private var chatTarget: ChatSheetTarget?
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: Spacing.md) {
-                    // Mission statement — what we're here for
-                    missionStatement
+            VStack(spacing: 0) {
+                // Pill navigation — one category at a time
+                pillNavigation
 
-                    // 1. LIVE — what the Centurion is doing right now
-                    liveActivitySection
-
-                    // 2. WINS — portfolio of completed loops
-                    completedLoopsSection
-
-                    // 3. OUTPUTS — documents the Centurion created
-                    if !outputs.isEmpty {
-                        outputsSection
+                ScrollView {
+                    VStack(spacing: Spacing.md) {
+                        // Only the selected category renders
+                        switch selectedCategory {
+                        case .live:
+                            liveActivitySection
+                        case .wins:
+                            completedLoopsSection
+                        case .outputs:
+                            if !outputs.isEmpty {
+                                outputsSection
+                            } else {
+                                emptyCategory("No outputs yet", "Documents the Centurion creates will appear here")
+                            }
+                        case .decisions:
+                            if !decisions.isEmpty {
+                                decisionsSection
+                            } else {
+                                emptyCategory("All clear", "Nothing needs your attention right now")
+                            }
+                        case .pulse:
+                            thoughtsSection
+                        }
                     }
-
-                    // 4. DECISIONS — only when human input is needed
-                    if !decisions.isEmpty {
-                        decisionsSection
-                    }
-
-                    // 4. THOUGHTS — Centurion's stream of consciousness
-                    thoughtsSection
+                    .frame(maxWidth: 428)
+                    .padding()
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: 428)
-                .padding()
-                .frame(maxWidth: .infinity)
             }
             .navigationTitle("Centurion Remote")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
-                        if let activity = liveActivity {
+                        if let activity = liveActivity, selectedCategory == .live {
                             LoopPhaseBadge(phase: activity.phase)
                         }
                         if connectionManager.connectionState == .connected {
@@ -79,6 +105,44 @@ struct MissionPortfolioView: View {
         .sheet(item: $chatTarget) { target in
             chatSheet(for: target.context)
         }
+    }
+
+    // MARK: - Pill Navigation
+
+    private var pillNavigation: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(PulseCategory.allCases, id: \.self) { category in
+                    Button(action: {
+                        Haptics.lightTap()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            selectedCategory = category
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: category.icon)
+                                .font(.system(size: 9))
+                            Text(category.rawValue)
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .tracking(1)
+                        }
+                        .foregroundColor(selectedCategory == category
+                            ? .black
+                            : ColorTheme.accent())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(selectedCategory == category
+                            ? ColorTheme.accent()
+                            : ColorTheme.accent().opacity(0.08))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+        .background(ColorTheme.background())
     }
 
     // MARK: - Chat Sheet
@@ -615,6 +679,26 @@ struct MissionPortfolioView: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.orange.opacity(0.15), lineWidth: 0.5)
         )
+    }
+
+    // MARK: - Empty State
+
+    private func emptyCategory(_ title: String, _ subtitle: String) -> some View {
+        VStack(spacing: Spacing.md) {
+            Spacer().frame(height: 60)
+            Image(systemName: "sparkle")
+                .font(.system(size: 32))
+                .foregroundColor(ColorTheme.dimAccent())
+            Text(title)
+                .font(.headline)
+                .foregroundColor(ColorTheme.primaryText())
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+            Spacer().frame(height: 60)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func urgencyBadge(_ urgency: DecisionItem.Urgency) -> some View {
