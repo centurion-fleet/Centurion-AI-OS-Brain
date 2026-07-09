@@ -152,6 +152,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollContentBackground(.hidden)
             .alert("Reset Identity?", isPresented: $showResetConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {
