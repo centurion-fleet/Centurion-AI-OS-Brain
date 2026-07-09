@@ -33,10 +33,10 @@ struct ContentView: View {
                 }
                 .tag(1)
 
-            // Mission Control — programs, targets, tasks
+            // Centurion Pulse — live AI activity, wins, decisions
             MissionPortfolioView()
                 .tabItem {
-                    Label("Mission", systemImage: "target")
+                    Label("Pulse", systemImage: "waveform.path.ecg")
                 }
                 .tag(2)
 

@@ -264,7 +264,7 @@ struct ChatView: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(ColorTheme.accent())
 
-            Text("Advancing: Build Australia's leading OEM lighting tower provider")
+            Text("Centurion Remote — your AI is working")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(ColorTheme.mutedText())
                 .lineLimit(1)
