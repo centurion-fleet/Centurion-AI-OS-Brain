@@ -272,7 +272,7 @@ struct ChatView: View {
             Spacer()
 
             if connectionManager.connectionState == .connected {
-                PulseDot(phase: .executing)
+                PulseDot()
                     .frame(width: 6, height: 6)
             }
         }
