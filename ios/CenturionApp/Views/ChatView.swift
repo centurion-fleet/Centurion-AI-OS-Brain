@@ -29,11 +29,6 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // MARK: - Brand Header — consistent with all pages
-            BrandHeader()
-                .padding(.top, Spacing.sm)
-                .padding(.bottom, Spacing.sm)
-
             // MARK: - Conversation Tray Trigger
             Button(action: {
                 Haptics.lightTap()

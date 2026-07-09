@@ -16,11 +16,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Brand header
-                BrandHeader()
-                    .listRowBackground(Color.clear)
-                    .padding(.bottom, Spacing.sm)
-
                 // Identity section
                 Section("Identity") {
                     HStack {

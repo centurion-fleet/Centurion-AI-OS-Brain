@@ -166,26 +166,27 @@ struct MissionPortfolioView: View {
                             if let count = badgeCounts[category], count > 0 {
                                 Text("\(count)")
                                     .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .foregroundColor(selectedCategory == category ? .black : .white)
+                                    .foregroundColor(.white)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
-                                    .background(
-                                        selectedCategory == category
-                                            ? Color.black.opacity(0.3)
-                                            : ColorTheme.accent()
-                                    )
+                                    .background(ColorTheme.mutedText().opacity(0.5))
                                     .clipShape(Capsule())
                             }
                         }
                         .foregroundColor(selectedCategory == category
-                            ? .black
-                            : ColorTheme.accent())
+                            ? ColorTheme.primaryText()
+                            : ColorTheme.mutedText())
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .background(selectedCategory == category
-                            ? ColorTheme.accent()
-                            : ColorTheme.accent().opacity(0.08))
+                            ? ColorTheme.mutedText().opacity(0.1)
+                            : Color.clear)
                         .clipShape(Capsule())
+                        .overlay(
+                            selectedCategory == category
+                                ? Capsule().stroke(ColorTheme.mutedText().opacity(0.2), lineWidth: 0.5)
+                                : nil
+                        )
                     }
                     .buttonStyle(.plain)
                 }
