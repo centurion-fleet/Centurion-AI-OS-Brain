@@ -19,7 +19,7 @@ struct SettingsView: View {
                 // Brand header
                 BrandHeader()
                     .listRowBackground(Color.clear)
-                    .padding(.vertical, Spacing.sm)
+                    .padding(.bottom, Spacing.sm)
 
                 // Identity section
                 Section("Identity") {

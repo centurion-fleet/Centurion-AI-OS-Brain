@@ -104,7 +104,7 @@ struct MissionPortfolioView: View {
                     VStack(spacing: Spacing.md) {
                         // Brand header
                         BrandHeader()
-                            .padding(.bottom, Spacing.xs)
+                            .padding(.bottom, Spacing.sm)
 
                         // Only the selected category renders
                         switch selectedCategory {

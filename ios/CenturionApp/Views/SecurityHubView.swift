@@ -13,7 +13,7 @@ struct SecurityHubView: View {
                 VStack(spacing: 20) {
                     // Brand header
                     BrandHeader()
-                        .padding(.bottom, Spacing.xs)
+                        .padding(.bottom, Spacing.sm)
 
                     // Hero shield
                     securityHero

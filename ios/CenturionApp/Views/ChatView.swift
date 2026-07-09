@@ -29,8 +29,49 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // MARK: - Title Bar (tappable)
-            titleBar
+            // MARK: - Brand Header — consistent with all pages
+            BrandHeader()
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, Spacing.sm)
+
+            // MARK: - Conversation Tray Trigger
+            Button(action: {
+                Haptics.lightTap()
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                    showTray.toggle()
+                }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 9))
+                        .foregroundColor(ColorTheme.accent())
+                    Text("Conversations")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .tracking(1)
+                    Image(systemName: showTray ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 8))
+                        .foregroundColor(ColorTheme.mutedText())
+
+                    if let conv = selectedConversation {
+                        Text(conv.displayTitle)
+                            .font(.system(size: 9, design: .monospaced))
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(ColorTheme.accent().opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+
+                    Spacer()
+
+                    if connectionManager.connectionState == .connected {
+                        StatusDot(isConnected: true)
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
 
             // MARK: - Pull-Down Tray
             if showTray {
@@ -79,52 +120,6 @@ struct ChatView: View {
             inputBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Title Bar
-
-    private var titleBar: some View {
-        Button(action: {
-            Haptics.lightTap()
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
-                showTray.toggle()
-            }
-        }) {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: showTray ? "chevron.up" : "waveform.path.ecg")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(ColorTheme.accent())
-
-                Text("Centurion Remote")
-                    .font(.system(size: 15, weight: .semibold, design: .default))
-                    .foregroundColor(ColorTheme.primaryText())
-
-                Spacer()
-
-                if let conv = selectedConversation {
-                    Text(conv.displayTitle)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(ColorTheme.mutedText())
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(ColorTheme.border())
-                        .clipShape(Capsule())
-                }
-
-                if connectionManager.connectionState == .connected {
-                    StatusDot(isConnected: true)
-                }
-
-                Image(systemName: showTray ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(ColorTheme.mutedText())
-            }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
-            .background(.ultraThinMaterial)
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Pull-Down Conversation Tray
