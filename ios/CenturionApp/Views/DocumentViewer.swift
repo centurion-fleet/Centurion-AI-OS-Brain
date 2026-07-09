@@ -242,18 +242,8 @@ struct DocumentViewer: View {
         }
     }
 
-    private func styledText(_ text: String) -> AttributedString {
-        var attributed = AttributedString(text)
-
-        // Bold (**text**)
-        if let boldRange = attributed.range(of: #"\*\*(.+?)\*\*"#, options: .regularExpression) {
-            let clean = AttributedString(
-                String(text[text.indices].filter { $0 != "*" || text[text.indices].count > 0 })
-            )
-            // Simple approach: just return clean text
-        }
-
-        return attributed
+    private func styledText(_ text: String) -> String {
+        text
     }
 
     // MARK: - Share
