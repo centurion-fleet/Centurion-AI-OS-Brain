@@ -6,7 +6,6 @@ struct CenturionApp: App {
     @StateObject private var messageService: MessageService
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showSplash = true
-    @State private var appReady = false
 
     init() {
         let cm = ConnectionManager()
@@ -17,7 +16,7 @@ struct CenturionApp: App {
     var body: some Scene {
         WindowGroup {
             if showSplash {
-                SplashView(isReady: appReady) {
+                SplashView {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         showSplash = false
                     }
@@ -26,14 +25,6 @@ struct CenturionApp: App {
                 .environmentObject(messageService)
                 .preferredColorScheme(appearanceMode.colorScheme)
                 .transition(.opacity)
-                .onAppear {
-                    // Signal splash that app is ready after views settle
-                    // On simulator this is instant; on iPhone (Debug) it allows
-                    // the splash loading messages to show while the binary loads
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        appReady = true
-                    }
-                }
             } else {
                 ContentView()
                     .environmentObject(connectionManager)

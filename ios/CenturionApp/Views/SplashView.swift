@@ -13,18 +13,6 @@ import SwiftUI
 /// Remote Control theme: The iPhone is a remote for the Linux brain. The concentric
 /// signal rings, the pairing ceremony feel, and the "REMOTE CONTROL" descriptor all
 /// reinforce that this app isn't an AI — it's a conduit to one.
-/// Controls what shows below the splash — loading spinner while app initialises
-enum SplashState {
-    case animating          // The 3-second brand animation
-    case loading(String)    // Animation done, waiting for app: "Connecting to Centurion…"
-    case ready              // Transition to app
-
-    var isReady: Bool {
-        if case .ready = self { return true }
-        return false
-    }
-}
-
 struct SplashView: View {
     @State private var phase: SplashPhase = .hidden
     @State private var glowPulse = false
@@ -32,18 +20,8 @@ struct SplashView: View {
     @State private var signalRingOpacity: Double = 0.0
     @State private var taglineOpacity = 0.0
     @State private var missionHorizonOpacity = 0.0
-    @State private var splashState: SplashState = .animating
-    @State private var loadingStep = 0
 
-    let isReady: Bool           // App signals this when initialisation is done
     let onComplete: () -> Void
-
-    private let loadingMessages = [
-        "Waking the Fleet…",
-        "Establishing secure channel…",
-        "Loading your mission…",
-        "Readying your Centurion…",
-    ]
 
     enum SplashPhase {
         case hidden     // Initial — matches system launch screen
@@ -165,8 +143,8 @@ struct SplashView: View {
             }
             .animation(Motion.appear.delay(0.2), value: phase)
 
-            // Tap to continue hint — shown during animation phase
-            if case .animating = splashState, phase == .title || phase == .globe || phase == .horizon {
+            // Tap to continue hint
+            if phase == .title || phase == .globe || phase == .horizon {
                 VStack {
                     Spacer()
                     Text("Tap anywhere to begin")
@@ -177,38 +155,13 @@ struct SplashView: View {
                 }
                 .transition(.opacity)
             }
-
-            // Loading indicator — shown after animation completes, while waiting for init
-            if case let .loading(message) = splashState {
-                VStack {
-                    Spacer()
-                    // Pulsing amber dot
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(ColorTheme.accent())
-                            .frame(width: 6, height: 6)
-                            .opacity(glowPulse ? 1.0 : 0.3)
-
-                        Text(message)
-                            .font(.system(size: 12, weight: .regular, design: .monospaced))
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-                    .padding(.bottom, Spacing.xxl)
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
         }
         .onAppear {
             animateThroughPhases()
         }
         .onTapGesture {
             guard phase == .title || phase == .globe || phase == .horizon else { return }
-            skipToLoading()
-        }
-        .onChange(of: isReady) { ready in
-            if ready, case .loading = splashState {
-                completeSplash()
-            }
+            completeToApp()
         }
     }
 
@@ -254,55 +207,13 @@ struct SplashView: View {
             }
         }
 
-        // Auto-complete — transition to loading state, wait for app readiness
+        // Auto-complete to app after animation finishes
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            transitionToLoading()
+            completeToApp()
         }
     }
 
-    /// Skip the brand animation and go straight to app readiness wait
-    private func skipToLoading() {
-        Haptics.lightTap()
-        transitionToLoading()
-    }
-
-    /// After brand animation completes, show loading indicator while app initialises
-    private func transitionToLoading() {
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-            phase = .complete
-        }
-        // Keep globe + brand visible, add loading indicator
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                splashState = .loading(loadingMessages[0])
-            }
-            startLoadingMessages()
-            // If app is somehow already ready, complete immediately
-            if isReady {
-                completeSplash()
-            }
-        }
-    }
-
-    /// Cycle through loading messages every 2.5s to feel alive
-    private func startLoadingMessages() {
-        guard !isReady else { return }
-        Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { timer in
-            guard case .loading = splashState, !isReady else {
-                timer.invalidate()
-                return
-            }
-            let nextIndex = (loadingStep + 1) % loadingMessages.count
-            withAnimation(.easeInOut(duration: 0.3)) {
-                loadingStep = nextIndex
-                splashState = .loading(loadingMessages[nextIndex])
-            }
-        }
-    }
-
-    private func completeSplash() {
-        guard !splashState.isReady else { return }
-        splashState = .ready
+    private func completeToApp() {
         Haptics.success()
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             phase = .complete
