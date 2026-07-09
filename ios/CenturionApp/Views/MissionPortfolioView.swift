@@ -42,6 +42,8 @@ struct MissionPortfolioView: View {
 
     /// Unified chat sheet state
     @State private var chatTarget: ChatSheetTarget?
+    /// Output document viewer state
+    @State private var selectedOutput: CenturionOutput?
 
     // MARK: - Notification tracking
     // Stores the last time each category was viewed. Items newer than this date
@@ -609,10 +611,7 @@ struct MissionPortfolioView: View {
             }
 
             ForEach(outputs) { output in
-                NavigationLink(destination: DocumentViewer(output: output)) {
-                    outputCard(output)
-                }
-                .buttonStyle(.plain)
+                outputCard(output)
             }
         }
         .opacity(isAppeared ? 1 : 0)
@@ -620,59 +619,98 @@ struct MissionPortfolioView: View {
     }
 
     private func outputCard(_ output: CenturionOutput) -> some View {
-        HStack(spacing: Spacing.sm) {
-            // New indicator dot
-            if isNew(output.createdAt, category: .outputs) {
-                Circle()
-                    .fill(ColorTheme.accent())
-                    .frame(width: 6, height: 6)
-            }
-
-            // Type icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(ColorTheme.accent().opacity(0.1))
-                    .frame(width: 36, height: 36)
-                Image(systemName: output.type.icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(ColorTheme.accent())
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(output.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ColorTheme.primaryText())
-                    .lineLimit(1)
-
-                Text(output.summary)
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .lineLimit(2)
-
-                HStack(spacing: 8) {
-                    Text(output.type.rawValue)
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                        .foregroundColor(ColorTheme.accent())
-                    Text("\(output.wordCount) words")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(ColorTheme.mutedText())
-                    if let mission = output.relatedMission {
-                        Text(mission)
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundColor(ColorTheme.mutedText())
+        VStack(spacing: 0) {
+            // Tappable content area — opens DocumentViewer
+            Button(action: {
+                selectedOutput = output
+            }) {
+                HStack(spacing: Spacing.sm) {
+                    // New indicator dot
+                    if isNew(output.createdAt, category: .outputs) {
+                        Circle()
+                            .fill(ColorTheme.accent())
+                            .frame(width: 6, height: 6)
                     }
+
+                    // Type icon
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(ColorTheme.accent().opacity(0.1))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: output.type.icon)
+                            .font(.system(size: 14))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(output.title)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ColorTheme.primaryText())
+                            .lineLimit(1)
+
+                        Text(output.summary)
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .lineLimit(2)
+
+                        HStack(spacing: 8) {
+                            Text(output.type.rawValue)
+                                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                                .foregroundColor(ColorTheme.accent())
+                            Text("\(output.wordCount) words")
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(ColorTheme.mutedText())
+                            if let mission = output.relatedMission {
+                                Text(mission)
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(ColorTheme.mutedText())
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
                 }
+                .padding()
             }
+            .buttonStyle(.plain)
 
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
+            // Discuss this output
+            Divider()
+                .padding(.horizontal)
+            HStack {
+                Spacer()
+                Button(action: {
+                    openChat(context: .standalone(title: "Output: \(output.title)"))
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10))
+                        Text("Discuss this output")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(ColorTheme.accent())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, Spacing.xs)
         }
-        .padding()
         .cardStyle()
+        .sheet(item: $selectedOutput) { output in
+            NavigationStack {
+                DocumentViewer(output: output)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { selectedOutput = nil }
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: - 4. DECISIONS — Only When Human Input Is Needed
@@ -721,6 +759,14 @@ struct MissionPortfolioView: View {
                         .foregroundColor(ColorTheme.accent())
                 }
                 Spacer()
+                Button(action: {
+                    openChat(context: .standalone(title: "Decision: \(decision.title)"))
+                }) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 11))
+                        .foregroundColor(ColorTheme.accent())
+                }
+                .buttonStyle(.plain)
                 Text(decision.generatedBy)
                     .font(.system(size: 8))
                     .foregroundColor(ColorTheme.mutedText())
@@ -857,6 +903,18 @@ struct MissionPortfolioView: View {
                     }
 
                     Spacer()
+
+                    // Discuss this thought
+                    Button(action: {
+                        openChat(context: .standalone(
+                            title: "\(thought.type.rawValue): \(String(thought.text.prefix(60)))..."
+                        ))
+                    }) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+                    .buttonStyle(.plain)
 
                     Text(timeAgo(thought.timestamp))
                         .font(.system(size: 8, design: .monospaced))
