@@ -18,6 +18,11 @@ enum SplashState {
     case animating          // The 3-second brand animation
     case loading(String)    // Animation done, waiting for app: "Connecting to Centurion…"
     case ready              // Transition to app
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
 }
 
 struct SplashView: View {
@@ -296,7 +301,7 @@ struct SplashView: View {
     }
 
     private func completeSplash() {
-        guard splashState != .ready else { return }
+        guard !splashState.isReady else { return }
         splashState = .ready
         Haptics.success()
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
