@@ -34,6 +34,7 @@ struct SecurityHubView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Security")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
     

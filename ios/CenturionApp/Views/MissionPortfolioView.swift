@@ -129,7 +129,8 @@ struct MissionPortfolioView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle("Centurion Remote")
+            .navigationTitle("Pulse")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // No toolbar items — clean title only
             }
