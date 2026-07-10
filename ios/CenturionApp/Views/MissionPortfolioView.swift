@@ -146,52 +146,53 @@ struct MissionPortfolioView: View {
 
     private var pillNavigation: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
                 ForEach(PulseCategory.allCases, id: \.self) { category in
                     Button(action: {
                         Haptics.lightTap()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
                             selectedCategory = category
                         }
                         markSeen(category)
                     }) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: category.icon)
-                                .font(.system(size: 9))
-                            Text(category.rawValue)
-                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .tracking(1)
+                                .font(.system(size: 15, weight: .semibold))
 
-                            // Badge count
                             if let count = badgeCounts[category], count > 0 {
                                 Text("\(count)")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 4)
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(selectedCategory == category ? ColorTheme.forest : .white)
+                                    .padding(.horizontal, 6)
                                     .padding(.vertical, 1)
-                                    .background(ColorTheme.mutedText().opacity(0.5))
+                                    .background(selectedCategory == category
+                                        ? ColorTheme.accent().opacity(0.9)
+                                        : ColorTheme.accent().opacity(0.7))
                                     .clipShape(Capsule())
                             }
                         }
                         .foregroundColor(selectedCategory == category
                             ? ColorTheme.primaryText()
                             : ColorTheme.mutedText())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(selectedCategory == category
-                            ? ColorTheme.mutedText().opacity(0.1)
-                            : Color.clear)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(
+                            selectedCategory == category
+                                ? ColorTheme.accent().opacity(0.12)
+                                : Color.clear
+                        )
                         .clipShape(Capsule())
                         .overlay(
                             selectedCategory == category
-                                ? Capsule().stroke(ColorTheme.mutedText().opacity(0.2), lineWidth: 0.5)
+                                ? Capsule()
+                                    .stroke(ColorTheme.accent().opacity(0.35), lineWidth: 1)
                                 : nil
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 4)
             .padding(.vertical, 8)
         }
     }
