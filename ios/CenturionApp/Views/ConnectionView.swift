@@ -86,53 +86,25 @@ struct ConnectionView: View {
         }
     }
     
-    // MARK: - LLM Providers
+    // MARK: - LLM Providers (Dial Style)
     private var llmProvidersSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "LLM Providers", icon: "brain.head.profile")
             
-            Text("Your Centurion thinks through these models. When one has issues, switch here instead of blaming your Centurion.")
+            Text("Turn the dial to switch which model your Centurion thinks through. Status shows real-time health.")
                 .font(.system(size: 14))
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.bottom, Spacing.xs)
             
-            // DeepSeek - Primary
-            LLMProviderCard(
-                provider: .deepseek,
-                isSelected: selectedProvider == .deepseek,
-                status: .healthy,
-                onSelect: { selectedProvider = .deepseek }
+            // Dial-style selector
+            LLMProviderDial(
+                selectedProvider: $selectedProvider
             )
             
-            // Claude
-            LLMProviderCard(
-                provider: .claude,
-                isSelected: selectedProvider == .claude,
-                status: .healthy,
-                onSelect: { selectedProvider = .claude }
-            )
-            
-            // ChatGPT
-            LLMProviderCard(
-                provider: .chatgpt,
-                isSelected: selectedProvider == .chatgpt,
-                status: .degraded,
-                onSelect: { selectedProvider = .chatgpt }
-            )
-            
-            // Grok
-            LLMProviderCard(
-                provider: .grok,
-                isSelected: selectedProvider == .grok,
-                status: .healthy,
-                onSelect: { selectedProvider = .grok }
-            )
-            
-            Text("We recommend DeepSeek for most people. It’s fast, capable, and reliable.")
-                .font(.system(size: 12, weight: .medium, design: .serif))
-                .foregroundColor(ColorTheme.accent().opacity(0.8))
-                .italic()
-                .padding(.top, Spacing.xs)
+            // Current selection details
+            if let current = selectedProvider {
+                LLMStatusDetail(provider: current)
+            }
         }
     }
 }
@@ -243,6 +215,128 @@ enum ConnectionStatus {
         case .healthy:  return .green
         case .degraded: return .orange
         case .broken:   return .red
+        }
+    }
+}
+
+// MARK: - Dial Style LLM Selector
+
+struct LLMProviderDial: View {
+    @Binding var selectedProvider: LLMProvider
+    
+    let providers: [LLMProvider] = [.deepseek, .claude, .chatgpt, .grok]
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // The dial itself
+            HStack(spacing: 0) {
+                ForEach(providers, id: \.self) { provider in
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                            selectedProvider = provider
+                        }
+                        Haptics.lightTap()
+                    } label: {
+                        VStack(spacing: 8) {
+                            // Status dot
+                            Circle()
+                                .fill(provider.status.color)
+                                .frame(width: 10, height: 10)
+                                .overlay(
+                                    Circle()
+                                        .stroke(provider.status.color.opacity(0.3), lineWidth: 4)
+                                        .scaleEffect(selectedProvider == provider ? 1.6 : 0.8)
+                                )
+                            
+                            // Provider name
+                            Text(provider.displayName)
+                                .font(.system(size: 13, weight: selectedProvider == provider ? .semibold : .medium))
+                                .foregroundColor(selectedProvider == provider ? ColorTheme.primaryText() : ColorTheme.mutedText())
+                            
+                            // Small status label
+                            Text(provider.status.label)
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(provider.status.color)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            selectedProvider == provider 
+                                ? ColorTheme.accent().opacity(0.08) 
+                                : Color.clear
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(4)
+            .background(ColorTheme.surface())
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(ColorTheme.border().opacity(0.6), lineWidth: 1)
+            )
+            
+            // Dial indicator line
+            HStack {
+                ForEach(providers, id: \.self) { provider in
+                    Rectangle()
+                        .fill(selectedProvider == provider ? ColorTheme.accent() : Color.clear)
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+}
+
+struct LLMStatusDetail: View {
+    let provider: LLMProvider
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(provider.displayName)
+                    .font(.headline)
+                
+                Spacer()
+                
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(provider.status.color)
+                        .frame(width: 8, height: 8)
+                    Text(provider.status.label.uppercased())
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(provider.status.color)
+                }
+            }
+            
+            Text(provider.description)
+                .font(.system(size: 14))
+                .foregroundColor(ColorTheme.mutedText())
+            
+            if provider.status != .healthy {
+                Text("This provider is currently experiencing issues. Consider switching to another model.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.orange)
+                    .padding(.top, 4)
+            }
+        }
+        .padding()
+        .background(ColorTheme.surface())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+extension LLMProvider {
+    var status: ConnectionStatus {
+        switch self {
+        case .deepseek: return .healthy
+        case .claude:   return .healthy
+        case .chatgpt:  return .degraded
+        case .grok:     return .healthy
         }
     }
 }
