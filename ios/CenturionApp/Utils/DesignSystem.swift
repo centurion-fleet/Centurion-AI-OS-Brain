@@ -176,21 +176,59 @@ struct StatusDot: View {
 /// Replaces all toolbar principals and page titles with one unified layout.
 struct BrandHeader: View {
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "app.connected.to.app.below.fill")
-                .font(.system(size: 32))
-                .foregroundColor(ColorTheme.accent())
-
-            Text("PERSONAL-CENTURION AI REMOTE")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundColor(ColorTheme.accent())
-                .tracking(4)
-
+        VStack(spacing: 8) {
+            // Architectural icon with warm glow — Frank Lloyd Wright inspired
+            ZStack {
+                Circle()
+                    .fill(ColorTheme.accent().opacity(0.08))
+                    .frame(width: 52, height: 52)
+                
+                Image(systemName: "app.connected.to.app.below.fill")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(ColorTheme.accent())
+            }
+            
+            VStack(spacing: 2) {
+                Text("PERSONAL-CENTURION")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(ColorTheme.accent())
+                    .tracking(4)
+                
+                Text("AI REMOTE")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(ColorTheme.accent())
+                    .tracking(4)
+            }
+            
+            // Prairie-style horizontal accent line — organic, warm, timeless
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            ColorTheme.accent().opacity(0.2),
+                            ColorTheme.accent(),
+                            ColorTheme.accent().opacity(0.2)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 120, height: 1)
+                .padding(.vertical, 2)
+            
             Text("MISSION HORIZON  ·  v3.0.0")
                 .font(.system(size: 9, weight: .regular, design: .monospaced))
                 .foregroundColor(ColorTheme.dimAccent())
-                .tracking(3)
+                .tracking(2)
+            
+            // The emotional promise — your lifelong companion
+            Text("Your AI. Your mission. For life.")
+                .font(.system(size: 9, weight: .medium, design: .serif))
+                .foregroundColor(ColorTheme.mutedText().opacity(0.7))
+                .italic()
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 }

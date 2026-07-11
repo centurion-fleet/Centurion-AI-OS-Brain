@@ -97,6 +97,10 @@ struct MissionPortfolioView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Brand header — consistent across all tabs
+                BrandHeader()
+                    .padding(.bottom, Spacing.sm)
+                
                 // Pill navigation — one category at a time
                 pillNavigation
 
@@ -155,27 +159,52 @@ struct MissionPortfolioView: View {
                         }
                         markSeen(category)
                     }) {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 6) {
                             Image(systemName: category.icon)
-                                .font(.system(size: 14, weight: .semibold))
-
+                                .font(.system(size: 13, weight: .semibold))
+                            
+                            Text(category.rawValue)
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .tracking(0.5)
+                            
                             if let count = badgeCounts[category], count > 0 {
                                 Text("\(count)")
                                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                                     .foregroundColor(.white)
-                                    .padding(.horizontal, 5)
+                                    .padding(.horizontal, 6)
                                     .padding(.vertical, 1)
                                     .background(ColorTheme.accent())
                                     .clipShape(Capsule())
                             }
                         }
-                        .foregroundColor(ColorTheme.primaryText())
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.clear)
+                        .foregroundColor(selectedCategory == category ? .white : ColorTheme.primaryText())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(
+                            selectedCategory == category 
+                                ? ColorTheme.accent() 
+                                : ColorTheme.surface().opacity(0.6)
+                        )
                         .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(
+                                    selectedCategory == category 
+                                        ? ColorTheme.accent().opacity(0.3) 
+                                        : ColorTheme.border().opacity(0.5), 
+                                    lineWidth: 0.5
+                                )
+                        )
+                        .shadow(
+                            color: selectedCategory == category 
+                                ? ColorTheme.accent().opacity(0.25) 
+                                : .clear, 
+                            radius: 8, x: 0, y: 2
+                        )
                     }
                     .buttonStyle(.plain)
+                    .scaleEffect(selectedCategory == category ? 1.02 : 1.0)
+                    .animation(Motion.light, value: selectedCategory)
                 }
             }
             .padding(.horizontal, 4)
@@ -207,26 +236,40 @@ struct MissionPortfolioView: View {
     // MARK: - Mission Statement
 
     private var missionStatement: some View {
-        VStack(spacing: 4) {
-            Text("Advancing")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundColor(ColorTheme.dimAccent())
-                .tracking(3)
+        VStack(spacing: 6) {
+            Text("YOUR MISSION")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(ColorTheme.accent())
+                .tracking(4)
                 .textCase(.uppercase)
 
             Text(mission.statement)
-                .font(.system(size: 18, weight: .bold, design: .serif))
+                .font(.system(size: 19, weight: .bold, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
-                .lineSpacing(3)
+                .lineSpacing(4)
+                .padding(.horizontal, 12)
 
+            // Warm amber accent — like light through Wright windows
             Rectangle()
-                .fill(ColorTheme.accent())
-                .frame(width: 40, height: 2)
-                .padding(.top, Spacing.xxs)
+                .fill(
+                    LinearGradient(
+                        colors: [ColorTheme.accent().opacity(0.6), ColorTheme.accent()],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 48, height: 2)
+                .padding(.top, Spacing.xs)
+            
+            Text("This is what we are building together.")
+                .font(.system(size: 11, weight: .medium, design: .serif))
+                .foregroundColor(ColorTheme.mutedText().opacity(0.75))
+                .italic()
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.sm)
+        .padding(.vertical, Spacing.md)
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 10)
     }
@@ -243,10 +286,10 @@ struct MissionPortfolioView: View {
                     PulseDot()
                         .frame(width: 10, height: 10)
 
-                    Text("LIVE")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    Text("LIVE — RIGHT NOW")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundColor(ColorTheme.accent())
-                        .tracking(3)
+                        .tracking(2)
 
                     if let activity = liveActivity {
                         Text(activity.phase.rawValue.uppercased())
@@ -458,6 +501,7 @@ struct MissionPortfolioView: View {
 
             ForEach(completedLoops) { loop in
                 completedLoopCard(loop)
+                    .cardStyle()
             }
         }
         .opacity(isAppeared ? 1 : 0)
@@ -495,6 +539,23 @@ struct MissionPortfolioView: View {
                 Text(formatDuration(loop.duration))
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(ColorTheme.mutedText())
+            }
+
+            // Discuss button
+            HStack {
+                Spacer()
+                Button(action: {
+                    openChat(context: .standalone(title: "Win: \\(loop.summary)"))
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10))
+                        Text("Discuss this win")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(ColorTheme.accent())
+                }
+                .buttonStyle(.plain)
             }
 
             // Detail
@@ -588,6 +649,7 @@ struct MissionPortfolioView: View {
 
             ForEach(outputs) { output in
                 outputCard(output)
+                    .cardStyle()
             }
         }
         .opacity(isAppeared ? 1 : 0)
@@ -712,6 +774,7 @@ struct MissionPortfolioView: View {
 
             ForEach(decisions) { decision in
                 decisionCard(decision)
+                    .cardStyle()
             }
         }
         .opacity(isAppeared ? 1 : 0)
