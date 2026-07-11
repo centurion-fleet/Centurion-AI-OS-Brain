@@ -25,8 +25,10 @@ echo "Installing menu entry and icons…"
 mkdir -p "${APP_DIR}" "${ICON_DIR}"
 # Remove stale Tauri launcher if present.
 rm -f "${APP_DIR}/centurion-desktop.desktop"
-install -m 0644 "${DESKTOP_NATIVE}/resources/com.centurion.desktop.desktop" \
-  "${APP_DIR}/com.centurion.desktop.desktop"
+sed "s|^Exec=centurion-desktop$|Exec=${BIN_DIR}/centurion-desktop|" \
+  "${DESKTOP_NATIVE}/resources/com.centurion.desktop.desktop" \
+  > "${APP_DIR}/com.centurion.desktop.desktop"
+chmod 0644 "${APP_DIR}/com.centurion.desktop.desktop"
 for size in 16 22 24 32 48 64 128 256 512; do
   install -D -m 0644 \
     "${DESKTOP_NATIVE}/resources/icons/hicolor/${size}x${size}/apps/com.centurion.desktop.png" \
@@ -53,11 +55,18 @@ export PATH="${BIN_DIR}:${PATH}"
 systemctl --user daemon-reload
 systemctl --user enable --now centurion-remote.service
 
+if [[ ! -x "${BIN_DIR}/centurion-desktop" ]]; then
+  echo "ERROR: ${BIN_DIR}/centurion-desktop was not built." >&2
+  exit 1
+fi
+
 echo
 echo "Installed:"
 echo "  ${BIN_DIR}/centurion-remote"
 echo "  ${BIN_DIR}/centurion-desktop"
 echo "  ${APP_DIR}/com.centurion.desktop.desktop"
 echo
-echo "Launch GUI: centurion-desktop"
-echo "Or log out/in so the application menu picks up the icon."
+echo "Launch GUI:"
+echo "  ${BIN_DIR}/centurion-desktop"
+echo
+echo "If the app menu still lacks the icon, log out and back in."
