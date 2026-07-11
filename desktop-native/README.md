@@ -11,6 +11,22 @@ Fedora-based Personal Centurion hardware.
 
 The Tauri prototype under `desktop/` is not used by this application.
 
+## User-local install (Track B, no RPM)
+
+After Fedora build dependencies are installed:
+
+```bash
+chmod +x desktop-native/scripts/install-user.sh
+desktop-native/scripts/install-user.sh
+```
+
+This builds `centurion-remote` and `centurion-desktop`, installs both to
+`~/.local/bin`, replaces any stale Tauri `centurion-desktop.desktop` launcher,
+installs icons, and enables the user `centurion-remote` systemd unit.
+
+If an old menu entry pointed at `desktop/launch.sh`, remove it or let the
+installer replace it.
+
 ## Fedora development
 
 ```bash
