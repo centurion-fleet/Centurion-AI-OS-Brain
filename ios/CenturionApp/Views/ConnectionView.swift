@@ -75,7 +75,11 @@ struct ConnectionView: View {
 
                 Button {
                     Haptics.lightTap()
-                    showPairingSheet = true
+                    if case .awaitingApproval = connectionManager.connectionState {
+                        connectionManager.retryConnection()
+                    } else {
+                        showPairingSheet = true
+                    }
                 } label: {
                     Text(remoteActionLabel)
                         .font(.system(size: 14, weight: .semibold))
@@ -140,6 +144,7 @@ struct ConnectionView: View {
     private var remoteActionLabel: String {
         switch connectionManager.connectionState {
         case .connected: return "Manage"
+        case .awaitingApproval: return "Try Again"
         default:         return "Connect"
         }
     }
@@ -173,6 +178,8 @@ struct ConnectionPairingSheet: View {
             Group {
                 if connectionManager.connectionState == .connected {
                     connectedState
+                } else if case .awaitingApproval(let message) = connectionManager.connectionState {
+                    awaitingApprovalState(message: message)
                 } else if connectionManager.discoveredDevices.isEmpty {
                     searchingState
                 } else {
@@ -220,6 +227,20 @@ struct ConnectionPairingSheet: View {
             .padding(.horizontal)
         }
         .padding()
+    }
+
+    private func awaitingApprovalState(message: String) -> some View {
+        ContentUnavailableView {
+            Label("Waiting for approval", systemImage: "hourglass")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Try Again") {
+                connectionManager.retryConnection()
+                Haptics.lightTap()
+            }
+            .buttonStyle(AmberButtonStyle())
+        }
     }
 
     private var searchingState: some View {

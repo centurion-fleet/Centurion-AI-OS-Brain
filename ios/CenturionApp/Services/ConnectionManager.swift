@@ -25,6 +25,7 @@ final class ConnectionManager: ObservableObject {
     private var connection: NWConnection?
     private var pendingDevice: CenturionDevice?
     private var keepaliveTask: Task<Void, Never>?
+    private var connectionTimeoutTask: Task<Void, Never>?
     private let maximumFrameSize = 8 * 1024 * 1024
     private let handshakeTimeoutSeconds: UInt64 = 15
 
@@ -54,31 +55,64 @@ final class ConnectionManager: ObservableObject {
         bonjourDiscoverer.startDiscovery()
     }
 
+    func retryConnection() {
+        if let pendingDevice {
+            connect(to: pendingDevice)
+            return
+        }
+        if let device = discoveredDevices.first {
+            connect(to: device)
+            return
+        }
+        startDiscovery()
+    }
+
+    /// Prefer hostname/IP over Bonjour service endpoints — iOS often stalls on
+    /// IPv6 service resolution even when discovery succeeds.
+    private func connectionEndpoint(for device: CenturionDevice) -> NWEndpoint {
+        let port = NWEndpoint.Port(rawValue: UInt16(device.port))
+            ?? NWEndpoint.Port(integerLiteral: 9119)
+
+        if !device.ipAddress.isEmpty {
+            return .hostPort(host: NWEndpoint.Host(device.ipAddress), port: port)
+        }
+
+        if !device.hostname.isEmpty {
+            let host = device.hostname.contains(".")
+                ? device.hostname
+                : "\(device.hostname).local"
+            return .hostPort(host: NWEndpoint.Host(host), port: port)
+        }
+
+        if let name = device.serviceName,
+           let type = device.serviceType,
+           let domain = device.serviceDomain {
+            return .service(name: name, type: type, domain: domain, interface: nil)
+        }
+
+        return .hostPort(host: NWEndpoint.Host("localhost"), port: port)
+    }
+
     func connect(to device: CenturionDevice) {
         disconnect()
         connectionState = .connecting
         pendingDevice = device
 
-        let endpoint: NWEndpoint
-        if let name = device.serviceName,
-           let type = device.serviceType,
-           let domain = device.serviceDomain {
-            endpoint = .service(name: name, type: type, domain: domain, interface: nil)
-        } else {
-            endpoint = .hostPort(
-                host: NWEndpoint.Host(device.hostname),
-                port: NWEndpoint.Port(rawValue: UInt16(device.port))
-                    ?? NWEndpoint.Port(integerLiteral: 9119)
-            )
-        }
+        let endpoint = connectionEndpoint(for: device)
+        let params = NWParameters.tcp
+        params.includePeerToPeer = true
+        params.requiredInterfaceType = .wifi
 
-        let newConnection = NWConnection(to: endpoint, using: .tcp)
+        let newConnection = NWConnection(to: endpoint, using: params)
         connection = newConnection
         installConnectionHandler(for: newConnection)
+        startConnectionTimeout()
         newConnection.start(queue: .global(qos: .userInitiated))
     }
 
     func disconnect() {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -103,7 +137,7 @@ final class ConnectionManager: ObservableObject {
         try await sendFrame(encrypted, over: connection)
 
         let responseFrame = try await withTimeout(seconds: chatTimeoutSeconds) {
-            try await receiveFrame(over: connection)
+            try await self.receiveFrame(over: connection)
         }
         let responseData = try secureChannel.decrypt(responseFrame, using: sessionKey)
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
@@ -132,6 +166,24 @@ final class ConnectionManager: ObservableObject {
     }
 
     // MARK: - Private
+
+    private func startConnectionTimeout() {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            await MainActor.run {
+                guard let self, self.connectionState == .connecting else { return }
+                self.failConnection(
+                    "The connection timed out. Confirm both devices are on the same Wi‑Fi and Local Network access is enabled for this app in Settings."
+                )
+            }
+        }
+    }
+
+    private func clearConnectionTimeout() {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
+    }
 
     private func installConnectionHandler(for newConnection: NWConnection) {
         newConnection.stateUpdateHandler = { [weak self, weak newConnection] state in
@@ -231,6 +283,7 @@ final class ConnectionManager: ObservableObject {
         let status = try JSONDecoder().decode(RemoteEnvelope.self, from: statusData)
         if status.type == "error" {
             if status.code == "PAIRING_APPROVAL_REQUIRED" {
+                clearConnectionTimeout()
                 await MainActor.run {
                     self.connection?.cancel()
                     self.connection = nil
@@ -258,6 +311,7 @@ final class ConnectionManager: ObservableObject {
         )
 
         currentSessionKey = sessionKey
+        clearConnectionTimeout()
         if let pendingDevice {
             connectedDevice = pendingDevice.asConnected(
                 publicKey: serverPublicKey,
@@ -316,7 +370,7 @@ final class ConnectionManager: ObservableObject {
         try await sendFrame(encrypted, over: connection)
 
         let responseFrame = try await withTimeout(seconds: 15) {
-            try await receiveFrame(over: connection)
+            try await self.receiveFrame(over: connection)
         }
         let responseData = try secureChannel.decrypt(responseFrame, using: sessionKey)
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
@@ -336,6 +390,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func failConnection(_ message: String) {
+        clearConnectionTimeout()
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
