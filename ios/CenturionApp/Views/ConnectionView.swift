@@ -120,6 +120,14 @@ struct ConnectionView: View {
                 onSelect: { selectedProvider = .chatgpt }
             )
             
+            // Grok
+            LLMProviderCard(
+                provider: .grok,
+                isSelected: selectedProvider == .grok,
+                status: .healthy,
+                onSelect: { selectedProvider = .grok }
+            )
+            
             Text("We recommend DeepSeek for most people. It’s fast, capable, and reliable.")
                 .font(.system(size: 12, weight: .medium, design: .serif))
                 .foregroundColor(ColorTheme.accent().opacity(0.8))
@@ -198,13 +206,14 @@ struct LLMProviderCard: View {
 }
 
 enum LLMProvider {
-    case deepseek, claude, chatgpt
+    case deepseek, claude, chatgpt, grok
     
     var displayName: String {
         switch self {
         case .deepseek: return "DeepSeek"
         case .claude:   return "Claude"
         case .chatgpt:  return "ChatGPT"
+        case .grok:     return "Grok"
         }
     }
     
@@ -213,6 +222,7 @@ enum LLMProvider {
         case .deepseek: return "Fast, powerful, and cost-effective. Our primary recommendation."
         case .claude:   return "Excellent reasoning and long context. Great for complex tasks."
         case .chatgpt:  return "Widely capable with strong general knowledge."
+        case .grok:     return "Real-time knowledge with a helpful, maximum-truth-seeking personality."
         }
     }
 }
