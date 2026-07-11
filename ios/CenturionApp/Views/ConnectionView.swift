@@ -102,9 +102,7 @@ struct ConnectionView: View {
             )
             
             // Current selection details
-            if let current = selectedProvider {
-                LLMStatusDetail(provider: current)
-            }
+            LLMStatusDetail(provider: selectedProvider)
         }
     }
 }
