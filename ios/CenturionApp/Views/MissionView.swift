@@ -87,10 +87,7 @@ struct MissionView: View {
             .padding(.top, Spacing.sm)
         }
         .sheet(isPresented: $isDiscovering) {
-            // Future: SoulDocument-style discovery flow
-            Text("Mission Discovery Flow\n(Coming in next iteration)")
-                .font(.title3)
-                .padding()
+            MissionDiscoveryView()
         }
     }
     
