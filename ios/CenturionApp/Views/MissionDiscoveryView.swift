@@ -1,15 +1,15 @@
 import SwiftUI
 
-/// Enriched Mission Discovery Experience
-/// A calm, guided journey to help the user discover their personal mission.
-/// Uses plain language. Saves progress automatically.
+/// Award-level Mission Discovery Experience
+/// Designed with the intention of feeling special, human, and emotionally resonant.
+/// Every detail is considered — pacing, haptics, typography, warmth, and meaning.
 
 struct MissionDiscoveryView: View {
     @AppStorage("missionAnswers") private var savedAnswersData: Data = Data()
     @State private var answers: [String: String] = [:]
     @State private var currentIndex = 0
     @State private var showSummary = false
-    @State private var hasCompletedBefore = false
+    @State private var showIntro = true
     
     let questions: [MissionQuestion] = [
         MissionQuestion(id: "areas", section: "What Matters Most", question: "When you look at the world, what areas of life feel most important to you right now?", placeholder: "Family, creativity, helping others, learning, building something..."),
@@ -26,39 +26,85 @@ struct MissionDiscoveryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                if showSummary {
+                if showIntro {
+                    introScreen
+                } else if showSummary {
                     MissionSummaryView(answers: answers, onEdit: {
-                        withAnimation { showSummary = false }
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            showSummary = false
+                        }
                     })
                 } else {
                     guidedQuestionFlow
                 }
             }
-            .navigationTitle("Discover Your Mission")
+            .navigationTitle(showIntro ? "" : "Discover Your Mission")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 loadAnswers()
+                if !answers.isEmpty {
+                    showIntro = false
+                }
             }
         }
     }
     
-    // MARK: - Guided Flow
-    private var guidedQuestionFlow: some View {
-        VStack(spacing: 0) {
-            // Progress
-            ProgressView(value: Double(currentIndex), total: Double(questions.count))
-                .tint(ColorTheme.accent())
-                .padding(.horizontal)
-                .padding(.top, 8)
+    // MARK: - Intro Screen (Ceremonial)
+    private var introScreen: some View {
+        VStack(spacing: Spacing.xxl) {
+            Spacer()
             
-            Text("\(currentIndex + 1) of \(questions.count)")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(ColorTheme.mutedText())
-                .padding(.top, 6)
+            VStack(spacing: Spacing.lg) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 42))
+                    .foregroundColor(ColorTheme.accent().opacity(0.7))
+                
+                Text("A Quiet Space")
+                    .font(.system(size: 34, weight: .bold, design: .serif))
+                    .foregroundColor(ColorTheme.primaryText())
+                
+                Text("This is time set aside for you.\nTo listen to what matters most.")
+                    .font(.system(size: 17, weight: .medium, design: .serif))
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(6)
+            }
             
             Spacer()
             
-            // Current Question
+            Button {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    showIntro = false
+                }
+                Haptics.mediumTap()
+            } label: {
+                Text("Begin")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(AmberButtonStyle())
+            .padding(.horizontal, 40)
+            .padding(.bottom, 50)
+        }
+    }
+    
+    // MARK: - Guided Question Flow
+    private var guidedQuestionFlow: some View {
+        VStack(spacing: 0) {
+            // Elegant Progress
+            HStack {
+                ForEach(0..<questions.count, id: \.self) { index in
+                    Circle()
+                        .fill(index <= currentIndex ? ColorTheme.accent() : ColorTheme.border())
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.top, 12)
+            
+            Spacer()
+            
+            // Question Content with animation
             if currentIndex < questions.count {
                 let question = questions[currentIndex]
                 
@@ -66,37 +112,50 @@ struct MissionDiscoveryView: View {
                     Text(question.section)
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundColor(ColorTheme.accent())
-                        .tracking(2)
+                        .tracking(3)
+                        .opacity(0.8)
                     
                     Text(question.question)
-                        .font(.system(size: 20, weight: .medium, design: .serif))
+                        .font(.system(size: 22, weight: .medium, design: .serif))
                         .foregroundColor(ColorTheme.primaryText())
                         .multilineTextAlignment(.center)
-                        .lineSpacing(6)
-                        .padding(.horizontal, 20)
+                        .lineSpacing(8)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                     
                     TextEditor(text: binding(for: question.id))
-                        .frame(minHeight: 140)
-                        .padding(16)
+                        .frame(minHeight: 160)
+                        .padding(20)
                         .background(ColorTheme.surface())
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(ColorTheme.border().opacity(0.6), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(ColorTheme.border().opacity(0.5), lineWidth: 1)
                         )
-                        .padding(.horizontal)
+                        .padding(.horizontal, 20)
+                        .onChange(of: answers[question.id]) { _ in
+                            Haptics.lightTap()
+                        }
                 }
+                .id(currentIndex) // Force animation on change
             }
             
             Spacer()
             
-            // Navigation
-            HStack {
+            // Navigation Bar
+            HStack(spacing: 16) {
                 if currentIndex > 0 {
-                    Button("Back") {
-                        withAnimation {
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                             currentIndex -= 1
                         }
+                        Haptics.lightTap()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .medium))
+                            .padding(14)
+                            .background(ColorTheme.surface())
+                            .clipShape(Circle())
                     }
                     .foregroundColor(ColorTheme.mutedText())
                 }
@@ -104,38 +163,44 @@ struct MissionDiscoveryView: View {
                 Spacer()
                 
                 if currentIndex < questions.count - 1 {
-                    Button("Next") {
-                        withAnimation {
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                             currentIndex += 1
                         }
+                        Haptics.mediumTap()
+                    } label: {
+                        Text("Continue")
+                            .font(.system(size: 16, weight: .semibold))
+                            .padding(.horizontal, 36)
+                            .padding(.vertical, 14)
+                            .background(ColorTheme.accent())
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 12)
-                    .background(ColorTheme.accent())
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
                 } else {
-                    Button("Finish & See My Mission") {
+                    Button {
                         saveAnswers()
-                        withAnimation {
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                             showSummary = true
                         }
+                        Haptics.success()
+                    } label: {
+                        Text("Complete My Mission")
+                            .font(.system(size: 16, weight: .semibold))
+                            .padding(.horizontal, 36)
+                            .padding(.vertical, 14)
+                            .background(ColorTheme.accent())
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 12)
-                    .background(ColorTheme.accent())
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
                 }
             }
-            .padding(.bottom, 30)
-            .padding(.horizontal)
+            .padding(.bottom, 40)
+            .padding(.horizontal, 24)
         }
     }
     
-    // MARK: - Persistence
+    // MARK: - Persistence & Helpers
     private func binding(for id: String) -> Binding<String> {
         Binding(
             get: { answers[id] ?? "" },
@@ -146,7 +211,6 @@ struct MissionDiscoveryView: View {
     private func loadAnswers() {
         if let decoded = try? JSONDecoder().decode([String: String].self, from: savedAnswersData) {
             answers = decoded
-            hasCompletedBefore = !answers.isEmpty
         }
     }
     
@@ -157,62 +221,69 @@ struct MissionDiscoveryView: View {
     }
 }
 
-// MARK: - Summary View
+// MARK: - Summary View (Enriched)
 struct MissionSummaryView: View {
     let answers: [String: String]
     let onEdit: () -> Void
     
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.xl) {
-                VStack(spacing: Spacing.sm) {
+            VStack(spacing: Spacing.xxl) {
+                VStack(spacing: Spacing.md) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 32))
+                        .foregroundColor(ColorTheme.accent().opacity(0.6))
+                    
                     Text("Your Mission")
-                        .font(.system(size: 32, weight: .bold, design: .serif))
+                        .font(.system(size: 34, weight: .bold, design: .serif))
                         .foregroundColor(ColorTheme.primaryText())
                     
-                    Text("This is what you’ve uncovered so far.\nIt can grow and change with you.")
-                        .font(.system(size: 15))
+                    Text("This is what you’ve discovered.\nIt is alive and can evolve with you.")
+                        .font(.system(size: 16, weight: .medium, design: .serif))
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
+                        .lineSpacing(5)
                 }
-                .padding(.top, Spacing.lg)
+                .padding(.top, Spacing.xl)
                 
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     ForEach(Array(answers.keys.sorted()), id: \.self) { key in
                         if let answer = answers[key], !answer.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 10) {
                                 Text(key.capitalized.replacingOccurrences(of: "([A-Z])", with: " $1", options: .regularExpression).trimmingCharacters(in: .whitespaces))
-                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                     .foregroundColor(ColorTheme.accent())
+                                    .tracking(1)
                                 
                                 Text(answer)
-                                    .font(.system(size: 16))
+                                    .font(.system(size: 17))
                                     .foregroundColor(ColorTheme.primaryText())
-                                    .lineSpacing(5)
+                                    .lineSpacing(6)
                             }
-                            .padding()
+                            .padding(20)
                             .background(ColorTheme.surface())
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
                         }
                     }
                 }
                 
-                Button(action: onEdit) {
-                    Text("Edit My Answers")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(ColorTheme.accent())
+                VStack(spacing: Spacing.md) {
+                    Button(action: onEdit) {
+                        Text("Edit My Answers")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    
+                    Button {
+                        // Future: Send to Centurion / Pulse
+                    } label: {
+                        Text("Share With My Centurion")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                    }
+                    .buttonStyle(AmberButtonStyle())
                 }
-                .padding(.top, Spacing.md)
-                
-                Button {
-                    // Future: Share or send to Centurion
-                } label: {
-                    Text("Share With My Centurion")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(AmberButtonStyle())
                 .padding(.top, Spacing.lg)
             }
             .padding()
