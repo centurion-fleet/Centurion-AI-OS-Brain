@@ -103,19 +103,44 @@ async fn handle_connection(
 
         let response = match message {
             RemoteMessage::Chat { id, text } => {
+                info!(
+                    %peer,
+                    %fingerprint,
+                    request_id = %id,
+                    bytes = text.len(),
+                    "iPhone chat request received"
+                );
                 let response = state.bridge.chat(&id.to_string(), &text).await;
                 if !reload_is_approved(&state, &fingerprint).await? {
                     send_revoked(&mut stream, &session).await?;
                     return Err(SessionError::ApprovalRequired(fingerprint));
                 }
                 match response {
-                    Ok(text) => RemoteMessage::ChatResponse { id, text },
-                    Err(error) => RemoteMessage::Error {
-                        id: Some(id),
-                        code: "CENTURION_UNAVAILABLE".to_owned(),
-                        message: error.to_string(),
-                        retryable: true,
-                    },
+                    Ok(text) => {
+                        info!(
+                            %peer,
+                            %fingerprint,
+                            request_id = %id,
+                            bytes = text.len(),
+                            "Centurion response ready"
+                        );
+                        RemoteMessage::ChatResponse { id, text }
+                    }
+                    Err(error) => {
+                        warn!(
+                            %peer,
+                            %fingerprint,
+                            request_id = %id,
+                            %error,
+                            "Centurion response failed"
+                        );
+                        RemoteMessage::Error {
+                            id: Some(id),
+                            code: "CENTURION_UNAVAILABLE".to_owned(),
+                            message: error.to_string(),
+                            retryable: true,
+                        }
+                    }
                 }
             }
             RemoteMessage::Ping => RemoteMessage::Pong,
