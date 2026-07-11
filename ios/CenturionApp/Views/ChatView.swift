@@ -415,16 +415,20 @@ struct ChatView: View {
         messageText = ""
         isSending = true
 
+        // Select the conversation before the async send so the user's message
+        // stays visible while waiting for the Centurion response.
+        let context: ConversationContext
+        if let selected = selectedConversation {
+            context = selected.context
+        } else {
+            context = ConversationContext.standalone(title: "Quick Chat")
+            selectedConversation = messageService.findOrCreateConversation(for: context)
+        }
+
         Task {
             do {
-                let conversation: Conversation
-                if let selected = selectedConversation {
-                    conversation = try await messageService.sendMessage(text, in: selected.context)
-                } else {
-                    let context = ConversationContext.standalone(title: "Quick Chat")
-                    conversation = try await messageService.sendMessage(text, in: context)
-                    selectedConversation = conversation
-                }
+                let conversation = try await messageService.sendMessage(text, in: context)
+                selectedConversation = conversation
                 withAnimation(Motion.standard) {
                     showTray = false
                 }

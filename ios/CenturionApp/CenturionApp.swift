@@ -7,6 +7,7 @@ struct CenturionApp: App {
     @State private var showSplash = true
     @State private var showOnboarding = false
     @State private var services = AppServices()
+    @State private var clearedDemoForConnection = false
 
     var body: some Scene {
         WindowGroup {
@@ -49,7 +50,12 @@ struct CenturionApp: App {
             .onReceive(services.connectionManager.$connectionState) { state in
                 services.dataMode.update(connectionState: state)
                 if state == .connected {
-                    services.messageService.clearDemoData()
+                    if !clearedDemoForConnection {
+                        services.messageService.clearDemoData()
+                        clearedDemoForConnection = true
+                    }
+                } else {
+                    clearedDemoForConnection = false
                 }
             }
         }

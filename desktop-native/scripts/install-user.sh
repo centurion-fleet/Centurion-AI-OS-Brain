@@ -47,9 +47,12 @@ fi
 
 echo "Installing user systemd unit for centurion-remote…"
 mkdir -p "${SYSTEMD_DIR}"
-sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
-  "${DESKTOP_NATIVE}/packaging/systemd/centurion-remote.service" \
-  > "${SYSTEMD_DIR}/centurion-remote.service"
+{
+  sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
+    "${DESKTOP_NATIVE}/packaging/systemd/centurion-remote.service"
+  printf 'WorkingDirectory=%s\n' "${ROOT}"
+  printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
+} > "${SYSTEMD_DIR}/centurion-remote.service"
 
 export PATH="${BIN_DIR}:${PATH}"
 systemctl --user daemon-reload

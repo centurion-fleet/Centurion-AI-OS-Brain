@@ -26,6 +26,7 @@ final class ConnectionManager: ObservableObject {
     private var pendingDevice: CenturionDevice?
     private var keepaliveTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
+    private let remoteIO = RemoteIOPipeline()
     private let maximumFrameSize = 8 * 1024 * 1024
     private let handshakeTimeoutSeconds: UInt64 = 15
 
@@ -67,11 +68,17 @@ final class ConnectionManager: ObservableObject {
         startDiscovery()
     }
 
-    /// Prefer hostname/IP over Bonjour service endpoints — iOS often stalls on
-    /// IPv6 service resolution even when discovery succeeds.
+    /// Use the Bonjour service endpoint when available — that matches how discovery
+    /// found the device. Fall back to hostname/IP only when service metadata is missing.
     private func connectionEndpoint(for device: CenturionDevice) -> NWEndpoint {
         let port = NWEndpoint.Port(rawValue: UInt16(device.port))
             ?? NWEndpoint.Port(integerLiteral: 9119)
+
+        if let name = device.serviceName,
+           let type = device.serviceType,
+           let domain = device.serviceDomain {
+            return .service(name: name, type: type, domain: domain, interface: nil)
+        }
 
         if !device.ipAddress.isEmpty {
             return .hostPort(host: NWEndpoint.Host(device.ipAddress), port: port)
@@ -84,13 +91,13 @@ final class ConnectionManager: ObservableObject {
             return .hostPort(host: NWEndpoint.Host(host), port: port)
         }
 
-        if let name = device.serviceName,
-           let type = device.serviceType,
-           let domain = device.serviceDomain {
-            return .service(name: name, type: type, domain: domain, interface: nil)
-        }
-
         return .hostPort(host: NWEndpoint.Host("localhost"), port: port)
+    }
+
+    private func connectionParameters() -> NWParameters {
+        let params = NWParameters.tcp
+        params.includePeerToPeer = true
+        return params
     }
 
     func connect(to device: CenturionDevice) {
@@ -99,11 +106,7 @@ final class ConnectionManager: ObservableObject {
         pendingDevice = device
 
         let endpoint = connectionEndpoint(for: device)
-        let params = NWParameters.tcp
-        params.includePeerToPeer = true
-        params.requiredInterfaceType = .wifi
-
-        let newConnection = NWConnection(to: endpoint, using: params)
+        let newConnection = NWConnection(to: endpoint, using: connectionParameters())
         connection = newConnection
         installConnectionHandler(for: newConnection)
         startConnectionTimeout()
@@ -133,13 +136,23 @@ final class ConnectionManager: ObservableObject {
         let requestID = UUID()
         let request = RemoteEnvelope(type: "chat", id: requestID, text: text)
         let plaintext = try JSONEncoder().encode(request)
-        let encrypted = try secureChannel.encrypt(plaintext, using: sessionKey)
-        try await sendFrame(encrypted, over: connection)
 
-        let responseFrame = try await withTimeout(seconds: chatTimeoutSeconds) {
-            try await self.receiveFrame(over: connection)
+        let responseData: Data
+        do {
+            responseData = try await withTimeout(seconds: chatTimeoutSeconds) {
+                try await self.remoteIO.exchange(
+                    connection: connection,
+                    secureChannel: self.secureChannel,
+                    sessionKey: sessionKey,
+                    maximumFrameSize: self.maximumFrameSize,
+                    plaintext: plaintext
+                )
+            }
+        } catch is TimeoutError {
+            throw ConnectionError.serverRejected(
+                "Your Centurion is taking too long to respond. Try again in a moment."
+            )
         }
-        let responseData = try secureChannel.decrypt(responseFrame, using: sessionKey)
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
 
         if response.type == "chat_response",
@@ -266,8 +279,8 @@ final class ConnectionManager: ObservableObject {
         var publicKey = identityKey.publicKey
         publicKey.insert(0x01, at: 0)
 
-        try await sendData(publicKey, over: connection)
-        let data = try await receiveExactly(33, over: connection)
+        try await RemoteFrameIO.sendData(publicKey, over: connection)
+        let data = try await RemoteFrameIO.receiveExactly(33, over: connection)
         guard data.count == 33, data[0] == 0x01 else {
             throw ConnectionError.invalidResponse
         }
@@ -278,7 +291,10 @@ final class ConnectionManager: ObservableObject {
             mySecretKey: identityKey.secretKey,
             myPublicKey: identityKey.publicKey
         )
-        let statusFrame = try await receiveFrame(over: connection)
+        let statusFrame = try await RemoteFrameIO.receiveFrame(
+            over: connection,
+            maximumFrameSize: maximumFrameSize
+        )
         let statusData = try secureChannel.decrypt(statusFrame, using: sessionKey)
         let status = try JSONDecoder().decode(RemoteEnvelope.self, from: statusData)
         if status.type == "error" {
@@ -366,13 +382,16 @@ final class ConnectionManager: ObservableObject {
 
         let request = RemoteEnvelope(type: "ping")
         let plaintext = try JSONEncoder().encode(request)
-        let encrypted = try secureChannel.encrypt(plaintext, using: sessionKey)
-        try await sendFrame(encrypted, over: connection)
 
-        let responseFrame = try await withTimeout(seconds: 15) {
-            try await self.receiveFrame(over: connection)
+        let responseData = try await withTimeout(seconds: 15) {
+            try await self.remoteIO.exchange(
+                connection: connection,
+                secureChannel: self.secureChannel,
+                sessionKey: sessionKey,
+                maximumFrameSize: self.maximumFrameSize,
+                plaintext: plaintext
+            )
         }
-        let responseData = try secureChannel.decrypt(responseFrame, using: sessionKey)
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
         if response.type == "error", response.code == "DEVICE_REVOKED" {
             handleDeviceRevoked(
@@ -427,83 +446,6 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func sendData(_ data: Data, over connection: NWConnection) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: data, completion: .contentProcessed({ error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }))
-        }
-    }
-
-    private func sendFrame(_ payload: Data, over connection: NWConnection) async throws {
-        guard payload.count <= maximumFrameSize else {
-            throw ConnectionError.messageTooLarge
-        }
-        var length = UInt32(payload.count).bigEndian
-        var frame = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
-        frame.append(payload)
-        try await sendData(frame, over: connection)
-    }
-
-    private func receiveFrame(over connection: NWConnection) async throws -> Data {
-        let header = try await receiveExactly(4, over: connection)
-        let length = header.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-        guard length <= maximumFrameSize else {
-            throw ConnectionError.messageTooLarge
-        }
-        return try await receiveExactly(Int(length), over: connection)
-    }
-
-    private func receiveExactly(_ count: Int, over connection: NWConnection) async throws -> Data {
-        var result = Data()
-        while result.count < count {
-            let remaining = count - result.count
-            let chunk = try await receiveChunk(maxLength: remaining, over: connection)
-            result.append(chunk)
-        }
-        return result
-    }
-
-    private func receiveChunk(
-        maxLength: Int,
-        over connection: NWConnection
-    ) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
-            receiveChunkContinuation(
-                maxLength: maxLength,
-                over: connection,
-                continuation: continuation
-            )
-        }
-    }
-
-    private func receiveChunkContinuation(
-        maxLength: Int,
-        over connection: NWConnection,
-        continuation: CheckedContinuation<Data, Error>
-    ) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) {
-            [weak self] data, _, isComplete, error in
-            if let error {
-                continuation.resume(throwing: error)
-            } else if let data, !data.isEmpty {
-                continuation.resume(returning: data)
-            } else if isComplete {
-                continuation.resume(throwing: ConnectionError.connectionClosed)
-            } else {
-                self?.receiveChunkContinuation(
-                    maxLength: maxLength,
-                    over: connection,
-                    continuation: continuation
-                )
-            }
-        }
-    }
-
     private func friendlyConnectionError(_ error: NWError) -> String {
         switch error {
         case .posix(.ECONNREFUSED):
@@ -530,6 +472,115 @@ final class ConnectionManager: ObservableObject {
             let result = try await group.next()!
             group.cancelAll()
             return result
+        }
+    }
+}
+
+/// Serializes encrypted frame traffic so chat and keepalive cannot race on one socket.
+private actor RemoteIOPipeline {
+    func exchange(
+        connection: NWConnection,
+        secureChannel: SecureChannel,
+        sessionKey: SessionKey,
+        maximumFrameSize: Int,
+        plaintext: Data
+    ) async throws -> Data {
+        let encrypted = try secureChannel.encrypt(plaintext, using: sessionKey)
+        try await RemoteFrameIO.sendFrame(
+            encrypted,
+            over: connection,
+            maximumFrameSize: maximumFrameSize
+        )
+        let responseFrame = try await RemoteFrameIO.receiveFrame(
+            over: connection,
+            maximumFrameSize: maximumFrameSize
+        )
+        return try secureChannel.decrypt(responseFrame, using: sessionKey)
+    }
+}
+
+private enum RemoteFrameIO {
+    static func sendData(_ data: Data, over connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed({ error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }))
+        }
+    }
+
+    static func sendFrame(
+        _ payload: Data,
+        over connection: NWConnection,
+        maximumFrameSize: Int
+    ) async throws {
+        guard payload.count <= maximumFrameSize else {
+            throw ConnectionError.messageTooLarge
+        }
+        var length = UInt32(payload.count).bigEndian
+        var frame = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
+        frame.append(payload)
+        try await sendData(frame, over: connection)
+    }
+
+    static func receiveFrame(
+        over connection: NWConnection,
+        maximumFrameSize: Int
+    ) async throws -> Data {
+        let header = try await receiveExactly(4, over: connection)
+        let length = header.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        guard length <= maximumFrameSize else {
+            throw ConnectionError.messageTooLarge
+        }
+        return try await receiveExactly(Int(length), over: connection)
+    }
+
+    static func receiveExactly(_ count: Int, over connection: NWConnection) async throws -> Data {
+        var result = Data()
+        while result.count < count {
+            let remaining = count - result.count
+            let chunk = try await receiveChunk(maxLength: remaining, over: connection)
+            result.append(chunk)
+        }
+        return result
+    }
+
+    private static func receiveChunk(
+        maxLength: Int,
+        over connection: NWConnection
+    ) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            receiveChunkContinuation(
+                maxLength: maxLength,
+                over: connection,
+                continuation: continuation
+            )
+        }
+    }
+
+    private static func receiveChunkContinuation(
+        maxLength: Int,
+        over connection: NWConnection,
+        continuation: CheckedContinuation<Data, Error>
+    ) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) {
+            data, _, isComplete, error in
+            if let error {
+                continuation.resume(throwing: error)
+            } else if let data, !data.isEmpty {
+                continuation.resume(returning: data)
+            } else if isComplete {
+                continuation.resume(throwing: ConnectionError.connectionClosed)
+            } else {
+                receiveChunkContinuation(
+                    maxLength: maxLength,
+                    over: connection,
+                    continuation: continuation
+                )
+            }
         }
     }
 }

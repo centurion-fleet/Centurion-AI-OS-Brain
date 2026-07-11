@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -69,7 +70,10 @@ impl AgentBridge for PythonBridge {
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
         if let Ok(home) = std::env::var("CENTURION_HOME") {
-            command.env("CENTURION_HOME", home);
+            command.env("CENTURION_HOME", &home);
+        }
+        if let Some(cwd) = bridge_working_directory() {
+            command.current_dir(cwd);
         }
 
         let mut child = command.spawn().map_err(BridgeError::Spawn)?;
@@ -107,6 +111,22 @@ impl AgentBridge for PythonBridge {
             Err(BridgeError::Agent(response.error))
         }
     }
+}
+
+fn bridge_working_directory() -> Option<PathBuf> {
+    for key in ["TERMINAL_CWD", "CENTURION_AI_REPO"] {
+        if let Ok(path) = std::env::var(key) {
+            let candidate = PathBuf::from(path);
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    std::env::var("CENTURION_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
 }
 
 #[derive(Debug, Default)]
