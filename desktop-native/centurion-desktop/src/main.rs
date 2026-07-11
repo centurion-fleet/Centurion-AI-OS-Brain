@@ -420,7 +420,7 @@ mod linux {
             approve.set_valign(gtk::Align::Center);
             let fingerprint = device.fingerprint;
             let name = device.name;
-            let list = list.clone();
+            let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             approve.connect_clicked(move |button| {
                 button.set_sensitive(false);
@@ -429,7 +429,7 @@ mod linux {
                     .status()
                     .is_ok_and(|status| status.success());
                 if approved {
-                    refresh_devices(&list);
+                    refresh_devices(&list_refresh);
                 } else {
                     button.set_sensitive(true);
                 }
@@ -461,7 +461,7 @@ mod linux {
             revoke.add_css_class("destructive-action");
             revoke.set_valign(gtk::Align::Center);
             let fingerprint = device.fingerprint;
-            let list = list.clone();
+            let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
                 button.set_sensitive(false);
@@ -470,7 +470,7 @@ mod linux {
                     .status()
                     .is_ok_and(|status| status.success());
                 if revoked {
-                    refresh_devices(&list);
+                    refresh_devices(&list_refresh);
                 } else {
                     button.set_sensitive(true);
                 }
