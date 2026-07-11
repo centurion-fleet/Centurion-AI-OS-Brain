@@ -1,77 +1,91 @@
 import SwiftUI
 
 /// Connection Hub — the trust layer of the app.
-/// 
-/// This screen exists to protect the relationship between user and Centurion.
-/// When LLM connections or Telegram break, users previously blamed Centurion.
-/// This view makes the real state of both connections visible and actionable.
+///
+/// When LLM connections or the remote link break, users should see the real state
+/// here instead of blaming their Centurion.
 struct ConnectionView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
-    @State private var selectedProvider: LLMProvider = .deepseek
-    
+    @AppStorage("selectedLLMProvider") private var selectedProviderRaw = LLMProvider.deepseek.rawValue
+    @State private var showPairingSheet = false
+
+    private var selectedProvider: LLMProvider {
+        get { LLMProvider(rawValue: selectedProviderRaw) ?? .deepseek }
+        nonmutating set { selectedProviderRaw = newValue.rawValue }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.xl) {
                     BrandHeader()
                         .padding(.bottom, Spacing.sm)
-                    
-                    // Purpose statement
-                    VStack(spacing: 6) {
-                        Text("Your Centurion stays reliable when its connections are clear.")
-                            .font(.system(size: 15, weight: .medium, design: .serif))
-                            .foregroundColor(ColorTheme.primaryText())
-                            .multilineTextAlignment(.center)
-                        
-                        Text("This screen shows the health of both links so you always know what’s happening.")
-                            .font(.system(size: 13))
-                            .foregroundColor(ColorTheme.mutedText())
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Remote Connection Section
+
+                    trustStatement
+
                     remoteConnectionSection
-                    
-                    // LLM Providers Section
                     llmProvidersSection
                 }
                 .padding()
             }
+            .background(ColorTheme.background())
             .navigationTitle("Connect")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showPairingSheet) {
+                ConnectionPairingSheet()
+                    .environmentObject(connectionManager)
+            }
         }
     }
-    
+
+    // MARK: - Trust Statement
+
+    private var trustStatement: some View {
+        VStack(spacing: 6) {
+            Text("Your Centurion stays reliable when its connections are clear.")
+                .font(.system(size: 15, weight: .medium, design: .serif))
+                .foregroundColor(ColorTheme.primaryText())
+                .multilineTextAlignment(.center)
+
+            Text("This screen shows the health of both links so you always know what's happening.")
+                .font(.system(size: 13))
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal)
+    }
+
     // MARK: - Remote Connection
+
     private var remoteConnectionSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Remote Connection", icon: "antenna.radiowaves.left.and.right")
-            
+
             Text("The link between this iPhone and your Centurion.")
                 .font(.system(size: 14))
                 .foregroundColor(ColorTheme.mutedText())
-            
-            // Status card
-            HStack {
+
+            HStack(spacing: Spacing.md) {
+                StatusDot(isConnected: connectionManager.connectionState == .connected)
+
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(connectionManager.connectionState == .connected ? "Connected" : "Disconnected")
+                    Text(remoteStatusTitle)
                         .font(.headline)
-                        .foregroundColor(connectionManager.connectionState == .connected ? .green : ColorTheme.mutedText())
-                    
-                    Text(connectionManager.connectionState == .connected 
-                         ? "Your iPhone is securely linked to your Centurion"
-                         : "Tap below to connect your Centurion")
+                        .foregroundColor(remoteStatusColor)
+
+                    Text(remoteStatusDetail)
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                
+
                 Spacer()
-                
+
                 Button {
-                    // Trigger connection flow
+                    Haptics.lightTap()
+                    showPairingSheet = true
                 } label: {
-                    Text(connectionManager.connectionState == .connected ? "Manage" : "Connect")
+                    Text(remoteActionLabel)
                         .font(.system(size: 14, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -79,141 +93,194 @@ struct ConnectionView: View {
                         .foregroundColor(.white)
                         .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
             .padding()
             .background(ColorTheme.surface())
             .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(ColorTheme.border(), lineWidth: 0.5)
+            )
         }
     }
-    
-    // MARK: - LLM Providers (Dial Style)
+
+    private var remoteStatusTitle: String {
+        switch connectionManager.connectionState {
+        case .connected:    return "Connected"
+        case .discovering:  return "Searching"
+        case .connecting:   return "Connecting"
+        case .disconnected: return "Disconnected"
+        case .error:        return "Connection Issue"
+        }
+    }
+
+    private var remoteStatusDetail: String {
+        switch connectionManager.connectionState {
+        case .connected:
+            if let device = connectionManager.connectedDevice {
+                return "Securely linked to \(device.name)"
+            }
+            return "Your iPhone is securely linked to your Centurion"
+        case .discovering:
+            return "Looking for your Centurion on the local network"
+        case .connecting:
+            return "Establishing an encrypted channel"
+        case .disconnected:
+            return "Tap Connect to pair with your Centurion"
+        case .error(let message):
+            return message
+        }
+    }
+
+    private var remoteStatusColor: Color {
+        switch connectionManager.connectionState {
+        case .connected: return ColorTheme.success()
+        case .error:     return ColorTheme.error()
+        default:         return ColorTheme.mutedText()
+        }
+    }
+
+    private var remoteActionLabel: String {
+        switch connectionManager.connectionState {
+        case .connected: return "Manage"
+        default:         return "Connect"
+        }
+    }
+
+    // MARK: - LLM Providers
+
     private var llmProvidersSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "LLM Providers", icon: "brain.head.profile")
-            
+
             Text("Turn the dial to switch which model your Centurion thinks through. Status shows real-time health.")
                 .font(.system(size: 14))
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.bottom, Spacing.xs)
-            
-            // Dial-style selector
-            LLMProviderDial(
-                selectedProvider: $selectedProvider
-            )
-            
-            // Current selection details
+
+            LLMProviderDial(selectedProvider: Binding(
+                get: { selectedProvider },
+                set: { selectedProviderRaw = $0.rawValue }
+            ))
+
             LLMStatusDetail(provider: selectedProvider)
         }
     }
 }
 
-// MARK: - Supporting Views
+// MARK: - Pairing Sheet
 
-struct LLMProviderCard: View {
-    let provider: LLMProvider
-    let isSelected: Bool
-    let status: ConnectionStatus
-    let onSelect: () -> Void
-    
+struct ConnectionPairingSheet: View {
+    @EnvironmentObject private var connectionManager: ConnectionManager
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: Spacing.md) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(provider.displayName)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(ColorTheme.primaryText())
-                        
-                        if provider == .deepseek {
-                            Text("RECOMMENDED")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(ColorTheme.accent())
-                                .clipShape(Capsule())
-                        }
-                    }
-                    
-                    Text(provider.description)
-                        .font(.system(size: 13))
-                        .foregroundColor(ColorTheme.mutedText())
+        NavigationStack {
+            Group {
+                if connectionManager.connectionState == .connected {
+                    connectedState
+                } else if connectionManager.discoveredDevices.isEmpty {
+                    searchingState
+                } else {
+                    deviceList
                 }
-                
-                Spacer()
-                
-                // Status indicator
-                VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(status.color)
-                            .frame(width: 8, height: 8)
-                        
-                        Text(status.label)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(status.color)
+            }
+            .navigationTitle("Connect")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .onAppear {
+                if connectionManager.connectionState != .connected {
+                    connectionManager.startDiscovery()
+                }
+            }
+        }
+    }
+
+    private var connectedState: some View {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 48))
+                .foregroundColor(ColorTheme.success())
+
+            Text("Connected")
+                .font(.title2.weight(.semibold))
+
+            if let device = connectionManager.connectedDevice {
+                Text(device.name)
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            Button(role: .destructive) {
+                connectionManager.disconnect()
+                Haptics.mediumTap()
+            } label: {
+                Text("Disconnect")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .padding(.horizontal)
+        }
+        .padding()
+    }
+
+    private var searchingState: some View {
+        ContentUnavailableView {
+            Label("Searching", systemImage: "antenna.radiowaves.left.and.right")
+        } description: {
+            Text("Make sure your Centurion is running on the same network. Discovery uses Bonjour — no cloud account needed.")
+        } actions: {
+            if case .discovering = connectionManager.connectionState {
+                ProgressView()
+                    .padding(.top, Spacing.sm)
+            } else {
+                Button("Search Again") {
+                    connectionManager.startDiscovery()
+                }
+                .buttonStyle(AmberButtonStyle())
+            }
+        }
+    }
+
+    private var deviceList: some View {
+        List(connectionManager.discoveredDevices) { device in
+            Button {
+                connectionManager.connect(to: device)
+                Haptics.connectionEstablished()
+            } label: {
+                HStack {
+                    Image(systemName: device.connectionMethod.icon)
+                        .foregroundColor(ColorTheme.accent())
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name)
+                            .font(.headline)
+                            .foregroundColor(ColorTheme.primaryText())
+                        Text("Local network")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
-                    
-                    if isSelected {
-                        Text("ACTIVE")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(ColorTheme.accent())
+
+                    Spacer()
+
+                    if connectionManager.connectionState == .connecting {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(ColorTheme.mutedText())
                     }
                 }
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? ColorTheme.accent().opacity(0.06) : ColorTheme.surface())
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
-                    )
-            )
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
-    }
-}
-
-enum LLMProvider {
-    case deepseek, claude, chatgpt, grok
-    
-    var displayName: String {
-        switch self {
-        case .deepseek: return "DeepSeek"
-        case .claude:   return "Claude"
-        case .chatgpt:  return "ChatGPT"
-        case .grok:     return "Grok"
-        }
-    }
-    
-    var description: String {
-        switch self {
-        case .deepseek: return "Fast, powerful, and cost-effective. Our primary recommendation."
-        case .claude:   return "Excellent reasoning and long context. Great for complex tasks."
-        case .chatgpt:  return "Widely capable with strong general knowledge."
-        case .grok:     return "Real-time knowledge with a helpful, maximum-truth-seeking personality."
-        }
-    }
-}
-
-enum ConnectionStatus {
-    case healthy, degraded, broken
-    
-    var label: String {
-        switch self {
-        case .healthy:  return "Healthy"
-        case .degraded: return "Degraded"
-        case .broken:   return "Issue"
-        }
-    }
-    
-    var color: Color {
-        switch self {
-        case .healthy:  return .green
-        case .degraded: return .orange
-        case .broken:   return .red
-        }
+        .listStyle(.insetGrouped)
     }
 }
 
@@ -221,86 +288,150 @@ enum ConnectionStatus {
 
 struct LLMProviderDial: View {
     @Binding var selectedProvider: LLMProvider
-    
-    let providers: [LLMProvider] = [.deepseek, .claude, .chatgpt, .grok]
-    
+
+    private let providers = LLMProvider.allCases
+
     var body: some View {
-        VStack(spacing: 12) {
-            // The dial itself
-            HStack(spacing: 0) {
-                ForEach(providers, id: \.self) { provider in
-                    Button {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                            selectedProvider = provider
-                        }
-                        Haptics.lightTap()
-                    } label: {
-                        VStack(spacing: 8) {
-                            // Status dot
-                            Circle()
-                                .fill(provider.status.color)
-                                .frame(width: 10, height: 10)
-                                .overlay(
-                                    Circle()
-                                        .stroke(provider.status.color.opacity(0.3), lineWidth: 4)
-                                        .scaleEffect(selectedProvider == provider ? 1.6 : 0.8)
-                                )
-                            
-                            // Provider name
-                            Text(provider.displayName)
-                                .font(.system(size: 13, weight: selectedProvider == provider ? .semibold : .medium))
-                                .foregroundColor(selectedProvider == provider ? ColorTheme.primaryText() : ColorTheme.mutedText())
-                            
-                            // Small status label
-                            Text(provider.status.label)
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .foregroundColor(provider.status.color)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            selectedProvider == provider 
-                                ? ColorTheme.accent().opacity(0.08) 
-                                : Color.clear
+        VStack(spacing: Spacing.md) {
+            GeometryReader { geometry in
+                let segmentWidth = geometry.size.width / CGFloat(providers.count)
+
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    ColorTheme.surface(),
+                                    ColorTheme.accent().opacity(0.05)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(ColorTheme.accent().opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(ColorTheme.accent().opacity(0.35), lineWidth: 1)
+                        )
+                        .frame(width: segmentWidth - 8, height: geometry.size.height - 8)
+                        .offset(x: selectionOffset(segmentWidth: segmentWidth) + 4)
+                        .animation(Motion.standard, value: selectedProvider)
+
+                    HStack(spacing: 0) {
+                        ForEach(providers) { provider in
+                            dialSegment(for: provider)
+                                .frame(width: segmentWidth)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(4)
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .frame(height: 108)
             .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(ColorTheme.border().opacity(0.6), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(ColorTheme.border(), lineWidth: 0.5)
             )
-            
-            // Dial indicator line
-            HStack {
-                ForEach(providers, id: \.self) { provider in
-                    Rectangle()
-                        .fill(selectedProvider == provider ? ColorTheme.accent() : Color.clear)
-                        .frame(height: 2)
-                        .frame(maxWidth: .infinity)
+
+            prairieIndicator
+        }
+    }
+
+    private func selectionOffset(segmentWidth: CGFloat) -> CGFloat {
+        CGFloat(providers.firstIndex(of: selectedProvider) ?? 0) * segmentWidth
+    }
+
+    private func dialSegment(for provider: LLMProvider) -> some View {
+        Button {
+            guard selectedProvider != provider else { return }
+            withAnimation(Motion.standard) {
+                selectedProvider = provider
+            }
+            Haptics.lightTap()
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(provider.status.color.opacity(selectedProvider == provider ? 0.18 : 0.08))
+                        .frame(width: 34, height: 34)
+
+                    Text(provider.shortLabel)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(
+                            selectedProvider == provider
+                                ? ColorTheme.accent()
+                                : ColorTheme.mutedText()
+                        )
+                }
+
+                Text(provider.displayName)
+                    .font(.system(size: 12, weight: selectedProvider == provider ? .semibold : .medium))
+                    .foregroundColor(
+                        selectedProvider == provider
+                            ? ColorTheme.primaryText()
+                            : ColorTheme.mutedText()
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(provider.status.color)
+                        .frame(width: 6, height: 6)
+                    Text(provider.status.label)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(provider.status.color)
                 }
             }
-            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(provider.displayName), \(provider.status.label)")
+        .accessibilityAddTraits(selectedProvider == provider ? .isSelected : [])
+    }
+
+    private var prairieIndicator: some View {
+        HStack(spacing: 0) {
+            ForEach(providers) { provider in
+                Rectangle()
+                    .fill(
+                        selectedProvider == provider
+                            ? ColorTheme.accent()
+                            : ColorTheme.border().opacity(0.5)
+                    )
+                    .frame(height: selectedProvider == provider ? 2 : 1)
+                    .frame(maxWidth: .infinity)
+                    .animation(Motion.light, value: selectedProvider)
+            }
+        }
+        .padding(.horizontal, Spacing.lg)
     }
 }
 
+// MARK: - Status Detail
+
 struct LLMStatusDetail: View {
     let provider: LLMProvider
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(provider.displayName)
                     .font(.headline)
-                
+
+                if provider.isRecommended {
+                    Text("RECOMMENDED")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(ColorTheme.accent())
+                        .clipShape(Capsule())
+                }
+
                 Spacer()
-                
+
                 HStack(spacing: 6) {
                     Circle()
                         .fill(provider.status.color)
@@ -310,31 +441,25 @@ struct LLMStatusDetail: View {
                         .foregroundColor(provider.status.color)
                 }
             }
-            
+
             Text(provider.description)
                 .font(.system(size: 14))
                 .foregroundColor(ColorTheme.mutedText())
-            
-            if provider.status != .healthy {
-                Text("This provider is currently experiencing issues. Consider switching to another model.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.orange)
+
+            if let reassurance = provider.status.reassurance {
+                Text(reassurance)
+                    .font(.system(size: 12, weight: .medium, design: .serif))
+                    .foregroundColor(provider.status == .broken ? ColorTheme.error() : .orange)
                     .padding(.top, 4)
             }
         }
         .padding()
         .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-}
-
-extension LLMProvider {
-    var status: ConnectionStatus {
-        switch self {
-        case .deepseek: return .healthy
-        case .claude:   return .healthy
-        case .chatgpt:  return .degraded
-        case .grok:     return .healthy
-        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(ColorTheme.border(), lineWidth: 0.5)
+        )
+        .animation(Motion.light, value: provider)
     }
 }

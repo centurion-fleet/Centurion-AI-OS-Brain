@@ -8,7 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: J6DY26ZGL4
+    CODE_SIGN_STYLE: Automatic
 
 targets:
   CenturionApp:
@@ -33,7 +34,8 @@ targets:
       properties:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIApplicationSupportsAllInterfaceOrientations: true
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:

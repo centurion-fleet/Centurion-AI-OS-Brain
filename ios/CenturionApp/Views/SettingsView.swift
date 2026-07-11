@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var missionStore: MissionStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
@@ -36,9 +37,26 @@ struct SettingsView: View {
                     }
                 }
 
-                // Soul Document
-                Section {
-                    NavigationLink(destination: SoulDocumentView(soul: SoulDocument.preview())) {
+                // Mission & Soul
+                Section("Mission") {
+                    NavigationLink(destination: MissionView()) {
+                        HStack {
+                            Image(systemName: "target")
+                                .foregroundColor(ColorTheme.accent())
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Your Mission")
+                                    .foregroundColor(ColorTheme.primaryText())
+                                Text(missionStore.hasMissionStatement
+                                     ? missionStore.mission.statement
+                                     : "Discover what you're building")
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.mutedText())
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    NavigationLink(destination: SoulDocumentView()) {
                         HStack {
                             Image(systemName: "heart.text.square.fill")
                                 .foregroundColor(ColorTheme.accent())
@@ -145,6 +163,7 @@ struct SettingsView: View {
                     Text("This will generate a new encryption identity. You'll need to re-pair with your Centurion.")
                 }
             }
+            .background(ColorTheme.background())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .scrollContentBackground(.hidden)

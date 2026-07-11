@@ -28,12 +28,13 @@ enum PulseCategory: String, CaseIterable {
 }
 
 struct MissionPortfolioView: View {
-    @State private var mission: LifeMission = LifeMission.preview()
-    @State private var liveActivity: LiveActivity? = LiveActivity.preview()
-    @State private var completedLoops: [CompletedLoop] = CompletedLoop.preview()
-    @State private var decisions: [DecisionItem] = DecisionItem.preview()
-    @State private var outputs: [CenturionOutput] = CenturionOutput.preview()
-    @State private var thoughts: [CenturionThought] = CenturionThought.preview()
+    @EnvironmentObject private var missionStore: MissionStore
+    @State private var liveActivity: LiveActivity?
+    @State private var completedLoops: [CompletedLoop] = []
+    @State private var decisions: [DecisionItem] = []
+    @State private var outputs: [CenturionOutput] = []
+    @State private var thoughts: [CenturionThought] = []
+    @State private var isDataLoaded = false
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
     @State private var isAppeared = false
@@ -95,50 +96,33 @@ struct MissionPortfolioView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Brand header — consistent across all tabs
-                BrandHeader()
-                    .padding(.bottom, Spacing.sm)
-                
-                // Pill navigation — one category at a time
-                pillNavigation
-
-                ScrollView {
-                    VStack(spacing: Spacing.md) {
-                        // Only the selected category renders
-                        switch selectedCategory {
-                        case .live:
-                            liveActivitySection
-                        case .wins:
-                            completedLoopsSection
-                        case .outputs:
-                            if !outputs.isEmpty {
-                                outputsSection
-                            } else {
-                                emptyCategory("No outputs yet", "Documents the Centurion creates will appear here")
-                            }
-                        case .decisions:
-                            if !decisions.isEmpty {
-                                decisionsSection
-                            } else {
-                                emptyCategory("All clear", "Nothing needs your attention right now")
-                            }
-                        case .pulse:
-                            thoughtsSection
-                        }
-                    }
-                    .frame(maxWidth: 428)
-                    .padding()
-                    .frame(maxWidth: .infinity)
+        TabPageChrome(title: "Pulse") {
+            pillNavigation
+                .padding(.horizontal, Spacing.sm)
+                .padding(.bottom, Spacing.xs)
+        } content: {
+            Group {
+                if isDataLoaded {
+                    pulseScrollContent
+                } else {
+                    ProgressView()
+                        .tint(ColorTheme.accent())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .navigationTitle("Pulse")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                withAnimation(Motion.appear.delay(0.1)) {
-                    isAppeared = true
-                }
+        }
+        .task {
+            guard !isDataLoaded else { return }
+            liveActivity = LiveActivity.preview()
+            completedLoops = CompletedLoop.preview()
+            decisions = DecisionItem.preview()
+            outputs = CenturionOutput.preview()
+            thoughts = CenturionThought.preview()
+            isDataLoaded = true
+        }
+        .onAppear {
+            withAnimation(Motion.appear.delay(0.1)) {
+                isAppeared = true
             }
         }
         .sheet(item: $chatTarget) { target in
@@ -146,70 +130,133 @@ struct MissionPortfolioView: View {
         }
     }
 
+    private var pulseScrollContent: some View {
+        ScrollView {
+            VStack(spacing: Spacing.md) {
+                missionBanner
+
+                if !missionStore.activeTargets.isEmpty {
+                    activeTargetsStrip
+                }
+
+                switch selectedCategory {
+                case .live:
+                    liveActivitySection
+                case .wins:
+                    completedLoopsSection
+                case .outputs:
+                    if !outputs.isEmpty {
+                        outputsSection
+                    } else {
+                        emptyCategory("No outputs yet", "Documents the Centurion creates will appear here")
+                    }
+                case .decisions:
+                    if !decisions.isEmpty {
+                        decisionsSection
+                    } else {
+                        emptyCategory("All clear", "Nothing needs your attention right now")
+                    }
+                case .pulse:
+                    thoughtsSection
+                }
+            }
+            .frame(maxWidth: 428)
+            .padding()
+            .frame(maxWidth: .infinity)
+        }
+    }
+
     // MARK: - Pill Navigation
 
     private var pillNavigation: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(PulseCategory.allCases, id: \.self) { category in
-                    Button(action: {
-                        Haptics.lightTap()
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            selectedCategory = category
-                        }
-                        markSeen(category)
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: category.icon)
-                                .font(.system(size: 13, weight: .semibold))
-                            
-                            Text(category.rawValue)
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                .tracking(0.5)
-                            
-                            if let count = badgeCounts[category], count > 0 {
-                                Text("\(count)")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 1)
-                                    .background(ColorTheme.accent())
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .foregroundColor(selectedCategory == category ? .white : ColorTheme.primaryText())
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(
-                            selectedCategory == category 
-                                ? ColorTheme.accent() 
-                                : ColorTheme.surface().opacity(0.6)
-                        )
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    selectedCategory == category 
-                                        ? ColorTheme.accent().opacity(0.3) 
-                                        : ColorTheme.border().opacity(0.5), 
-                                    lineWidth: 0.5
-                                )
-                        )
-                        .shadow(
-                            color: selectedCategory == category 
-                                ? ColorTheme.accent().opacity(0.25) 
-                                : .clear, 
-                            radius: 8, x: 0, y: 2
-                        )
+        HStack(spacing: 4) {
+            ForEach(PulseCategory.allCases, id: \.self) { category in
+                pillButton(for: category)
+                    .layoutPriority(selectedCategory == category ? 1 : 0)
+            }
+        }
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, Spacing.xs)
+    }
+
+    private func pillButton(for category: PulseCategory) -> some View {
+        let isSelected = selectedCategory == category
+        let badgeCount = badgeCounts[category] ?? 0
+
+        return Button {
+            Haptics.lightTap()
+            withAnimation(Motion.standard) {
+                selectedCategory = category
+            }
+            markSeen(category)
+        } label: {
+            HStack(spacing: 5) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: category.icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 18, height: 18)
+
+                    if badgeCount > 0 && !isSelected {
+                        Circle()
+                            .fill(ColorTheme.accent())
+                            .frame(width: 6, height: 6)
+                            .offset(x: 4, y: -4)
                     }
-                    .buttonStyle(.plain)
-                    .scaleEffect(selectedCategory == category ? 1.02 : 1.0)
-                    .animation(Motion.light, value: selectedCategory)
+                }
+
+                if isSelected {
+                    Text(category.rawValue)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .tracking(0.5)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                }
+
+                if isSelected && badgeCount > 0 {
+                    Text("\(badgeCount)")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.white.opacity(0.25))
+                        .clipShape(Capsule())
+                }
+
+                if isSelected {
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
+            .foregroundColor(isSelected ? .white : ColorTheme.primaryText())
+            .padding(.horizontal, isSelected ? 12 : 8)
+            .padding(.vertical, 9)
+            .frame(maxWidth: isSelected ? .infinity : nil)
+            .background(
+                isSelected
+                    ? ColorTheme.accent()
+                    : ColorTheme.surface().opacity(0.6)
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isSelected
+                            ? ColorTheme.accent().opacity(0.3)
+                            : ColorTheme.border().opacity(0.5),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(
+                color: isSelected ? ColorTheme.accent().opacity(0.25) : .clear,
+                radius: 6,
+                x: 0,
+                y: 2
+            )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(category.rawValue)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .animation(Motion.light, value: selectedCategory)
     }
 
     // MARK: - Chat Sheet
@@ -217,7 +264,7 @@ struct MissionPortfolioView: View {
     private func chatSheet(for context: ConversationContext) -> some View {
         let conversation = messageService.findOrCreateConversation(for: context)
         return NavigationStack {
-            ChatView(conversation: conversation)
+            ChatView(conversation: conversation, usesPageChrome: false)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { chatTarget = nil }
@@ -233,24 +280,70 @@ struct MissionPortfolioView: View {
         chatTarget = ChatSheetTarget(context: context)
     }
 
+    // MARK: - Mission Banner
+
+    private var missionBanner: some View {
+        NavigationLink {
+            MissionView()
+        } label: {
+            missionStatement
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var activeTargetsStrip: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("ACTIVE TARGETS")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(ColorTheme.mutedText())
+                .tracking(2)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(missionStore.activeTargets) { target in
+                        Text(target.title)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(ColorTheme.primaryText())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(ColorTheme.accent().opacity(0.1))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(ColorTheme.accent().opacity(0.25), lineWidth: 0.5)
+                            )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
     // MARK: - Mission Statement
 
     private var missionStatement: some View {
         VStack(spacing: 6) {
-            Text("YOUR MISSION")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundColor(ColorTheme.accent())
-                .tracking(4)
-                .textCase(.uppercase)
+            HStack {
+                Text("YOUR MISSION")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(ColorTheme.accent())
+                    .tracking(4)
+                    .textCase(.uppercase)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(ColorTheme.mutedText())
+            }
 
-            Text(mission.statement)
+            Text(missionStore.mission.statement.isEmpty
+                 ? "Discover your personal mission"
+                 : missionStore.mission.statement)
                 .font(.system(size: 19, weight: .bold, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
                 .lineSpacing(4)
-                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Warm amber accent — like light through Wright windows
             Rectangle()
                 .fill(
                     LinearGradient(
@@ -260,16 +353,26 @@ struct MissionPortfolioView: View {
                     )
                 )
                 .frame(width: 48, height: 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Spacing.xs)
-            
-            Text("This is what we are building together.")
+
+            Text(missionStore.hasMissionStatement
+                 ? "Tap to view and refine your mission"
+                 : "Tap to begin mission discovery")
                 .font(.system(size: 11, weight: .medium, design: .serif))
                 .foregroundColor(ColorTheme.mutedText().opacity(0.75))
                 .italic()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.md)
+        .padding(Spacing.md)
+        .background(ColorTheme.surface())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(ColorTheme.border(), lineWidth: 0.5)
+        )
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 10)
     }

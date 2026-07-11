@@ -1,19 +1,16 @@
 import SwiftUI
 
 /// Clean chat interface with a pull-down conversation tray.
-///
-/// The default view shows a minimal empty state — just the brand header
-/// and an input bar. Tap the "Centurion Remote" title bar to drop down
-/// the conversation tray, which groups conversations by mission area.
-///
-/// This pattern keeps the top half clean while making all conversations
-/// one tap away — inspired by Apple Maps, Fantastical, and Things 3.
+/// Tap Conversations under the page title to open the tray.
 struct ChatView: View {
     /// Initialize with an optional conversation to open immediately.
     /// Pass nil (default) for the clean empty state.
-    init(conversation: Conversation? = nil) {
+    init(conversation: Conversation? = nil, usesPageChrome: Bool = true) {
         _selectedConversation = State(initialValue: conversation)
+        self.usesPageChrome = usesPageChrome
     }
+
+    var usesPageChrome: Bool = true
 
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -28,55 +25,33 @@ struct ChatView: View {
     @State private var showTray = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: - Conversation Tray Trigger
-            Button(action: {
-                Haptics.lightTap()
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
-                    showTray.toggle()
+        Group {
+            if usesPageChrome {
+                TabPageChrome(title: "Remote") {
+                    conversationTrayTrigger
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.bottom, Spacing.xs)
+                } content: {
+                    chatContent
                 }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 9))
-                        .foregroundColor(ColorTheme.accent())
-                    Text("Conversations")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .tracking(1)
-                    Image(systemName: showTray ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 8))
-                        .foregroundColor(ColorTheme.mutedText())
-
-                    if let conv = selectedConversation {
-                        Text(conv.displayTitle)
-                            .font(.system(size: 9, design: .monospaced))
-                            .lineLimit(1)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(ColorTheme.accent().opacity(0.1))
-                            .clipShape(Capsule())
-                    }
-
-                    Spacer()
-
-                    if connectionManager.connectionState == .connected {
-                        StatusDot(isConnected: true)
-                    }
+            } else {
+                VStack(spacing: 0) {
+                    conversationTrayTrigger
+                    chatContent
                 }
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, 6)
             }
-            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
-            // MARK: - Pull-Down Tray
+    private var chatContent: some View {
+        VStack(spacing: 0) {
             if showTray {
                 conversationTray
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // MARK: - Messages Area
             if let conversation = selectedConversation {
-                // Show context header + messages for this conversation
                 contextHeader(conversation: conversation)
 
                 ScrollViewReader { proxy in
@@ -104,17 +79,54 @@ struct ChatView: View {
                     }
                 }
             } else {
-                // Mission context banner — what mission we're advancing
-                missionContextBanner
-
-                // Clean empty state — no conversation selected
                 emptyState
             }
 
-            // MARK: - Input Bar
             inputBar
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ColorTheme.background())
+    }
+
+    // MARK: - Conversation Tray Trigger
+
+    private var conversationTrayTrigger: some View {
+        Button(action: {
+            Haptics.lightTap()
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                showTray.toggle()
+            }
+        }) {
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 9))
+                    .foregroundColor(ColorTheme.accent())
+                Text("Conversations")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .tracking(1)
+                Image(systemName: showTray ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 8))
+                    .foregroundColor(ColorTheme.mutedText())
+
+                if let conv = selectedConversation {
+                    Text(conv.displayTitle)
+                        .font(.system(size: 9, design: .monospaced))
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(ColorTheme.accent().opacity(0.1))
+                        .clipShape(Capsule())
+                }
+
+                Spacer()
+
+                if connectionManager.connectionState == .connected {
+                    StatusDot(isConnected: true)
+                }
+            }
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xs)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Pull-Down Conversation Tray
@@ -244,60 +256,31 @@ struct ChatView: View {
         .background(ColorTheme.accent().opacity(0.05))
     }
 
-    // MARK: - Mission Context Banner
-
-    /// Shows the current mission being advanced by this conversation.
-    /// Every chat in Centurion is mission-contextual — never idle chatter.
-    private var missionContextBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "target")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(ColorTheme.accent())
-
-            Text("Centurion Remote — your AI is working")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(ColorTheme.mutedText())
-                .lineLimit(1)
-
-            Spacer()
-
-            if connectionManager.connectionState == .connected {
-                PulseDot()
-                    .frame(width: 6, height: 6)
-            }
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, 6)
-        .background(ColorTheme.accent().opacity(0.04))
-        .overlay(
-            Rectangle()
-                .fill(ColorTheme.accent().opacity(0.15))
-                .frame(height: 0.5),
-            alignment: .bottom
-        )
-    }
-
     // MARK: - Empty States
 
     private var emptyState: some View {
         VStack(spacing: Spacing.md) {
             Spacer()
 
-            // Brand header
-            BrandHeader()
-                .padding(.bottom, Spacing.md)
+            Image(systemName: "message.fill")
+                .font(.system(size: 40))
+                .foregroundColor(ColorTheme.accent().opacity(0.45))
 
-            VStack(spacing: Spacing.md) {
-                Text("All messages from your Centurion appear here.")
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Spacing.xl)
-            }
-            .frame(maxWidth: 428)
+            Text("All messages from your Centurion appear here.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.xl)
+
+            Text("Tap Conversations above to open a thread.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText().opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.xl)
 
             Spacer()
         }
+        .frame(maxWidth: 428)
     }
 
     private func emptyChatState(context: ConversationContext) -> some View {

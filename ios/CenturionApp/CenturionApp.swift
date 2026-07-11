@@ -2,36 +2,34 @@ import SwiftUI
 
 @main
 struct CenturionApp: App {
-    @StateObject private var connectionManager = ConnectionManager()
-    @StateObject private var messageService: MessageService
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showSplash = true
-
-    init() {
-        let cm = ConnectionManager()
-        _connectionManager = StateObject(wrappedValue: cm)
-        _messageService = StateObject(wrappedValue: MessageService(connectionManager: cm))
-    }
+    @State private var services = AppServices()
 
     var body: some Scene {
         WindowGroup {
-            if showSplash {
-                SplashView {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                        showSplash = false
-                    }
-                }
-                .environmentObject(connectionManager)
-                .environmentObject(messageService)
-                .preferredColorScheme(appearanceMode.colorScheme)
-                .transition(.opacity)
-            } else {
+            ZStack {
+                ColorTheme.background()
+                    .ignoresSafeArea()
+
                 ContentView()
-                    .environmentObject(connectionManager)
-                    .environmentObject(messageService)
-                    .preferredColorScheme(appearanceMode.colorScheme)
+                    .environmentObject(services.connectionManager)
+                    .environmentObject(services.messageService)
+                    .environmentObject(services.missionStore)
+                    .opacity(showSplash ? 0 : 1)
+                    .allowsHitTesting(!showSplash)
+
+                if showSplash {
+                    SplashView {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showSplash = false
+                        }
+                    }
                     .transition(.opacity)
+                    .zIndex(1)
+                }
             }
+            .preferredColorScheme(appearanceMode.colorScheme)
         }
     }
 }

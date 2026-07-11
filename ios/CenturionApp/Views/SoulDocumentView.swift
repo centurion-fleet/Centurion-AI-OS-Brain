@@ -4,10 +4,12 @@ import SwiftUI
 /// This is what they show other people. It should feel like a leather-bound
 /// journal entry, not a form.
 struct SoulDocumentView: View {
-    let soul: SoulDocument
+    @EnvironmentObject private var missionStore: MissionStore
     @State private var showShareSheet = false
     @State private var showInterview = false
     @State private var showEditHint = false
+
+    private var soul: SoulDocument { missionStore.soul }
 
     var body: some View {
         ScrollView {
@@ -158,7 +160,9 @@ struct SoulDocumentView: View {
             shareSheet
         }
         .sheet(isPresented: $showInterview) {
-            SoulInterviewView(existingSoul: soul) { _ in }
+            SoulInterviewView(existingSoul: missionStore.soul) { document in
+                missionStore.completeDiscovery(with: document)
+            }
         }
     }
 

@@ -98,6 +98,63 @@ extension View {
     }
 }
 
+// MARK: - Tab Page Chrome
+
+/// Uniform layout for main tabs: inline nav title, optional header row, no app branding.
+struct TabPageChrome<Header: View, Content: View>: View {
+    let title: String
+    let header: Header
+    let content: Content
+
+    init(
+        title: String,
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.header = header()
+        self.content = content()
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                header
+                content
+            }
+            .background(ColorTheme.background())
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+extension TabPageChrome where Header == EmptyView {
+    init(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.header = EmptyView()
+        self.content = content()
+    }
+}
+
+/// Defers heavy tab content until the user selects that tab.
+struct DeferredTabContent<Content: View>: View {
+    let tag: Int
+    @Binding var selection: Int
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if selection == tag {
+            content()
+        } else {
+            Color.clear
+        }
+    }
+}
+
 // MARK: - Section Header
 
 /// Premium section header with amber accent line

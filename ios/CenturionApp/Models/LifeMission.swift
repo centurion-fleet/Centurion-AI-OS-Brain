@@ -5,13 +5,13 @@ import Foundation
 struct LifeMission: Identifiable, Codable {
     let id: UUID
     var statement: String
-    var targets: [MissionTarget]
+    var targets: [LifeMissionTarget]
     
     static func preview() -> LifeMission {
         LifeMission(
             id: UUID(),
             statement: "Build Australia's leading OEM lighting tower provider",
-            targets: MissionTarget.previewTargets()
+            targets: LifeMissionTarget.previewTargets()
         )
     }
 }
@@ -323,17 +323,17 @@ struct CenturionOutput: Identifiable {
 }
 
 
-// MARK: - Mission Targets
-struct MissionTarget: Identifiable, Codable {
+// MARK: - Life Mission Targets (high-level aspirations — distinct from program targets in MissionProject)
+struct LifeMissionTarget: Identifiable, Codable {
     let id: UUID
     let title: String
     let description: String
     
-    static func previewTargets() -> [MissionTarget] {
+    static func previewTargets() -> [LifeMissionTarget] {
         [
-            MissionTarget(id: UUID(), title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
-            MissionTarget(id: UUID(), title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
-            MissionTarget(id: UUID(), title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
+            LifeMissionTarget(id: UUID(), title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
+            LifeMissionTarget(id: UUID(), title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
+            LifeMissionTarget(id: UUID(), title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
         ]
     }
 }

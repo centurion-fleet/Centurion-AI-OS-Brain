@@ -8,37 +8,20 @@ struct SecurityHubView: View {
     @State private var showCryptoDetail = false
     
     var body: some View {
-        NavigationStack {
+        TabPageChrome(title: "Security") {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Brand header
-                    BrandHeader()
-                        .padding(.bottom, Spacing.sm)
-
-                    // Hero shield
                     securityHero
-
-                    // Connection security
                     connectionSecurityCard
-
-                    // Encryption details
                     encryptionDetailsCard
-
-                    // Comparison — card-based, no table, no emoji text
                     comparisonSection
-
-                    // Zero trust explanation
                     zeroTrustCard
-
-                    // Technical specifications
                     cryptoFooter
                 }
                 .frame(maxWidth: 428)
                 .padding()
                 .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Security")
-            .navigationBarTitleDisplayMode(.inline)
         }
     }
     
