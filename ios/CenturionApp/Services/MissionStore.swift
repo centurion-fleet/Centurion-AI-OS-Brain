@@ -1,8 +1,8 @@
 import Foundation
 import SwiftUI
 
-/// Single source of truth for the user's life mission, soul document, and active targets.
-/// Persisted locally — syncs to the Centurion when the remote link is connected (future).
+/// Single source of truth for the human's mission and the Centurion's Soul.
+/// Mission = you. Soul = your AI companion's personality and rules.
 @MainActor
 final class MissionStore: ObservableObject {
     @Published private(set) var mission: LifeMission
@@ -11,15 +11,15 @@ final class MissionStore: ObservableObject {
 
     private static let missionKey = "centurion.lifeMission.v1"
     private static let soulKey = "centurion.soulDocument.v1"
+    private static let legacySoulKey = "centurion.soulDocument.v1"
     private static let activeTargetsKey = "centurion.activeMissionTargets"
     private static let discoveryAnswersKey = "centurion.missionDiscoveryAnswers.v1"
     private static let hasPersistedKey = "centurion.mission.hasPersisted"
+    private static let migrationKey = "centurion.soulMissionSplit.v1"
 
     @Published private(set) var discoveryAnswers: [String: String] = [:]
 
     init() {
-        let hasPersisted = UserDefaults.standard.bool(forKey: Self.hasPersistedKey)
-
         let resolvedMission: LifeMission
         if let loaded = Self.loadMission() {
             resolvedMission = loaded
@@ -41,7 +41,11 @@ final class MissionStore: ObservableObject {
         }
 
         discoveryAnswers = Self.loadDiscoveryAnswers() ?? [:]
-        syncMissionStatementFromSoul()
+
+        if !UserDefaults.standard.bool(forKey: Self.migrationKey) {
+            runLegacyMigration()
+            UserDefaults.standard.set(true, forKey: Self.migrationKey)
+        }
     }
 
     // MARK: - Public API
@@ -58,6 +62,10 @@ final class MissionStore: ObservableObject {
 
     var hasMissionStatement: Bool {
         !mission.statement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasSoulConfiguration: Bool {
+        soul.isValid
     }
 
     func toggleActiveTarget(_ id: UUID) {
@@ -78,70 +86,168 @@ final class MissionStore: ObservableObject {
         discoveryAnswers = answers
         persistDiscoveryAnswers()
 
-        var document = soul
-        document.updatedAt = Date()
+        var updated = mission
 
         if let approved = answers["_missionStatement"]?.trimmingCharacters(in: .whitespacesAndNewlines), !approved.isEmpty {
-            document.missionStatement = approved
+            updated.statement = approved
         } else if let statement = Self.synthesizedMissionStatement(from: answers) {
-            document.missionStatement = statement
+            updated.statement = statement
         }
+
         if let approvedWhy = answers["_whyThisMission"]?.trimmingCharacters(in: .whitespacesAndNewlines), !approvedWhy.isEmpty {
-            document.whyThisMission = approvedWhy
+            updated.profile.whyThisMission = approvedWhy
         } else if let why = Self.synthesizedWhy(from: answers) {
-            document.whyThisMission = why
+            updated.profile.whyThisMission = why
         }
+
         if let focus = Self.synthesizedFocusAreas(from: answers), !focus.isEmpty {
-            document.areasOfFocus = focus
+            updated.profile.areasOfFocus = focus
         }
+
         if let goals = Self.synthesizedGoals(from: answers), !goals.isEmpty {
-            document.goals = goals
-        }
-
-        completeDiscovery(with: document)
-    }
-
-    func completeDiscovery(with document: SoulDocument) {
-        soul = document
-        persistSoul()
-
-        if !document.missionStatement.isEmpty {
-            mission.statement = document.missionStatement
-        }
-
-        if !document.goals.isEmpty {
-            mission.targets = document.goals.map { goal in
+            updated.targets = goals.map { goal in
                 LifeMissionTarget(
                     id: UUID(),
                     title: goal,
-                    description: document.whyThisMission.isEmpty
+                    description: updated.profile.whyThisMission.isEmpty
                         ? "A commitment your Centurion is helping you fulfill."
-                        : document.whyThisMission
+                        : updated.profile.whyThisMission
                 )
             }
-            activeTargetIDs = Set(mission.targets.map(\.id))
+            activeTargetIDs = Set(updated.targets.map(\.id))
             persistActiveTargets()
         }
 
+        mission = updated
+        persistMission()
+        markPersisted()
+    }
+
+    func updateProfile(_ profile: HumanProfile) {
+        mission.profile = profile
         persistMission()
         markPersisted()
     }
 
     func updateSoul(_ document: SoulDocument) {
-        soul = document
+        var updated = document
+        updated.updatedAt = Date()
+        if updated.version < 2 { updated.version = 2 }
+        soul = updated
         persistSoul()
-        syncMissionStatementFromSoul()
         markPersisted()
     }
 
-    // MARK: - Persistence
+    // MARK: - Legacy migration
 
-    private func syncMissionStatementFromSoul() {
-        let statement = soul.missionStatement.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !statement.isEmpty, statement != mission.statement else { return }
-        mission.statement = statement
+    private func runLegacyMigration() {
+        guard let data = UserDefaults.standard.data(forKey: Self.legacySoulKey),
+              let legacy = try? JSONDecoder().decode(LegacySoulDocument.self, from: data) else {
+            return
+        }
+
+        var updatedMission = mission
+
+        if updatedMission.statement.isEmpty, !legacy.missionStatement.isEmpty {
+            updatedMission.statement = legacy.missionStatement
+        }
+
+        if updatedMission.profile.whyThisMission.isEmpty, !legacy.whyThisMission.isEmpty {
+            updatedMission.profile.whyThisMission = legacy.whyThisMission
+        }
+        if updatedMission.profile.areasOfFocus.isEmpty, !legacy.areasOfFocus.isEmpty {
+            updatedMission.profile.areasOfFocus = legacy.areasOfFocus
+        }
+        if updatedMission.profile.yourStory.isEmpty, !legacy.yourStory.isEmpty {
+            updatedMission.profile.yourStory = legacy.yourStory
+        }
+        if updatedMission.profile.yourValues.isEmpty, !legacy.yourValues.isEmpty {
+            updatedMission.profile.yourValues = legacy.yourValues
+        }
+        if updatedMission.profile.yourPersonality.isEmpty, !legacy.yourPersonality.isEmpty {
+            updatedMission.profile.yourPersonality = legacy.yourPersonality
+        }
+        if updatedMission.profile.yourStrengths.isEmpty, !legacy.yourStrengths.isEmpty {
+            updatedMission.profile.yourStrengths = legacy.yourStrengths
+        }
+        if updatedMission.profile.vitalStatName.isEmpty, !legacy.vitalStatName.isEmpty {
+            updatedMission.profile.vitalStatName = legacy.vitalStatName
+            updatedMission.profile.vitalStatCurrent = legacy.vitalStatCurrent
+            updatedMission.profile.vitalStatTarget = legacy.vitalStatTarget
+        }
+        if updatedMission.profile.workStyle.isEmpty, !legacy.workStyle.isEmpty {
+            updatedMission.profile.workStyle = legacy.workStyle
+        }
+        if updatedMission.profile.decisionStyle.isEmpty, !legacy.decisionStyle.isEmpty {
+            updatedMission.profile.decisionStyle = legacy.decisionStyle
+        }
+        if updatedMission.profile.timezone.isEmpty, !legacy.timezone.isEmpty {
+            updatedMission.profile.timezone = legacy.timezone
+        }
+        if updatedMission.profile.workHours.isEmpty, !legacy.workHours.isEmpty {
+            updatedMission.profile.workHours = legacy.workHours
+        }
+        if updatedMission.profile.challenges.isEmpty, !legacy.challenges.isEmpty {
+            updatedMission.profile.challenges = legacy.challenges
+        }
+        if updatedMission.profile.keyRelationships.isEmpty, !legacy.keyRelationships.isEmpty {
+            updatedMission.profile.keyRelationships = legacy.keyRelationships
+        }
+        if updatedMission.profile.toolsYouUse.isEmpty, !legacy.toolsYouUse.isEmpty {
+            updatedMission.profile.toolsYouUse = legacy.toolsYouUse
+        }
+        if updatedMission.profile.delegatePreferences.isEmpty, !legacy.delegatePreferences.isEmpty {
+            updatedMission.profile.delegatePreferences = legacy.delegatePreferences
+        }
+        if updatedMission.profile.currentProjects.isEmpty, !legacy.currentProjects.isEmpty {
+            updatedMission.profile.currentProjects = legacy.currentProjects
+        }
+
+        if updatedMission.targets.isEmpty, !legacy.goals.isEmpty {
+            updatedMission.targets = legacy.goals.map { goal in
+                LifeMissionTarget(
+                    id: UUID(),
+                    title: goal,
+                    description: legacy.whyThisMission.isEmpty
+                        ? "A commitment your Centurion is helping you fulfill."
+                        : legacy.whyThisMission
+                )
+            }
+            if activeTargetIDs.isEmpty {
+                activeTargetIDs = Set(updatedMission.targets.map(\.id))
+                persistActiveTargets()
+            }
+        }
+
+        mission = updatedMission
         persistMission()
+
+        if !soul.isValid {
+            var migratedSoul = soul
+            migratedSoul.version = 2
+            if migratedSoul.personalitySummary.isEmpty {
+                let parts = [legacy.preferredTone, legacy.feedbackPreference]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !parts.isEmpty {
+                    migratedSoul.personalitySummary = parts.joined(separator: ". ")
+                }
+            }
+            if migratedSoul.tone.isEmpty, !legacy.preferredTone.isEmpty {
+                migratedSoul.tone = legacy.preferredTone
+            }
+            if migratedSoul.communicationStyle.isEmpty, !legacy.communicationStyle.isEmpty {
+                migratedSoul.communicationStyle = legacy.communicationStyle
+            }
+            if migratedSoul.pushbackStyle.isEmpty, !legacy.feedbackPreference.isEmpty {
+                migratedSoul.pushbackStyle = legacy.feedbackPreference
+            }
+            soul = migratedSoul
+            persistSoul()
+        }
     }
+
+    // MARK: - Persistence
 
     private func markPersisted() {
         UserDefaults.standard.set(true, forKey: Self.hasPersistedKey)
@@ -171,11 +277,11 @@ final class MissionStore: ObservableObject {
     }
 
     private static func loadSoul() -> SoulDocument? {
-        guard let data = UserDefaults.standard.data(forKey: soulKey),
-              let soul = try? JSONDecoder().decode(SoulDocument.self, from: data) else {
-            return nil
+        guard let data = UserDefaults.standard.data(forKey: soulKey) else { return nil }
+        if let soul = try? JSONDecoder().decode(SoulDocument.self, from: data) {
+            return soul
         }
-        return soul
+        return nil
     }
 
     private static func loadActiveTargetIDs() -> Set<UUID>? {

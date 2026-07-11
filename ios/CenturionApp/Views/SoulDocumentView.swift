@@ -1,135 +1,33 @@
 import SwiftUI
 
-/// The Soul Document — a beautiful, shareable portrait of who the human is.
-/// This is what they show other people. It should feel like a leather-bound
-/// journal entry, not a form.
+/// Your Centurion's Soul — how your AI companion speaks and behaves.
 struct SoulDocumentView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @State private var showShareSheet = false
     @State private var showInterview = false
-    @State private var showEditHint = false
 
     private var soul: SoulDocument { missionStore.soul }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Cover page
                 coverPage
 
-                // Who You Are
-                if !soul.yourStory.isEmpty {
-                    sectionCard(
-                        icon: "person.fill",
-                        title: "My Story",
-                        content: soul.yourStory
-                    )
+                if soul.isValid {
+                    soulContent
+                } else {
+                    emptyState
                 }
 
-                // Values
-                if !soul.yourValues.isEmpty {
-                    sectionCard(
-                        icon: "heart.fill",
-                        title: "My Values",
-                        tags: soul.yourValues
-                    )
-                }
-
-                // Mission
-                if !soul.missionStatement.isEmpty {
-                    VStack(spacing: Spacing.sm) {
-                        HStack(spacing: Spacing.xs) {
-                            Image(systemName: "target")
-                                .font(.caption)
-                                .foregroundColor(ColorTheme.accent())
-                            Text("My Mission")
-                                .font(.headline)
-                                .foregroundColor(ColorTheme.primaryText())
-                            Spacer()
-                        }
-
-                        Text(soul.missionStatement)
-                            .font(.system(size: 20, weight: .bold, design: .serif))
-                            .foregroundColor(ColorTheme.accent())
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(4)
-                            .frame(maxWidth: .infinity)
-
-                        if !soul.whyThisMission.isEmpty {
-                            Text(soul.whyThisMission)
-                                .font(.subheadline)
-                                .foregroundColor(ColorTheme.mutedText())
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    .padding()
-                    .cardStyle()
-                }
-
-                // How I Work
-                if !soul.workStyle.isEmpty || !soul.communicationStyle.isEmpty {
-                    sectionCard(
-                        icon: "bolt.fill",
-                        title: "How I Work",
-                        content: [soul.workStyle, soul.communicationStyle]
-                            .filter { !$0.isEmpty }
-                            .joined(separator: "\n\n")
-                    )
-                }
-
-                // Goals
-                if !soul.goals.isEmpty {
-                    sectionCard(
-                        icon: "star.fill",
-                        title: "My Goals",
-                        tags: soul.goals
-                    )
-                }
-
-                // Delegate Preferences
-                if !soul.delegatePreferences.isEmpty {
-                    sectionCard(
-                        icon: "hand.raised.fill",
-                        title: "What I Want Help With",
-                        tags: soul.delegatePreferences
-                    )
-                }
-
-                // Key People
-                if !soul.keyRelationships.isEmpty {
-                    sectionCard(
-                        icon: "person.2.fill",
-                        title: "My People",
-                        tags: soul.keyRelationships
-                    )
-                }
-
-                // Footer
-                VStack(spacing: 8) {
-                    Rectangle()
-                        .fill(ColorTheme.accent().opacity(0.2))
-                        .frame(width: 40, height: 1)
-
-                    Text("Created \(formatDate(soul.createdAt))")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(ColorTheme.mutedText())
-
-                    Text("Updated \(formatDate(soul.updatedAt))")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(ColorTheme.mutedText())
-                }
-                .padding(.bottom, Spacing.lg)
-
-                // Edit button
                 Button(action: {
                     Haptics.mediumTap()
                     showInterview = true
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12))
-                        Text("Edit My Soul")
-                            .font(.system(size: 12, weight: .semibold))
+                        Image(systemName: soul.isValid ? "pencil" : "sparkles")
+                            .font(.subheadline)
+                        Text(soul.isValid ? "Shape Your Centurion" : "Set Up Your Centurion's Soul")
+                            .font(.subheadline.weight(.semibold))
                     }
                     .foregroundColor(ColorTheme.accent())
                     .padding(.horizontal, 20)
@@ -138,21 +36,24 @@ struct SoulDocumentView: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .padding(.bottom, Spacing.lg)
             }
             .frame(maxWidth: 428)
             .padding()
             .frame(maxWidth: .infinity)
         }
-        .navigationTitle("My Soul")
+        .navigationTitle("Your Centurion's Soul")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: {
-                    Haptics.lightTap()
-                    showShareSheet = true
-                }) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14))
-                        .foregroundColor(ColorTheme.accent())
+            if soul.isValid {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: {
+                        Haptics.lightTap()
+                        showShareSheet = true
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.subheadline)
+                            .foregroundColor(ColorTheme.accent())
+                    }
                 }
             }
         }
@@ -161,37 +62,92 @@ struct SoulDocumentView: View {
         }
         .sheet(isPresented: $showInterview) {
             SoulInterviewView(existingSoul: missionStore.soul) { document in
-                missionStore.completeDiscovery(with: document)
+                missionStore.updateSoul(document)
             }
         }
     }
 
-    // MARK: - Cover Page
+    // MARK: - Cover
 
     private var coverPage: some View {
         VStack(spacing: 16) {
-            Image(systemName: "heart.text.square.fill")
+            Image(systemName: "sparkles")
                 .font(.system(size: 48))
                 .foregroundColor(ColorTheme.accent())
 
-            Text("SOUL")
-                .font(.system(size: 32, weight: .bold, design: .serif))
+            Text("Your Centurion's Soul")
+                .font(.title.weight(.bold))
                 .foregroundColor(ColorTheme.primaryText())
-                .tracking(8)
+                .multilineTextAlignment(.center)
 
-            if !soul.missionStatement.isEmpty {
-                Text(soul.missionStatement)
+            Text("How your companion speaks and behaves")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+
+            if !soul.personalitySummary.isEmpty {
+                Text(soul.personalitySummary)
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.dimAccent())
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+                    .padding(.top, Spacing.sm)
             }
         }
         .padding(.vertical, Spacing.xl)
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Section Card
+    private var emptyState: some View {
+        VStack(spacing: Spacing.md) {
+            Text("Your Centurion's personality isn't set yet.")
+                .font(.headline)
+                .foregroundColor(ColorTheme.primaryText())
+            Text("Define how it speaks, what it always does, and what it never does. This is separate from your life mission — it's about your AI companion.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+        }
+        .padding()
+        .cardStyle()
+    }
+
+    private var soulContent: some View {
+        VStack(spacing: Spacing.md) {
+            if !soul.tone.isEmpty {
+                sectionCard(icon: "waveform", title: "Tone", content: soul.tone)
+            }
+            if !soul.communicationStyle.isEmpty {
+                sectionCard(icon: "bubble.left.and.bubble.right", title: "How It Speaks", content: soul.communicationStyle)
+            }
+            if !soul.responseLength.isEmpty {
+                sectionCard(icon: "text.alignleft", title: "Response Length", content: soul.responseLength)
+            }
+            if !soul.pushbackStyle.isEmpty {
+                sectionCard(icon: "hand.raised", title: "When It Pushes Back", content: soul.pushbackStyle)
+            }
+            if !soul.uncertaintyStyle.isEmpty {
+                sectionCard(icon: "questionmark.circle", title: "Handling Uncertainty", content: soul.uncertaintyStyle)
+            }
+            if !soul.alwaysDo.isEmpty {
+                sectionCard(icon: "checkmark.circle", title: "Always Does", tags: soul.alwaysDo)
+            }
+            if !soul.neverDo.isEmpty {
+                sectionCard(icon: "xmark.circle", title: "Never Does", tags: soul.neverDo)
+            }
+
+            VStack(spacing: 8) {
+                Rectangle()
+                    .fill(ColorTheme.accent().opacity(0.2))
+                    .frame(width: 40, height: 1)
+                Text("Updated \(formatDate(soul.updatedAt))")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+            .padding(.top, Spacing.sm)
+        }
+    }
 
     private func sectionCard(icon: String, title: String, content: String? = nil, tags: [String]? = nil) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -220,7 +176,7 @@ struct SoulDocumentView: View {
                                 .fill(ColorTheme.accent())
                                 .frame(width: 4, height: 4)
                             Text(tag)
-                                .font(.system(size: 12))
+                                .font(.caption)
                                 .foregroundColor(ColorTheme.primaryText())
                         }
                     }
@@ -231,29 +187,23 @@ struct SoulDocumentView: View {
         .cardStyle()
     }
 
-    // MARK: - Share Sheet
+    // MARK: - Share
 
     private var shareSheet: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                // Preview card
                 VStack(spacing: 16) {
-                    Image(systemName: "heart.text.square.fill")
+                    Image(systemName: "sparkles")
                         .font(.system(size: 36))
                         .foregroundColor(ColorTheme.accent())
 
-                    Text("SOUL")
-                        .font(.system(size: 24, weight: .bold, design: .serif))
-                        .tracking(6)
+                    Text("Your Centurion's Soul")
+                        .font(.title3.weight(.bold))
 
-                    Text(soul.missionStatement)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-
-                    if !soul.yourValues.isEmpty {
-                        Text(soul.yourValues.prefix(3).joined(separator: "  •  "))
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.dimAccent())
+                    if !soul.personalitySummary.isEmpty {
+                        Text(soul.personalitySummary)
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
                     }
                 }
                 .foregroundColor(ColorTheme.primaryText())
@@ -261,15 +211,14 @@ struct SoulDocumentView: View {
                 .frame(maxWidth: .infinity)
                 .cardStyle()
 
-                Text("Share your Soul document with someone you trust.\nIt shows them who you are and what you're building.")
+                Text("Share how your Centurion is configured to work with you.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
 
                 Button(action: {
                     Haptics.mediumTap()
-                    let text = generateShareText()
-                    UIPasteboard.general.string = text
+                    UIPasteboard.general.string = generateShareText()
                 }) {
                     Label("Copy to Clipboard", systemImage: "doc.on.doc")
                         .font(.subheadline)
@@ -307,15 +256,15 @@ struct SoulDocumentView: View {
     }
 
     private func generateShareText() -> String {
-        var text = "🤍 MY SOUL — Centurion AI\n\n"
-        text += "\"\(soul.missionStatement)\"\n\n"
-        if !soul.yourValues.isEmpty {
-            text += "Values: \(soul.yourValues.joined(separator: ", "))\n\n"
+        var text = "✨ Your Centurion's Soul — Centurion AI\n\n"
+        if !soul.personalitySummary.isEmpty {
+            text += "\(soul.personalitySummary)\n\n"
         }
-        if !soul.goals.isEmpty {
-            text += "Goals: \(soul.goals.joined(separator: ", "))\n"
-        }
-        text += "\nBuilt with Centurion AI — Live Your Personal Mission"
+        if !soul.tone.isEmpty { text += "Tone: \(soul.tone)\n" }
+        if !soul.communicationStyle.isEmpty { text += "Speaks: \(soul.communicationStyle)\n" }
+        if !soul.alwaysDo.isEmpty { text += "Always: \(soul.alwaysDo.joined(separator: ", "))\n" }
+        if !soul.neverDo.isEmpty { text += "Never: \(soul.neverDo.joined(separator: ", "))\n" }
+        text += "\nHow my Centurion is configured to work with me."
         return text
     }
 

@@ -1,0 +1,82 @@
+# Centurion Desktop for Linux
+
+Native GTK4/libadwaita desktop application and encrypted iPhone service for
+Fedora-based Personal Centurion hardware.
+
+## Components
+
+- `centurion-desktop`: native Linux window and pairing controls
+- `centurion-remote`: mDNS discovery, encrypted TCP sessions, and Python bridge
+- `centurion-common`: versioned wire messages and framing
+
+The Tauri prototype under `desktop/` is not used by this application.
+
+## Fedora development
+
+```bash
+sudo dnf install \
+  cargo rust gcc gcc-c++ pkgconf-pkg-config \
+  gtk4-devel libadwaita-devel vte291-gtk4-devel
+
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Run the service in explicit development pairing mode:
+
+```bash
+cargo run -p centurion-remote -- serve --auto-approve --echo
+```
+
+Production mode requires approval:
+
+```bash
+cargo run -p centurion-remote -- serve
+cargo run -p centurion-remote -- devices
+cargo run -p centurion-remote -- approve <fingerprint> --name "Adrian's iPhone"
+```
+
+The native desktop performs the same approval action from its Devices page.
+
+## Local chat
+
+The Chat tab embeds the real `centurion --tui` inside a VTE terminal — the same
+surface the dashboard PTY uses. No second chat UI is built in GTK widgets.
+
+Requirements on the host:
+
+- `centurion` on `PATH` (Python core installed and configured)
+- Node/npm available if the TUI bundle must be built on first launch
+- `vte291-gtk4` runtime library (pulled in by the RPM)
+
+## Loopback verification
+
+```bash
+chmod +x desktop-native/scripts/e2e-smoke.sh
+desktop-native/scripts/e2e-smoke.sh
+```
+
+## Physical iPhone E2E (Fedora hardware)
+
+Build the RPM from `packaging/fedora/centurion-desktop.spec`, publish it to the
+Centurion provisioning repository, then run:
+
+```bash
+desktop-native/packaging/fedora/provision-centurion.sh
+```
+
+The installer enables the user service and opens mDNS plus TCP 9119 in
+firewalld's trusted zone. Provisioning must assign only the Centurion LAN
+interface to that zone.
+
+## Security notes
+
+- Approved device and server identity data are profile-scoped under
+  `CENTURION_HOME/remote/`.
+- The server identity file is created with mode `0600`.
+- iOS stores its identity and the pinned server public key in Keychain.
+- The LAN listener exposes only the remote protocol, never dashboard/admin
+  endpoints.
+- `--auto-approve` and `--echo` are development flags and are absent from the
+  systemd service.

@@ -11,6 +11,11 @@ settings:
     DEVELOPMENT_TEAM: J6DY26ZGL4
     CODE_SIGN_STYLE: Automatic
 
+packages:
+  Sodium:
+    url: https://github.com/jedisct1/swift-sodium.git
+    exactVersion: 0.11.0
+
 targets:
   CenturionApp:
     type: application
@@ -24,6 +29,8 @@ targets:
       - path: Services
       - path: Crypto
       - path: Utils
+    dependencies:
+      - package: Sodium
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
@@ -36,11 +43,12 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
           UIColorName: LaunchBackground
+          UIImageName: AppMark
         UIApplicationSupportsAllInterfaceOrientations: true
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: "Centurion needs local network access to discover your Centurion on the local network via Bonjour."
+        NSLocalNetworkUsageDescription: "Centurion needs local network access to find your Centurion on your Wi‑Fi."
         NSBonjourServices:
           - _centurion._tcp
         NSAppTransportSecurity:

@@ -57,6 +57,12 @@ environments/benchmarks/evals/
 # Web UI build output
 centurion_cli/web_dist/
 
+# Native desktop and Xcode generated output
+desktop-native/target/
+ios/CenturionApp/build/
+**/xcuserdata/
+*.xcuserstate
+
 # Web UI assets — synced from @nous-research/ui at build time via
 # `npm run sync-assets` (see web/package.json).
 web/public/fonts/

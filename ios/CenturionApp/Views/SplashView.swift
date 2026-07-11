@@ -51,18 +51,9 @@ struct SplashView: View {
             }
             .opacity(phase == .glow ? 0.6 : 1)
 
-            ZStack {
-                Circle()
-                    .stroke(ColorTheme.accent().opacity(0.4), lineWidth: 1.5)
-                    .frame(width: 88, height: 88)
-                Circle()
-                    .fill(ColorTheme.accent().opacity(0.2))
-                    .frame(width: 76, height: 76)
-                Circle()
-                    .fill(ColorTheme.accent())
-                    .frame(width: 12, height: 12)
-            }
-            .scaleEffect(phase == .glow ? 0.8 : 1.0)
+            CenturionAppMark(size: 96)
+                .shadow(color: ColorTheme.accent().opacity(0.25), radius: 24, y: 8)
+                .scaleEffect(phase == .glow ? 0.82 : 1.0)
 
             VStack(spacing: 0) {
                 Spacer()

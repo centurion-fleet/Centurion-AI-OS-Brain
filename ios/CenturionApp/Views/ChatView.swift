@@ -29,7 +29,7 @@ struct ChatView: View {
     var body: some View {
         Group {
             if usesPageChrome {
-                TabPageChrome(title: "Remote") {
+                TabPageChrome(title: "Chat") {
                     conversationTrayTrigger
                         .padding(.horizontal, Spacing.sm)
                         .padding(.bottom, Spacing.xs)
@@ -155,7 +155,7 @@ struct ChatView: View {
                     // Mission conversations
                     let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
                     if !missionConvs.isEmpty {
-                        traySectionHeader("ACTIVE MISSIONS", icon: "target")
+                        traySectionHeader("FROM YOUR MISSION", icon: "target")
                         ForEach(missionConvs) { conv in
                             trayRow(conv)
                         }
@@ -368,7 +368,7 @@ struct ChatView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .focused($isFocused)
-                .disabled(isSending)
+                .disabled(isSending || connectionManager.connectionState != .connected)
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, Spacing.sm)
                 .background(ColorTheme.chatInput())

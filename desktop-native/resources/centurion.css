@@ -1,0 +1,40 @@
+@define-color centurion_amber #b87a36;
+@define-color centurion_amber_soft #d7a868;
+@define-color centurion_ink #241d16;
+
+window {
+  background: linear-gradient(145deg, alpha(@centurion_amber, 0.08), transparent 42%);
+}
+
+.centurion-card {
+  min-height: 360px;
+  padding: 48px;
+  border-radius: 28px;
+  background: alpha(@window_bg_color, 0.94);
+  border: 1px solid alpha(@centurion_amber_soft, 0.28);
+  box-shadow: 0 18px 50px alpha(@centurion_ink, 0.12);
+}
+
+.centurion-card image {
+  color: @centurion_amber;
+  -gtk-icon-size: 56px;
+}
+
+.centurion-hero {
+  font-family: "Cantarell", sans-serif;
+  font-size: 32px;
+  font-weight: 650;
+  color: @window_fg_color;
+}
+
+button.suggested-action {
+  background: @centurion_amber;
+  color: white;
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+stackswitcher button {
+  min-height: 36px;
+  min-width: 96px;
+}

@@ -39,7 +39,7 @@ struct SettingsView: View {
                     }
 
                     HStack {
-                        Label("Public Key", systemImage: "key.fill")
+                        Label("Security Code", systemImage: "key.fill")
                             .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Button("Show") { showKeyExport = true }
@@ -48,8 +48,8 @@ struct SettingsView: View {
                     }
                 }
 
-                // Mission & Soul
-                Section("Mission") {
+                // You — Mission (human) and Soul (AI)
+                Section("You") {
                     NavigationLink(destination: MissionView()) {
                         HStack {
                             Image(systemName: "target")
@@ -59,7 +59,7 @@ struct SettingsView: View {
                                     .foregroundColor(ColorTheme.primaryText())
                                 Text(missionStore.hasMissionStatement
                                      ? missionStore.mission.statement
-                                     : "Discover what you're building")
+                                     : "Your life purpose and commitments")
                                     .font(.caption)
                                     .foregroundColor(ColorTheme.mutedText())
                                     .lineLimit(1)
@@ -69,12 +69,14 @@ struct SettingsView: View {
 
                     NavigationLink(destination: SoulDocumentView()) {
                         HStack {
-                            Image(systemName: "heart.text.square.fill")
+                            Image(systemName: "sparkles")
                                 .foregroundColor(ColorTheme.accent())
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("About Me")
+                                Text("Your Centurion's Soul")
                                     .foregroundColor(ColorTheme.primaryText())
-                                Text("What your Centurion knows about you")
+                                Text(missionStore.hasSoulConfiguration
+                                     ? "Personality and rules configured"
+                                     : "Personality and rules for your AI")
                                     .font(.caption)
                                     .foregroundColor(ColorTheme.mutedText())
                             }
@@ -102,7 +104,7 @@ struct SettingsView: View {
                 Section {
                     DisclosureGroup("Advanced", isExpanded: $showAdvancedAI) {
                         VStack(alignment: .leading, spacing: Spacing.md) {
-                            Text("Choose which AI provider powers your Centurion. Most people can leave this on the recommended setting.")
+                            Text("Choose which service powers your Centurion. Most people can leave this on the recommended setting.")
                                 .font(.caption)
                                 .foregroundColor(ColorTheme.mutedText())
 
@@ -116,7 +118,7 @@ struct SettingsView: View {
                         .padding(.vertical, Spacing.sm)
                     }
                 } header: {
-                    Text("AI Provider")
+                    Text("How Your Centurion Thinks")
                 }
 
                 // Appearance section
@@ -143,6 +145,18 @@ struct SettingsView: View {
                 // About section
                 Section("About") {
                     HStack {
+                        Spacer()
+                        VStack(spacing: Spacing.sm) {
+                            CenturionAppMark(size: 64)
+                            Text("CenturionAI Remote")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(ColorTheme.primaryText())
+                        }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+
+                    HStack {
                         Label("Version", systemImage: "info.circle")
                         Spacer()
                         Text(appVersion)
@@ -166,7 +180,7 @@ struct SettingsView: View {
                         Label("Reset Identity", systemImage: "trash")
                     }
                 } footer: {
-                    Text("This will generate a new encryption identity. You'll need to re-pair with your Centurion.")
+                    Text("This will get a new pairing code. You'll need to link again in Connect.")
                 }
             }
             .background(ColorTheme.background())
@@ -178,9 +192,10 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Reset", role: .destructive) {
                     connectionManager.disconnect()
+                    try? IdentityKey.reset()
                 }
             } message: {
-                Text("Your current encryption keys will be discarded. You'll need to reconnect to your Centurion.")
+                Text("Your iPhone will get a new security identity. Approve it again on your Centurion before reconnecting.")
             }
             .sheet(isPresented: $showKeyExport) {
                 KeyExportView()
@@ -203,6 +218,8 @@ struct SettingsView: View {
 
 struct KeyExportView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var fingerprint = ""
+    @State private var loadError: String?
 
     var body: some View {
         NavigationStack {
@@ -211,37 +228,61 @@ struct KeyExportView: View {
                     .font(.system(size: 48))
                     .foregroundColor(ColorTheme.accent())
 
-                Text("Centurion Identity Key")
+                Text("Your iPhone Security Code")
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(ColorTheme.primaryText())
 
-                Text("Share this public key with your Centurion to establish a secure connection.")
+                Text("Approve this code on your Centurion → Devices when pairing for the first time.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
 
-                Text("Not yet connected")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(ColorTheme.border(), lineWidth: 0.5)
-                    )
+                if let loadError {
+                    Text(loadError)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.error())
+                } else {
+                    Text(fingerprint)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(ColorTheme.primaryText())
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(ColorTheme.surface())
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(ColorTheme.border(), lineWidth: 0.5)
+                        )
+                }
+
+                if !fingerprint.isEmpty {
+                    Button("Copy Code") {
+                        UIPasteboard.general.string = fingerprint
+                        Haptics.success()
+                    }
+                    .buttonStyle(AmberButtonStyle())
+                }
 
                 Spacer()
             }
             .padding()
+            .onAppear(perform: loadFingerprint)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .foregroundColor(ColorTheme.accent())
                 }
             }
+        }
+    }
+
+    private func loadFingerprint() {
+        do {
+            let identity = try IdentityKey.loadOrCreate()
+            fingerprint = identity.fingerprint
+        } catch {
+            loadError = "Your secure identity couldn't be loaded."
         }
     }
 }

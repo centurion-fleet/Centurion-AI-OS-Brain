@@ -357,11 +357,11 @@ struct MissionSynthesisReviewView: View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
                 VStack(spacing: Spacing.md) {
-                    Text("Your Mission Statement")
+                    Text("Your life mission")
                         .font(.title2.weight(.bold))
                         .foregroundColor(ColorTheme.primaryText())
 
-                    Text("We've distilled your reflections into a mission statement. Edit it until it feels true.")
+                    Text("We've distilled your reflections into words that describe what you're living toward. Edit until it feels true.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -370,7 +370,7 @@ struct MissionSynthesisReviewView: View {
                 .padding(.top, Spacing.lg)
 
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Mission")
+                    Text("Your life mission")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(ColorTheme.accent())
                     TextEditor(text: $statement)
@@ -434,11 +434,11 @@ struct MissionSummaryView: View {
                         .font(.system(size: 32))
                         .foregroundColor(ColorTheme.accent().opacity(0.6))
 
-                    Text("Your Mission")
+                    Text("What you've discovered")
                         .font(.system(size: 34, weight: .bold, design: .serif))
                         .foregroundColor(ColorTheme.primaryText())
 
-                    Text("This is what you've discovered.\nIt is alive and can evolve with you.")
+                    Text("This is about your life — what matters and what you're building.\nIt can evolve with you.")
                         .font(.system(size: 16, weight: .medium, design: .serif))
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)

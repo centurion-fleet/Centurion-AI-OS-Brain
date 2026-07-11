@@ -48,6 +48,9 @@ struct CenturionApp: App {
             .preferredColorScheme(appearanceMode.colorScheme)
             .onReceive(services.connectionManager.$connectionState) { state in
                 services.dataMode.update(connectionState: state)
+                if state == .connected {
+                    services.messageService.clearDemoData()
+                }
             }
         }
     }

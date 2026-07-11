@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Centurion
+GenericName=Personal AI
+Comment=Your private Personal Centurion
+Exec=centurion-desktop
+Icon=com.centurion.desktop
+Terminal=false
+Categories=Utility;Network;
+Keywords=AI;Assistant;Centurion;Private;
+StartupNotify=true
+StartupWMClass=com.centurion.desktop

@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Where users discover and live their mission with their Centurion.
+/// Where users discover and live their mission — everything about the human.
 /// Reachable from Pulse (mission banner) and Settings.
 struct MissionView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @State private var isDiscovering = false
+    @State private var showContextEditor = false
+
+    private var profile: HumanProfile { missionStore.mission.profile }
 
     var body: some View {
         ScrollView {
@@ -12,6 +15,7 @@ struct MissionView: View {
                 missionHero
                 missionDiscoverySection
                 missionTargetsSection
+                aboutYouSection
             }
             .padding()
         }
@@ -24,6 +28,11 @@ struct MissionView: View {
                 isDiscovering = false
             }
         }
+        .sheet(isPresented: $showContextEditor) {
+            HumanContextInterviewView(existingProfile: missionStore.mission.profile) { updated in
+                missionStore.updateProfile(updated)
+            }
+        }
     }
 
     // MARK: - Hero
@@ -31,33 +40,39 @@ struct MissionView: View {
     private var missionHero: some View {
         VStack(spacing: Spacing.md) {
             if missionStore.hasMissionStatement {
-                Text("YOUR MISSION")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                Text("WHAT YOU'RE BUILDING TOWARD")
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(ColorTheme.accent())
-                    .tracking(4)
+                    .tracking(2)
 
                 Text(missionStore.mission.statement)
-                    .font(.system(size: 22, weight: .bold, design: .serif))
+                    .font(.title2.weight(.bold))
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
                     .lineSpacing(6)
 
-                if !missionStore.soul.whyThisMission.isEmpty {
-                    Text(missionStore.soul.whyThisMission)
-                        .font(.system(size: 14, weight: .medium, design: .serif))
+                if !profile.whyThisMission.isEmpty {
+                    Text(profile.whyThisMission)
+                        .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
+
+                Text("This is about you — your life, your purpose, your commitments.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
+                    .padding(.top, Spacing.xs)
             } else {
-                Text("LIVE YOUR\nPERSONAL MISSION")
+                Text("YOUR LIFE\nMISSION")
                     .font(.system(size: 28, weight: .bold, design: .serif))
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
                     .lineSpacing(6)
 
-                Text("Your Centurion exists to help you discover it,\nthen walk beside you as you live it.")
-                    .font(.system(size: 15, weight: .medium, design: .serif))
+                Text("Your Centurion exists to help you discover what matters,\nthen walk beside you as you live it.")
+                    .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -81,8 +96,8 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Discover Your Mission", icon: "sparkles")
 
-            Text("Your mission isn't assigned. It emerges through reflection, conversation, and living. Your Centurion is here to help you find it.")
-                .font(.system(size: 14, weight: .regular, design: .serif))
+            Text("Reflect on your life — what matters and what you're building. This isn't about how your Centurion behaves; it's about you.")
+                .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
 
@@ -92,7 +107,7 @@ struct MissionView: View {
                 HStack {
                     Image(systemName: missionStore.hasMissionStatement
                           ? "arrow.triangle.2.circlepath"
-                          : "heart.text.square.fill")
+                          : "person.crop.circle")
                     Text(missionStore.hasMissionStatement
                          ? "Refine Mission Discovery"
                          : "Begin Mission Discovery")
@@ -109,10 +124,10 @@ struct MissionView: View {
 
     private var missionTargetsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Mission Targets", icon: "target")
+            SectionHeader(title: "Active Commitments", icon: "target")
 
-            Text("These are the living commitments your Centurion is helping you fulfill. Select the ones you want to actively work on — they will appear in Pulse.")
-                .font(.system(size: 14, weight: .regular, design: .serif))
+            Text("Living commitments your Centurion helps you fulfill. Select the ones to work on — they appear in Pulse.")
+                .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
 
@@ -129,12 +144,82 @@ struct MissionView: View {
             }
 
             if !missionStore.activeTargets.isEmpty {
-                Text("\(missionStore.activeTargets.count) target\(missionStore.activeTargets.count == 1 ? "" : "s") active in Pulse")
-                    .font(.system(size: 12, weight: .medium, design: .serif))
+                Text("\(missionStore.activeTargets.count) commitment\(missionStore.activeTargets.count == 1 ? "" : "s") active in Pulse")
+                    .font(.caption)
                     .foregroundColor(ColorTheme.accent().opacity(0.8))
                     .italic()
                     .padding(.top, Spacing.xs)
             }
+        }
+    }
+
+    // MARK: - About You
+
+    private var aboutYouSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            SectionHeader(title: "About You", icon: "person.fill")
+
+            Text("Context that helps your Centurion understand your world — story, values, people, and what you need help with.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .lineSpacing(5)
+
+            if profile.hasContext {
+                aboutYouSummary
+            }
+
+            Button {
+                showContextEditor = true
+            } label: {
+                HStack {
+                    Image(systemName: profile.hasContext ? "pencil" : "plus.circle")
+                    Text(profile.hasContext ? "Edit About You" : "Add context about you")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(AmberButtonStyle())
+        }
+    }
+
+    private var aboutYouSummary: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            if !profile.yourStory.isEmpty {
+                profileRow(title: "Story", value: profile.yourStory)
+            }
+            if !profile.yourValues.isEmpty {
+                profileTags(title: "Values", tags: profile.yourValues)
+            }
+            if !profile.keyRelationships.isEmpty {
+                profileTags(title: "People", tags: profile.keyRelationships)
+            }
+            if !profile.delegatePreferences.isEmpty {
+                profileTags(title: "Help with", tags: profile.delegatePreferences)
+            }
+        }
+        .padding()
+        .background(ColorTheme.surface())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func profileRow(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(ColorTheme.accent())
+            Text(value)
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .lineLimit(3)
+        }
+    }
+
+    private func profileTags(title: String, tags: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(ColorTheme.accent())
+            FlowLayout(tags: tags)
         }
     }
 
@@ -143,7 +228,7 @@ struct MissionView: View {
             Image(systemName: "target")
                 .font(.system(size: 28))
                 .foregroundColor(ColorTheme.mutedText().opacity(0.5))
-            Text("Complete Mission Discovery to define your targets.")
+            Text("Complete Mission Discovery to define your commitments.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -152,6 +237,26 @@ struct MissionView: View {
         .padding(.vertical, Spacing.lg)
         .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// MARK: - Simple tag flow layout
+
+private struct FlowLayout: View {
+    let tags: [String]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 6)], alignment: .leading, spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.primaryText())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(ColorTheme.accent().opacity(0.08))
+                    .clipShape(Capsule())
+            }
+        }
     }
 }
 

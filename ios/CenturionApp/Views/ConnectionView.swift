@@ -12,9 +12,6 @@ struct ConnectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.xl) {
-                    BrandHeader()
-                        .padding(.bottom, Spacing.sm)
-
                     trustStatement
 
                     remoteConnectionSection
@@ -37,12 +34,12 @@ struct ConnectionView: View {
 
     private var trustStatement: some View {
         VStack(spacing: 6) {
-            Text("Your Centurion stays reliable when its connections are clear.")
+            Text("Your Centurion stays reliable when your iPhone is linked to your Centurion.")
                 .font(.system(size: 15, weight: .medium, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
 
-            Text("This screen shows the health of both links so you always know what's happening.")
+            Text("This shows whether your iPhone is linked to your Centurion.")
                 .font(.system(size: 13))
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -54,7 +51,7 @@ struct ConnectionView: View {
 
     private var remoteConnectionSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Remote Connection", icon: "antenna.radiowaves.left.and.right")
+            SectionHeader(title: "Your private connection", icon: "antenna.radiowaves.left.and.right")
 
             Text("The link between this iPhone and your Centurion.")
                 .font(.system(size: 14))
@@ -103,9 +100,10 @@ struct ConnectionView: View {
     private var remoteStatusTitle: String {
         switch connectionManager.connectionState {
         case .connected:    return "Connected"
-        case .discovering:  return "Searching"
+        case .discovering:  return "Looking for your Centurion"
         case .connecting:   return "Connecting"
         case .disconnected: return "Disconnected"
+        case .awaitingApproval: return "Waiting for approval"
         case .error:        return "Connection Issue"
         }
     }
@@ -120,9 +118,11 @@ struct ConnectionView: View {
         case .discovering:
             return "Looking for your Centurion on the local network"
         case .connecting:
-            return "Establishing an encrypted channel"
+            return "Setting up your private connection…"
         case .disconnected:
             return "Tap Connect to pair with your Centurion"
+        case .awaitingApproval(let message):
+            return message
         case .error(let message):
             return message
         }
@@ -132,6 +132,7 @@ struct ConnectionView: View {
         switch connectionManager.connectionState {
         case .connected: return ColorTheme.success()
         case .error:     return ColorTheme.error()
+        case .awaitingApproval: return ColorTheme.accent()
         default:         return ColorTheme.mutedText()
         }
     }
@@ -154,7 +155,7 @@ struct ConnectionView: View {
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(4)
 
-            Text("Advanced settings, including AI provider choice, are in Settings.")
+            Text("For advanced options, including how your Centurion thinks, open Settings.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.dimAccent())
         }
@@ -223,9 +224,9 @@ struct ConnectionPairingSheet: View {
 
     private var searchingState: some View {
         ContentUnavailableView {
-            Label("Searching", systemImage: "antenna.radiowaves.left.and.right")
+            Label("Looking for your Centurion", systemImage: "antenna.radiowaves.left.and.right")
         } description: {
-            Text("Make sure your Centurion is running on the same network. Discovery uses Bonjour — no cloud account needed.")
+            Text("Make sure your Centurion is running on the same Wi‑Fi. We look for it automatically — no account needed.")
         } actions: {
             if case .discovering = connectionManager.connectionState {
                 ProgressView()

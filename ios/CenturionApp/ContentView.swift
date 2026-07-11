@@ -28,7 +28,7 @@ struct ContentView: View {
                 ChatView()
             }
             .tabItem {
-                Label("Remote", systemImage: "message.fill")
+                Label("Chat", systemImage: "message.fill")
             }
             .tag(1)
 
@@ -36,7 +36,7 @@ struct ContentView: View {
                 MissionPortfolioView()
             }
             .tabItem {
-                Label("Pulse", systemImage: "waveform.path.ecg")
+                Label("Home", systemImage: "waveform.path.ecg")
             }
             .tag(2)
 

@@ -121,10 +121,41 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
     let hostname: String
     let ipAddress: String
     let port: Int
+    let serviceName: String?
+    let serviceType: String?
+    let serviceDomain: String?
     let publicKey: Data?
     let isConnected: Bool
     let connectionMethod: ConnectionMethod
     let lastSeen: Date
+
+    init(
+        id: UUID,
+        name: String,
+        hostname: String,
+        ipAddress: String,
+        port: Int,
+        serviceName: String? = nil,
+        serviceType: String? = nil,
+        serviceDomain: String? = nil,
+        publicKey: Data?,
+        isConnected: Bool,
+        connectionMethod: ConnectionMethod,
+        lastSeen: Date
+    ) {
+        self.id = id
+        self.name = name
+        self.hostname = hostname
+        self.ipAddress = ipAddress
+        self.port = port
+        self.serviceName = serviceName
+        self.serviceType = serviceType
+        self.serviceDomain = serviceDomain
+        self.publicKey = publicKey
+        self.isConnected = isConnected
+        self.connectionMethod = connectionMethod
+        self.lastSeen = lastSeen
+    }
 
     enum ConnectionMethod: String, Codable {
         case lan      // Local network (mDNS)
@@ -136,6 +167,22 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
             case .tailscale: return "shield.fill"
             }
         }
+    }
+    func asConnected(publicKey: Data?, hostname: String? = nil, port: Int? = nil) -> CenturionDevice {
+        CenturionDevice(
+            id: id,
+            name: name,
+            hostname: hostname ?? self.hostname,
+            ipAddress: ipAddress,
+            port: port ?? (self.port > 0 ? self.port : 9119),
+            serviceName: serviceName,
+            serviceType: serviceType,
+            serviceDomain: serviceDomain,
+            publicKey: publicKey,
+            isConnected: true,
+            connectionMethod: connectionMethod,
+            lastSeen: Date()
+        )
     }
 }
 

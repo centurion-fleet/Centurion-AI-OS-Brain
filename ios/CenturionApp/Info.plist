@@ -30,7 +30,7 @@
 		<string>_centurion._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Centurion needs local network access to discover your Centurion on the local network via Bonjour.</string>
+	<string>Centurion needs local network access to find your Centurion on your Wi‑Fi.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -42,6 +42,8 @@
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>AppMark</string>
 	</dict>
 	<key>UIRequiresFullScreen</key>
 	<true/>

@@ -1,0 +1,20 @@
+[package]
+name = "centurion-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+centurion-common = { path = "../centurion-common" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = "0.22.8"
+gtk4 = "0.11.4"
+libadwaita = "0.9.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+vte4 = "0.10.0"

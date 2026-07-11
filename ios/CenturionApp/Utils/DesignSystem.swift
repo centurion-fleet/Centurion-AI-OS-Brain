@@ -181,10 +181,10 @@ struct DemoDataBanner: View {
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.accent())
             VStack(alignment: .leading, spacing: 2) {
-                Text("Sample activity")
+                Text("Sample updates")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Connect your Centurion to see live updates.")
+                Text("These are examples until you link your Centurion in Connect.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -198,7 +198,7 @@ struct DemoDataBanner: View {
                 .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sample activity. Connect your Centurion to see live updates.")
+        .accessibilityLabel("Sample updates. These are examples until you link your Centurion in Connect.")
     }
 }
 
@@ -293,6 +293,25 @@ struct StatusDot: View {
     }
 }
 
+// MARK: - App Icon
+
+/// The same mark shown on the Home Screen and simulator — used for in-app branding.
+struct CenturionAppMark: View {
+    var size: CGFloat = 64
+
+    private var cornerRadius: CGFloat { size * 0.223 }
+
+    var body: some View {
+        Image("AppMark")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .accessibilityLabel("Centurion app icon")
+    }
+}
+
 // MARK: - App Brand Header
 
 /// Consistent brand header for every page — Icon + name + version.
@@ -300,56 +319,23 @@ struct StatusDot: View {
 struct BrandHeader: View {
     var body: some View {
         VStack(spacing: 8) {
-            // Architectural icon with warm glow — Frank Lloyd Wright inspired
             ZStack {
                 Circle()
                     .fill(ColorTheme.accent().opacity(0.08))
-                    .frame(width: 52, height: 52)
-                
-                Image(systemName: "app.connected.to.app.below.fill")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundColor(ColorTheme.accent())
+                    .frame(width: 60, height: 60)
+
+                CenturionAppMark(size: 52)
             }
             
             VStack(spacing: 2) {
-                Text("PERSONAL-CENTURION")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundColor(ColorTheme.accent())
-                    .tracking(4)
-                
-                Text("AI REMOTE")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundColor(ColorTheme.accent())
-                    .tracking(4)
+                Text("CenturionAI Remote")
+                    .font(.title2.weight(.semibold))
+                    .foregroundColor(ColorTheme.primaryText())
+
+                Text("Your private companion on your network")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
             }
-            
-            // Prairie-style horizontal accent line — organic, warm, timeless
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            ColorTheme.accent().opacity(0.2),
-                            ColorTheme.accent(),
-                            ColorTheme.accent().opacity(0.2)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: 120, height: 1)
-                .padding(.vertical, 2)
-            
-            Text("MISSION HORIZON  ·  v3.0.0")
-                .font(.system(size: 9, weight: .regular, design: .monospaced))
-                .foregroundColor(ColorTheme.dimAccent())
-                .tracking(2)
-            
-            // The emotional promise — your lifelong companion
-            Text("Your AI. Your mission. For life.")
-                .font(.system(size: 9, weight: .medium, design: .serif))
-                .foregroundColor(ColorTheme.mutedText().opacity(0.7))
-                .italic()
-                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		06F77B8AAFFD24BF59B9FAD9 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 03214021F1121C95DBE4833B /* Sodium */; };
 		0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */; };
 		0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */; };
 		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
@@ -23,6 +24,7 @@
 		766953EA2DCD12361AD1AEC1 /* SecurityHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */; };
 		776C89C43273562535733334 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D967220CE7E18782E047ACD2 /* ContentView.swift */; };
 		79327A346B13F76541E0524B /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A427BD838F46B4F357B51D9 /* ConnectionView.swift */; };
+		8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */; };
 		92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */; };
 		93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */; };
 		9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D098FD991C91178ACF8C94 /* LLMProvider.swift */; };
@@ -34,7 +36,6 @@
 		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
 		CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */; };
-		CF90249AE9E5DAA6EEAD808C /* CryptoStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D04856D4939ED1C87CE77B /* CryptoStubs.swift */; };
 		CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D533936FBAD883AD748A223 /* DesignSystem.swift */; };
 		D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */; };
 		D3655C930D9D16EEDC17A92E /* MissionDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */; };
@@ -59,7 +60,6 @@
 		463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscoverer.swift; sourceTree = "<group>"; };
 		4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionTheme.swift; sourceTree = "<group>"; };
 		51401B6F9885163352D34464 /* SoulDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocument.swift; sourceTree = "<group>"; };
-		56D04856D4939ED1C87CE77B /* CryptoStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoStubs.swift; sourceTree = "<group>"; };
 		5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionDiscoveryView.swift; sourceTree = "<group>"; };
 		6A427BD838F46B4F357B51D9 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		6D533936FBAD883AD748A223 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
@@ -71,6 +71,7 @@
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
 		B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulInterviewView.swift; sourceTree = "<group>"; };
+		B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HumanContextInterviewView.swift; sourceTree = "<group>"; };
 		BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewer.swift; sourceTree = "<group>"; };
 		C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopVisualizationView.swift; sourceTree = "<group>"; };
@@ -85,6 +86,17 @@
 		FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityHubView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		74BA99ADAAC1F4A7D724CC7F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06F77B8AAFFD24BF59B9FAD9 /* Sodium in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
 		5AF76F4EC679BD6E37148BFD /* Views */ = {
 			isa = PBXGroup;
@@ -93,6 +105,7 @@
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
 				3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */,
 				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
+				B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */,
 				C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */,
 				5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */,
 				762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */,
@@ -155,7 +168,6 @@
 		D9FADF2360B2D39B2A4B587F /* Crypto */ = {
 			isa = PBXGroup;
 			children = (
-				56D04856D4939ED1C87CE77B /* CryptoStubs.swift */,
 				8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */,
 				7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */,
 			);
@@ -186,6 +198,7 @@
 			buildPhases = (
 				C719891FAA5E33880B93717C /* Sources */,
 				3175ECA4AB9302813E924A72 /* Resources */,
+				74BA99ADAAC1F4A7D724CC7F /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -193,6 +206,7 @@
 			);
 			name = CenturionApp;
 			packageProductDependencies = (
+				03214021F1121C95DBE4833B /* Sodium */,
 			);
 			productName = CenturionApp;
 			productReference = 1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */;
@@ -222,6 +236,9 @@
 			);
 			mainGroup = F768D014BFCFB9E8750FD7AA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D30D688CF6ACE021BA7E71D6 /* XCRemoteSwiftPackageReference "swift-sodium" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5F6D31A6E9BF3B866F3ABE07 /* Products */;
 			projectDirPath = "";
@@ -259,9 +276,9 @@
 				776C89C43273562535733334 /* ContentView.swift in Sources */,
 				A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */,
 				B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */,
-				CF90249AE9E5DAA6EEAD808C /* CryptoStubs.swift in Sources */,
 				CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */,
 				93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */,
+				8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */,
 				D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */,
 				9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */,
 				92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */,
@@ -470,6 +487,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D30D688CF6ACE021BA7E71D6 /* XCRemoteSwiftPackageReference "swift-sodium" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jedisct1/swift-sodium.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.11.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		03214021F1121C95DBE4833B /* Sodium */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D30D688CF6ACE021BA7E71D6 /* XCRemoteSwiftPackageReference "swift-sodium" */;
+			productName = Sodium;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2A6775CCA8E36A771C5F4815 /* Project object */;
 }

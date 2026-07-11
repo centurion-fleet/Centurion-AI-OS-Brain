@@ -66,8 +66,17 @@ Every screen answers: *Why am I here? What can I do next?*
 | Remote Control, protocol, transport, Bonjour, mDNS | Your Centurion, private connection, on your network |
 | LLM, model, provider, agent, sub-agent, loop phase | Your Centurion is working on… / Needs your decision |
 | Output, filesystem path, source loop | Document / Ready for you |
-| Soul (without context) | What your Centurion knows about you |
+| Soul (without context) | Your Centurion's Soul — personality and rules for your AI |
+| Mission (without context) | Your life purpose, commitments, and personal context |
 | XSalsa20, X25519, PFS, nonce | Your conversations stay private on your network |
+
+### Mission vs Soul (locked)
+| Term | Meaning | User-facing home |
+|------|---------|------------------|
+| **Mission** | The **human** — life purpose, active commitments, story/values/context | Mission screen, Mission Discovery, Pulse banner |
+| **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Centurion's Soul screen, Shape Your Centurion flow |
+
+Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces.
 
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.

@@ -32,6 +32,13 @@ final class MessageService: ObservableObject {
         self.dataMode = dataMode
     }
 
+    /// Remove seeded preview conversations once a live Centurion link is active.
+    func clearDemoData() {
+        allMessages = []
+        conversations = []
+        currentConversation = nil
+    }
+
     /// Call after the view has appeared to seed demo conversations when offline.
     func seedInitialData() {
         guard dataMode.showsDemoContent, conversations.isEmpty else { return }
@@ -53,7 +60,14 @@ final class MessageService: ObservableObject {
         )
         appendMessage(userMessage)
 
-        try await connectionManager.sendMessage(text)
+        let response = try await connectionManager.sendMessage(text)
+        appendMessage(
+            Message(
+                conversationId: conversation.id,
+                content: response,
+                role: .centurion
+            )
+        )
         return conversation
     }
 

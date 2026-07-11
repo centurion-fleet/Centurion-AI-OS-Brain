@@ -108,7 +108,7 @@ struct MissionPortfolioView: View {
     }
 
     var body: some View {
-        TabPageChrome(title: "Pulse") {
+        TabPageChrome(title: "Home") {
             pillNavigation
                 .padding(.horizontal, Spacing.sm)
                 .padding(.bottom, Spacing.xs)
@@ -339,7 +339,7 @@ struct MissionPortfolioView: View {
     private var missionStatement: some View {
         VStack(spacing: 6) {
             HStack {
-                Text("YOUR MISSION")
+                Text("WHAT YOU'RE BUILDING TOWARD")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(ColorTheme.accent())
                     .tracking(2)
@@ -351,7 +351,7 @@ struct MissionPortfolioView: View {
             }
 
             Text(missionStore.mission.statement.isEmpty
-                 ? "Discover your personal mission"
+                 ? "Discover what matters in your life"
                  : missionStore.mission.statement)
                 .font(.title3.weight(.bold))
                 .foregroundColor(ColorTheme.primaryText())
@@ -372,8 +372,8 @@ struct MissionPortfolioView: View {
                 .padding(.top, Spacing.xs)
 
             Text(missionStore.hasMissionStatement
-                 ? "Tap to view and refine your mission"
-                 : "Tap to begin mission discovery")
+                 ? "Tap to view your mission and commitments"
+                 : "Tap to reflect on your life mission")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .italic()

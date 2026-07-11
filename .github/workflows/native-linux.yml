@@ -1,0 +1,52 @@
+name: Native Linux
+
+on:
+  pull_request:
+    paths:
+      - "desktop-native/**"
+      - "centurion_cli/remote_bridge.py"
+      - "tests/centurion_cli/test_remote_bridge.py"
+      - ".github/workflows/native-linux.yml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop-native/**"
+      - "centurion_cli/remote_bridge.py"
+      - "tests/centurion_cli/test_remote_bridge.py"
+      - ".github/workflows/native-linux.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fedora:
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install native build dependencies
+        run: >-
+          dnf install -y
+          cargo rust rustfmt clippy gcc gcc-c++
+          pkgconf-pkg-config gtk4-devel libadwaita-devel vte291-gtk4-devel
+
+      - name: Check formatting
+        working-directory: desktop-native
+        run: cargo fmt --all -- --check
+
+      - name: Run native tests
+        working-directory: desktop-native
+        run: cargo test --workspace --locked
+
+      - name: Run Clippy
+        working-directory: desktop-native
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run Python remote bridge tests
+        run: scripts/run_tests.sh tests/centurion_cli/test_remote_bridge.py
+
+      - name: Run loopback smoke script
+        run: desktop-native/scripts/e2e-smoke.sh

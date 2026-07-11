@@ -1,17 +1,69 @@
 import Foundation
 
-/// The user's life mission — the highest level of focus.
-/// Only the mission statement remains. No human-speed tracking.
+/// Personal context about the human — story, values, people, and work habits.
+/// Lives under Mission; distinct from Soul (AI personality).
+struct HumanProfile: Codable {
+    var whyThisMission: String = ""
+    var areasOfFocus: [String] = []
+    var yourStory: String = ""
+    var yourValues: [String] = []
+    var yourPersonality: String = ""
+    var yourStrengths: [String] = []
+    var vitalStatName: String = ""
+    var vitalStatCurrent: Double = 0
+    var vitalStatTarget: Double = 0
+    var workStyle: String = ""
+    var decisionStyle: String = ""
+    var timezone: String = ""
+    var workHours: String = ""
+    var challenges: [String] = []
+    var keyRelationships: [String] = []
+    var toolsYouUse: [String] = []
+    var delegatePreferences: [String] = []
+    var currentProjects: [String] = []
+
+    var hasContext: Bool {
+        !yourStory.isEmpty
+            || !yourValues.isEmpty
+            || !keyRelationships.isEmpty
+            || !toolsYouUse.isEmpty
+            || !challenges.isEmpty
+            || !delegatePreferences.isEmpty
+    }
+}
+
+/// The user's life mission — purpose, commitments, and personal context.
 struct LifeMission: Identifiable, Codable {
     let id: UUID
     var statement: String
     var targets: [LifeMissionTarget]
-    
+    var profile: HumanProfile
+
+    init(id: UUID, statement: String, targets: [LifeMissionTarget], profile: HumanProfile = HumanProfile()) {
+        self.id = id
+        self.statement = statement
+        self.targets = targets
+        self.profile = profile
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        statement = try container.decode(String.self, forKey: .statement)
+        targets = try container.decode([LifeMissionTarget].self, forKey: .targets)
+        profile = try container.decodeIfPresent(HumanProfile.self, forKey: .profile) ?? HumanProfile()
+    }
+
     static func preview() -> LifeMission {
-        LifeMission(
+        var profile = HumanProfile()
+        profile.whyThisMission = "Australian mining and construction deserve world-class equipment built locally."
+        profile.yourStory = "Founder building Australia's leading OEM lighting tower manufacturer."
+        profile.yourValues = ["Reliability", "Directness", "Craftsmanship"]
+        return LifeMission(
             id: UUID(),
             statement: "Build Australia's leading OEM lighting tower provider",
-            targets: LifeMissionTarget.previewTargets()
+            targets: LifeMissionTarget.previewTargets(),
+            profile: profile
         )
     }
 }

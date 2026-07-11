@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>Centurion Remote</short>
+  <description>Encrypted local-network access for CenturionAI Remote on iPhone.</description>
+  <port protocol="tcp" port="9119"/>
+</service>

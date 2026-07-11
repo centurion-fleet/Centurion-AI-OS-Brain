@@ -18,7 +18,10 @@ Ship work that could score in: Delight, Inclusivity, Innovation, Interaction, So
 
 ### Language (default surfaces)
 - Say: "Your Centurion", "private connection", "working on now", "needs your choice", "documents"
+- **Mission** = the human (life purpose, commitments, About You context)
+- **Soul** = the Centurion (AI personality, tone, rules — not the human profile)
 - Never: Remote Control, LLM/provider/model, agent/sub-agent, loop phase, Bonjour/mDNS, crypto algorithm names, filesystem paths
+- Never duplicate mission language in Soul surfaces or AI personality language in Mission surfaces
 
 ### Typography & touch
 - Body copy: semantic styles (`.body`, `.headline`) — supports Dynamic Type
@@ -49,7 +52,7 @@ Ship work that could score in: Delight, Inclusivity, Innovation, Interaction, So
 - Meaningful transitions only — never per-keystroke in text fields
 
 ## Anti-patterns (block PR)
-Fixed tiny fonts, hardcoded fake live data, LLM dial on main Connect for new users, duplicate Security+Settings crypto essays, nested share sheets, unreachable broken flows (Soul Interview save, Quick Chat selection)
+Fixed tiny fonts, hardcoded fake live data, LLM dial on main Connect for new users, duplicate Security+Settings crypto essays, nested share sheets, unreachable broken flows (Quick Chat selection), Mission/Soul copy overlap (human mission in Soul screen)
 
 ## Pre-merge checklist
 - [ ] Plain-language copy on new strings

@@ -1,0 +1,22 @@
+[Unit]
+Description=Centurion encrypted iPhone service
+Documentation=https://github.com/NousResearch/Centurion-AI-OS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=CENTURION_HOME=%h/.centurion
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/centurion-remote serve --name "Personal Centurion"
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.centurion %h/.centurion/profiles
+
+[Install]
+WantedBy=default.target
