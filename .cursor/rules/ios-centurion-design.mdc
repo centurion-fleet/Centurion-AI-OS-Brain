@@ -1,0 +1,58 @@
+---
+description: Centurion iOS design rules — Apple Design Award alignment, Companion Calm for 50+ users, visual and workflow consistency
+globs: ios/CenturionApp/**/*
+alwaysApply: false
+---
+
+# Centurion Remote iOS — Locked Design Rules
+
+Read `ios/CenturionApp/DESIGN_RULES.md` for full rationale. Enforce these on every iOS change.
+
+## Audience
+Successful adults 50+, non-technical, newly self-directed with personal AI. They must feel **calm and capable**, never like they're using a developer console.
+
+## Apple Design Award lens (2025–2026)
+Ship work that could score in: Delight, Inclusivity, Innovation, Interaction, Social Impact, Visuals. Innovation = native private Centurion link + mission-centered companion, not feature sprawl.
+
+## Non-negotiables
+
+### Language (default surfaces)
+- Say: "Your Centurion", "private connection", "working on now", "needs your choice", "documents"
+- Never: Remote Control, LLM/provider/model, agent/sub-agent, loop phase, Bonjour/mDNS, crypto algorithm names, filesystem paths
+
+### Typography & touch
+- Body copy: semantic styles (`.body`, `.headline`) — supports Dynamic Type
+- No fixed sizes below 15pt for readable content; never 6–10pt operational labels on default UI
+- Minimum 44×44pt tap targets
+- Honor `accessibilityReduceMotion` for orbital/loop/splash animations
+
+### Visual system
+- Colors/spacing/motion from `ColorTheme`, `Spacing`, `Motion` in DesignSystem/CenturionTheme
+- Cards: `.cardStyle()` — do not duplicate card chrome
+- Remote/Pulse/Security: `TabPageChrome` without BrandHeader
+- Serif for mission/editorial only; sans for actions
+
+### Simplicity & IA
+- One primary action per screen; advanced/technical behind progressive disclosure
+- Max 3 concepts above the fold
+- Pulse categories map to human outcomes: Working on now / Finished / Documents / Needs your choice / Updates
+- Security/crypto details collapsed by default
+
+### Workflows
+- No preview data presented as live — label demo mode explicitly
+- Errors need visible message + retry (not haptic-only)
+- Tab switches must not reset conversation, forms, or navigation stacks
+- Mission Discovery: one clear Save path; Share is optional
+- Offline/disconnected states must block or clearly label simulated responses
+
+### Haptics
+- Meaningful transitions only — never per-keystroke in text fields
+
+## Anti-patterns (block PR)
+Fixed tiny fonts, hardcoded fake live data, LLM dial on main Connect for new users, duplicate Security+Settings crypto essays, nested share sheets, unreachable broken flows (Soul Interview save, Quick Chat selection)
+
+## Pre-merge checklist
+- [ ] Plain-language copy on new strings
+- [ ] Dynamic Type spot-check on changed screens
+- [ ] VoiceOver labels on new controls
+- [ ] Uses design tokens, not raw magic numbers/colors

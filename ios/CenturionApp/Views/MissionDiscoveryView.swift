@@ -13,6 +13,9 @@ struct MissionDiscoveryView: View {
     @State private var currentIndex = 0
     @State private var showSummary = false
     @State private var showIntro = true
+    @State private var showSynthesis = false
+    @State private var synthesizedStatement = ""
+    @State private var synthesizedWhy = ""
     @State private var shareStatus: ShareStatus?
     @State private var isSharing = false
 
@@ -51,6 +54,25 @@ struct MissionDiscoveryView: View {
 
                 if showIntro {
                     introScreen
+                } else if showSynthesis {
+                    MissionSynthesisReviewView(
+                        statement: $synthesizedStatement,
+                        why: $synthesizedWhy,
+                        onBack: {
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                                showSynthesis = false
+                            }
+                        },
+                        onApprove: {
+                            answers["_missionStatement"] = synthesizedStatement
+                            answers["_whyThisMission"] = synthesizedWhy
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                showSynthesis = false
+                                showSummary = true
+                            }
+                            Haptics.success()
+                        }
+                    )
                 } else if showSummary {
                     MissionSummaryView(
                         questions: Self.questions,
@@ -204,9 +226,6 @@ struct MissionDiscoveryView: View {
                             .stroke(ColorTheme.border().opacity(0.5), lineWidth: 1)
                     )
                     .padding(.horizontal, 20)
-                    .onChange(of: answers[question.id]) { _ in
-                        Haptics.lightTap()
-                    }
                 }
                 .id(currentIndex)
             }
@@ -249,8 +268,9 @@ struct MissionDiscoveryView: View {
                     }
                 } else {
                     Button {
+                        prepareSynthesis()
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                            showSummary = true
+                            showSynthesis = true
                         }
                         Haptics.success()
                     } label: {
@@ -279,9 +299,23 @@ struct MissionDiscoveryView: View {
     }
 
     private func finishDiscovery() {
+        if !synthesizedStatement.isEmpty {
+            answers["_missionStatement"] = synthesizedStatement
+        }
+        if !synthesizedWhy.isEmpty {
+            answers["_whyThisMission"] = synthesizedWhy
+        }
         onComplete(answers)
         Haptics.success()
         dismiss()
+    }
+
+    private func prepareSynthesis() {
+        synthesizedStatement = MissionStore.synthesizedMissionStatement(from: answers) ?? ""
+        synthesizedWhy = MissionStore.synthesizedWhy(from: answers) ?? ""
+        if synthesizedStatement.isEmpty {
+            synthesizedStatement = "I am discovering what matters most to me."
+        }
     }
 
     private func shareWithCenturion() {
@@ -307,6 +341,77 @@ struct MissionDiscoveryView: View {
                     shareStatus = .notConnected
                 }
             }
+        }
+    }
+}
+
+// MARK: - Synthesis Review
+
+struct MissionSynthesisReviewView: View {
+    @Binding var statement: String
+    @Binding var why: String
+    let onBack: () -> Void
+    let onApprove: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.xl) {
+                VStack(spacing: Spacing.md) {
+                    Text("Your Mission Statement")
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(ColorTheme.primaryText())
+
+                    Text("We've distilled your reflections into a mission statement. Edit it until it feels true.")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+                .padding(.top, Spacing.lg)
+
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Mission")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.accent())
+                    TextEditor(text: $statement)
+                        .scrollContentBackground(.hidden)
+                        .font(.body)
+                        .frame(minHeight: 100)
+                        .padding(Spacing.md)
+                        .background(ColorTheme.surface())
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Why it matters")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.accent())
+                    TextEditor(text: $why)
+                        .scrollContentBackground(.hidden)
+                        .font(.body)
+                        .frame(minHeight: 80)
+                        .padding(Spacing.md)
+                        .background(ColorTheme.surface())
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+
+                VStack(spacing: Spacing.md) {
+                    Button(action: onApprove) {
+                        Text("This feels right")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                    }
+                    .buttonStyle(AmberButtonStyle())
+
+                    Button(action: onBack) {
+                        Text("Review my answers")
+                            .font(.subheadline)
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                }
+            }
+            .padding()
         }
     }
 }
@@ -377,7 +482,7 @@ struct MissionSummaryView: View {
                                     .tint(.black)
                             }
                             Text("Share With My Centurion")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.headline)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -387,7 +492,7 @@ struct MissionSummaryView: View {
 
                     Button(action: onDone) {
                         Text("Save to Pulse")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                     }

@@ -8,6 +8,7 @@ import SwiftUI
 /// that users open the app just to see what their Centurion is doing.
 struct LoopVisualizationView: View {
     let activity: LiveActivity
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rotation: Double = 0
     @State private var centerPulse: CGFloat = 1.0
     @State private var lineGlow: [Bool]
@@ -131,7 +132,8 @@ struct LoopVisualizationView: View {
     }
 
     private func startAnimations() {
-        // Continuous rotation
+        guard !reduceMotion else { return }
+
         withAnimation(.linear(duration: 20).repeatForever(autoreverses: false)) {
             rotation = 360
         }

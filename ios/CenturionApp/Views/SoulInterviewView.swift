@@ -12,11 +12,13 @@ struct SoulInterviewView: View {
     let existingSoul: SoulDocument?
     let onComplete: (SoulDocument) -> Void
 
+    @Environment(\.dismiss) private var dismiss
     @State private var soul: SoulDocument
     @State private var currentQuestionIndex = 0
-    @State private var answers: [String: String] = [:]
+    @State private var answers: [Int: String] = [:]
     @State private var tagInput: String = ""
-    @State private var numericalInput: String = ""
+    @State private var vitalCurrentInput: String = ""
+    @State private var vitalTargetInput: String = ""
     @State private var isComplete = false
 
     private let questions = SoulQuestion.allQuestions()
@@ -40,9 +42,10 @@ struct SoulInterviewView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Skip") {
-                        // Save what we have so far
                         saveCurrentAnswer()
+                        compileSoul()
                         onComplete(soul)
+                        dismiss()
                     }
                     .foregroundColor(ColorTheme.mutedText())
                     .font(.caption)
@@ -51,7 +54,9 @@ struct SoulInterviewView: View {
                     if !isComplete {
                         Button("Done") {
                             saveCurrentAnswer()
+                            compileSoul()
                             onComplete(soul)
+                            dismiss()
                         }
                         .foregroundColor(ColorTheme.accent())
                         .font(.caption)
@@ -59,7 +64,31 @@ struct SoulInterviewView: View {
                 }
             }
             .interactiveDismissDisabled()
+            .onAppear { prefillFromExistingSoul() }
         }
+    }
+
+    private func prefillFromExistingSoul() {
+        guard let existing = existingSoul else { return }
+        let q = questions
+        if q.indices.contains(0), !existing.yourStory.isEmpty { answers[0] = existing.yourStory }
+        if q.indices.contains(1), !existing.yourStory.isEmpty { answers[1] = existing.yourStory }
+        if q.indices.contains(2), !existing.yourValues.isEmpty { answers[2] = existing.yourValues.joined(separator: ", ") }
+        if q.indices.contains(3), !existing.missionStatement.isEmpty { answers[3] = existing.missionStatement }
+        if q.indices.contains(4), !existing.whyThisMission.isEmpty { answers[4] = existing.whyThisMission }
+        if q.indices.contains(5), !existing.vitalStatName.isEmpty { answers[5] = existing.vitalStatName }
+        if q.indices.contains(6) {
+            vitalCurrentInput = existing.vitalStatCurrent > 0 ? String(format: "%.0f", existing.vitalStatCurrent) : ""
+            vitalTargetInput = existing.vitalStatTarget > 0 ? String(format: "%.0f", existing.vitalStatTarget) : ""
+        }
+        if q.indices.contains(7), !existing.workStyle.isEmpty { answers[7] = existing.workStyle }
+        if q.indices.contains(8), !existing.communicationStyle.isEmpty { answers[8] = existing.communicationStyle }
+        if q.indices.contains(9), !existing.timezone.isEmpty { answers[9] = existing.timezone }
+        if q.indices.contains(10), !existing.goals.isEmpty { answers[10] = existing.goals.joined(separator: ", ") }
+        if q.indices.contains(11), !existing.challenges.isEmpty { answers[11] = existing.challenges.joined(separator: ", ") }
+        if q.indices.contains(12), !existing.delegatePreferences.isEmpty { answers[12] = existing.delegatePreferences.joined(separator: ", ") }
+        if q.indices.contains(13), !existing.keyRelationships.isEmpty { answers[13] = existing.keyRelationships.joined(separator: ", ") }
+        if q.indices.contains(14), !existing.toolsYouUse.isEmpty { answers[14] = existing.toolsYouUse.joined(separator: ", ") }
     }
 
     // MARK: - Progress Bar
@@ -69,12 +98,11 @@ struct SoulInterviewView: View {
             // Stage indicator
             HStack {
                 Text(currentQuestion.stage.rawValue)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(ColorTheme.accent())
-                    .tracking(2)
                 Spacer()
                 Text("\(currentQuestionIndex + 1) of \(questions.count)")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
             .padding(.horizontal)
@@ -259,13 +287,13 @@ struct SoulInterviewView: View {
                     Text("Current")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
-                    TextField("0", text: $numericalInput)
+                    TextField("0", text: $vitalCurrentInput)
                         .textFieldStyle(.plain)
                         .font(.title)
                         .fontWeight(.bold)
                         .foregroundColor(ColorTheme.accent())
                         .multilineTextAlignment(.center)
-                        .keyboardType(.numberPad)
+                        .keyboardType(.decimalPad)
                         .frame(width: 100)
                         .padding(12)
                         .background(ColorTheme.surface())
@@ -284,13 +312,13 @@ struct SoulInterviewView: View {
                     Text("Target")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
-                    TextField("0", text: .constant("")) // Will wire properly
+                    TextField("0", text: $vitalTargetInput)
                         .textFieldStyle(.plain)
                         .font(.title)
                         .fontWeight(.bold)
                         .foregroundColor(ColorTheme.accent())
                         .multilineTextAlignment(.center)
-                        .keyboardType(.numberPad)
+                        .keyboardType(.decimalPad)
                         .frame(width: 100)
                         .padding(12)
                         .background(ColorTheme.surface())
@@ -309,13 +337,13 @@ struct SoulInterviewView: View {
 
     private var textBinding: Binding<String> {
         Binding(
-            get: { answers[currentQuestion.question] ?? "" },
-            set: { answers[currentQuestion.question] = $0 }
+            get: { answers[currentQuestionIndex] ?? "" },
+            set: { answers[currentQuestionIndex] = $0 }
         )
     }
 
     private var currentTags: [String] {
-        let raw = answers[currentQuestion.question] ?? ""
+        let raw = answers[currentQuestionIndex] ?? ""
         return raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
     }
 
@@ -324,18 +352,20 @@ struct SoulInterviewView: View {
         guard !trimmed.isEmpty else { return }
         var tags = currentTags
         tags.append(trimmed)
-        answers[currentQuestion.question] = tags.joined(separator: ",")
+        answers[currentQuestionIndex] = tags.joined(separator: ",")
         tagInput = ""
     }
 
     private func removeTag(_ tag: String) {
         var tags = currentTags
         tags.removeAll { $0 == tag }
-        answers[currentQuestion.question] = tags.joined(separator: ",")
+        answers[currentQuestionIndex] = tags.joined(separator: ",")
     }
 
     private func saveCurrentAnswer() {
-        // Persist the current answer before moving on
+        if currentQuestion.inputType == .number {
+            answers[currentQuestionIndex] = "\(vitalCurrentInput)|\(vitalTargetInput)"
+        }
     }
 
     private func nextQuestion() {
@@ -345,6 +375,7 @@ struct SoulInterviewView: View {
         if currentQuestionIndex < questions.count - 1 {
             withAnimation {
                 currentQuestionIndex += 1
+                restoreInputsForCurrentQuestion()
             }
         } else {
             compileSoul()
@@ -354,40 +385,50 @@ struct SoulInterviewView: View {
         }
     }
 
+    private func restoreInputsForCurrentQuestion() {
+        guard currentQuestion.inputType == .number else { return }
+        let parts = (answers[currentQuestionIndex] ?? "").split(separator: "|", omittingEmptySubsequences: false)
+        vitalCurrentInput = parts.indices.contains(0) ? String(parts[0]) : ""
+        vitalTargetInput = parts.indices.contains(1) ? String(parts[1]) : ""
+    }
+
     private func compileSoul() {
-        // Map answers back to the SoulDocument struct
-        let q = questions
-        if q.indices.contains(0) { soul.yourStory = answers[q[0].question] ?? soul.yourStory }
-        if q.indices.contains(1) { soul.yourStory = answers[q[1].question] ?? soul.yourStory }
-        if q.indices.contains(2) {
-            let raw = answers[q[2].question] ?? ""
-            soul.yourValues = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let story = answers[1]?.trimmingCharacters(in: .whitespacesAndNewlines), !story.isEmpty {
+            soul.yourStory = story
+        } else if let intro = answers[0]?.trimmingCharacters(in: .whitespacesAndNewlines), !intro.isEmpty {
+            soul.yourStory = intro
         }
-        if q.indices.contains(3) { soul.missionStatement = answers[q[3].question] ?? soul.missionStatement }
-        if q.indices.contains(4) { soul.whyThisMission = answers[q[4].question] ?? soul.whyThisMission }
-        if q.indices.contains(5) { soul.vitalStatName = answers[q[5].question] ?? soul.vitalStatName }
-        if q.indices.contains(7) { soul.workStyle = answers[q[7].question] ?? soul.workStyle }
-        if q.indices.contains(8) { soul.communicationStyle = answers[q[8].question] ?? soul.communicationStyle }
-        if q.indices.contains(9) { soul.timezone = answers[q[9].question] ?? soul.timezone }
-        if q.indices.contains(10) {
-            let raw = answers[q[10].question] ?? ""
-            soul.goals = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let raw = answers[2] {
+            soul.yourValues = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
-        if q.indices.contains(11) {
-            let raw = answers[q[11].question] ?? ""
-            soul.challenges = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let v = answers[3] { soul.missionStatement = v }
+        if let v = answers[4] { soul.whyThisMission = v }
+        if let v = answers[5] { soul.vitalStatName = v }
+        if let raw = answers[6] {
+            let parts = raw.split(separator: "|", omittingEmptySubsequences: false)
+            if parts.indices.contains(0), let current = Double(parts[0]) { soul.vitalStatCurrent = current }
+            if parts.indices.contains(1), let target = Double(parts[1]) { soul.vitalStatTarget = target }
+        } else {
+            if let current = Double(vitalCurrentInput) { soul.vitalStatCurrent = current }
+            if let target = Double(vitalTargetInput) { soul.vitalStatTarget = target }
         }
-        if q.indices.contains(12) {
-            let raw = answers[q[12].question] ?? ""
-            soul.delegatePreferences = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let v = answers[7] { soul.workStyle = v }
+        if let v = answers[8] { soul.communicationStyle = v }
+        if let v = answers[9] { soul.timezone = v }
+        if let raw = answers[10] {
+            soul.goals = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
-        if q.indices.contains(13) {
-            let raw = answers[q[13].question] ?? ""
-            soul.keyRelationships = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let raw = answers[11] {
+            soul.challenges = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
-        if q.indices.contains(14) {
-            let raw = answers[q[14].question] ?? ""
-            soul.toolsYouUse = raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+        if let raw = answers[12] {
+            soul.delegatePreferences = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        if let raw = answers[13] {
+            soul.keyRelationships = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        if let raw = answers[14] {
+            soul.toolsYouUse = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
         soul.updatedAt = Date()
     }
@@ -430,6 +471,7 @@ struct SoulInterviewView: View {
             Button(action: {
                 Haptics.success()
                 onComplete(soul)
+                dismiss()
             }) {
                 Text("Done — Show My Soul")
                     .font(.headline)

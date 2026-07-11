@@ -140,18 +140,84 @@ extension TabPageChrome where Header == EmptyView {
     }
 }
 
-/// Defers heavy tab content until the user selects that tab.
+/// Defers heavy tab content until first visit, then preserves state when switching tabs.
 struct DeferredTabContent<Content: View>: View {
     let tag: Int
     @Binding var selection: Int
+    @Binding var loadedTabs: Set<Int>
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        if selection == tag {
-            content()
-        } else {
-            Color.clear
+        Group {
+            if loadedTabs.contains(tag) {
+                content()
+                    .opacity(selection == tag ? 1 : 0)
+                    .allowsHitTesting(selection == tag)
+                    .accessibilityHidden(selection != tag)
+            } else {
+                Color.clear
+            }
         }
+        .onChange(of: selection) { _, newValue in
+            if newValue == tag {
+                loadedTabs.insert(tag)
+            }
+        }
+        .onAppear {
+            if selection == tag {
+                loadedTabs.insert(tag)
+            }
+        }
+    }
+}
+
+// MARK: - Demo Data Banner
+
+/// Labels sample content so users are never misled while disconnected.
+struct DemoDataBanner: View {
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "sparkles")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.accent())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sample activity")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(ColorTheme.primaryText())
+                Text("Connect your Centurion to see live updates.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+            Spacer()
+        }
+        .padding(Spacing.md)
+        .background(ColorTheme.accent().opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Sample activity. Connect your Centurion to see live updates.")
+    }
+}
+
+// MARK: - Reduce Motion
+
+extension View {
+    @ViewBuilder
+    func centurionAnimation<V: Equatable>(_ animation: Animation?, value: V) -> some View {
+        modifier(ReduceMotionAnimationModifier(animation: animation, value: value))
+    }
+}
+
+private struct ReduceMotionAnimationModifier<V: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let animation: Animation?
+    let value: V
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
     }
 }
 

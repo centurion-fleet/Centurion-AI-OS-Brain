@@ -23,27 +23,21 @@ final class MissionStore: ObservableObject {
         let resolvedMission: LifeMission
         if let loaded = Self.loadMission() {
             resolvedMission = loaded
-        } else if hasPersisted {
-            resolvedMission = LifeMission(id: UUID(), statement: "", targets: [])
         } else {
-            resolvedMission = LifeMission.preview()
+            resolvedMission = LifeMission(id: UUID(), statement: "", targets: [])
         }
         mission = resolvedMission
 
         if let loaded = Self.loadSoul() {
             soul = loaded
-        } else if hasPersisted {
-            soul = SoulDocument()
         } else {
-            soul = SoulDocument.preview()
+            soul = SoulDocument()
         }
 
         if let ids = Self.loadActiveTargetIDs() {
             activeTargetIDs = ids
-        } else if hasPersisted {
-            activeTargetIDs = []
         } else {
-            activeTargetIDs = Set(resolvedMission.targets.map(\.id))
+            activeTargetIDs = []
         }
 
         discoveryAnswers = Self.loadDiscoveryAnswers() ?? [:]
@@ -87,10 +81,14 @@ final class MissionStore: ObservableObject {
         var document = soul
         document.updatedAt = Date()
 
-        if let statement = Self.synthesizedMissionStatement(from: answers) {
+        if let approved = answers["_missionStatement"]?.trimmingCharacters(in: .whitespacesAndNewlines), !approved.isEmpty {
+            document.missionStatement = approved
+        } else if let statement = Self.synthesizedMissionStatement(from: answers) {
             document.missionStatement = statement
         }
-        if let why = Self.synthesizedWhy(from: answers) {
+        if let approvedWhy = answers["_whyThisMission"]?.trimmingCharacters(in: .whitespacesAndNewlines), !approvedWhy.isEmpty {
+            document.whyThisMission = approvedWhy
+        } else if let why = Self.synthesizedWhy(from: answers) {
             document.whyThisMission = why
         }
         if let focus = Self.synthesizedFocusAreas(from: answers), !focus.isEmpty {
@@ -202,12 +200,12 @@ final class MissionStore: ObservableObject {
 
     // MARK: - Discovery synthesis
 
-    private static func synthesizedMissionStatement(from answers: [String: String]) -> String? {
-        nonEmptyAnswer(from: answers, keys: ["endOfLife", "noLimits", "shouldDo"])
+    static func synthesizedMissionStatement(from answers: [String: String]) -> String? {
+        nonEmptyAnswer(from: answers, keys: ["_missionStatement", "endOfLife", "noLimits", "shouldDo"])
     }
 
-    private static func synthesizedWhy(from answers: [String: String]) -> String? {
-        nonEmptyAnswer(from: answers, keys: ["shouldDo", "responsibility", "alive"])
+    static func synthesizedWhy(from answers: [String: String]) -> String? {
+        nonEmptyAnswer(from: answers, keys: ["_whyThisMission", "shouldDo", "responsibility", "alive"])
     }
 
     private static func synthesizedFocusAreas(from answers: [String: String]) -> [String]? {

@@ -1,0 +1,475 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */; };
+		0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */; };
+		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
+		25AE7A4F341CEECABA750074 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE860688EDBD16296174C4F9 /* AppServices.swift */; };
+		2F889D54B96241760B114440 /* AppDataMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */; };
+		304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B87F6A70291CA9DF47F42EF /* MissionStore.swift */; };
+		37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */; };
+		411F7E170398267292B933B5 /* MessageError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5FA050811F918E8D8DFE861 /* MessageError.swift */; };
+		41C67F5E153C660BF68F7AA8 /* MissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FE7DA4FA608AA25FCAE719E /* MissionView.swift */; };
+		5492E373A05DDAE48D1404E8 /* BonjourDiscoverer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */; };
+		5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */; };
+		72AF68B2AB3F1DDA54CA4514 /* MissionProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C229C48C642E36295368A /* MissionProject.swift */; };
+		764DD626DB852DD81ACCF95C /* CenturionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */; };
+		766953EA2DCD12361AD1AEC1 /* SecurityHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */; };
+		776C89C43273562535733334 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D967220CE7E18782E047ACD2 /* ContentView.swift */; };
+		79327A346B13F76541E0524B /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A427BD838F46B4F357B51D9 /* ConnectionView.swift */; };
+		92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */; };
+		93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */; };
+		9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D098FD991C91178ACF8C94 /* LLMProvider.swift */; };
+		A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1608B826ED73D403B7D6D39D /* Conversation.swift */; };
+		AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */; };
+		AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3109FC232D48D3C3445556 /* ConnectionManager.swift */; };
+		B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */; };
+		BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51401B6F9885163352D34464 /* SoulDocument.swift */; };
+		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
+		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
+		CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */; };
+		CF90249AE9E5DAA6EEAD808C /* CryptoStubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D04856D4939ED1C87CE77B /* CryptoStubs.swift */; };
+		CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D533936FBAD883AD748A223 /* DesignSystem.swift */; };
+		D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */; };
+		D3655C930D9D16EEDC17A92E /* MissionDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */; };
+		D514204DF4E162E34C6756F1 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2816DC1C66616790651EBA30 /* Message.swift */; };
+		D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */; };
+		D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */; };
+		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
+		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0E3C229C48C642E36295368A /* MissionProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionProject.swift; sourceTree = "<group>"; };
+		15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1608B826ED73D403B7D6D39D /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		19D098FD991C91178ACF8C94 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CenturionApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FE7DA4FA608AA25FCAE719E /* MissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionView.swift; sourceTree = "<group>"; };
+		2816DC1C66616790651EBA30 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		3B87F6A70291CA9DF47F42EF /* MissionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionStore.swift; sourceTree = "<group>"; };
+		3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingView.swift; sourceTree = "<group>"; };
+		3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
+		463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscoverer.swift; sourceTree = "<group>"; };
+		4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionTheme.swift; sourceTree = "<group>"; };
+		51401B6F9885163352D34464 /* SoulDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocument.swift; sourceTree = "<group>"; };
+		56D04856D4939ED1C87CE77B /* CryptoStubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoStubs.swift; sourceTree = "<group>"; };
+		5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionDiscoveryView.swift; sourceTree = "<group>"; };
+		6A427BD838F46B4F357B51D9 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
+		6D533936FBAD883AD748A223 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		715E25DBDBADAB367351854A /* MessageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageService.swift; sourceTree = "<group>"; };
+		762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionPortfolioView.swift; sourceTree = "<group>"; };
+		7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannel.swift; sourceTree = "<group>"; };
+		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
+		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
+		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
+		B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulInterviewView.swift; sourceTree = "<group>"; };
+		BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewer.swift; sourceTree = "<group>"; };
+		C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopVisualizationView.swift; sourceTree = "<group>"; };
+		CE860688EDBD16296174C4F9 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
+		D967220CE7E18782E047ACD2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		ED3109FC232D48D3C3445556 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMission.swift; sourceTree = "<group>"; };
+		F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F5FA050811F918E8D8DFE861 /* MessageError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageError.swift; sourceTree = "<group>"; };
+		F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDataMode.swift; sourceTree = "<group>"; };
+		FB5FADFC392151FEFB0301E4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityHubView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		5AF76F4EC679BD6E37148BFD /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				815E8C975CB35A4357AFF0E1 /* ChatView.swift */,
+				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
+				3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */,
+				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
+				C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */,
+				5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */,
+				762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */,
+				1FE7DA4FA608AA25FCAE719E /* MissionView.swift */,
+				BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */,
+				FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */,
+				15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */,
+				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
+				B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */,
+				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
+				3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		5F6D31A6E9BF3B866F3ABE07 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B354BED46A66DC98F68F3373 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */,
+				4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */,
+				6D533936FBAD883AD748A223 /* DesignSystem.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		B3EFDD1F9B1D190735AFF511 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				1608B826ED73D403B7D6D39D /* Conversation.swift */,
+				ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */,
+				19D098FD991C91178ACF8C94 /* LLMProvider.swift */,
+				2816DC1C66616790651EBA30 /* Message.swift */,
+				0E3C229C48C642E36295368A /* MissionProject.swift */,
+				51401B6F9885163352D34464 /* SoulDocument.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C0E7F518524E96F48D59E074 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */,
+				CE860688EDBD16296174C4F9 /* AppServices.swift */,
+				ED3109FC232D48D3C3445556 /* ConnectionManager.swift */,
+				F5FA050811F918E8D8DFE861 /* MessageError.swift */,
+				715E25DBDBADAB367351854A /* MessageService.swift */,
+				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D9FADF2360B2D39B2A4B587F /* Crypto */ = {
+			isa = PBXGroup;
+			children = (
+				56D04856D4939ED1C87CE77B /* CryptoStubs.swift */,
+				8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */,
+				7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */,
+			);
+			path = Crypto;
+			sourceTree = "<group>";
+		};
+		F768D014BFCFB9E8750FD7AA = {
+			isa = PBXGroup;
+			children = (
+				F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */,
+				9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */,
+				D967220CE7E18782E047ACD2 /* ContentView.swift */,
+				D9FADF2360B2D39B2A4B587F /* Crypto */,
+				B3EFDD1F9B1D190735AFF511 /* Models */,
+				C0E7F518524E96F48D59E074 /* Services */,
+				B354BED46A66DC98F68F3373 /* Utils */,
+				5AF76F4EC679BD6E37148BFD /* Views */,
+				5F6D31A6E9BF3B866F3ABE07 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		87DCFEAF64EBAEB820931638 /* CenturionApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10209D6F44740FC13CF0265 /* Build configuration list for PBXNativeTarget "CenturionApp" */;
+			buildPhases = (
+				C719891FAA5E33880B93717C /* Sources */,
+				3175ECA4AB9302813E924A72 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CenturionApp;
+			packageProductDependencies = (
+			);
+			productName = CenturionApp;
+			productReference = 1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2A6775CCA8E36A771C5F4815 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					87DCFEAF64EBAEB820931638 = {
+						DevelopmentTeam = J6DY26ZGL4;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 7455D0EF054EB149BD3CF850 /* Build configuration list for PBXProject "CenturionApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F768D014BFCFB9E8750FD7AA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5F6D31A6E9BF3B866F3ABE07 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				87DCFEAF64EBAEB820931638 /* CenturionApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3175ECA4AB9302813E924A72 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C719891FAA5E33880B93717C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F889D54B96241760B114440 /* AppDataMode.swift in Sources */,
+				25AE7A4F341CEECABA750074 /* AppServices.swift in Sources */,
+				5492E373A05DDAE48D1404E8 /* BonjourDiscoverer.swift in Sources */,
+				764DD626DB852DD81ACCF95C /* CenturionApp.swift in Sources */,
+				5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */,
+				FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */,
+				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
+				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
+				776C89C43273562535733334 /* ContentView.swift in Sources */,
+				A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */,
+				B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */,
+				CF90249AE9E5DAA6EEAD808C /* CryptoStubs.swift in Sources */,
+				CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */,
+				93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */,
+				D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */,
+				9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */,
+				92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */,
+				0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */,
+				D514204DF4E162E34C6756F1 /* Message.swift in Sources */,
+				411F7E170398267292B933B5 /* MessageError.swift in Sources */,
+				CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */,
+				D3655C930D9D16EEDC17A92E /* MissionDiscoveryView.swift in Sources */,
+				D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */,
+				72AF68B2AB3F1DDA54CA4514 /* MissionProject.swift in Sources */,
+				304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */,
+				41C67F5E153C660BF68F7AA8 /* MissionView.swift in Sources */,
+				37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */,
+				F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */,
+				766953EA2DCD12361AD1AEC1 /* SecurityHubView.swift in Sources */,
+				1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */,
+				BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */,
+				CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */,
+				D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */,
+				BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */,
+				0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2C9803503BF489FC6488BFAB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = J6DY26ZGL4;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		4DFF393F89BAE92FE5BCC3CE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 3.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AB1E3773AC8261592E1CDDF1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = J6DY26ZGL4;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		AE49DC42BFD2597C321254E8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 3.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7455D0EF054EB149BD3CF850 /* Build configuration list for PBXProject "CenturionApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB1E3773AC8261592E1CDDF1 /* Debug */,
+				2C9803503BF489FC6488BFAB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E10209D6F44740FC13CF0265 /* Build configuration list for PBXNativeTarget "CenturionApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4DFF393F89BAE92FE5BCC3CE /* Debug */,
+				AE49DC42BFD2597C321254E8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2A6775CCA8E36A771C5F4815 /* Project object */;
+}

@@ -14,8 +14,10 @@ struct ChatView: View {
 
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var dataMode: AppDataMode
     @State private var messageText = ""
     @State private var isSending = false
+    @State private var sendError: String?
     @FocusState private var isFocused: Bool
 
     /// The currently selected conversation (nil = clean empty state)
@@ -46,6 +48,20 @@ struct ChatView: View {
 
     private var chatContent: some View {
         VStack(spacing: 0) {
+            if dataMode.showsDemoContent && !messageService.conversations.isEmpty {
+                DemoDataBanner()
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.top, Spacing.xs)
+            }
+
+            if connectionManager.connectionState != .connected {
+                offlineBanner
+            }
+
+            if let sendError {
+                errorBanner(sendError)
+            }
+
             if showTray {
                 conversationTray
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -98,21 +114,20 @@ struct ChatView: View {
         }) {
             HStack(spacing: 4) {
                 Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 9))
+                    .font(.caption)
                     .foregroundColor(ColorTheme.accent())
                 Text("Conversations")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(1)
+                    .font(.caption.weight(.semibold))
                 Image(systemName: showTray ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 8))
+                    .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
 
                 if let conv = selectedConversation {
                     Text(conv.displayTitle)
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(.caption2)
                         .lineLimit(1)
                         .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
+                        .padding(.vertical, 2)
                         .background(ColorTheme.accent().opacity(0.1))
                         .clipShape(Capsule())
                 }
@@ -256,6 +271,39 @@ struct ChatView: View {
         .background(ColorTheme.accent().opacity(0.05))
     }
 
+    // MARK: - Status Banners
+
+    private var offlineBanner: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "wifi.slash")
+                .foregroundColor(ColorTheme.mutedText())
+            Text("Not connected — link your Centurion in the Connect tab to send messages.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ColorTheme.surface())
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "exclamationmark.circle")
+                .foregroundColor(ColorTheme.error())
+            Text(message)
+                .font(.caption)
+                .foregroundColor(ColorTheme.primaryText())
+            Spacer()
+            Button("Dismiss") { sendError = nil }
+                .font(.caption)
+                .foregroundColor(ColorTheme.accent())
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(ColorTheme.error().opacity(0.08))
+    }
+
     // MARK: - Empty States
 
     private var emptyState: some View {
@@ -362,20 +410,27 @@ struct ChatView: View {
         let text = messageText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
 
+        sendError = nil
         Haptics.messageSent()
         messageText = ""
         isSending = true
 
         Task {
             do {
-                if let conversation = selectedConversation {
-                    try await messageService.sendMessage(text, in: conversation.context)
+                let conversation: Conversation
+                if let selected = selectedConversation {
+                    conversation = try await messageService.sendMessage(text, in: selected.context)
                 } else {
                     let context = ConversationContext.standalone(title: "Quick Chat")
-                    try await messageService.sendMessage(text, in: context)
+                    conversation = try await messageService.sendMessage(text, in: context)
+                    selectedConversation = conversation
+                }
+                withAnimation(Motion.standard) {
+                    showTray = false
                 }
             } catch {
                 Haptics.error()
+                sendError = error.localizedDescription
             }
             isSending = false
         }

@@ -92,11 +92,10 @@ struct SplashView: View {
                     .tracking(8)
                     .opacity(missionHorizonOpacity)
 
-                Text("REMOTE CONTROL  ·  v3.0.0")
-                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                Text("Your lifelong companion")
+                    .font(.caption)
                     .foregroundColor(ColorTheme.dimAccent())
-                    .tracking(4)
-                    .opacity(missionHorizonOpacity * 0.7)
+                    .opacity(missionHorizonOpacity * 0.9)
                     .padding(.top, 6)
             }
         }

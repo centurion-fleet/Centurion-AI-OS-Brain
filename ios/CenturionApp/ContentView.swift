@@ -5,11 +5,13 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
+    @EnvironmentObject private var dataMode: AppDataMode
     @State private var selectedTab = 0
+    @State private var loadedTabs: Set<Int> = [0]
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            DeferredTabContent(tag: 0, selection: $selectedTab) {
+            DeferredTabContent(tag: 0, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 ConnectionView()
             }
             .tabItem {
@@ -22,7 +24,7 @@ struct ContentView: View {
             }
             .tag(0)
 
-            DeferredTabContent(tag: 1, selection: $selectedTab) {
+            DeferredTabContent(tag: 1, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 ChatView()
             }
             .tabItem {
@@ -30,7 +32,7 @@ struct ContentView: View {
             }
             .tag(1)
 
-            DeferredTabContent(tag: 2, selection: $selectedTab) {
+            DeferredTabContent(tag: 2, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 MissionPortfolioView()
             }
             .tabItem {
@@ -38,12 +40,12 @@ struct ContentView: View {
             }
             .tag(2)
 
-            DeferredTabContent(tag: 3, selection: $selectedTab) {
+            DeferredTabContent(tag: 3, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 SecurityHubView()
             }
             .tabItem {
                 Label(
-                    "Security",
+                    "Privacy",
                     systemImage: connectionManager.connectionState == .connected
                         ? "lock.shield.fill"
                         : "shield"
@@ -51,7 +53,7 @@ struct ContentView: View {
             }
             .tag(3)
 
-            DeferredTabContent(tag: 4, selection: $selectedTab) {
+            DeferredTabContent(tag: 4, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 SettingsView()
             }
             .tabItem {
@@ -61,10 +63,11 @@ struct ContentView: View {
         }
         .tint(ColorTheme.accent())
         .task(priority: .utility) {
-            // Seed demo messages after first paint — never block launch.
             try? await Task.sleep(for: .milliseconds(400))
             await MainActor.run {
-                messageService.seedInitialData()
+                if dataMode.showsDemoContent {
+                    messageService.seedInitialData()
+                }
             }
         }
     }

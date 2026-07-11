@@ -6,13 +6,7 @@ import SwiftUI
 /// here instead of blaming their Centurion.
 struct ConnectionView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
-    @AppStorage("selectedLLMProvider") private var selectedProviderRaw = LLMProvider.deepseek.rawValue
     @State private var showPairingSheet = false
-
-    private var selectedProvider: LLMProvider {
-        get { LLMProvider(rawValue: selectedProviderRaw) ?? .deepseek }
-        nonmutating set { selectedProviderRaw = newValue.rawValue }
-    }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +18,8 @@ struct ConnectionView: View {
                     trustStatement
 
                     remoteConnectionSection
-                    llmProvidersSection
+
+                    reassuranceSection
                 }
                 .padding()
             }
@@ -148,23 +143,20 @@ struct ConnectionView: View {
         }
     }
 
-    // MARK: - LLM Providers
+    // MARK: - Reassurance
 
-    private var llmProvidersSection: some View {
+    private var reassuranceSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "LLM Providers", icon: "brain.head.profile")
+            SectionHeader(title: "Your Privacy", icon: "lock.shield")
 
-            Text("Turn the dial to switch which model your Centurion thinks through. Status shows real-time health.")
-                .font(.system(size: 14))
+            Text("Your Centurion runs on your network. Conversations stay between you and your Centurion — not on a public cloud.")
+                .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
-                .padding(.bottom, Spacing.xs)
+                .lineSpacing(4)
 
-            LLMProviderDial(selectedProvider: Binding(
-                get: { selectedProvider },
-                set: { selectedProviderRaw = $0.rawValue }
-            ))
-
-            LLMStatusDetail(provider: selectedProvider)
+            Text("Advanced settings, including AI provider choice, are in Settings.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.dimAccent())
         }
     }
 }

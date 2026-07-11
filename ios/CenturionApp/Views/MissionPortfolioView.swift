@@ -16,6 +16,16 @@ enum PulseCategory: String, CaseIterable {
     case decisions = "DECISIONS"
     case pulse = "PULSE"
 
+    var displayTitle: String {
+        switch self {
+        case .live: return "Working on now"
+        case .wins: return "Finished"
+        case .outputs: return "Documents"
+        case .decisions: return "Needs your choice"
+        case .pulse: return "Updates"
+        }
+    }
+
     var icon: String {
         switch self {
         case .live:      return "bolt.circle.fill"
@@ -29,6 +39,7 @@ enum PulseCategory: String, CaseIterable {
 
 struct MissionPortfolioView: View {
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var dataMode: AppDataMode
     @State private var liveActivity: LiveActivity?
     @State private var completedLoops: [CompletedLoop] = []
     @State private var decisions: [DecisionItem] = []
@@ -38,7 +49,8 @@ struct MissionPortfolioView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
     @State private var isAppeared = false
-    @State private var liveExpanded = true
+    @State private var liveExpanded = false
+    @State private var showActivityDetails = false
     @State private var selectedCategory: PulseCategory = .live
 
     /// Unified chat sheet state
@@ -133,6 +145,10 @@ struct MissionPortfolioView: View {
     private var pulseScrollContent: some View {
         ScrollView {
             VStack(spacing: Spacing.md) {
+                if dataMode.showsDemoContent {
+                    DemoDataBanner()
+                }
+
                 missionBanner
 
                 if !missionStore.activeTargets.isEmpty {
@@ -205,9 +221,8 @@ struct MissionPortfolioView: View {
                 }
 
                 if isSelected {
-                    Text(category.rawValue)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .tracking(0.5)
+                    Text(category.displayTitle)
+                        .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
@@ -254,7 +269,7 @@ struct MissionPortfolioView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(category.rawValue)
+        .accessibilityLabel(category.displayTitle)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .animation(Motion.light, value: selectedCategory)
     }
@@ -325,9 +340,9 @@ struct MissionPortfolioView: View {
         VStack(spacing: 6) {
             HStack {
                 Text("YOUR MISSION")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(ColorTheme.accent())
-                    .tracking(4)
+                    .tracking(2)
                     .textCase(.uppercase)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -338,7 +353,7 @@ struct MissionPortfolioView: View {
             Text(missionStore.mission.statement.isEmpty
                  ? "Discover your personal mission"
                  : missionStore.mission.statement)
-                .font(.system(size: 19, weight: .bold, design: .serif))
+                .font(.title3.weight(.bold))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.leading)
                 .lineSpacing(4)
@@ -359,8 +374,8 @@ struct MissionPortfolioView: View {
             Text(missionStore.hasMissionStatement
                  ? "Tap to view and refine your mission"
                  : "Tap to begin mission discovery")
-                .font(.system(size: 11, weight: .medium, design: .serif))
-                .foregroundColor(ColorTheme.mutedText().opacity(0.75))
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
@@ -389,27 +404,22 @@ struct MissionPortfolioView: View {
                     PulseDot()
                         .frame(width: 10, height: 10)
 
-                    Text("LIVE — RIGHT NOW")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    Text("Working on now")
+                        .font(.caption.weight(.semibold))
                         .foregroundColor(ColorTheme.accent())
-                        .tracking(2)
 
                     if let activity = liveActivity {
-                        Text(activity.phase.rawValue.uppercased())
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        Text(activity.summary)
+                            .font(.caption2)
                             .foregroundColor(ColorTheme.dimAccent())
-                            .tracking(2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(ColorTheme.accent().opacity(0.08))
-                            .clipShape(Capsule())
+                            .lineLimit(1)
                     }
 
                     Spacer()
 
                     if let activity = liveActivity {
                         Text("\(Int(activity.progress * 100))%")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(.caption.weight(.bold))
                             .foregroundColor(ColorTheme.accent())
                     }
 
@@ -422,78 +432,67 @@ struct MissionPortfolioView: View {
             .buttonStyle(.plain)
 
             if liveExpanded, let activity = liveActivity {
-                // Orbital agent visualization — mesmerising to watch
-                LoopVisualizationView(activity: activity)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(ColorTheme.border(), lineWidth: 0.5)
-                    )
-
-                // Loop phase bar
-                loopPhaseBar(currentPhase: activity.phase)
-
-                // Activity details
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text(activity.summary)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.headline)
                         .foregroundColor(ColorTheme.primaryText())
 
                     Text(activity.detail)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
-                        .lineLimit(3)
+                        .lineLimit(4)
 
-                    // Progress
                     ProgressView(value: activity.progress)
                         .tint(ColorTheme.accent())
 
-                    // Est completion
                     if let est = activity.estimatedCompletion {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 9))
-                            Text("Est. \(Int(est / 60))m remaining")
-                                .font(.system(size: 9, design: .monospaced))
-                        }
-                        .foregroundColor(ColorTheme.dimAccent())
+                        Label("About \(Int(est / 60)) minutes remaining", systemImage: "clock")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.dimAccent())
                     }
 
-                    // Sub-agents
-                    if !activity.subAgents.isEmpty {
-                        VStack(spacing: Spacing.xxs) {
-                            ForEach(activity.subAgents) { agent in
-                                subAgentRow(agent)
-                            }
-                        }
-                        .padding(Spacing.sm)
-                        .background(ColorTheme.accent().opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    Button {
+                        withAnimation(Motion.standard) { showActivityDetails.toggle() }
+                    } label: {
+                        Text(showActivityDetails ? "Hide details" : "Show how it's working")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showActivityDetails {
+                        LoopVisualizationView(activity: activity)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(ColorTheme.surface())
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(ColorTheme.border(), lineWidth: 0.5)
+                            )
                     }
 
-                    // Chat about this activity
                     HStack {
                         Spacer()
                         Button(action: {
-                            openChat(context: .standalone(title: "Centurion Remote — Live Activity"))
+                            openChat(context: .standalone(title: activity.summary))
                         }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 10))
-                                Text("Discuss this")
-                                    .font(.system(size: 10))
-                            }
-                            .foregroundColor(ColorTheme.accent())
+                            Label("Ask about this", systemImage: "bubble.left.and.bubble.right")
+                                .font(.caption.weight(.medium))
                         }
                         .buttonStyle(.plain)
+                        .foregroundColor(ColorTheme.accent())
                     }
                 }
-                .padding()
-                .cardStyle()
+                .padding(Spacing.md)
+                .background(ColorTheme.surface())
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            } else if !liveExpanded, let activity = liveActivity {
+                Text(activity.summary)
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(2)
+                    .padding(.horizontal, Spacing.xs)
             }
         }
         .opacity(isAppeared ? 1 : 0)

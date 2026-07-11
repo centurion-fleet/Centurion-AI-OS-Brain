@@ -24,26 +24,28 @@ final class MessageService: ObservableObject {
     @Published var currentConversation: Conversation?
 
     private let connectionManager: ConnectionManager
+    private let dataMode: AppDataMode
     private var cancellables = Set<AnyCancellable>()
 
-    init(connectionManager: ConnectionManager) {
+    init(connectionManager: ConnectionManager, dataMode: AppDataMode) {
         self.connectionManager = connectionManager
-        // Sample data seeded on first appearance, not in init,
-        // to avoid rendering 15+ message rows during launch
+        self.dataMode = dataMode
     }
 
-    /// Call after the view has appeared to seed initial data
+    /// Call after the view has appeared to seed demo conversations when offline.
     func seedInitialData() {
-        guard conversations.isEmpty else { return }
+        guard dataMode.showsDemoContent, conversations.isEmpty else { return }
         seedSampleData()
     }
 
-    /// Send a message in a conversation context.
-    /// Creates the conversation if it doesn't exist yet.
-    func sendMessage(_ text: String, in context: ConversationContext) async throws {
+    /// Send a message in a conversation context. Returns the conversation used.
+    func sendMessage(_ text: String, in context: ConversationContext) async throws -> Conversation {
+        guard connectionManager.connectionState == .connected else {
+            throw MessageError.notConnected
+        }
+
         let conversation = findOrCreateConversation(for: context)
 
-        // Add user message locally (optimistic UI)
         let userMessage = Message(
             conversationId: conversation.id,
             content: text,
@@ -51,20 +53,8 @@ final class MessageService: ObservableObject {
         )
         appendMessage(userMessage)
 
-        // Encrypt and send via connection manager
-        if connectionManager.connectionState == .connected {
-            try await connectionManager.sendMessage(text)
-        }
-
-        // Simulate Centurion response for preview
-        let centurionMessage = Message(
-            conversationId: conversation.id,
-            content: generateResponse(for: text, in: context),
-            role: .centurion
-        )
-        // Small delay to feel natural
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        appendMessage(centurionMessage)
+        try await connectionManager.sendMessage(text)
+        return conversation
     }
 
     /// Find a conversation by its context, or create a new one.

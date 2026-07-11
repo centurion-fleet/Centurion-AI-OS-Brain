@@ -4,8 +4,19 @@ struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
+    @AppStorage("selectedLLMProvider") private var selectedProviderRaw = LLMProvider.deepseek.rawValue
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
+    @State private var showAdvancedAI = false
+
+    private var selectedProvider: LLMProvider {
+        get { LLMProvider(rawValue: selectedProviderRaw) ?? .deepseek }
+        nonmutating set { selectedProviderRaw = newValue.rawValue }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
+    }
 
     private var appearanceBinding: Binding<AppearanceMode> {
         Binding(
@@ -61,9 +72,9 @@ struct SettingsView: View {
                             Image(systemName: "heart.text.square.fill")
                                 .foregroundColor(ColorTheme.accent())
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("My Soul")
+                                Text("About Me")
                                     .foregroundColor(ColorTheme.primaryText())
-                                Text("Who you are, what you're building")
+                                Text("What your Centurion knows about you")
                                     .font(.caption)
                                     .foregroundColor(ColorTheme.mutedText())
                             }
@@ -71,23 +82,11 @@ struct SettingsView: View {
                     }
                 }
 
-                // Remote Control section
-                Section("Remote Control") {
+                Section("Connection") {
                     HStack {
-                        Label("Transport", systemImage: "network")
-                            .foregroundColor(ColorTheme.primaryText())
+                        Label("Status", systemImage: "app.connected.to.app.below.fill")
                         Spacer()
-                        Text(connectionManager.connectedDevice?.connectionMethod.rawValue.uppercased()
-                             ?? "—")
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    HStack {
-                        Label("Encryption", systemImage: "lock.shield.fill")
-                            .foregroundColor(ColorTheme.primaryText())
-                        Spacer()
-                        Text("X25519 + XSalsa20-Poly1305")
-                            .font(.caption)
+                        Text(connectionManager.connectionState == .connected ? "Connected" : "Not connected")
                             .foregroundColor(ColorTheme.mutedText())
                     }
 
@@ -95,9 +94,29 @@ struct SettingsView: View {
                         Button(role: .destructive) {
                             connectionManager.disconnect()
                         } label: {
-                            Label("Disconnect Remote", systemImage: "power")
+                            Label("Disconnect", systemImage: "power")
                         }
                     }
+                }
+
+                Section {
+                    DisclosureGroup("Advanced", isExpanded: $showAdvancedAI) {
+                        VStack(alignment: .leading, spacing: Spacing.md) {
+                            Text("Choose which AI provider powers your Centurion. Most people can leave this on the recommended setting.")
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+
+                            LLMProviderDial(selectedProvider: Binding(
+                                get: { selectedProvider },
+                                set: { selectedProviderRaw = $0.rawValue }
+                            ))
+
+                            LLMStatusDetail(provider: selectedProvider)
+                        }
+                        .padding(.vertical, Spacing.sm)
+                    }
+                } header: {
+                    Text("AI Provider")
                 }
 
                 // Appearance section
@@ -111,44 +130,31 @@ struct SettingsView: View {
                     .tint(ColorTheme.accent())
                 }
 
-                // Security section
-                Section("Security") {
-                    privacyRow("Messages are encrypted end-to-end",
-                               "Your Centurion is the only device that can decrypt them")
-                    privacyRow("No metadata in transit",
-                               "Unlike Signal or Telegram, there is no routing server")
-                    privacyRow("Forward secrecy",
-                               "Today's keys can't decrypt yesterday's messages")
-                    privacyRow("Local only",
-                               "When on your home network, no internet is needed at all")
+                // Privacy section
+                Section("Privacy") {
+                    privacyRow("Private on your network",
+                               "Messages stay between your iPhone and Centurion")
+                    privacyRow("Encrypted in transit",
+                               "Protected the same way sensitive apps protect your data")
+                    privacyRow("No cloud account",
+                               "You don't need to sign in to a third-party service")
                 }
 
                 // About section
                 Section("About") {
                     HStack {
                         Label("Version", systemImage: "info.circle")
-                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
-                        Text("3.0.0")
+                        Text(appVersion)
                             .foregroundColor(ColorTheme.mutedText())
                     }
 
                     HStack {
                         Label("Release", systemImage: "sparkle")
-                            .foregroundColor(ColorTheme.primaryText())
                         Spacer()
                         Text("Mission Horizon")
                             .font(.caption)
                             .foregroundColor(ColorTheme.accent())
-                    }
-
-                    HStack {
-                        Label("Protocol", systemImage: "arrow.triangle.branch")
-                            .foregroundColor(ColorTheme.primaryText())
-                        Spacer()
-                        Text("Centurion Secure Channel v1")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.mutedText())
                     }
                 }
 
