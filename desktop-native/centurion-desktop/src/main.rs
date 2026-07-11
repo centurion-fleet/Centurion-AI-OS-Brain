@@ -47,7 +47,13 @@ mod linux {
                 }
             }
 
-            let child = Command::new("centurion-remote")
+            let centurion_remote = std::env::var("HOME")
+                .ok()
+                .map(|home| format!("{home}/.local/bin/centurion-remote"))
+                .filter(|path| std::path::Path::new(path).is_file())
+                .unwrap_or_else(|| "centurion-remote".to_owned());
+
+            let child = Command::new(&centurion_remote)
                 .arg("serve")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -290,7 +296,8 @@ mod linux {
     }
 
     fn build_chat_page() -> gtk::Box {
-        use vte4::prelude::*;
+        use gio::prelude::*;
+        use vte4::prelude::TerminalExtManual;
 
         let container = gtk::Box::new(gtk::Orientation::Vertical, 12);
         container.set_margin_top(16);
@@ -348,14 +355,14 @@ mod linux {
 
                 terminal.spawn_async(
                     vte4::PtyFlags::DEFAULT,
-                    None::<&std::path::Path>,
+                    None::<&str>,
                     &["centurion", "--tui"],
                     &env_refs,
-                    glib::SpawnFlags::SEARCH_PATH | glib::SpawnFlags::SEARCH_USER,
-                    None,
+                    glib::SpawnFlags::SEARCH_PATH,
+                    || {},
                     -1,
                     None::<&gio::Cancellable>,
-                    |_| {},
+                    |_result| {},
                 );
             }
         };
@@ -369,7 +376,13 @@ mod linux {
             list.remove(&child);
         }
 
-        let output = Command::new("centurion-remote")
+        let centurion_remote = std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{home}/.local/bin/centurion-remote"))
+            .filter(|path| std::path::Path::new(path).is_file())
+            .unwrap_or_else(|| "centurion-remote".to_owned());
+
+        let output = Command::new(&centurion_remote)
             .args(["devices", "--json"])
             .output();
         let listing = output
@@ -388,7 +401,14 @@ mod linux {
             return;
         };
 
-        for device in listing.pending {
+        let pending = listing.pending;
+        let approved = listing.approved;
+        let show_no_devices = pending.is_empty() && approved.is_empty();
+        let show_no_connected = !approved.is_empty()
+            && pending.is_empty()
+            && approved.iter().all(|device| !device.connected);
+
+        for device in pending {
             let row = adw::ActionRow::builder()
                 .title(&device.name)
                 .subtitle(format!("Waiting for your approval · {}", device.fingerprint))
@@ -400,9 +420,10 @@ mod linux {
             let fingerprint = device.fingerprint;
             let name = device.name;
             let list = list.clone();
+            let remote = centurion_remote.clone();
             approve.connect_clicked(move |button| {
                 button.set_sensitive(false);
-                let approved = Command::new("centurion-remote")
+                let approved = Command::new(&remote)
                     .args(["approve", &fingerprint, "--name", &name])
                     .status()
                     .is_ok_and(|status| status.success());
@@ -416,7 +437,7 @@ mod linux {
             list.append(&row);
         }
 
-        for device in listing.approved {
+        for device in approved {
             let subtitle = if device.connected {
                 format!(
                     "Connected · {} · {}",
@@ -440,9 +461,10 @@ mod linux {
             revoke.set_valign(gtk::Align::Center);
             let fingerprint = device.fingerprint;
             let list = list.clone();
+            let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
                 button.set_sensitive(false);
-                let revoked = Command::new("centurion-remote")
+                let revoked = Command::new(&remote)
                     .args(["revoke", &fingerprint])
                     .status()
                     .is_ok_and(|status| status.success());
@@ -456,7 +478,7 @@ mod linux {
             list.append(&row);
         }
 
-        if listing.approved.is_empty() && listing.pending.is_empty() {
+        if show_no_devices {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones connected")
@@ -464,9 +486,7 @@ mod linux {
                     .icon_name("phone-symbolic")
                     .build(),
             );
-        } else if listing.approved.iter().all(|device| !device.connected)
-            && listing.pending.is_empty()
-        {
+        } else if show_no_connected {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones connected right now")
