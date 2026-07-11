@@ -5,11 +5,13 @@ import Foundation
 struct LifeMission: Identifiable, Codable {
     let id: UUID
     var statement: String
+    var targets: [MissionTarget]
     
     static func preview() -> LifeMission {
         LifeMission(
             id: UUID(),
-            statement: "Build Australia's leading OEM lighting tower provider"
+            statement: "Build Australia's leading OEM lighting tower provider",
+            targets: MissionTarget.previewTargets()
         )
     }
 }
@@ -316,6 +318,22 @@ struct CenturionOutput: Identifiable {
                 wordCount: 450,
                 filePath: "/outputs/content/weekly-brief-12.md"
             ),
+        ]
+    }
+}
+
+
+// MARK: - Mission Targets
+struct MissionTarget: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let description: String
+    
+    static func previewTargets() -> [MissionTarget] {
+        [
+            MissionTarget(id: UUID(), title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
+            MissionTarget(id: UUID(), title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
+            MissionTarget(id: UUID(), title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
         ]
     }
 }
