@@ -298,6 +298,7 @@ mod linux {
     fn build_chat_page() -> gtk::Box {
         use gio::prelude::*;
         use vte4::prelude::TerminalExtManual;
+        use vte4::TerminalExt;
 
         let container = gtk::Box::new(gtk::Orientation::Vertical, 12);
         container.set_margin_top(16);
