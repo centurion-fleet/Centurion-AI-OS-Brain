@@ -169,20 +169,3 @@ struct MissionTargetRow: View {
         .buttonStyle(.plain)
     }
 }
-
-// Supporting models (temporary — move to proper models later)
-struct MissionTarget: Identifiable {
-    let id = UUID()
-    let title: String
-    let description: String
-}
-
-extension LifeMission {
-    var targets: [MissionTarget] {
-        [
-            MissionTarget(title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
-            MissionTarget(title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
-            MissionTarget(title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
-        ]
-    }
-}
