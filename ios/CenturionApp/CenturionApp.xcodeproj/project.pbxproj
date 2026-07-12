@@ -31,7 +31,9 @@
 		A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1608B826ED73D403B7D6D39D /* Conversation.swift */; };
 		AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */; };
 		AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3109FC232D48D3C3445556 /* ConnectionManager.swift */; };
+		A7F3E2B19C4D5E6F7081A2B4 /* ThinkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F3E2B19C4D5E6F7081A2B3 /* ThinkingService.swift */; };
 		B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */; };
+		B8E4F3C20D5E6F7A8192B3C5 /* ThinkingRecoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8E4F3C20D5E6F7A8192B3C4 /* ThinkingRecoverySheet.swift */; };
 		BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51401B6F9885163352D34464 /* SoulDocument.swift */; };
 		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
@@ -43,6 +45,11 @@
 		D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */; };
 		D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */; };
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
+		C9F5A3D40E6F7A8192B3C6 /* GetHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */; };
+		H3R4LDBAR01E6F7A8192B3C6 /* HeraldBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */; };
+		H3R4LDMDL01E6F7A8192B3C6 /* HeraldModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */; };
+		H3R4LDSVC01E6F7A8192B3C6 /* HeraldService.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */; };
+		H3R4LDVW01E6F7A8192B3C6 /* HeraldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
 /* End PBXBuildFile section */
 
@@ -70,12 +77,19 @@
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
+		A7F3E2B19C4D5E6F7081A2B3 /* ThinkingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingService.swift; sourceTree = "<group>"; };
 		B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulInterviewView.swift; sourceTree = "<group>"; };
 		B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HumanContextInterviewView.swift; sourceTree = "<group>"; };
+		B8E4F3C20D5E6F7A8192B3C4 /* ThinkingRecoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingRecoverySheet.swift; sourceTree = "<group>"; };
 		BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewer.swift; sourceTree = "<group>"; };
 		C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopVisualizationView.swift; sourceTree = "<group>"; };
 		CE860688EDBD16296174C4F9 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
+		C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetHelpView.swift; sourceTree = "<group>"; };
+		H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldBar.swift; sourceTree = "<group>"; };
+		H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldModels.swift; sourceTree = "<group>"; };
+		H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldService.swift; sourceTree = "<group>"; };
+		H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldView.swift; sourceTree = "<group>"; };
 		D967220CE7E18782E047ACD2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		ED3109FC232D48D3C3445556 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMission.swift; sourceTree = "<group>"; };
@@ -105,6 +119,9 @@
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
 				3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */,
 				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
+				C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */,
+				H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */,
+				H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */,
 				B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */,
 				C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */,
 				5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */,
@@ -113,6 +130,7 @@
 				BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */,
 				FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */,
 				15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */,
+				B8E4F3C20D5E6F7A8192B3C4 /* ThinkingRecoverySheet.swift */,
 				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
 				B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */,
 				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
@@ -148,6 +166,8 @@
 				2816DC1C66616790651EBA30 /* Message.swift */,
 				0E3C229C48C642E36295368A /* MissionProject.swift */,
 				51401B6F9885163352D34464 /* SoulDocument.swift */,
+				A7F3E2B19C4D5E6F7081A2B3 /* ThinkingService.swift */,
+				H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -161,6 +181,7 @@
 				F5FA050811F918E8D8DFE861 /* MessageError.swift */,
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
+				H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -271,6 +292,11 @@
 				764DD626DB852DD81ACCF95C /* CenturionApp.swift in Sources */,
 				5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */,
 				FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */,
+				C9F5A3D40E6F7A8192B3C6 /* GetHelpView.swift in Sources */,
+				H3R4LDBAR01E6F7A8192B3C6 /* HeraldBar.swift in Sources */,
+				H3R4LDMDL01E6F7A8192B3C6 /* HeraldModels.swift in Sources */,
+				H3R4LDSVC01E6F7A8192B3C6 /* HeraldService.swift in Sources */,
+				H3R4LDVW01E6F7A8192B3C6 /* HeraldView.swift in Sources */,
 				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
 				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
 				776C89C43273562535733334 /* ContentView.swift in Sources */,
@@ -295,6 +321,8 @@
 				F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */,
 				766953EA2DCD12361AD1AEC1 /* SecurityHubView.swift in Sources */,
 				1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */,
+				A7F3E2B19C4D5E6F7081A2B4 /* ThinkingService.swift in Sources */,
+				B8E4F3C20D5E6F7A8192B3C5 /* ThinkingRecoverySheet.swift in Sources */,
 				BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */,
 				CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */,
 				D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */,

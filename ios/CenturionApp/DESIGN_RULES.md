@@ -192,4 +192,25 @@ Before any release:
 
 ---
 
+## 10. Calm Remote UX (locked)
+
+### Device link vs thinking service
+- **Device link** — iPhone connected to the Centurion computer on the LAN.
+- **Thinking service** — whether the Centurion on the computer can think.
+- Never merge these into one status on default surfaces.
+
+### Get Help (host-backed)
+- Support codes, auto-fix, and health checks require a device link.
+- Plain language only; no provider slugs on iPhone default paths.
+- One filled primary CTA per screen.
+
+### Herald (cloud-backed)
+- **Herald** is Centurion's support guide — cloud-hosted, paid by Centurion, no customer API keys.
+- Herald is independent of the LAN Centurion link; requires internet only.
+- Herald never sees Centurion chat history or secrets — only sanitized app context.
+- Floating **Herald** affordance on all main tabs; separate from Chat with your Centurion.
+- Herald's job: help users stay on mission while fixing the app — warm advisor, not a dev console.
+
+---
+
 *This document is the human-readable source of truth. Cursor enforces it via `.cursor/rules/ios-centurion-design.mdc`.*

@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Connection Hub — the trust layer of the app.
-///
-/// When LLM connections or the remote link break, users should see the real state
-/// here instead of blaming their Centurion.
+/// Connection Hub — device link and thinking service as separate, calm status cards.
 struct ConnectionView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var showPairingSheet = false
+    @State private var showRecoverySheet = false
+    @State private var showGetHelp = false
 
     var body: some View {
         NavigationStack {
@@ -14,7 +13,15 @@ struct ConnectionView: View {
                 VStack(spacing: Spacing.xl) {
                     trustStatement
 
-                    remoteConnectionSection
+                    deviceLinkCard
+
+                    if connectionManager.connectionState == .connected {
+                        thinkingServiceCard
+                    }
+
+                    primaryActionButton
+
+                    getHelpLink
 
                     reassuranceSection
                 }
@@ -25,6 +32,16 @@ struct ConnectionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showPairingSheet) {
                 ConnectionPairingSheet()
+                    .environmentObject(connectionManager)
+            }
+            .sheet(isPresented: $showRecoverySheet) {
+                ThinkingRecoverySheet(
+                    initialMessage: "Your Centurion's thinking service needs attention."
+                )
+                .environmentObject(connectionManager)
+            }
+            .sheet(isPresented: $showGetHelp) {
+                GetHelpView()
                     .environmentObject(connectionManager)
             }
         }
@@ -39,7 +56,7 @@ struct ConnectionView: View {
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
 
-            Text("This shows whether your iPhone is linked to your Centurion.")
+            Text("This shows whether your iPhone is linked and whether your Centurion can think properly.")
                 .font(.system(size: 13))
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -47,106 +64,113 @@ struct ConnectionView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Remote Connection
+    // MARK: - Device Link Card
 
-    private var remoteConnectionSection: some View {
+    private var deviceLinkCard: some View {
+        statusCard(
+            title: "Device link",
+            icon: "antenna.radiowaves.left.and.right",
+            headline: deviceLinkHeadline,
+            detail: deviceLinkDetail,
+            dotColor: deviceLinkDotColor,
+            accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
+        )
+    }
+
+    // MARK: - Thinking Service Card
+
+    private var thinkingServiceCard: some View {
+        statusCard(
+            title: "Thinking service",
+            icon: "brain.head.profile",
+            headline: connectionManager.llmHealth.label,
+            detail: thinkingServiceDetail,
+            dotColor: thinkingDotColor,
+            accessibilityLabel: "Thinking service, \(connectionManager.llmHealth.label). \(thinkingServiceDetail)"
+        )
+        .task {
+            await connectionManager.refreshThinkingStatus()
+        }
+    }
+
+    private func statusCard(
+        title: String,
+        icon: String,
+        headline: String,
+        detail: String,
+        dotColor: Color,
+        accessibilityLabel: String
+    ) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Your private connection", icon: "antenna.radiowaves.left.and.right")
-
-            Text("The link between this iPhone and your Centurion.")
-                .font(.system(size: 14))
-                .foregroundColor(ColorTheme.mutedText())
+            SectionHeader(title: title, icon: icon)
 
             HStack(spacing: Spacing.md) {
-                StatusDot(isConnected: connectionManager.connectionState == .connected)
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 12, height: 12)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(remoteStatusTitle)
+                    Text(headline)
                         .font(.headline)
-                        .foregroundColor(remoteStatusColor)
+                        .foregroundColor(ColorTheme.primaryText())
 
-                    Text(remoteStatusDetail)
-                        .font(.caption)
+                    Text(detail)
+                        .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
-
-                Button {
-                    Haptics.lightTap()
-                    if case .awaitingApproval = connectionManager.connectionState {
-                        connectionManager.retryConnection()
-                    } else {
-                        showPairingSheet = true
-                    }
-                } label: {
-                    Text(remoteActionLabel)
-                        .font(.system(size: 14, weight: .semibold))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(ColorTheme.accent())
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
             }
-            .padding()
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(ColorTheme.border(), lineWidth: 0.5)
-            )
         }
+        .padding()
+        .background(ColorTheme.surface())
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(ColorTheme.border(), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private var remoteStatusTitle: String {
-        switch connectionManager.connectionState {
-        case .connected:    return "Connected"
-        case .discovering:  return "Looking for your Centurion"
-        case .connecting:   return "Connecting"
-        case .disconnected: return "Disconnected"
-        case .awaitingApproval: return "Waiting for approval"
-        case .error:        return "Connection Issue"
-        }
-    }
+    // MARK: - Primary CTA (one filled button)
 
-    private var remoteStatusDetail: String {
-        switch connectionManager.connectionState {
-        case .connected:
-            if let device = connectionManager.connectedDevice {
-                return "Securely linked to \(device.name)"
+    @ViewBuilder
+    private var primaryActionButton: some View {
+        if connectionManager.connectionState != .connected {
+            Button {
+                Haptics.lightTap()
+                showPairingSheet = true
+            } label: {
+                Text("Find my Centurion")
+                    .frame(maxWidth: .infinity)
             }
-            return "Your iPhone is securely linked to your Centurion"
-        case .discovering:
-            return "Looking for your Centurion on the local network"
-        case .connecting:
-            return "Setting up your private connection…"
-        case .disconnected:
-            return "Tap Connect to pair with your Centurion"
-        case .awaitingApproval(let message):
-            return message
-        case .error(let message):
-            return message
+            .buttonStyle(AmberButtonStyle())
+            .accessibilityLabel("Find my Centurion")
+        } else if connectionManager.llmHealth.needsAttention {
+            Button {
+                Haptics.lightTap()
+                showRecoverySheet = true
+            } label: {
+                Text("Fix Thinking Service")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(AmberButtonStyle())
+            .accessibilityLabel("Fix Thinking Service")
         }
     }
 
-    private var remoteStatusColor: Color {
-        switch connectionManager.connectionState {
-        case .connected: return ColorTheme.success()
-        case .error:     return ColorTheme.error()
-        case .awaitingApproval: return ColorTheme.accent()
-        default:         return ColorTheme.mutedText()
+    private var getHelpLink: some View {
+        Button {
+            showGetHelp = true
+        } label: {
+            Text("Get Help")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ColorTheme.accent())
         }
-    }
-
-    private var remoteActionLabel: String {
-        switch connectionManager.connectionState {
-        case .connected: return "Manage"
-        case .awaitingApproval: return "Try Again"
-        default:         return "Connect"
-        }
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("Get Help")
     }
 
     // MARK: - Reassurance
@@ -159,10 +183,74 @@ struct ConnectionView: View {
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(4)
+        }
+    }
 
-            Text("For advanced options, including how your Centurion thinks, open Settings.")
-                .font(.caption)
-                .foregroundColor(ColorTheme.dimAccent())
+    // MARK: - Copy helpers
+
+    private var deviceLinkHeadline: String {
+        switch connectionManager.connectionState {
+        case .connected: return "Linked"
+        case .awaitingApproval: return "Waiting for approval"
+        case .discovering, .connecting: return "Connecting"
+        case .error: return "Connection issue"
+        case .disconnected: return "Not linked"
+        }
+    }
+
+    private var deviceLinkDetail: String {
+        switch connectionManager.connectionState {
+        case .connected:
+            if let device = connectionManager.connectedDevice {
+                return "Securely linked to \(device.name)"
+            }
+            return "Securely linked to your Centurion"
+        case .discovering:
+            return "Looking for your Centurion on your network"
+        case .connecting:
+            return "Setting up your private connection…"
+        case .disconnected:
+            return "Link your iPhone to your Centurion to get started"
+        case .awaitingApproval(let message):
+            return message
+        case .error(let message):
+            return message
+        }
+    }
+
+    private var deviceLinkDotColor: Color {
+        switch connectionManager.connectionState {
+        case .connected: return ColorTheme.success()
+        case .error: return ColorTheme.error()
+        case .awaitingApproval: return ColorTheme.accent()
+        default: return ColorTheme.mutedText()
+        }
+    }
+
+    private var thinkingServiceDetail: String {
+        if let status = connectionManager.thinkingStatus {
+            if status.lastGoodAvailable && connectionManager.llmHealth.needsAttention {
+                return "Last working setup is available."
+            }
+            if !status.healthMessage.isEmpty, connectionManager.llmHealth.needsAttention {
+                return status.healthMessage
+            }
+        }
+        switch connectionManager.llmHealth {
+        case .healthy:
+            return "Your Centurion can answer messages."
+        case .unknown:
+            return "Checking with your Centurion…"
+        default:
+            return "Your Centurion may not be able to reply right now."
+        }
+    }
+
+    private var thinkingDotColor: Color {
+        switch connectionManager.llmHealth {
+        case .healthy: return ColorTheme.success()
+        case .degraded: return .orange
+        case .broken, .unknown: return ColorTheme.error()
         }
     }
 }
@@ -203,12 +291,13 @@ struct ConnectionPairingSheet: View {
 
     private var connectedState: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 48))
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
                 .foregroundColor(ColorTheme.success())
 
-            Text("Connected")
+            Text("Linked to your Centurion")
                 .font(.title2.weight(.semibold))
+                .foregroundColor(ColorTheme.primaryText())
 
             if let device = connectionManager.connectedDevice {
                 Text(device.name)
@@ -216,264 +305,73 @@ struct ConnectionPairingSheet: View {
                     .foregroundColor(ColorTheme.mutedText())
             }
 
-            Button(role: .destructive) {
-                connectionManager.disconnect()
-                Haptics.mediumTap()
-            } label: {
-                Text("Disconnect")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .padding(.horizontal)
+            Button("Done") { dismiss() }
+                .buttonStyle(AmberButtonStyle())
+                .padding(.top, Spacing.md)
         }
         .padding()
     }
 
     private func awaitingApprovalState(message: String) -> some View {
-        ContentUnavailableView {
-            Label("Waiting for approval", systemImage: "hourglass")
-        } description: {
+        VStack(spacing: Spacing.lg) {
+            Image(systemName: "hourglass.circle.fill")
+                .font(.system(size: 56))
+                .foregroundColor(ColorTheme.accent())
+
+            Text("Approve on your Centurion")
+                .font(.title2.weight(.semibold))
+
             Text(message)
-        } actions: {
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+
             Button("Try Again") {
                 connectionManager.retryConnection()
-                Haptics.lightTap()
             }
             .buttonStyle(AmberButtonStyle())
         }
+        .padding()
     }
 
     private var searchingState: some View {
-        ContentUnavailableView {
-            Label("Looking for your Centurion", systemImage: "antenna.radiowaves.left.and.right")
-        } description: {
-            Text("Make sure your Centurion is running on the same Wi‑Fi. We look for it automatically — no account needed.")
-        } actions: {
-            if case .discovering = connectionManager.connectionState {
-                ProgressView()
-                    .padding(.top, Spacing.sm)
-            } else {
-                Button("Search Again") {
-                    connectionManager.startDiscovery()
-                }
-                .buttonStyle(AmberButtonStyle())
-            }
+        VStack(spacing: Spacing.lg) {
+            ProgressView()
+                .scaleEffect(1.2)
+
+            Text("Looking for your Centurion…")
+                .font(.headline)
+
+            Text("Make sure your Centurion is running and both devices are on the same network.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
         }
+        .padding()
     }
 
     private var deviceList: some View {
-        List(connectionManager.discoveredDevices) { device in
-            Button {
-                connectionManager.connect(to: device)
-                Haptics.connectionEstablished()
-            } label: {
-                HStack {
-                    Image(systemName: device.connectionMethod.icon)
-                        .foregroundColor(ColorTheme.accent())
-                        .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(device.name)
-                            .font(.headline)
-                            .foregroundColor(ColorTheme.primaryText())
-                        Text("Local network")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    Spacer()
-
-                    if connectionManager.connectionState == .connecting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-        }
-        .listStyle(.insetGrouped)
-    }
-}
-
-// MARK: - Dial Style LLM Selector
-
-struct LLMProviderDial: View {
-    @Binding var selectedProvider: LLMProvider
-
-    private let providers = LLMProvider.allCases
-
-    var body: some View {
-        VStack(spacing: Spacing.md) {
-            GeometryReader { geometry in
-                let segmentWidth = geometry.size.width / CGFloat(providers.count)
-
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 22)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    ColorTheme.surface(),
-                                    ColorTheme.accent().opacity(0.05)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(ColorTheme.accent().opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(ColorTheme.accent().opacity(0.35), lineWidth: 1)
-                        )
-                        .frame(width: segmentWidth - 8, height: geometry.size.height - 8)
-                        .offset(x: selectionOffset(segmentWidth: segmentWidth) + 4)
-                        .animation(Motion.standard, value: selectedProvider)
-
-                    HStack(spacing: 0) {
-                        ForEach(providers) { provider in
-                            dialSegment(for: provider)
-                                .frame(width: segmentWidth)
+        List {
+            ForEach(connectionManager.discoveredDevices) { device in
+                Button {
+                    connectionManager.connect(to: device)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(device.name)
+                                .font(.headline)
+                            Text(device.hostname.isEmpty ? "On your network" : device.hostname)
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                        }
+                        Spacer()
+                        if device.isConnected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(ColorTheme.success())
                         }
                     }
                 }
             }
-            .frame(height: 108)
-            .overlay(
-                RoundedRectangle(cornerRadius: 22)
-                    .stroke(ColorTheme.border(), lineWidth: 0.5)
-            )
-
-            prairieIndicator
         }
-    }
-
-    private func selectionOffset(segmentWidth: CGFloat) -> CGFloat {
-        CGFloat(providers.firstIndex(of: selectedProvider) ?? 0) * segmentWidth
-    }
-
-    private func dialSegment(for provider: LLMProvider) -> some View {
-        Button {
-            guard selectedProvider != provider else { return }
-            withAnimation(Motion.standard) {
-                selectedProvider = provider
-            }
-            Haptics.lightTap()
-        } label: {
-            VStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(provider.status.color.opacity(selectedProvider == provider ? 0.18 : 0.08))
-                        .frame(width: 34, height: 34)
-
-                    Text(provider.shortLabel)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(
-                            selectedProvider == provider
-                                ? ColorTheme.accent()
-                                : ColorTheme.mutedText()
-                        )
-                }
-
-                Text(provider.displayName)
-                    .font(.system(size: 12, weight: selectedProvider == provider ? .semibold : .medium))
-                    .foregroundColor(
-                        selectedProvider == provider
-                            ? ColorTheme.primaryText()
-                            : ColorTheme.mutedText()
-                    )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(provider.status.color)
-                        .frame(width: 6, height: 6)
-                    Text(provider.status.label)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundColor(provider.status.color)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(provider.displayName), \(provider.status.label)")
-        .accessibilityAddTraits(selectedProvider == provider ? .isSelected : [])
-    }
-
-    private var prairieIndicator: some View {
-        HStack(spacing: 0) {
-            ForEach(providers) { provider in
-                Rectangle()
-                    .fill(
-                        selectedProvider == provider
-                            ? ColorTheme.accent()
-                            : ColorTheme.border().opacity(0.5)
-                    )
-                    .frame(height: selectedProvider == provider ? 2 : 1)
-                    .frame(maxWidth: .infinity)
-                    .animation(Motion.light, value: selectedProvider)
-            }
-        }
-        .padding(.horizontal, Spacing.lg)
-    }
-}
-
-// MARK: - Status Detail
-
-struct LLMStatusDetail: View {
-    let provider: LLMProvider
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(provider.displayName)
-                    .font(.headline)
-
-                if provider.isRecommended {
-                    Text("RECOMMENDED")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(ColorTheme.accent())
-                        .clipShape(Capsule())
-                }
-
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(provider.status.color)
-                        .frame(width: 8, height: 8)
-                    Text(provider.status.label.uppercased())
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(provider.status.color)
-                }
-            }
-
-            Text(provider.description)
-                .font(.system(size: 14))
-                .foregroundColor(ColorTheme.mutedText())
-
-            if let reassurance = provider.status.reassurance {
-                Text(reassurance)
-                    .font(.system(size: 12, weight: .medium, design: .serif))
-                    .foregroundColor(provider.status == .broken ? ColorTheme.error() : .orange)
-                    .padding(.top, 4)
-            }
-        }
-        .padding()
-        .background(ColorTheme.surface())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(ColorTheme.border(), lineWidth: 0.5)
-        )
-        .animation(Motion.light, value: provider)
     }
 }

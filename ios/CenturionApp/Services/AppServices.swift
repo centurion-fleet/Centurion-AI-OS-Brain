@@ -7,6 +7,7 @@ final class AppServices: ObservableObject {
     let messageService: MessageService
     let missionStore: MissionStore
     let dataMode: AppDataMode
+    let heraldService: HeraldService
 
     init() {
         let connectionManager = ConnectionManager()
@@ -15,6 +16,7 @@ final class AppServices: ObservableObject {
         self.dataMode = dataMode
         self.messageService = MessageService(connectionManager: connectionManager, dataMode: dataMode)
         self.missionStore = MissionStore()
+        self.heraldService = HeraldService()
         dataMode.update(connectionState: connectionManager.connectionState)
     }
 }

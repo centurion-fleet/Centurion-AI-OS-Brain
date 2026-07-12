@@ -4,15 +4,9 @@ struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
-    @AppStorage("selectedLLMProvider") private var selectedProviderRaw = LLMProvider.deepseek.rawValue
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
-    @State private var showAdvancedAI = false
-
-    private var selectedProvider: LLMProvider {
-        get { LLMProvider(rawValue: selectedProviderRaw) ?? .deepseek }
-        nonmutating set { selectedProviderRaw = newValue.rawValue }
-    }
+    @State private var showGetHelp = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
@@ -28,7 +22,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Identity section
                 Section("Identity") {
                     HStack {
                         Label("Device Name", systemImage: "iphone")
@@ -48,7 +41,6 @@ struct SettingsView: View {
                     }
                 }
 
-                // You — Mission (human) and Soul (AI)
                 Section("You") {
                     NavigationLink(destination: MissionView()) {
                         HStack {
@@ -86,9 +78,9 @@ struct SettingsView: View {
 
                 Section("Connection") {
                     HStack {
-                        Label("Status", systemImage: "app.connected.to.app.below.fill")
+                        Label("Device link", systemImage: "app.connected.to.app.below.fill")
                         Spacer()
-                        Text(connectionManager.connectionState == .connected ? "Connected" : "Not connected")
+                        Text(connectionManager.connectionState == .connected ? "Linked" : "Not linked")
                             .foregroundColor(ColorTheme.mutedText())
                     }
 
@@ -102,26 +94,42 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    DisclosureGroup("Advanced", isExpanded: $showAdvancedAI) {
-                        VStack(alignment: .leading, spacing: Spacing.md) {
-                            Text("Choose which service powers your Centurion. Most people can leave this on the recommended setting.")
-                                .font(.caption)
-                                .foregroundColor(ColorTheme.mutedText())
-
-                            LLMProviderDial(selectedProvider: Binding(
-                                get: { selectedProvider },
-                                set: { selectedProviderRaw = $0.rawValue }
-                            ))
-
-                            LLMStatusDetail(provider: selectedProvider)
-                        }
-                        .padding(.vertical, Spacing.sm)
+                    HStack {
+                        Label("Thinking service", systemImage: "brain.head.profile")
+                        Spacer()
+                        Text(connectionManager.llmHealth.label)
+                            .foregroundColor(ColorTheme.mutedText())
                     }
+
+                    if let status = connectionManager.thinkingStatus,
+                       status.lastGoodAvailable,
+                       connectionManager.llmHealth.needsAttention {
+                        Text("Last working setup is available.")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+
+                    Text("Change on your computer")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
                 } header: {
                     Text("How Your Centurion Thinks")
                 }
+                .task(id: connectionManager.connectionState) {
+                    guard connectionManager.connectionState == .connected else { return }
+                    await connectionManager.refreshThinkingStatus()
+                }
 
-                // Appearance section
+                Section {
+                    Button {
+                        showGetHelp = true
+                    } label: {
+                        Label("Get Help", systemImage: "lifepreserver")
+                    }
+                    .accessibilityLabel("Get Help")
+                    .accessibilityHint("Create a support code or try automatic recovery")
+                }
+
                 Section("Appearance") {
                     Picker("Theme", selection: appearanceBinding) {
                         ForEach(AppearanceMode.allCases, id: \.self) { mode in
@@ -132,7 +140,6 @@ struct SettingsView: View {
                     .tint(ColorTheme.accent())
                 }
 
-                // Privacy section
                 Section("Privacy") {
                     privacyRow("Private on your network",
                                "Messages stay between your iPhone and Centurion")
@@ -142,7 +149,6 @@ struct SettingsView: View {
                                "You don't need to sign in to a third-party service")
                 }
 
-                // About section
                 Section("About") {
                     HStack {
                         Spacer()
@@ -172,7 +178,6 @@ struct SettingsView: View {
                     }
                 }
 
-                // Danger zone
                 Section {
                     Button(role: .destructive) {
                         showResetConfirmation = true
@@ -184,7 +189,7 @@ struct SettingsView: View {
                 }
             }
             .background(ColorTheme.background())
-            .navigationTitle("Settings")
+            .navigationTitle("You")
             .navigationBarTitleDisplayMode(.inline)
             .scrollContentBackground(.hidden)
             .environment(\.defaultMinListHeaderHeight, 0)
@@ -199,6 +204,10 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showKeyExport) {
                 KeyExportView()
+            }
+            .sheet(isPresented: $showGetHelp) {
+                GetHelpView()
+                    .environmentObject(connectionManager)
             }
         }
     }

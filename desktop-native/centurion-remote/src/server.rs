@@ -1,4 +1,4 @@
-use crate::bridge::AgentBridge;
+use crate::bridge::{AgentBridge, BridgeError};
 use crate::crypto::{ServerIdentity, ServerSession};
 use crate::registry::DeviceRegistry;
 use crate::session_registry::{SessionGuard, SessionRegistry};
@@ -116,31 +116,212 @@ async fn handle_connection(
                     return Err(SessionError::ApprovalRequired(fingerprint));
                 }
                 match response {
-                    Ok(text) => {
+                    Ok(result) => {
                         info!(
                             %peer,
                             %fingerprint,
                             request_id = %id,
-                            bytes = text.len(),
+                            bytes = result.text.len(),
                             "Centurion response ready"
                         );
-                        RemoteMessage::ChatResponse { id, text }
-                    }
-                    Err(error) => {
-                        warn!(
-                            %peer,
-                            %fingerprint,
-                            request_id = %id,
-                            %error,
-                            "Centurion response failed"
-                        );
-                        RemoteMessage::Error {
-                            id: Some(id),
-                            code: "CENTURION_UNAVAILABLE".to_owned(),
-                            message: error.to_string(),
-                            retryable: true,
+                        RemoteMessage::ChatResponse {
+                            id,
+                            text: result.text,
+                            recovered: result.recovered.then_some(true),
+                            recovery_message: result.recovery_message,
                         }
                     }
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ProviderStatus { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "provider_status", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ProviderStatusResponse {
+                        id,
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ProviderOptions { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "provider_options", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ProviderOptionsResponse {
+                        id,
+                        options: payload
+                            .get("options")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ProviderValidate { id, provider, model } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "provider_validate",
+                        serde_json::json!({ "provider": provider, "model": model }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ProviderValidateResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        result: payload
+                            .get("result")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ProviderApply { id, provider, model } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "provider_apply",
+                        serde_json::json!({ "provider": provider, "model": model }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ProviderApplyResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        result: payload
+                            .get("result")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ProviderRestore { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "provider_restore", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ProviderRestoreResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        restored: payload
+                            .get("restored")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        result: payload
+                            .get("result")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::HealthCheck { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "health_check", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::HealthCheckResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        snapshot: payload
+                            .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        summary: payload
+                            .get("summary")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        thinking_health: payload
+                            .get("thinking_health")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_owned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SupportBundle { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "support_bundle", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SupportBundleResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        code: payload
+                            .get("code")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        expires_at: payload
+                            .get("expires_at")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        summary: payload
+                            .get("summary")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        thinking_health: payload
+                            .get("thinking_health")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_owned(),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SupportAutoFix { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "support_auto_fix", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SupportAutoFixResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        thinking_health: payload
+                            .get("thinking_health")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_owned(),
+                        restored: payload
+                            .get("restored")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
                 }
             }
             RemoteMessage::Ping => RemoteMessage::Pong,
@@ -169,6 +350,33 @@ async fn send_revoked(
         retryable: false,
     };
     write_message(stream, session, &message).await
+}
+
+fn bridge_error_response(id: Option<uuid::Uuid>, error: BridgeError) -> RemoteMessage {
+    match error {
+        BridgeError::Agent {
+            message,
+            code,
+            retryable,
+        } => {
+            warn!(?id, %message, ?code, "Centurion bridge request failed");
+            RemoteMessage::Error {
+                id,
+                code: code.unwrap_or_else(|| "CENTURION_UNAVAILABLE".to_owned()),
+                message,
+                retryable,
+            }
+        }
+        other => {
+            warn!(?id, %other, "Centurion bridge transport failed");
+            RemoteMessage::Error {
+                id,
+                code: "CENTURION_UNAVAILABLE".to_owned(),
+                message: other.to_string(),
+                retryable: true,
+            }
+        }
+    }
 }
 
 async fn reload_is_approved(state: &ServerState, fingerprint: &str) -> Result<bool, SessionError> {

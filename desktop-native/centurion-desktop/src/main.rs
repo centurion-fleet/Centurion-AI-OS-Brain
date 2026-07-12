@@ -31,6 +31,26 @@ mod linux {
         peer: Option<String>,
     }
 
+    #[derive(Debug, Deserialize)]
+    struct ProviderStatusPayload {
+        provider: String,
+        model: String,
+        health: String,
+        health_message: String,
+        #[serde(default)]
+        last_good_available: bool,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ProviderCliResponse {
+        ok: bool,
+        status: Option<ProviderStatusPayload>,
+        options: Option<serde_json::Value>,
+        result: Option<serde_json::Value>,
+        message: Option<String>,
+        code: Option<String>,
+    }
+
     impl RemoteSupervisor {
         fn ensure_running(&mut self) -> Result<(), String> {
             if remote_listener_active() {
@@ -137,12 +157,25 @@ mod linux {
             .css_classes(["dim-label"])
             .wrap(true)
             .build();
+        let thinking_title = gtk::Label::builder()
+            .label("Thinking service")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build();
+        let thinking_detail = gtk::Label::builder()
+            .label("Checking your Centurion's thinking service…")
+            .css_classes(["dim-label"])
+            .wrap(true)
+            .xalign(0.0)
+            .build();
 
         let status_card = gtk::Box::new(gtk::Orientation::Vertical, 12);
         status_card.add_css_class("centurion-card");
         status_card.append(&app_icon_image(72));
         status_card.append(&status_title);
         status_card.append(&status_detail);
+        status_card.append(&thinking_title);
+        status_card.append(&thinking_detail);
 
         let restart = gtk::Button::with_label("Restart Centurion");
         restart.add_css_class("suggested-action");
@@ -217,6 +250,70 @@ mod linux {
                 .icon_name("dialog-information-symbolic")
                 .build(),
         );
+        let thinking_settings_row = adw::ActionRow::builder()
+            .title("Thinking Service")
+            .subtitle("Checking thinking service…")
+            .icon_name("preferences-system-symbolic")
+            .build();
+        let restore_thinking_button = gtk::Button::with_label("Restore last working setup");
+        restore_thinking_button.add_css_class("suggested-action");
+        restore_thinking_button.set_valign(gtk::Align::Center);
+        let change_thinking_button = gtk::Button::with_label("Change Thinking Service");
+        change_thinking_button.set_valign(gtk::Align::Center);
+        thinking_settings_row.add_suffix(&restore_thinking_button);
+        thinking_settings_row.add_suffix(&change_thinking_button);
+        settings_list.append(&thinking_settings_row);
+
+        let backup_thinking_row = adw::ActionRow::builder()
+            .title("Backup Thinking Services")
+            .subtitle("No backup thinking services configured.")
+            .icon_name("view-list-symbolic")
+            .build();
+        settings_list.append(&backup_thinking_row);
+
+        let setup_thinking_row = adw::ActionRow::builder()
+            .title("Set up how your Centurion thinks")
+            .subtitle("Run centurion setup on this computer for first-time configuration.")
+            .icon_name("system-run-symbolic")
+            .build();
+        settings_list.append(&setup_thinking_row);
+
+        settings.append(
+            &gtk::Label::builder()
+                .label("Support Tools")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(12)
+                .build(),
+        );
+        let support_health_row = adw::ActionRow::builder()
+            .title("Run Health Check")
+            .subtitle("Check thinking service and configuration")
+            .icon_name("emblem-system-symbolic")
+            .build();
+        let support_bundle_row = adw::ActionRow::builder()
+            .title("Generate Support Bundle")
+            .subtitle("Create a support code for your advisor")
+            .icon_name("dialog-information-symbolic")
+            .build();
+        let support_lookup_row = adw::ActionRow::builder()
+            .title("Look Up Support Code")
+            .subtitle("Open a saved support bundle by code")
+            .icon_name("system-search-symbolic")
+            .build();
+        let health_check_button = gtk::Button::with_label("Run");
+        health_check_button.set_valign(gtk::Align::Center);
+        let bundle_button = gtk::Button::with_label("Generate");
+        bundle_button.set_valign(gtk::Align::Center);
+        let lookup_button = gtk::Button::with_label("Look Up");
+        lookup_button.set_valign(gtk::Align::Center);
+        support_health_row.add_suffix(&health_check_button);
+        support_bundle_row.add_suffix(&bundle_button);
+        support_lookup_row.add_suffix(&lookup_button);
+        settings_list.append(&support_health_row);
+        settings_list.append(&support_bundle_row);
+        settings_list.append(&support_lookup_row);
+
         settings.append(&settings_list);
 
         let chat = build_chat_page();
@@ -278,6 +375,53 @@ mod linux {
         };
 
         update_status();
+        refresh_thinking_status(&thinking_detail, &thinking_settings_row);
+        refresh_backup_thinking_services(&backup_thinking_row);
+        let thinking_poll_detail = thinking_detail.clone();
+        let thinking_poll_row = thinking_settings_row.clone();
+        let backup_poll_row = backup_thinking_row.clone();
+        glib::timeout_add_seconds_local(30, move || {
+            refresh_thinking_status(&thinking_poll_detail, &thinking_poll_row);
+            refresh_backup_thinking_services(&backup_poll_row);
+            glib::ControlFlow::Continue
+        });
+        restore_thinking_button.connect_clicked({
+            let thinking_settings_row = thinking_settings_row.clone();
+            move |_| {
+                if let Some(response) = run_provider_command(&["restore", "--json"]) {
+                    let message = response
+                        .message
+                        .or_else(|| {
+                            response.result.and_then(|value| {
+                                value
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .map(str::to_owned)
+                            })
+                        })
+                        .unwrap_or_else(|| "Restore finished.".to_owned());
+                    thinking_settings_row.set_subtitle(&message);
+                }
+            }
+        });
+        change_thinking_button.connect_clicked({
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
+            let window = window.clone();
+            move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        health_check_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_support_health_dialog(&window)
+        });
+        bundle_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_support_bundle_dialog(&window)
+        });
+        lookup_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_support_lookup_dialog(&window)
+        });
         restart.connect_clicked(move |_| {
             let result = supervisor.borrow_mut().restart();
             match result {
@@ -496,6 +640,288 @@ mod linux {
                     .build(),
             );
         }
+    }
+
+    fn centurion_binary() -> String {
+        std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{home}/.local/bin/centurion"))
+            .filter(|path| std::path::Path::new(path).is_file())
+            .unwrap_or_else(|| "centurion".to_owned())
+    }
+
+    fn run_provider_command(args: &[&str]) -> Option<ProviderCliResponse> {
+        let mut command_args = vec!["provider"];
+        command_args.extend_from_slice(args);
+        let output = Command::new(centurion_binary())
+            .args(command_args)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())?;
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_support_command(args: &[&str]) -> Option<ProviderCliResponse> {
+        let mut command_args = vec!["support"];
+        command_args.extend_from_slice(args);
+        let output = Command::new(centurion_binary())
+            .args(command_args)
+            .output()
+            .ok()
+            .filter(|output| output.status.success())?;
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn refresh_thinking_status(detail: &gtk::Label, settings_row: &adw::ActionRow) {
+        let Some(response) = run_provider_command(&["status", "--json"]) else {
+            detail.set_label("Thinking service status is unavailable.");
+            settings_row.set_subtitle("Could not read thinking service status.");
+            return;
+        };
+        let Some(status) = response.status else {
+            detail.set_label("Thinking service status is unavailable.");
+            settings_row.set_subtitle("Could not read thinking service status.");
+            return;
+        };
+        let plain = match status.health.as_str() {
+            "ok" => "Working normally".to_owned(),
+            "degraded" => "May be slow".to_owned(),
+            _ => "Needs attention".to_owned(),
+        };
+        let mut line = format!("{plain} — {}", status.health_message);
+        if status.last_good_available && status.health != "ok" {
+            line.push_str(" Last working setup is available.");
+        }
+        detail.set_label(&line);
+        settings_row.set_subtitle(&line);
+    }
+
+    fn refresh_backup_thinking_services(row: &adw::ActionRow) {
+        let Some(response) = run_support_command(&["backups", "--json"]) else {
+            row.set_subtitle("Could not read backup thinking services.");
+            return;
+        };
+        let Some(result) = response.result else {
+            row.set_subtitle("No backup thinking services configured.");
+            return;
+        };
+        let backups = result
+            .get("backups")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if backups.is_empty() {
+            row.set_subtitle("No backup thinking services configured.");
+            return;
+        }
+        let labels: Vec<String> = backups
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .get("label")
+                    .and_then(|label| label.as_str())
+                    .map(str::to_owned)
+            })
+            .collect();
+        if labels.is_empty() {
+            row.set_subtitle(format!("{} backup thinking service(s) configured.", backups.len()));
+        } else {
+            row.set_subtitle(labels.join(" · "));
+        }
+    }
+
+    fn show_change_thinking_dialog(
+        parent: &adw::ApplicationWindow,
+        settings_row: &adw::ActionRow,
+        detail: &gtk::Label,
+    ) {
+        let dialog = adw::MessageDialog::builder()
+            .heading("Change thinking service")
+            .body("Enter a provider slug and model id. Centurion validates before applying.")
+            .close_response("cancel")
+            .default_response("apply")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("apply", "Validate and apply");
+        dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
+
+        let provider_entry = gtk::Entry::builder()
+            .placeholder_text("openrouter")
+            .build();
+        let model_entry = gtk::Entry::builder()
+            .placeholder_text("anthropic/claude-sonnet-4")
+            .build();
+
+        let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        extra.append(
+            &gtk::Label::builder()
+                .label("Provider")
+                .xalign(0.0)
+                .build(),
+        );
+        extra.append(&provider_entry);
+        extra.append(
+            &gtk::Label::builder()
+                .label("Model")
+                .xalign(0.0)
+                .build(),
+        );
+        extra.append(&model_entry);
+        dialog.set_extra_child(Some(&extra));
+        dialog.set_transient_for(Some(parent));
+        dialog.present();
+
+        let settings_row = settings_row.clone();
+        let detail = detail.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response != "apply" {
+                dialog.close();
+                return;
+            }
+            let provider = provider_entry.text().to_string();
+            let model = model_entry.text().to_string();
+            if provider.trim().is_empty() || model.trim().is_empty() {
+                settings_row.set_subtitle("Provider and model are required.");
+                dialog.close();
+                return;
+            }
+            if let Some(response) =
+                run_provider_command(&["set", &provider, &model, "--json"])
+            {
+                let message = response
+                    .result
+                    .and_then(|value| {
+                        value
+                            .get("message")
+                            .and_then(|m| m.as_str())
+                            .map(str::to_owned)
+                    })
+                    .unwrap_or_else(|| "Thinking service updated.".to_owned());
+                settings_row.set_subtitle(&message);
+                refresh_thinking_status(&detail, &settings_row);
+            } else {
+                settings_row.set_subtitle("Could not apply thinking service change.");
+            }
+            dialog.close();
+        });
+    }
+
+    fn show_support_health_dialog(parent: &adw::ApplicationWindow) {
+        let body = if let Some(response) = run_support_command(&["health", "--json"]) {
+            response
+                .message
+                .or_else(|| {
+                    response
+                        .result
+                        .and_then(|value| {
+                            value
+                                .get("summary")
+                                .and_then(|m| m.as_str())
+                                .map(str::to_owned)
+                        })
+                })
+                .unwrap_or_else(|| "Health check completed.".to_owned())
+        } else {
+            "Could not run health check.".to_owned()
+        };
+        let dialog = adw::MessageDialog::builder()
+            .heading("Health Check")
+            .body(&body)
+            .close_response("ok")
+            .build();
+        dialog.add_response("ok", "OK");
+        dialog.set_transient_for(Some(parent));
+        dialog.present();
+    }
+
+    fn show_support_bundle_dialog(parent: &adw::ApplicationWindow) {
+        let (heading, body) = if let Some(response) = run_support_command(&["bundle", "--json"]) {
+            if let Some(code) = response.code {
+                (
+                    "Support Code".to_owned(),
+                    format!(
+                        "{}\n\nShare this code with your advisor:\n\n{code}",
+                        response
+                            .message
+                            .unwrap_or_else(|| "Support bundle created.".to_owned())
+                    ),
+                )
+            } else {
+                (
+                    "Support Bundle".to_owned(),
+                    "Could not create a support code.".to_owned(),
+                )
+            }
+        } else {
+            (
+                "Support Bundle".to_owned(),
+                "Could not create a support code.".to_owned(),
+            )
+        };
+        let dialog = adw::MessageDialog::builder()
+            .heading(&heading)
+            .body(&body)
+            .close_response("ok")
+            .build();
+        dialog.add_response("ok", "OK");
+        dialog.set_transient_for(Some(parent));
+        dialog.present();
+    }
+
+    fn show_support_lookup_dialog(parent: &adw::ApplicationWindow) {
+        let dialog = adw::MessageDialog::builder()
+            .heading("Look Up Support Code")
+            .body("Enter the support code from an iPhone or a previous bundle.")
+            .close_response("cancel")
+            .default_response("lookup")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("lookup", "Look Up");
+        let code_entry = gtk::Entry::builder()
+            .placeholder_text("ABC-123")
+            .build();
+        dialog.set_extra_child(Some(&code_entry));
+        dialog.set_transient_for(Some(parent));
+        dialog.present();
+
+        dialog.connect_response(None, move |dialog, response| {
+            if response != "lookup" {
+                dialog.close();
+                return;
+            }
+            let code = code_entry.text().to_string();
+            let result_dialog = if let Some(cli_response) =
+                run_support_command(&["show", &code, "--json"])
+            {
+                let body = cli_response
+                    .message
+                    .filter(|text| !text.trim().is_empty())
+                    .or_else(|| {
+                        cli_response.result.and_then(|bundle| {
+                            bundle
+                                .get("summary_plain")
+                                .and_then(|s| s.as_str())
+                                .map(str::to_owned)
+                        })
+                    })
+                    .unwrap_or_else(|| "Support bundle found.".to_owned());
+                adw::MessageDialog::builder()
+                    .heading(&format!("Support Code {code}"))
+                    .body(&body)
+                    .close_response("ok")
+                    .build()
+            } else {
+                adw::MessageDialog::builder()
+                    .heading("Support Code Not Found")
+                    .body("That code is missing or has expired.")
+                    .close_response("ok")
+                    .build()
+            };
+            result_dialog.add_response("ok", "OK");
+            result_dialog.set_transient_for(dialog.transient_for().as_ref());
+            result_dialog.present();
+            dialog.close();
+        });
     }
 }
 

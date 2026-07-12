@@ -10773,7 +10773,8 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "fleet", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
-        "model", "pairing", "plugins", "portal", "postinstall", "profile", "proxy",
+        "model", "pairing", "plugins", "portal", "postinstall", "profile", "provider", "proxy",
+        "support",
         "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
         "version", "webhook", "whatsapp", "chat", "secrets", "security",
@@ -12112,6 +12113,27 @@ def main():
         ),
     )
     doctor_parser.set_defaults(func=cmd_doctor)
+
+    # =========================================================================
+    # provider command — Host Provider Control Plane (JSON API)
+    # =========================================================================
+    from centurion_cli.provider_cli import register_subparser as register_provider_subparser
+
+    register_provider_subparser(subparsers)
+
+    # =========================================================================
+    # support command — structured support bundles (JSON API)
+    # =========================================================================
+    from centurion_cli.support_cli import register_subparser as register_support_subparser
+
+    register_support_subparser(subparsers)
+
+    # =========================================================================
+    # herald command — Centurion Herald cloud support guide
+    # =========================================================================
+    from centurion_cli.herald_cli import register_subparser as register_herald_subparser
+
+    register_herald_subparser(subparsers)
 
     # =========================================================================
     # security command — on-demand supply-chain audit

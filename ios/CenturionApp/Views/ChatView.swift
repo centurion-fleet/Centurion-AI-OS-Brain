@@ -18,6 +18,8 @@ struct ChatView: View {
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
+    @State private var lastFailedMessage: String?
+    @State private var showRecoverySheet = false
     @FocusState private var isFocused: Bool
 
     /// The currently selected conversation (nil = clean empty state)
@@ -59,7 +61,7 @@ struct ChatView: View {
             }
 
             if let sendError {
-                errorBanner(sendError)
+                llmErrorBanner(sendError)
             }
 
             if showTray {
@@ -101,6 +103,10 @@ struct ChatView: View {
             inputBar
         }
         .background(ColorTheme.background())
+        .sheet(isPresented: $showRecoverySheet) {
+            ThinkingRecoverySheet(initialMessage: sendError ?? "Your Centurion's thinking service needs attention.")
+                .environmentObject(connectionManager)
+        }
     }
 
     // MARK: - Conversation Tray Trigger
@@ -155,7 +161,7 @@ struct ChatView: View {
                     // Mission conversations
                     let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
                     if !missionConvs.isEmpty {
-                        traySectionHeader("FROM YOUR MISSION", icon: "target")
+                        traySectionHeader("From your mission", icon: "target")
                         ForEach(missionConvs) { conv in
                             trayRow(conv)
                         }
@@ -164,7 +170,7 @@ struct ChatView: View {
                     // Standalone conversations
                     let standaloneConvs = messageService.conversations.filter { $0.context.isStandalone }
                     if !standaloneConvs.isEmpty {
-                        traySectionHeader("CHATS", icon: "message.fill")
+                        traySectionHeader("Past conversations", icon: "message.fill")
                         ForEach(standaloneConvs) { conv in
                             trayRow(conv)
                         }
@@ -196,12 +202,11 @@ struct ChatView: View {
     private func traySectionHeader(_ title: String, icon: String) -> some View {
         HStack(spacing: Spacing.xs) {
             Image(systemName: icon)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundColor(ColorTheme.accent())
             Text(title)
-                .font(.system(size: 10, weight: .semibold, design: .default))
+                .font(.subheadline.weight(.semibold))
                 .foregroundColor(ColorTheme.mutedText())
-                .textCase(.uppercase)
         }
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.sm)
@@ -285,6 +290,31 @@ struct ChatView: View {
         .padding(.vertical, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ColorTheme.surface())
+    }
+
+    private func llmErrorBanner(_ message: String) -> some View {
+        let _ = message
+        Button {
+            showRecoverySheet = true
+        } label: {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundColor(ColorTheme.error())
+                    Text("Your Centurion is having trouble thinking right now. Tap to fix.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(ColorTheme.primaryText())
+                        .multilineTextAlignment(.leading)
+                }
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ColorTheme.error().opacity(0.08))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Your Centurion is having trouble thinking right now. Tap to fix.")
+        .accessibilityHint("Opens the Fix Thinking Service screen")
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -411,6 +441,7 @@ struct ChatView: View {
         guard !text.isEmpty else { return }
 
         sendError = nil
+        lastFailedMessage = text
         Haptics.messageSent()
         messageText = ""
         isSending = true

@@ -14,20 +14,83 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
+from centurion_cli.provider_control import (
+    LLM_AUTH_INVALID,
+    LLM_AUTH_MISSING,
+    LLM_CONFIG_INVALID,
+    LLM_MODEL_INVALID,
+    LLM_UNAVAILABLE,
+    apply_switch,
+    classify_llm_error,
+    get_status,
+    list_options,
+    load_last_known_good,
+    record_successful_turn,
+    restore_last_known_good,
+    validate_switch,
+)
+from centurion_cli.support_control import (
+    auto_fix_thinking,
+    collect_health_snapshot,
+    create_support_bundle,
+)
+
 
 def handle_request(
     request: dict[str, Any],
     *,
     run_agent: Callable[[str], str] | None = None,
 ) -> dict[str, Any]:
-    """Run one native-remote chat request and return a JSON-safe response."""
+    """Run one native-remote request and return a JSON-safe response."""
     request_id = str(request.get("id") or "")
+    action = str(request.get("action") or "chat").strip().lower()
+
+    if action == "chat":
+        return _handle_chat(request, request_id=request_id, run_agent=run_agent)
+    if action == "provider_status":
+        return _handle_provider_status(request_id)
+    if action == "provider_options":
+        return _handle_provider_options(request_id)
+    if action == "provider_validate":
+        return _handle_provider_validate(request, request_id)
+    if action == "provider_apply":
+        return _handle_provider_apply(request, request_id)
+    if action == "provider_restore":
+        return _handle_provider_restore(request_id)
+    if action == "health_check":
+        return _handle_health_check(request_id)
+    if action == "support_bundle":
+        return _handle_support_bundle(request_id)
+    if action == "support_auto_fix":
+        return _handle_support_auto_fix(request_id)
+
+    code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
+    return {
+        "id": request_id,
+        "ok": False,
+        "action": action,
+        "code": "UNSUPPORTED_ACTION",
+        "error": message,
+        "message": message,
+    }
+
+
+def _handle_chat(
+    request: dict[str, Any],
+    *,
+    request_id: str,
+    run_agent: Callable[[str], str] | None,
+) -> dict[str, Any]:
     text = request.get("text")
     if not isinstance(text, str) or not text.strip():
         return {
             "id": request_id,
             "ok": False,
+            "action": "chat",
+            "code": "INVALID_REQUEST",
             "error": "Message text is required.",
+            "message": "Message text is required.",
+            "retryable": False,
         }
 
     if run_agent is None:
@@ -35,18 +98,231 @@ def handle_request(
 
     try:
         response = run_agent(text.strip())
-    except Exception as exc:
+        record_successful_turn()
         return {
             "id": request_id,
-            "ok": False,
-            "error": f"Your Centurion could not respond: {exc}",
+            "ok": True,
+            "action": "chat",
+            "text": response or "",
         }
+    except Exception as exc:
+        return _error_response(
+            request_id,
+            action="chat",
+            exc=exc,
+            retryable=True,
+            attempt_recovery=True,
+            retry_text=text.strip(),
+            run_agent=run_agent,
+        )
+
+
+def _handle_provider_status(request_id: str) -> dict[str, Any]:
+    try:
+        status = get_status(probe=True)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "provider_status",
+            "status": status.to_dict(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="provider_status", exc=exc)
+
+
+def _handle_provider_options(request_id: str) -> dict[str, Any]:
+    try:
+        options = list_options()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "provider_options",
+            "options": options,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="provider_options", exc=exc)
+
+
+def _handle_provider_validate(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    provider = str(request.get("provider") or "").strip()
+    model = str(request.get("model") or "").strip()
+    try:
+        result = validate_switch(provider, model, probe=True)
+        payload = {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "provider_validate",
+            "result": result.to_dict(),
+        }
+        if not result.ok:
+            payload["code"] = result.code or LLM_UNAVAILABLE
+            payload["error"] = result.message
+            payload["message"] = result.message
+            payload["retryable"] = result.code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"}
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="provider_validate", exc=exc)
+
+
+def _handle_provider_apply(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    provider = str(request.get("provider") or "").strip()
+    model = str(request.get("model") or "").strip()
+    try:
+        result = apply_switch(provider, model, probe=True)
+        payload = {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "provider_apply",
+            "result": result.to_dict(),
+        }
+        if not result.ok:
+            payload["code"] = result.code or LLM_UNAVAILABLE
+            payload["error"] = result.message
+            payload["message"] = result.message
+            payload["retryable"] = result.code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"}
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="provider_apply", exc=exc)
+
+
+def _handle_provider_restore(request_id: str) -> dict[str, Any]:
+    try:
+        result = restore_last_known_good(probe=True)
+        payload = {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "provider_restore",
+            "result": result.to_dict(),
+            "restored": result.ok,
+        }
+        if not result.ok:
+            payload["code"] = result.code or LLM_UNAVAILABLE
+            payload["error"] = result.message
+            payload["message"] = result.message
+            payload["retryable"] = False
+        elif load_last_known_good():
+            payload["message"] = "Restored your last working setup."
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="provider_restore", exc=exc)
+
+
+def _handle_health_check(request_id: str) -> dict[str, Any]:
+    try:
+        snapshot = collect_health_snapshot(probe=True)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "health_check",
+            "snapshot": snapshot.to_dict(),
+            "summary": snapshot.thinking_message,
+            "thinking_health": snapshot.thinking_health,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="health_check", exc=exc)
+
+
+def _handle_support_bundle(request_id: str) -> dict[str, Any]:
+    try:
+        result = create_support_bundle(probe=True)
+        payload = {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "support_bundle",
+            "code": result.code,
+            "expires_at": result.expires_at,
+            "summary": result.summary,
+            "thinking_health": result.thinking_health,
+            "message": result.message,
+        }
+        if not result.ok:
+            payload["error"] = result.message
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="support_bundle", exc=exc)
+
+
+def _handle_support_auto_fix(request_id: str) -> dict[str, Any]:
+    try:
+        result = auto_fix_thinking(probe=True)
+        return {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "support_auto_fix",
+            "message": result.message,
+            "thinking_health": result.thinking_health,
+            "restored": result.restored,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="support_auto_fix", exc=exc)
+
+
+def _error_response(
+    request_id: str,
+    *,
+    action: str,
+    exc: BaseException,
+    retryable: bool = False,
+    attempt_recovery: bool = False,
+    retry_text: str = "",
+    run_agent: Callable[[str], str] | None = None,
+) -> dict[str, Any]:
+    code, message = classify_llm_error(exc)
+    if attempt_recovery and load_last_known_good() is not None:
+        restored = _attempt_lkg_retry(
+            request_id=request_id,
+            retry_text=retry_text,
+            original_code=code,
+            run_agent=run_agent,
+        )
+        if restored is not None:
+            return restored
 
     return {
         "id": request_id,
-        "ok": True,
-        "text": response or "",
+        "ok": False,
+        "action": action,
+        "code": code,
+        "error": message,
+        "message": message,
+        "retryable": retryable or code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"},
     }
+
+
+def _attempt_lkg_retry(
+    *,
+    request_id: str,
+    retry_text: str,
+    original_code: str,
+    run_agent: Callable[[str], str] | None,
+) -> dict[str, Any] | None:
+    if original_code not in {
+        LLM_AUTH_MISSING,
+        LLM_AUTH_INVALID,
+        LLM_MODEL_INVALID,
+        LLM_CONFIG_INVALID,
+    }:
+        return None
+    if not retry_text or run_agent is None:
+        return None
+
+    restore = restore_last_known_good(probe=True)
+    if not restore.ok:
+        return None
+
+    try:
+        response = run_agent(retry_text)
+        record_successful_turn()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "chat",
+            "text": response or "",
+            "recovered": True,
+            "recovery_message": "Restored your last working setup.",
+        }
+    except Exception:
+        return None
 
 
 def _run_agent_quiet(text: str) -> str:
@@ -84,7 +360,15 @@ def main(argv: list[str] | None = None) -> int:
         request = _read_request()
         response = handle_request(request)
     except Exception as exc:
-        response = {"id": "", "ok": False, "error": str(exc)}
+        code, message = classify_llm_error(exc)
+        response = {
+            "id": "",
+            "ok": False,
+            "code": code,
+            "error": message,
+            "message": message,
+            "retryable": False,
+        }
 
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     sys.stdout.write("\n")

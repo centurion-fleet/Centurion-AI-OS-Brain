@@ -20,6 +20,88 @@ pub enum RemoteMessage {
     ChatResponse {
         id: Uuid,
         text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recovered: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recovery_message: Option<String>,
+    },
+    ProviderStatus {
+        id: Uuid,
+    },
+    ProviderStatusResponse {
+        id: Uuid,
+        status: serde_json::Value,
+    },
+    ProviderOptions {
+        id: Uuid,
+    },
+    ProviderOptionsResponse {
+        id: Uuid,
+        options: serde_json::Value,
+    },
+    ProviderValidate {
+        id: Uuid,
+        provider: String,
+        model: String,
+    },
+    ProviderValidateResponse {
+        id: Uuid,
+        ok: bool,
+        result: serde_json::Value,
+    },
+    ProviderApply {
+        id: Uuid,
+        provider: String,
+        model: String,
+    },
+    ProviderApplyResponse {
+        id: Uuid,
+        ok: bool,
+        result: serde_json::Value,
+    },
+    ProviderRestore {
+        id: Uuid,
+    },
+    ProviderRestoreResponse {
+        id: Uuid,
+        ok: bool,
+        restored: bool,
+        result: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    HealthCheck {
+        id: Uuid,
+    },
+    HealthCheckResponse {
+        id: Uuid,
+        ok: bool,
+        snapshot: serde_json::Value,
+        summary: String,
+        thinking_health: String,
+    },
+    SupportBundle {
+        id: Uuid,
+    },
+    SupportBundleResponse {
+        id: Uuid,
+        ok: bool,
+        code: String,
+        expires_at: String,
+        summary: String,
+        thinking_health: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SupportAutoFix {
+        id: Uuid,
+    },
+    SupportAutoFixResponse {
+        id: Uuid,
+        ok: bool,
+        message: String,
+        thinking_health: String,
+        restored: bool,
     },
     Ready,
     Ping,

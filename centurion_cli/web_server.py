@@ -1072,21 +1072,24 @@ async def set_model_assignment(body: ModelAssignment):
         if scope == "main":
             if not provider or not model:
                 raise HTTPException(status_code=400, detail="provider and model required for main")
-            model_cfg = cfg.get("model", {})
-            if not isinstance(model_cfg, dict):
-                model_cfg = {}
-            model_cfg["provider"] = provider
-            model_cfg["default"] = model
-            # Clear stale base_url so the resolver picks the provider's own default.
-            if "base_url" in model_cfg and model_cfg.get("base_url"):
-                model_cfg["base_url"] = ""
-            # Also clear hardcoded context_length override — new model may have
-            # a different context window.
-            if "context_length" in model_cfg:
-                model_cfg.pop("context_length", None)
-            cfg["model"] = model_cfg
-            save_config(cfg)
-            return {"ok": True, "scope": "main", "provider": provider, "model": model}
+            from centurion_cli.provider_control import apply_switch
+
+            result = apply_switch(provider, model, probe=True)
+            if not result.ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": result.message,
+                        "code": result.code,
+                    },
+                )
+            return {
+                "ok": True,
+                "scope": "main",
+                "provider": result.provider,
+                "model": result.model,
+                "warning": result.warning or "",
+            }
 
         # scope == "auxiliary"
         aux = cfg.get("auxiliary")

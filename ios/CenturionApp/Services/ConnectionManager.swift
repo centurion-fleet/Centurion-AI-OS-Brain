@@ -17,6 +17,9 @@ final class ConnectionManager: ObservableObject {
     @Published var discoveredDevices: [CenturionDevice] = []
     @Published var connectedDevice: CenturionDevice?
     @Published var connectionState: ConnectionState = .disconnected
+    @Published var llmHealth: LLMHealthState = .unknown
+    @Published var thinkingStatus: ThinkingServiceStatus?
+    @Published var lastLLMError: (message: String, code: String?, retryable: Bool)?
 
     private let bonjourDiscoverer = BonjourDiscoverer()
     private let secureChannel = SecureChannel()
@@ -149,15 +152,21 @@ final class ConnectionManager: ObservableObject {
                 )
             }
         } catch is TimeoutError {
-            throw ConnectionError.serverRejected(
-                "Your Centurion is taking too long to respond. Try again in a moment."
-            )
+            let message = "Your Centurion is taking too long to respond. Try again in a moment."
+            lastLLMError = (message, "LLM_UNAVAILABLE", true)
+            llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
+            throw ConnectionError.serverRejected(message)
         }
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
 
         if response.type == "chat_response",
            response.id == requestID,
            let responseText = response.text {
+            llmHealth = .healthy
+            lastLLMError = nil
+            if response.recovered == true {
+                await refreshThinkingStatus()
+            }
             return responseText
         }
         if response.type == "error" {
@@ -171,9 +180,163 @@ final class ConnectionManager: ObservableObject {
                         ?? "This iPhone is no longer approved on your Centurion."
                 )
             }
-            throw ConnectionError.serverRejected(
-                response.message ?? "Your Centurion could not complete that request."
+            let message = response.message ?? "Your Centurion could not complete that request."
+            let code = response.code
+            let retryable = response.retryable ?? true
+            lastLLMError = (message, code, retryable)
+            llmHealth = .broken(message, code: code, retryable: retryable)
+            throw ConnectionError.serverRejected(message)
+        }
+        throw ConnectionError.invalidResponse
+    }
+
+    func refreshThinkingStatus() async {
+        guard connectionState == .connected else { return }
+        do {
+            let payload = try await invokeRemote(action: "provider_status")
+            if let statusData = try? JSONSerialization.data(withJSONObject: payload["status"] ?? [:]),
+               let status = try? JSONDecoder().decode(ThinkingServiceStatus.self, from: statusData) {
+                thinkingStatus = status
+                switch status.health {
+                case "ok":
+                    llmHealth = .healthy
+                case "degraded":
+                    llmHealth = .degraded(status.healthMessage)
+                default:
+                    llmHealth = .broken(status.healthMessage, code: nil, retryable: true)
+                }
+            }
+        } catch {
+            llmHealth = .unknown
+        }
+    }
+
+    func restoreLastThinkingSetup() async -> ProviderSwitchResult {
+        do {
+            let payload = try await invokeRemote(action: "provider_restore")
+            let ok = payload["ok"] as? Bool ?? false
+            let result = payload["result"] as? [String: Any] ?? [:]
+            let message = (payload["message"] as? String)
+                ?? (result["message"] as? String)
+                ?? (ok ? "Restored your last working setup." : "No saved setup to restore.")
+            if ok {
+                await refreshThinkingStatus()
+            }
+            return ProviderSwitchResult(
+                ok: ok,
+                message: message,
+                provider: result["provider"] as? String ?? "",
+                model: result["model"] as? String ?? ""
             )
+        } catch let error as ConnectionError {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        } catch {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        }
+    }
+
+    func requestSupportBundle() async -> SupportBundleResult {
+        do {
+            let payload = try await invokeRemote(action: "support_bundle")
+            return SupportBundleResult(
+                ok: payload["ok"] as? Bool ?? false,
+                code: payload["code"] as? String ?? "",
+                summary: payload["summary"] as? String ?? "",
+                thinkingHealth: payload["thinking_health"] as? String ?? "",
+                message: payload["message"] as? String ?? "Could not create a support code."
+            )
+        } catch let error as ConnectionError {
+            return SupportBundleResult(ok: false, code: "", summary: "", thinkingHealth: "", message: error.localizedDescription)
+        } catch {
+            return SupportBundleResult(ok: false, code: "", summary: "", thinkingHealth: "", message: error.localizedDescription)
+        }
+    }
+
+    func runHealthCheck() async -> HealthCheckResult {
+        do {
+            let payload = try await invokeRemote(action: "health_check")
+            let snapshot = payload["snapshot"] as? [String: Any] ?? [:]
+            return HealthCheckResult(
+                ok: payload["ok"] as? Bool ?? false,
+                summary: payload["summary"] as? String ?? "",
+                thinkingHealth: payload["thinking_health"] as? String ?? "",
+                issueCount: snapshot["issue_count"] as? Int ?? 0
+            )
+        } catch let error as ConnectionError {
+            return HealthCheckResult(ok: false, summary: error.localizedDescription, thinkingHealth: "", issueCount: 0)
+        } catch {
+            return HealthCheckResult(ok: false, summary: error.localizedDescription, thinkingHealth: "", issueCount: 0)
+        }
+    }
+
+    func autoFixThinking() async -> AutoFixResult {
+        do {
+            let payload = try await invokeRemote(action: "support_auto_fix")
+            let ok = payload["ok"] as? Bool ?? false
+            if ok {
+                await refreshThinkingStatus()
+            }
+            return AutoFixResult(
+                ok: ok,
+                message: payload["message"] as? String ?? "",
+                thinkingHealth: payload["thinking_health"] as? String ?? "",
+                restored: payload["restored"] as? Bool ?? false
+            )
+        } catch let error as ConnectionError {
+            return AutoFixResult(ok: false, message: error.localizedDescription, thinkingHealth: "", restored: false)
+        } catch {
+            return AutoFixResult(ok: false, message: error.localizedDescription, thinkingHealth: "", restored: false)
+        }
+    }
+
+    private func invokeRemote(action: String, extra: [String: Any] = [:]) async throws -> [String: Any] {
+        guard let sessionKey = currentSessionKey,
+              let connection = connection else {
+            throw ConnectionError.notConnected
+        }
+
+        let requestID = UUID()
+        var body: [String: Any] = [
+            "type": action,
+            "id": requestID.uuidString,
+        ]
+        for (key, value) in extra {
+            body[key] = value
+        }
+        let plaintext = try JSONSerialization.data(withJSONObject: body)
+
+        let responseData = try await withTimeout(seconds: 30) {
+            try await self.remoteIO.exchange(
+                connection: connection,
+                secureChannel: self.secureChannel,
+                sessionKey: sessionKey,
+                maximumFrameSize: self.maximumFrameSize,
+                plaintext: plaintext
+            )
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let responseType = json["type"] as? String else {
+            throw ConnectionError.invalidResponse
+        }
+
+        let expectedResponses: [String: String] = [
+            "provider_status_response": "provider_status",
+            "provider_options_response": "provider_options",
+            "provider_validate_response": "provider_validate",
+            "provider_apply_response": "provider_apply",
+            "provider_restore_response": "provider_restore",
+            "health_check_response": "health_check",
+            "support_bundle_response": "support_bundle",
+            "support_auto_fix_response": "support_auto_fix",
+        ]
+
+        if let expected = expectedResponses[responseType], expected == action {
+            return json
+        }
+
+        if responseType == "error" {
+            throw ConnectionError.serverRejected(json["message"] as? String ?? "Request failed.")
         }
         throw ConnectionError.invalidResponse
     }
@@ -339,6 +502,7 @@ final class ConnectionManager: ObservableObject {
         connectionState = .connected
         bonjourDiscoverer.stopDiscovery()
         startKeepalive()
+        Task { await refreshThinkingStatus() }
     }
 
     private func handleDeviceRevoked(_ message: String) {
@@ -594,6 +758,33 @@ private struct RemoteEnvelope: Codable {
     let code: String?
     let message: String?
     let retryable: Bool?
+    let recovered: Bool?
+    let ok: Bool?
+    let status: [String: AnyCodable]?
+    let options: [String: AnyCodable]?
+    let result: [String: AnyCodable]?
+    let restored: Bool?
+
+    var payload: [String: Any]? {
+        if let status {
+            return ["status": status.mapValues(\.value), "ok": true]
+        }
+        if let options {
+            return ["options": options.mapValues(\.value), "ok": true]
+        }
+        if let result {
+            var dict: [String: Any] = ["result": result.mapValues(\.value)]
+            dict["ok"] = ok ?? true
+            if let restored {
+                dict["restored"] = restored
+            }
+            if let message {
+                dict["message"] = message
+            }
+            return dict
+        }
+        return nil
+    }
 
     init(type: String, id: UUID? = nil, text: String? = nil) {
         self.type = type
@@ -602,6 +793,50 @@ private struct RemoteEnvelope: Codable {
         code = nil
         message = nil
         retryable = nil
+        recovered = nil
+        ok = nil
+        status = nil
+        options = nil
+        result = nil
+        restored = nil
+    }
+}
+
+private struct AnyCodable: Codable {
+    let value: Any
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let bool = try? container.decode(Bool.self) {
+            value = bool
+        } else if let int = try? container.decode(Int.self) {
+            value = int
+        } else if let double = try? container.decode(Double.self) {
+            value = double
+        } else if let string = try? container.decode(String.self) {
+            value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            value = array.map(\.value)
+        } else if let dict = try? container.decode([String: AnyCodable].self) {
+            value = dict.mapValues(\.value)
+        } else {
+            value = NSNull()
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let bool = value as? Bool {
+            try container.encode(bool)
+        } else if let int = value as? Int {
+            try container.encode(int)
+        } else if let double = value as? Double {
+            try container.encode(double)
+        } else if let string = value as? String {
+            try container.encode(string)
+        } else {
+            try container.encodeNil()
+        }
     }
 }
 

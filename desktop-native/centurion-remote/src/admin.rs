@@ -12,6 +12,7 @@ use uuid::Uuid;
 pub enum AdminRequest {
     ListSessions,
     Ping,
+    ProviderStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,6 +20,7 @@ pub enum AdminRequest {
 pub enum AdminResponse {
     Sessions { sessions: Vec<SessionView> },
     Pong,
+    ProviderStatus { payload: serde_json::Value },
     Error { message: String },
 }
 
@@ -93,6 +95,9 @@ async fn handle_connection(state: AdminState, stream: UnixStream) -> io::Result<
                 .collect(),
         },
         Ok(AdminRequest::Ping) => AdminResponse::Pong,
+        Ok(AdminRequest::ProviderStatus) => AdminResponse::ProviderStatus {
+            payload: read_provider_status_json(),
+        },
         Err(error) => AdminResponse::Error {
             message: format!("invalid admin request: {error}"),
         },
@@ -123,7 +128,31 @@ pub async fn query_sessions(path: &Path) -> io::Result<Vec<SessionView>> {
         Ok(AdminResponse::Sessions { sessions }) => Ok(sessions),
         Ok(AdminResponse::Error { message }) => Err(io::Error::other(message)),
         Ok(AdminResponse::Pong) => Ok(Vec::new()),
+        Ok(AdminResponse::ProviderStatus { .. }) => Ok(Vec::new()),
         Err(error) => Err(io::Error::other(error)),
+    }
+}
+
+fn read_provider_status_json() -> serde_json::Value {
+    let centurion = std::env::var("HOME")
+        .ok()
+        .map(|home| format!("{home}/.local/bin/centurion"))
+        .filter(|path| Path::new(path).is_file())
+        .unwrap_or_else(|| "centurion".to_owned());
+    let output = std::process::Command::new(centurion)
+        .args(["provider", "status", "--json"])
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+                serde_json::json!({ "ok": false, "error": error.to_string() })
+            })
+        }
+        Ok(output) => serde_json::json!({
+            "ok": false,
+            "error": String::from_utf8_lossy(&output.stderr).to_string(),
+        }),
+        Err(error) => serde_json::json!({ "ok": false, "error": error.to_string() }),
     }
 }
 
