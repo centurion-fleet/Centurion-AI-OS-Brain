@@ -87,7 +87,7 @@ class SwarmCoordinator:
     def _save_task(self, task: SwarmTask):
         path = self._task_path(task.task_id)
         tmp = path + ".tmp"
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(asdict(task), f, indent=2)
         os.replace(tmp, path)
 
@@ -96,7 +96,7 @@ class SwarmCoordinator:
         if not os.path.exists(path):
             return None
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 return SwarmTask(**json.load(f))
         except (json.JSONDecodeError, TypeError):
             return None

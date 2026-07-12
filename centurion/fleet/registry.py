@@ -97,7 +97,7 @@ class FleetRegistry:
         """Load registry from disk."""
         if os.path.exists(self.registry_path):
             try:
-                with open(self.registry_path) as f:
+                with open(self.registry_path, encoding="utf-8") as f:
                     data = json.load(f)
                 for cid, record_data in data.items():
                     identity = CenturionIdentity(**record_data["identity"])
@@ -124,7 +124,7 @@ class FleetRegistry:
                 "notes": record.notes,
             }
         tmp_path = self.registry_path + ".tmp"
-        with open(tmp_path, "w") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         os.replace(tmp_path, self.registry_path)
 
@@ -238,7 +238,7 @@ def send_fleet_message(
         "read": False,
     }
     msg_path = os.path.join(FLEET_MESSAGE_DIR, f"{msg_id}.json")
-    with open(msg_path, "w") as f:
+    with open(msg_path, "w", encoding="utf-8") as f:
         json.dump(message, f, indent=2)
     return msg_id
 
@@ -253,7 +253,7 @@ def get_fleet_messages(centurion_id: str, unread_only: bool = True) -> list[dict
             continue
         fpath = os.path.join(FLEET_MESSAGE_DIR, fname)
         try:
-            with open(fpath) as f:
+            with open(fpath, encoding="utf-8") as f:
                 msg = json.load(f)
             if msg["recipient"] != "all" and msg["recipient"] != centurion_id:
                 continue
@@ -270,9 +270,9 @@ def mark_fleet_message_read(message_id: str) -> bool:
     fpath = os.path.join(FLEET_MESSAGE_DIR, f"{message_id}.json")
     if not os.path.exists(fpath):
         return False
-    with open(fpath) as f:
+    with open(fpath, encoding="utf-8") as f:
         msg = json.load(f)
     msg["read"] = True
-    with open(fpath, "w") as f:
+    with open(fpath, "w", encoding="utf-8") as f:
         json.dump(msg, f, indent=2)
     return True

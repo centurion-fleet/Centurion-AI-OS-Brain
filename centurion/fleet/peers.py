@@ -61,7 +61,7 @@ class FleetPeers:
     def _load(self):
         if os.path.exists(self.peers_path):
             try:
-                with open(self.peers_path) as f:
+                with open(self.peers_path, encoding="utf-8") as f:
                     data = json.load(f)
                 for cid, pdata in data.get("peers", {}).items():
                     self._peers[cid] = FleetPeer(**pdata)
@@ -73,7 +73,7 @@ class FleetPeers:
         for cid, peer in self._peers.items():
             data["peers"][cid] = asdict(peer)
         tmp = self.peers_path + ".tmp"
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         os.replace(tmp, self.peers_path)
 

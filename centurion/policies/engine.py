@@ -76,7 +76,7 @@ class PolicyStore:
         policies_file = os.path.join(self.store_path, "policies.json")
         if os.path.exists(policies_file):
             try:
-                with open(policies_file) as f:
+                with open(policies_file, encoding="utf-8") as f:
                     data = json.load(f)
                 for pid, pdata in data.items():
                     self._policies[pid] = Policy(**pdata)
@@ -86,7 +86,7 @@ class PolicyStore:
         violations_file = os.path.join(self.store_path, "violations", "log.json")
         if os.path.exists(violations_file):
             try:
-                with open(violations_file) as f:
+                with open(violations_file, encoding="utf-8") as f:
                     data = json.load(f)
                 self._violations = [PolicyViolation(**v) for v in data]
             except (json.JSONDecodeError, TypeError):
@@ -97,7 +97,7 @@ class PolicyStore:
         data = {pid: asdict(p) for pid, p in self._policies.items()}
         path = os.path.join(self.store_path, "policies.json")
         tmp = path + ".tmp"
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         os.replace(tmp, path)
 
@@ -105,7 +105,7 @@ class PolicyStore:
         """Save violations log."""
         path = os.path.join(self.store_path, "violations", "log.json")
         tmp = path + ".tmp"
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump([asdict(v) for v in self._violations], f, indent=2)
         os.replace(tmp, path)
 

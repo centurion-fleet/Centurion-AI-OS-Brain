@@ -172,7 +172,7 @@ class CenturionDeployer:
             },
         }
         config_path = os.path.join(self.install_path, "config", "identity.json")
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
 
     def _register_fleet(self):
@@ -230,7 +230,7 @@ class CenturionDeployer:
         env_path = os.path.join(self.install_path, ".env")
         env_vars = []
         if os.path.exists(env_path):
-            with open(env_path) as f:
+            with open(env_path, encoding="utf-8") as f:
                 env_vars = [l.strip() for l in f if l.strip() and not l.startswith("#")]
 
         # Add or update key variables
@@ -246,7 +246,7 @@ class CenturionDeployer:
         if self.telegram_token:
             key_vars["TELEGRAM_BOT_TOKEN"] = self.telegram_token
 
-        with open(env_path, "w") as f:
+        with open(env_path, "w", encoding="utf-8") as f:
             for k, v in key_vars.items():
                 f.write(f"{k}={v}\n")
 

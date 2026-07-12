@@ -230,7 +230,7 @@ class FleetTransport:
         """Queue an undelivered message for later retry."""
         os.makedirs(self._outbox_dir, exist_ok=True)
         path = os.path.join(self._outbox_dir, f"{envelope.message_id}.json")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(asdict(envelope), f, indent=2)
         logger.info(f"Message {envelope.message_id} queued for retry")
 
@@ -251,7 +251,7 @@ class FleetTransport:
 
             fpath = os.path.join(self._outbox_dir, fname)
             try:
-                with open(fpath) as f:
+                with open(fpath, encoding="utf-8") as f:
                     data = json.load(f)
 
                 # Check retry count
@@ -291,7 +291,7 @@ class FleetTransport:
                     )
                     os.remove(fpath)
                 else:
-                    with open(fpath, "w") as f:
+                    with open(fpath, "w", encoding="utf-8") as f:
                         json.dump(data, f, indent=2)
                     pending += 1
 

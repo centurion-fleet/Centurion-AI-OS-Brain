@@ -142,7 +142,7 @@ class SoulDocument:
         directory = directory or get_souls_dir()
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, f"{self.centurion_id}_SOUL.md")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(self.to_markdown())
         return path
 
