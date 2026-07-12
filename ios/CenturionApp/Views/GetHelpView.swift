@@ -59,7 +59,7 @@ struct GetHelpView: View {
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
 
-            Text("For step-by-step help anytime, open Herald — Centurion's cloud guide — from the button at the bottom of the screen.")
+            Text("For step-by-step help anytime, open Adrian from Connect or the You tab.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
         }

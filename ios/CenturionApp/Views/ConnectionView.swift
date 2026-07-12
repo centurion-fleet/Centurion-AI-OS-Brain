@@ -3,9 +3,12 @@ import SwiftUI
 /// Connection Hub — device link and thinking service as separate, calm status cards.
 struct ConnectionView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var adrianService: AdrianService
+    @EnvironmentObject private var missionStore: MissionStore
     @State private var showPairingSheet = false
     @State private var showRecoverySheet = false
     @State private var showGetHelp = false
+    @State private var showAdrian = false
 
     var body: some View {
         NavigationStack {
@@ -21,7 +24,7 @@ struct ConnectionView: View {
 
                     primaryActionButton
 
-                    getHelpLink
+                    supportLinks
 
                     reassuranceSection
                 }
@@ -43,6 +46,19 @@ struct ConnectionView: View {
             .sheet(isPresented: $showGetHelp) {
                 GetHelpView()
                     .environmentObject(connectionManager)
+            }
+            .sheet(isPresented: $showAdrian) {
+                AdrianView { action in
+                    AdrianNavigation.handleAction(
+                        action,
+                        showAdrian: $showAdrian,
+                        showGetHelp: $showGetHelp,
+                        connectionManager: connectionManager
+                    )
+                }
+                .environmentObject(adrianService)
+                .environmentObject(connectionManager)
+                .environmentObject(missionStore)
             }
         }
     }
@@ -161,16 +177,20 @@ struct ConnectionView: View {
         }
     }
 
-    private var getHelpLink: some View {
-        Button {
-            showGetHelp = true
-        } label: {
-            Text("Get Help")
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(ColorTheme.accent())
+    private var supportLinks: some View {
+        HStack(spacing: Spacing.lg) {
+            Button {
+                showGetHelp = true
+            } label: {
+                Text("Get Help")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ColorTheme.accent())
+            }
+            .accessibilityLabel("Get Help")
+
+            AdrianLink(showAdrian: $showAdrian)
         }
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("Get Help")
     }
 
     // MARK: - Reassurance

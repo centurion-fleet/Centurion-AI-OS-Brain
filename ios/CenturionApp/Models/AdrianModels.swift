@@ -1,7 +1,7 @@
 import Foundation
 
-/// Herald — Centurion's cloud support guide (independent of the LAN Centurion link).
-struct HeraldMessage: Identifiable, Equatable {
+/// Adrian — Centurion's cloud support guide (independent of the LAN Centurion link).
+struct AdrianMessage: Identifiable, Equatable {
     let id: UUID
     let role: Role
     let content: String
@@ -9,7 +9,7 @@ struct HeraldMessage: Identifiable, Equatable {
 
     enum Role: String {
         case user
-        case herald
+        case adrian
     }
 
     init(id: UUID = UUID(), role: Role, content: String, createdAt: Date = Date()) {
@@ -20,12 +20,12 @@ struct HeraldMessage: Identifiable, Equatable {
     }
 }
 
-struct HeraldSuggestedAction: Identifiable, Equatable {
+struct AdrianSuggestedAction: Identifiable, Equatable {
     let id: String
     let label: String
 }
 
-struct HeraldChatContext: Encodable {
+struct AdrianChatContext: Encodable {
     let appVersion: String
     let connectionState: String
     let thinkingHealth: String
@@ -47,19 +47,18 @@ struct HeraldChatContext: Encodable {
     }
 }
 
-enum HeraldAction: String {
+enum AdrianAction: String {
     case openConnect
     case tryAutoFix
     case openGetHelp
     case openMission
 }
 
-enum HeraldConfig {
-    /// Production endpoint — Centurion-operated, customer API keys not required.
-    static let defaultBaseURL = "https://herald.centurion.ai"
+enum AdrianConfig {
+    static let defaultBaseURL = "https://adrian.centurion.ai"
 
     static var baseURL: URL {
-        if let raw = Bundle.main.object(forInfoDictionaryKey: "CenturionHeraldBaseURL") as? String,
+        if let raw = Bundle.main.object(forInfoDictionaryKey: "CenturionAdrianBaseURL") as? String,
            let url = URL(string: raw), !raw.isEmpty {
             return url
         }

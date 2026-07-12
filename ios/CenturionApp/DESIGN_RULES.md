@@ -204,12 +204,12 @@ Before any release:
 - Plain language only; no provider slugs on iPhone default paths.
 - One filled primary CTA per screen.
 
-### Herald (cloud-backed)
-- **Herald** is Centurion's support guide — cloud-hosted, paid by Centurion, no customer API keys.
-- Herald is independent of the LAN Centurion link; requires internet only.
-- Herald never sees Centurion chat history or secrets — only sanitized app context.
-- Floating **Herald** affordance on all main tabs; separate from Chat with your Centurion.
-- Herald's job: help users stay on mission while fixing the app — warm advisor, not a dev console.
+### Adrian (cloud-backed)
+- **Adrian** is Centurion's support guide — cloud-hosted, paid by Centurion, no customer API keys.
+- Adrian is independent of the LAN Centurion link; requires internet only.
+- Adrian never sees Centurion chat history or secrets — only sanitized app context.
+- Adrian entry on **Connect** and **You** only — inline link, not a global floating control.
+- Adrian's job: help users stay on mission while fixing the app — warm advisor, not a dev console.
 
 ---
 

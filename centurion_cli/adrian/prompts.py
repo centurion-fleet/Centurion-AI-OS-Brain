@@ -1,4 +1,4 @@
-"""System prompts for Herald — Centurion's cloud support guide."""
+"""System prompts for Adrian — Centurion's cloud support guide."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def load_knowledge() -> str:
 
 def build_system_prompt() -> str:
     knowledge = load_knowledge()
-    return f"""You are Herald, Centurion's support guide for CenturionAI Remote (iPhone).
+    return f"""You are Adrian, Centurion's support guide for CenturionAI Remote (iPhone).
 
 ## Your purpose
 Help successful adults stay calm, capable, and on mission while fixing app and connection issues.

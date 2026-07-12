@@ -12129,11 +12129,11 @@ def main():
     register_support_subparser(subparsers)
 
     # =========================================================================
-    # herald command — Centurion Herald cloud support guide
+    # adrian command — Centurion Adrian cloud support guide
     # =========================================================================
-    from centurion_cli.herald_cli import register_subparser as register_herald_subparser
+    from centurion_cli.adrian_cli import register_subparser as register_adrian_subparser
 
-    register_herald_subparser(subparsers)
+    register_adrian_subparser(subparsers)
 
     # =========================================================================
     # security command — on-demand supply-chain audit

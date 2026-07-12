@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Chat sheet for Herald — Centurion's cloud support guide.
-struct HeraldView: View {
-    @EnvironmentObject private var heraldService: HeraldService
+/// Chat sheet for Adrian — Centurion's cloud support guide.
+struct AdrianView: View {
+    @EnvironmentObject private var adrianService: AdrianService
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
     @Environment(\.dismiss) private var dismiss
 
-    var onAction: (HeraldAction) -> Void = { _ in }
+    var onAction: (AdrianAction) -> Void = { _ in }
 
     @State private var draft = ""
     @FocusState private var isFocused: Bool
@@ -15,21 +15,21 @@ struct HeraldView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if !heraldService.hasAcceptedPrivacy {
+                if !adrianService.hasAcceptedPrivacy {
                     privacyGate
                 } else {
                     messageList
-                    if !heraldService.suggestedActions.isEmpty {
+                    if !adrianService.suggestedActions.isEmpty {
                         actionChips
                     }
-                    if let error = heraldService.lastError {
+                    if let error = adrianService.lastError {
                         errorBanner(error)
                     }
                     inputBar
                 }
             }
             .background(ColorTheme.background())
-            .navigationTitle("Herald")
+            .navigationTitle("Adrian")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -38,7 +38,7 @@ struct HeraldView: View {
                 }
             }
             .onAppear {
-                heraldService.seedWelcomeIfNeeded()
+                adrianService.seedWelcomeIfNeeded()
             }
         }
     }
@@ -51,29 +51,29 @@ struct HeraldView: View {
                     .foregroundColor(ColorTheme.accent())
                     .frame(maxWidth: .infinity)
 
-                Text("Meet Herald")
+                Text("Meet Adrian")
                     .font(.title2.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
 
                 Text(
-                    "Herald is Centurion's support guide — powered by Centurion so you never need an API key. "
-                        + "Herald works over the internet, separate from your private Centurion link."
+                    "Adrian is Centurion's support guide — powered by Centurion so you never need an API key. "
+                        + "Adrian works over the internet, separate from your private Centurion link."
                 )
                 .font(.body)
                 .foregroundColor(ColorTheme.primaryText())
 
                 Text(
-                    "Herald sees only what helps troubleshooting: whether you're linked, thinking health in plain words, "
-                        + "and a short mission summary if you've set one. Herald never sees your Centurion chat history "
+                    "Adrian sees only what helps troubleshooting: whether you're linked, thinking health in plain words, "
+                        + "and a short mission summary if you've set one. Adrian never sees your Centurion chat history "
                         + "or secrets."
                 )
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
 
-                Button("Continue with Herald") {
+                Button("Continue with Adrian") {
                     Haptics.lightTap()
-                    heraldService.acceptPrivacy()
-                    heraldService.seedWelcomeIfNeeded()
+                    adrianService.acceptPrivacy()
+                    adrianService.seedWelcomeIfNeeded()
                 }
                 .buttonStyle(AmberButtonStyle())
                 .frame(maxWidth: .infinity)
@@ -86,16 +86,16 @@ struct HeraldView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: Spacing.sm) {
-                    ForEach(heraldService.messages) { message in
-                        heraldRow(message)
+                    ForEach(adrianService.messages) { message in
+                        adrianRow(message)
                             .id(message.id)
                     }
                 }
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, Spacing.sm)
             }
-            .onChange(of: heraldService.messages.count) { _, _ in
-                if let last = heraldService.messages.last {
+            .onChange(of: adrianService.messages.count) { _, _ in
+                if let last = adrianService.messages.last {
                     withAnimation(Motion.standard) {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
@@ -104,12 +104,12 @@ struct HeraldView: View {
         }
     }
 
-    private func heraldRow(_ message: HeraldMessage) -> some View {
+    private func adrianRow(_ message: AdrianMessage) -> some View {
         HStack(alignment: .bottom, spacing: Spacing.xs) {
             if message.role == .user { Spacer(minLength: 48) }
 
-            if message.role == .herald {
-                Image(systemName: "flag.fill")
+            if message.role == .adrian {
+                Image(systemName: "person.crop.circle.fill")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent())
                     .padding(6)
@@ -118,8 +118,8 @@ struct HeraldView: View {
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
-                if message.role == .herald {
-                    Text("Herald")
+                if message.role == .adrian {
+                    Text("Adrian")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(ColorTheme.accent())
                 }
@@ -137,14 +137,14 @@ struct HeraldView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
 
-            if message.role == .herald { Spacer(minLength: 48) }
+            if message.role == .adrian { Spacer(minLength: 48) }
         }
     }
 
     private var actionChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Spacing.sm) {
-                ForEach(heraldService.suggestedActions) { action in
+                ForEach(adrianService.suggestedActions) { action in
                     Button(action.label) {
                         Haptics.lightTap()
                         handleAction(action.id)
@@ -174,7 +174,7 @@ struct HeraldView: View {
 
     private var inputBar: some View {
         HStack(spacing: Spacing.sm) {
-            TextField("Ask Herald for help…", text: $draft)
+            TextField("Ask Adrian for help…", text: $draft)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .focused($isFocused)
@@ -183,7 +183,7 @@ struct HeraldView: View {
                 .background(ColorTheme.chatInput())
                 .clipShape(RoundedRectangle(cornerRadius: 14))
 
-            if heraldService.isSending {
+            if adrianService.isSending {
                 ProgressView()
                     .frame(width: 36, height: 36)
             } else {
@@ -191,7 +191,7 @@ struct HeraldView: View {
                     let text = draft
                     draft = ""
                     Task {
-                        await heraldService.send(
+                        await adrianService.send(
                             text,
                             connectionManager: connectionManager,
                             missionStore: missionStore

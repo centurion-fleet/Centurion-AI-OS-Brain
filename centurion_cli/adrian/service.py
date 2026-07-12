@@ -1,4 +1,4 @@
-"""Herald chat service — sanitized context, LLM routing, suggested actions."""
+"""Adrian chat service — sanitized context, LLM routing, suggested actions."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from centurion_cli.herald.prompts import build_system_prompt
+from centurion_cli.adrian.prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ _rate_buckets: dict[str, list[float]] = {}
 
 
 @dataclass
-class HeraldContext:
+class AdrianContext:
     app_version: str = ""
     connection_state: str = "disconnected"
     thinking_health: str = "unknown"
@@ -62,7 +62,7 @@ class HeraldContext:
 
 
 @dataclass
-class HeraldChatMessage:
+class AdrianChatMessage:
     role: str
     content: str
 
@@ -71,7 +71,7 @@ class HeraldChatMessage:
 
 
 @dataclass
-class HeraldSuggestedAction:
+class AdrianSuggestedAction:
     id: str
     label: str
 
@@ -80,15 +80,15 @@ class HeraldSuggestedAction:
 
 
 @dataclass
-class HeraldChatRequest:
+class AdrianChatRequest:
     install_id: str
-    messages: list[HeraldChatMessage]
-    context: HeraldContext = field(default_factory=HeraldContext)
+    messages: list[AdrianChatMessage]
+    context: AdrianContext = field(default_factory=AdrianContext)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> HeraldChatRequest:
+    def from_payload(cls, payload: dict[str, Any]) -> AdrianChatRequest:
         raw_ctx = payload.get("context") or {}
-        context = HeraldContext(
+        context = AdrianContext(
             app_version=_clip(str(raw_ctx.get("app_version") or ""), 32),
             connection_state=_normalize_connection_state(raw_ctx.get("connection_state")),
             thinking_health=_normalize_thinking_health(raw_ctx.get("thinking_health")),
@@ -98,7 +98,7 @@ class HeraldChatRequest:
             mission_summary=_clip(_redact_text(str(raw_ctx.get("mission_summary") or "")), 400),
             support_code=_normalize_support_code(str(raw_ctx.get("support_code") or "")),
         )
-        messages: list[HeraldChatMessage] = []
+        messages: list[AdrianChatMessage] = []
         for item in payload.get("messages") or []:
             if not isinstance(item, dict):
                 continue
@@ -107,16 +107,16 @@ class HeraldChatRequest:
                 continue
             content = _clip(_redact_text(str(item.get("content") or "")), 4000)
             if content:
-                messages.append(HeraldChatMessage(role=role, content=content))
+                messages.append(AdrianChatMessage(role=role, content=content))
         install_id = _clip(str(payload.get("install_id") or ""), 64)
         return cls(install_id=install_id, messages=messages[-20:], context=context)
 
 
 @dataclass
-class HeraldChatResponse:
+class AdrianChatResponse:
     ok: bool
     reply: str = ""
-    suggested_actions: list[HeraldSuggestedAction] = field(default_factory=list)
+    suggested_actions: list[AdrianSuggestedAction] = field(default_factory=list)
     message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -180,7 +180,7 @@ def _check_rate_limit(install_id: str) -> bool:
     return True
 
 
-def _context_block(context: HeraldContext) -> str:
+def _context_block(context: AdrianContext) -> str:
     lines = [
         f"App version: {context.app_version or 'unknown'}",
         f"Device link: {context.connection_state}",
@@ -199,27 +199,27 @@ def _context_block(context: HeraldContext) -> str:
     return "\n".join(lines)
 
 
-def suggest_actions(context: HeraldContext) -> list[HeraldSuggestedAction]:
-    actions: list[HeraldSuggestedAction] = []
+def suggest_actions(context: AdrianContext) -> list[AdrianSuggestedAction]:
+    actions: list[AdrianSuggestedAction] = []
     if context.connection_state != "connected":
-        actions.append(HeraldSuggestedAction(id="open_connect", label="Open Connect"))
+        actions.append(AdrianSuggestedAction(id="open_connect", label="Open Connect"))
     elif context.thinking_health == "needs_attention":
         actions.append(
-            HeraldSuggestedAction(id="try_auto_fix", label="Try to Fix Automatically")
+            AdrianSuggestedAction(id="try_auto_fix", label="Try to Fix Automatically")
         )
-        actions.append(HeraldSuggestedAction(id="open_get_help", label="Open Get Help"))
+        actions.append(AdrianSuggestedAction(id="open_get_help", label="Open Get Help"))
     elif context.connection_state == "connected":
-        actions.append(HeraldSuggestedAction(id="open_get_help", label="Open Get Help"))
+        actions.append(AdrianSuggestedAction(id="open_get_help", label="Open Get Help"))
     if context.has_mission:
-        actions.append(HeraldSuggestedAction(id="open_mission", label="Review Your Mission"))
+        actions.append(AdrianSuggestedAction(id="open_mission", label="Review Your Mission"))
     return actions[:4]
 
 
-def _fallback_reply(request: HeraldChatRequest) -> str:
+def _fallback_reply(request: AdrianChatRequest) -> str:
     ctx = request.context
     if ctx.connection_state != "connected":
         return (
-            "I'm Herald — Centurion's guide, always here even when your Centurion isn't linked yet.\n\n"
+            "I'm Adrian — Centurion's guide, always here even when your Centurion isn't linked yet.\n\n"
             "Let's get you connected:\n"
             "1. Make sure your iPhone and Centurion computer share the same Wi‑Fi.\n"
             "2. Open Centurion on your computer.\n"
@@ -239,16 +239,20 @@ def _fallback_reply(request: HeraldChatRequest) -> str:
             "how your Centurion thinks on the computer."
         )
     return (
-        "I'm Herald, your Centurion support guide. Tell me what's getting in your way "
+        "I'm Adrian, your Centurion support guide. Tell me what's getting in your way "
         "and I'll walk you through it in plain language — so you can get back to your mission."
     )
 
 
 def _call_openai(messages: list[dict[str, str]]) -> str | None:
-    api_key = os.getenv("CENTURION_HERALD_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    api_key = (
+        os.getenv("CENTURION_ADRIAN_OPENAI_API_KEY")
+        or os.getenv("CENTURION_HERALD_OPENAI_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
     if not api_key:
         return None
-    model = os.getenv("CENTURION_HERALD_MODEL", "gpt-4o-mini")
+    model = os.getenv("CENTURION_ADRIAN_MODEL") or os.getenv("CENTURION_HERALD_MODEL", "gpt-4o-mini")
     try:
         from openai import OpenAI
 
@@ -262,20 +266,20 @@ def _call_openai(messages: list[dict[str, str]]) -> str | None:
         choice = response.choices[0].message.content if response.choices else None
         return (choice or "").strip() or None
     except Exception:
-        logger.exception("Herald LLM call failed")
+        logger.exception("Adrian LLM call failed")
         return None
 
 
-def chat(request: HeraldChatRequest) -> HeraldChatResponse:
+def chat(request: AdrianChatRequest) -> AdrianChatResponse:
     if not request.install_id:
-        return HeraldChatResponse(ok=False, message="Missing install identifier.")
+        return AdrianChatResponse(ok=False, message="Missing install identifier.")
     if not _check_rate_limit(request.install_id):
-        return HeraldChatResponse(
+        return AdrianChatResponse(
             ok=False,
-            message="You've reached the hourly limit for Herald. Please try again later.",
+            message="You've reached the hourly limit for Adrian. Please try again later.",
         )
     if not request.messages or request.messages[-1].role != "user":
-        return HeraldChatResponse(ok=False, message="Send a user message to continue.")
+        return AdrianChatResponse(ok=False, message="Send a user message to continue.")
 
     system = build_system_prompt()
     llm_messages: list[dict[str, str]] = [
@@ -290,4 +294,4 @@ def chat(request: HeraldChatRequest) -> HeraldChatResponse:
 
     reply = _call_openai(llm_messages) or _fallback_reply(request)
     actions = suggest_actions(request.context)
-    return HeraldChatResponse(ok=True, reply=reply, suggested_actions=actions)
+    return AdrianChatResponse(ok=True, reply=reply, suggested_actions=actions)

@@ -46,10 +46,10 @@
 		D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */; };
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
 		C9F5A3D40E6F7A8192B3C6 /* GetHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */; };
-		H3R4LDBAR01E6F7A8192B3C6 /* HeraldBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */; };
-		H3R4LDMDL01E6F7A8192B3C6 /* HeraldModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */; };
-		H3R4LDSVC01E6F7A8192B3C6 /* HeraldService.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */; };
-		H3R4LDVW01E6F7A8192B3C6 /* HeraldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */; };
+		H3R4LDBAR01E6F7A8192B3C6 /* AdrianLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDBAR01E6F7A8192B3C5 /* AdrianLink.swift */; };
+		H3R4LDMDL01E6F7A8192B3C6 /* AdrianModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDMDL01E6F7A8192B3C5 /* AdrianModels.swift */; };
+		H3R4LDSVC01E6F7A8192B3C6 /* AdrianService.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDSVC01E6F7A8192B3C5 /* AdrianService.swift */; };
+		H3R4LDVW01E6F7A8192B3C6 /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDVW01E6F7A8192B3C5 /* AdrianView.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
 /* End PBXBuildFile section */
 
@@ -86,10 +86,10 @@
 		C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopVisualizationView.swift; sourceTree = "<group>"; };
 		CE860688EDBD16296174C4F9 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
 		C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetHelpView.swift; sourceTree = "<group>"; };
-		H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldBar.swift; sourceTree = "<group>"; };
-		H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldModels.swift; sourceTree = "<group>"; };
-		H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldService.swift; sourceTree = "<group>"; };
-		H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeraldView.swift; sourceTree = "<group>"; };
+		H3R4LDBAR01E6F7A8192B3C5 /* AdrianLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianLink.swift; sourceTree = "<group>"; };
+		H3R4LDMDL01E6F7A8192B3C5 /* AdrianModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianModels.swift; sourceTree = "<group>"; };
+		H3R4LDSVC01E6F7A8192B3C5 /* AdrianService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianService.swift; sourceTree = "<group>"; };
+		H3R4LDVW01E6F7A8192B3C5 /* AdrianView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianView.swift; sourceTree = "<group>"; };
 		D967220CE7E18782E047ACD2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		ED3109FC232D48D3C3445556 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMission.swift; sourceTree = "<group>"; };
@@ -120,8 +120,8 @@
 				3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */,
 				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
 				C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */,
-				H3R4LDBAR01E6F7A8192B3C5 /* HeraldBar.swift */,
-				H3R4LDVW01E6F7A8192B3C5 /* HeraldView.swift */,
+				H3R4LDBAR01E6F7A8192B3C5 /* AdrianLink.swift */,
+				H3R4LDVW01E6F7A8192B3C5 /* AdrianView.swift */,
 				B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */,
 				C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */,
 				5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */,
@@ -167,7 +167,7 @@
 				0E3C229C48C642E36295368A /* MissionProject.swift */,
 				51401B6F9885163352D34464 /* SoulDocument.swift */,
 				A7F3E2B19C4D5E6F7081A2B3 /* ThinkingService.swift */,
-				H3R4LDMDL01E6F7A8192B3C5 /* HeraldModels.swift */,
+				H3R4LDMDL01E6F7A8192B3C5 /* AdrianModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -181,7 +181,7 @@
 				F5FA050811F918E8D8DFE861 /* MessageError.swift */,
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
-				H3R4LDSVC01E6F7A8192B3C5 /* HeraldService.swift */,
+				H3R4LDSVC01E6F7A8192B3C5 /* AdrianService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -293,10 +293,10 @@
 				5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */,
 				FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */,
 				C9F5A3D40E6F7A8192B3C6 /* GetHelpView.swift in Sources */,
-				H3R4LDBAR01E6F7A8192B3C6 /* HeraldBar.swift in Sources */,
-				H3R4LDMDL01E6F7A8192B3C6 /* HeraldModels.swift in Sources */,
-				H3R4LDSVC01E6F7A8192B3C6 /* HeraldService.swift in Sources */,
-				H3R4LDVW01E6F7A8192B3C6 /* HeraldView.swift in Sources */,
+				H3R4LDBAR01E6F7A8192B3C6 /* AdrianLink.swift in Sources */,
+				H3R4LDMDL01E6F7A8192B3C6 /* AdrianModels.swift in Sources */,
+				H3R4LDSVC01E6F7A8192B3C6 /* AdrianService.swift in Sources */,
+				H3R4LDVW01E6F7A8192B3C6 /* AdrianView.swift in Sources */,
 				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
 				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
 				776C89C43273562535733334 /* ContentView.swift in Sources */,

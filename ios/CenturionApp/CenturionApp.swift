@@ -19,7 +19,7 @@ struct CenturionApp: App {
                     .environmentObject(services.connectionManager)
                     .environmentObject(services.messageService)
                     .environmentObject(services.missionStore)
-                    .environmentObject(services.heraldService)
+                    .environmentObject(services.adrianService)
                     .environmentObject(services.dataMode)
                     .opacity(showSplash || showOnboarding ? 0 : 1)
                     .allowsHitTesting(!showSplash && !showOnboarding)

@@ -1,12 +1,12 @@
-"""Tests for centurion_cli.herald."""
+"""Tests for centurion_cli.adrian."""
 
 from __future__ import annotations
 
 import pytest
 
-from centurion_cli.herald.service import (
-    HeraldChatRequest,
-    HeraldContext,
+from centurion_cli.adrian.service import (
+    AdrianChatRequest,
+    AdrianContext,
     _normalize_support_code,
     _redact_text,
     chat,
@@ -26,20 +26,20 @@ def test_support_code_normalization():
 
 
 def test_suggest_actions_disconnected():
-    ctx = HeraldContext(connection_state="disconnected")
+    ctx = AdrianContext(connection_state="disconnected")
     ids = [a.id for a in suggest_actions(ctx)]
     assert "open_connect" in ids
 
 
 def test_suggest_actions_thinking_broken():
-    ctx = HeraldContext(connection_state="connected", thinking_health="needs_attention")
+    ctx = AdrianContext(connection_state="connected", thinking_health="needs_attention")
     ids = [a.id for a in suggest_actions(ctx)]
     assert "try_auto_fix" in ids
     assert "open_get_help" in ids
 
 
 def test_chat_requires_user_message():
-    req = HeraldChatRequest(install_id="install-abc-12345", messages=[])
+    req = AdrianChatRequest(install_id="install-abc-12345", messages=[])
     result = chat(req)
     assert not result.ok
 
@@ -47,7 +47,7 @@ def test_chat_requires_user_message():
 def test_chat_fallback_without_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("CENTURION_HERALD_OPENAI_API_KEY", raising=False)
-    req = HeraldChatRequest.from_payload(
+    req = AdrianChatRequest.from_payload(
         {
             "install_id": "install-abc-12345",
             "messages": [{"role": "user", "content": "I cannot connect"}],
@@ -56,12 +56,12 @@ def test_chat_fallback_without_api_key(monkeypatch):
     )
     result = chat(req)
     assert result.ok
-    assert "Herald" in result.reply
+    assert "Adrian" in result.reply
     assert any(a.id == "open_connect" for a in result.suggested_actions)
 
 
 def test_chat_strips_secrets_from_context():
-    req = HeraldChatRequest.from_payload(
+    req = AdrianChatRequest.from_payload(
         {
             "install_id": "install-abc-12345",
             "messages": [{"role": "user", "content": "help"}],

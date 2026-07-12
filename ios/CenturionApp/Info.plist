@@ -18,8 +18,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>CenturionHeraldBaseURL</key>
-	<string>https://herald.centurion.ai</string>
+	<key>CenturionAdrianBaseURL</key>
+	<string>https://adrian.centurion.ai</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>

@@ -3,10 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var adrianService: AdrianService
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
     @State private var showGetHelp = false
+    @State private var showAdrian = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
@@ -128,6 +130,18 @@ struct SettingsView: View {
                     }
                     .accessibilityLabel("Get Help")
                     .accessibilityHint("Create a support code or try automatic recovery")
+
+                    Button {
+                        showAdrian = true
+                    } label: {
+                        Label("Talk to Adrian", systemImage: "person.crop.circle.fill")
+                    }
+                    .accessibilityLabel("Talk to Adrian")
+                    .accessibilityHint("Open Centurion's cloud support guide")
+                } header: {
+                    Text("Support")
+                } footer: {
+                    Text("Adrian works over the internet — even when your Centurion isn't linked.")
                 }
 
                 Section("Appearance") {
@@ -208,6 +222,19 @@ struct SettingsView: View {
             .sheet(isPresented: $showGetHelp) {
                 GetHelpView()
                     .environmentObject(connectionManager)
+            }
+            .sheet(isPresented: $showAdrian) {
+                AdrianView { action in
+                    AdrianNavigation.handleAction(
+                        action,
+                        showAdrian: $showAdrian,
+                        showGetHelp: $showGetHelp,
+                        connectionManager: connectionManager
+                    )
+                }
+                .environmentObject(adrianService)
+                .environmentObject(connectionManager)
+                .environmentObject(missionStore)
             }
         }
     }

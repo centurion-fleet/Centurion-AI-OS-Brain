@@ -293,7 +293,6 @@ struct ChatView: View {
     }
 
     private func llmErrorBanner(_ message: String) -> some View {
-        let _ = message
         Button {
             showRecoverySheet = true
         } label: {
