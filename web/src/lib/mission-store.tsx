@@ -17,7 +17,15 @@ import type {
   SwarmProject,
   SwarmTarget,
   SwarmTask,
+  SwarmSummary,
 } from './mission-types'
+import {
+  fetchSwarmSync,
+  normalizeSwarmProjects,
+  normalizeSwarmTargets,
+  normalizeSwarmTasks,
+  swarmsFromSwarmProjects,
+} from './swarm-sync'
 
 /* ---- Storage key ---- */
 
@@ -29,6 +37,8 @@ interface StoredData {
   projects: SwarmProject[]
   targets: SwarmTarget[]
   tasks: SwarmTask[]
+  swarms: SwarmSummary[]
+  syncSource: 'brain' | 'portal' | 'local'
 }
 
 /* ---- Context value shape ---- */
@@ -37,6 +47,11 @@ interface MissionStoreValue {
   projects: SwarmProject[]
   targets: SwarmTarget[]
   tasks: SwarmTask[]
+  swarms: SwarmSummary[]
+  syncSource: 'brain' | 'portal' | 'local'
+  syncError: string | null
+  isSyncing: boolean
+  refreshSync: () => Promise<void>
 
   // Projects
   createProject: (project: Omit<SwarmProject, 'id' | 'created_at' | 'updated_at'>) => SwarmProject
@@ -76,6 +91,8 @@ const EMPTY_DATA: StoredData = {
   projects: [],
   targets: [],
   tasks: [],
+  swarms: [],
+  syncSource: 'local',
 }
 
 /* ---- Provider ---- */
@@ -87,7 +104,13 @@ export function MissionStoreProvider({ children }: { children: ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored) as StoredData
         if (parsed.projects?.length || parsed.targets?.length || parsed.tasks?.length) {
-          return parsed
+          return {
+            projects: parsed.projects ?? [],
+            targets: parsed.targets ?? [],
+            tasks: parsed.tasks ?? [],
+            swarms: parsed.swarms ?? swarmsFromSwarmProjects(parsed.projects ?? [], parsed.tasks ?? []),
+            syncSource: parsed.syncSource ?? 'local',
+          }
         }
       }
     } catch {
@@ -95,6 +118,34 @@ export function MissionStoreProvider({ children }: { children: ReactNode }) {
     }
     return EMPTY_DATA
   })
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  const refreshSync = useCallback(async () => {
+    setIsSyncing(true)
+    try {
+      const payload = await fetchSwarmSync()
+      setSyncError(payload.ok ? null : payload.message ?? 'Mission Control not connected')
+      if (payload.ok && (payload.projects.length > 0 || payload.swarms.length > 0)) {
+        const projects = normalizeSwarmProjects(payload.projects)
+        const targets = normalizeSwarmTargets(payload.targets)
+        const tasks = normalizeSwarmTasks(payload.tasks)
+        const swarms =
+          payload.swarms.length > 0
+            ? payload.swarms
+            : swarmsFromSwarmProjects(projects, tasks)
+        setData({ projects, targets, tasks, swarms, syncSource: payload.source === 'local' ? 'local' : 'brain' })
+      }
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Sync failed')
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshSync()
+  }, [refreshSync])
 
   // Persist to localStorage on every change
   useEffect(() => {
@@ -105,7 +156,7 @@ export function MissionStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [data])
 
-  const { projects, targets, tasks } = data
+  const { projects, targets, tasks, swarms, syncSource } = data
 
   // ── Projects ────────────────────────────────────────────────────
 
@@ -268,6 +319,11 @@ export function MissionStoreProvider({ children }: { children: ReactNode }) {
       projects,
       targets,
       tasks,
+      swarms,
+      syncSource,
+      syncError,
+      isSyncing,
+      refreshSync,
 
       createProject,
       getProjects,
@@ -289,6 +345,11 @@ export function MissionStoreProvider({ children }: { children: ReactNode }) {
       projects,
       targets,
       tasks,
+      swarms,
+      syncSource,
+      syncError,
+      isSyncing,
+      refreshSync,
 
       createProject,
       getProjects,

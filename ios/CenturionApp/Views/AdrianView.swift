@@ -28,7 +28,7 @@ struct AdrianView: View {
                     inputBar
                 }
             }
-            .background(ColorTheme.background())
+            .background(secondaryBackground)
             .navigationTitle("Adrian")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -43,42 +43,50 @@ struct AdrianView: View {
         }
     }
 
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
+        }
+    }
+
     private var privacyGate: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.lg) {
-                Image(systemName: "person.crop.circle.badge.questionmark")
-                    .font(.system(size: 44))
-                    .foregroundColor(ColorTheme.accent())
-                    .frame(maxWidth: .infinity)
+            VStack(spacing: Spacing.lg) {
+                FullBrandHeader()
 
-                Text("Meet Adrian")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(ColorTheme.primaryText())
+                AtmosphericSurface(elevated: true) {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        CenturionSectionHeader(title: "Meet Adrian", icon: "person.crop.circle")
 
-                Text(
-                    "Adrian online is Adrian who created Centurion. His passion is helping you live "
-                        + "your mission — lift daily pressure, free your thinking, and deepen your "
-                        + "1:1 relationship with your private Centurion. Missions evolve; that's expected."
-                )
-                .font(.body)
-                .foregroundColor(ColorTheme.primaryText())
+                        Text(
+                            "Adrian online is Adrian who created Centurion. His passion is helping you live "
+                                + "your mission — lift daily pressure, free your thinking, and deepen your "
+                                + "1:1 relationship with your private Centurion. Missions evolve; that's expected."
+                        )
+                        .font(.body)
+                        .foregroundColor(ColorTheme.primaryText())
+                        .lineSpacing(4)
 
-                Text(
-                    "Adrian listens first, then helps one step at a time. He works over the internet, "
-                        + "separate from your private Centurion link, and sees only what helps — link status, "
-                        + "thinking health in plain words, and a short mission summary if you've set one. "
-                        + "Never your chat history or secrets."
-                )
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
+                        Text(
+                            "Adrian listens first, then helps one step at a time. He works over the internet, "
+                                + "separate from your private Centurion link, and sees only what helps — link status, "
+                                + "thinking health in plain words, and a short mission summary if you've set one. "
+                                + "Never your chat history or secrets."
+                        )
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineSpacing(4)
+                    }
+                }
 
                 Button("Continue with Adrian") {
                     Haptics.lightTap()
                     adrianService.acceptPrivacy()
                     adrianService.seedWelcomeIfNeeded()
                 }
-                .buttonStyle(AmberButtonStyle())
-                .frame(maxWidth: .infinity)
+                .buttonStyle(CenturionPrimaryButtonStyle())
             }
             .padding()
         }
@@ -126,17 +134,25 @@ struct AdrianView: View {
                         .foregroundColor(ColorTheme.accent())
                 }
 
-                Text(message.content)
-                    .font(.body)
-                    .foregroundColor(ColorTheme.primaryText())
-                    .padding(.horizontal, Spacing.md)
-                    .padding(.vertical, Spacing.sm)
-                    .background(
-                        message.role == .user
-                            ? ColorTheme.accent().opacity(0.15)
-                            : ColorTheme.surface()
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                Group {
+                    if message.role == .user {
+                        Text(message.content)
+                            .font(.body)
+                            .foregroundColor(ColorTheme.primaryText())
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.sm)
+                            .background(ColorTheme.accent().opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    } else {
+                        AtmosphericSurface {
+                            Text(message.content)
+                                .font(.body)
+                                .foregroundColor(ColorTheme.primaryText())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .lineSpacing(3)
+                        }
+                    }
+                }
             }
 
             if message.role == .adrian { Spacer(minLength: 48) }
@@ -157,6 +173,10 @@ struct AdrianView: View {
                     .padding(.vertical, Spacing.xs)
                     .background(ColorTheme.accent().opacity(0.1))
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(ColorTheme.accent().opacity(0.25), lineWidth: 0.5)
+                    )
                 }
             }
             .padding(.horizontal, Spacing.md)
@@ -165,13 +185,19 @@ struct AdrianView: View {
     }
 
     private func errorBanner(_ message: String) -> some View {
-        Text(message)
-            .font(.caption)
-            .foregroundColor(ColorTheme.primaryText())
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.xs)
+        AtmosphericSurface {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.error())
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.primaryText())
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ColorTheme.error().opacity(0.08))
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.xxs)
     }
 
     private var inputBar: some View {
@@ -183,10 +209,11 @@ struct AdrianView: View {
                 .padding(.horizontal, Spacing.md)
                 .padding(.vertical, Spacing.sm)
                 .background(ColorTheme.chatInput())
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
 
             if adrianService.isSending {
                 ProgressView()
+                    .tint(ColorTheme.accent())
                     .frame(width: 36, height: 36)
             } else {
                 Button {

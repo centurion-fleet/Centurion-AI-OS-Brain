@@ -20,6 +20,7 @@ struct WelcomeOnboardingView: View {
     var body: some View {
         ZStack {
             ColorTheme.background().ignoresSafeArea()
+            ColorTheme.atmosphericVeil().ignoresSafeArea()
 
             VStack(spacing: Spacing.xl) {
                 Spacer()
@@ -52,14 +53,7 @@ struct WelcomeOnboardingView: View {
 
     private var welcomeStep: some View {
         VStack(spacing: Spacing.lg) {
-            CenturionAppMark(size: 88)
-                .shadow(color: ColorTheme.accent().opacity(0.2), radius: 16, y: 6)
-
-            Text("Welcome to\nYour Centurion")
-                .font(.system(size: 32, weight: .bold, design: .serif))
-                .foregroundColor(ColorTheme.primaryText())
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
+            FullBrandHeader()
 
             Text("This is your private companion — on your network, for your mission.\n\nYou stay in charge. Your Centurion works beside you.")
                 .font(.body)
@@ -72,20 +66,25 @@ struct WelcomeOnboardingView: View {
 
     private var connectStep: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "app.connected.to.app.below.fill")
-                .font(.system(size: 44))
-                .foregroundColor(ColorTheme.accent())
+            SheetHeader(
+                title: "Link Your Centurion",
+                subtitle: "Make sure your iPhone and Centurion are on the same Wi‑Fi."
+            )
 
-            Text("Link Your Centurion")
-                .font(.title2.weight(.bold))
-                .foregroundColor(ColorTheme.primaryText())
-
-            Text("Make sure your iPhone and Centurion are on the same Wi‑Fi.\n\nYou'll find the Connect button in the first tab whenever you're ready.")
-                .font(.body)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .lineSpacing(6)
-                .padding(.horizontal, Spacing.lg)
+            AtmosphericSurface {
+                VStack(spacing: Spacing.sm) {
+                    Image(systemName: "app.connected.to.app.below.fill")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundColor(ColorTheme.accent())
+                    Text("Open You → Your link whenever you're ready.")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, Spacing.lg)
 
             if connectionManager.connectionState == .connected {
                 Label("Connected", systemImage: "checkmark.circle.fill")
@@ -97,20 +96,25 @@ struct WelcomeOnboardingView: View {
 
     private var missionStep: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 44))
-                .foregroundColor(ColorTheme.accent().opacity(0.8))
+            SheetHeader(
+                title: "Discover Your Mission",
+                subtitle: "A quiet moment to reflect on your life."
+            )
 
-            Text("Discover Your Mission")
-                .font(.title2.weight(.bold))
-                .foregroundColor(ColorTheme.primaryText())
-
-            Text("A quiet moment to reflect on your life — what matters and what you're building.\n\nThis is about you, not how your Centurion behaves. You can return anytime from Home or Settings.")
-                .font(.body)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .lineSpacing(6)
-                .padding(.horizontal, Spacing.lg)
+            AtmosphericSurface(showRim: true) {
+                VStack(spacing: Spacing.sm) {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundColor(ColorTheme.accent().opacity(0.8))
+                    Text("This is about you, not how your Centurion behaves. You can return anytime from Home or Settings.")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, Spacing.lg)
         }
     }
 
@@ -124,20 +128,19 @@ struct WelcomeOnboardingView: View {
                     withAnimation(Motion.standard) { step = .connect }
                     Haptics.lightTap()
                 }
-                .buttonStyle(AmberButtonStyle())
+                .buttonStyle(CenturionPrimaryButtonStyle())
             case .connect:
                 VStack(spacing: Spacing.md) {
                     Button("Continue") {
                         withAnimation(Motion.standard) { step = .mission }
                         Haptics.lightTap()
                     }
-                    .buttonStyle(AmberButtonStyle())
+                    .buttonStyle(CenturionPrimaryButtonStyle())
 
                     Button("Skip for now") {
                         withAnimation(Motion.standard) { step = .mission }
                     }
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
+                    .buttonStyle(CenturionGhostButtonStyle())
                 }
             case .mission:
                 VStack(spacing: Spacing.md) {
@@ -145,13 +148,12 @@ struct WelcomeOnboardingView: View {
                         showMissionDiscovery = true
                         Haptics.mediumTap()
                     }
-                    .buttonStyle(AmberButtonStyle())
+                    .buttonStyle(CenturionPrimaryButtonStyle())
 
                     Button("Skip — explore the app") {
                         finishOnboarding()
                     }
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
+                    .buttonStyle(CenturionGhostButtonStyle())
                 }
             }
         }

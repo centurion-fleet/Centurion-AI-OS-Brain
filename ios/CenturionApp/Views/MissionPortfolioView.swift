@@ -39,6 +39,7 @@ enum PulseCategory: String, CaseIterable {
 
 struct MissionPortfolioView: View {
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var dataMode: AppDataMode
     @State private var liveActivity: LiveActivity?
     @State private var completedLoops: [CompletedLoop] = []
@@ -57,6 +58,9 @@ struct MissionPortfolioView: View {
     @State private var chatTarget: ChatSheetTarget?
     /// Output document viewer state
     @State private var selectedOutput: CenturionOutput?
+    /// Swarm constellation sheets
+    @State private var selectedSwarm: SwarmSummary?
+    @State private var showConstellation = false
 
     // MARK: - Notification tracking
     // Stores the last time each category was viewed. Items newer than this date
@@ -74,10 +78,11 @@ struct MissionPortfolioView: View {
         let decisions = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
         let thoughts = Date(timeIntervalSinceReferenceDate: lastSeenThoughts)
         return [
-            .live: 0,
+            .live: swarmStore.heroSwarms.filter { $0.pulse == .active }.isEmpty ? 0 : 1,
             .wins: completedLoops.filter { $0.completedAt > wins }.count,
             .outputs: self.outputs.filter { $0.createdAt > outputs }.count,
-            .decisions: self.decisions.filter { $0.createdAt > decisions }.count,
+            .decisions: self.decisions.filter { $0.createdAt > decisions }.count
+                + swarmStore.signalsRequiringAttention.count,
             .pulse: self.thoughts.filter { $0.timestamp > thoughts }.count,
         ]
     }
@@ -109,17 +114,23 @@ struct MissionPortfolioView: View {
 
     var body: some View {
         TabPageChrome(title: "Home") {
-            pillNavigation
-                .padding(.horizontal, Spacing.sm)
-                .padding(.bottom, Spacing.xs)
+            CenturionPillNav(
+                items: PulseCategory.allCases,
+                selection: $selectedCategory,
+                title: { $0.displayTitle },
+                icon: { $0.icon },
+                badge: { badgeCounts[$0] ?? 0 }
+            )
+            .padding(.bottom, Spacing.xs)
+            .onChange(of: selectedCategory) { _, category in
+                markSeen(category)
+            }
         } content: {
             Group {
                 if isDataLoaded {
                     pulseScrollContent
                 } else {
-                    ProgressView()
-                        .tint(ColorTheme.accent())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingState(message: "Loading your dashboard…")
                 }
             }
         }
@@ -140,6 +151,19 @@ struct MissionPortfolioView: View {
         .sheet(item: $chatTarget) { target in
             chatSheet(for: target.context)
         }
+        .sheet(item: $selectedSwarm) { swarm in
+            SwarmDetailSheet(swarm: swarm) { discussed in
+                openChat(context: .standalone(title: discussed.displayName))
+            }
+            .environmentObject(swarmStore)
+        }
+        .sheet(isPresented: $showConstellation) {
+            ConstellationView { swarm in
+                showConstellation = false
+                selectedSwarm = swarm
+            }
+            .environmentObject(swarmStore)
+        }
     }
 
     private var pulseScrollContent: some View {
@@ -148,6 +172,18 @@ struct MissionPortfolioView: View {
                 if dataMode.showsDemoContent {
                     DemoDataBanner()
                 }
+
+                SwarmConstellationHero(
+                    hasMission: missionStore.hasMissionStatement,
+                    missionSnippet: missionStore.mission.statement,
+                    onSelectSwarm: { swarm in
+                        selectedSwarm = swarm
+                    },
+                    onShowAll: {
+                        showConstellation = true
+                    }
+                )
+                .environmentObject(swarmStore)
 
                 missionBanner
 
@@ -164,13 +200,21 @@ struct MissionPortfolioView: View {
                     if !outputs.isEmpty {
                         outputsSection
                     } else {
-                        emptyCategory("No outputs yet", "Documents the Centurion creates will appear here")
+                        EmptyState(
+                            icon: "doc.richtext",
+                            title: "No outputs yet",
+                            message: "Documents the Centurion creates will appear here"
+                        )
                     }
                 case .decisions:
                     if !decisions.isEmpty {
                         decisionsSection
                     } else {
-                        emptyCategory("All clear", "Nothing needs your attention right now")
+                        EmptyState(
+                            icon: "checkmark.circle",
+                            title: "All clear",
+                            message: "Nothing needs your attention right now"
+                        )
                     }
                 case .pulse:
                     thoughtsSection
@@ -180,98 +224,6 @@ struct MissionPortfolioView: View {
             .padding()
             .frame(maxWidth: .infinity)
         }
-    }
-
-    // MARK: - Pill Navigation
-
-    private var pillNavigation: some View {
-        HStack(spacing: 4) {
-            ForEach(PulseCategory.allCases, id: \.self) { category in
-                pillButton(for: category)
-                    .layoutPriority(selectedCategory == category ? 1 : 0)
-            }
-        }
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, Spacing.xs)
-    }
-
-    private func pillButton(for category: PulseCategory) -> some View {
-        let isSelected = selectedCategory == category
-        let badgeCount = badgeCounts[category] ?? 0
-
-        return Button {
-            Haptics.lightTap()
-            withAnimation(Motion.standard) {
-                selectedCategory = category
-            }
-            markSeen(category)
-        } label: {
-            HStack(spacing: 5) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: category.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 18, height: 18)
-
-                    if badgeCount > 0 && !isSelected {
-                        Circle()
-                            .fill(ColorTheme.accent())
-                            .frame(width: 6, height: 6)
-                            .offset(x: 4, y: -4)
-                    }
-                }
-
-                if isSelected {
-                    Text(category.displayTitle)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
-                }
-
-                if isSelected && badgeCount > 0 {
-                    Text("\(badgeCount)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color.white.opacity(0.25))
-                        .clipShape(Capsule())
-                }
-
-                if isSelected {
-                    Spacer(minLength: 0)
-                }
-            }
-            .foregroundColor(isSelected ? .white : ColorTheme.primaryText())
-            .padding(.horizontal, isSelected ? 12 : 8)
-            .padding(.vertical, 9)
-            .frame(maxWidth: isSelected ? .infinity : nil)
-            .background(
-                isSelected
-                    ? ColorTheme.accent()
-                    : ColorTheme.surface().opacity(0.6)
-            )
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isSelected
-                            ? ColorTheme.accent().opacity(0.3)
-                            : ColorTheme.border().opacity(0.5),
-                        lineWidth: 0.5
-                    )
-            )
-            .shadow(
-                color: isSelected ? ColorTheme.accent().opacity(0.25) : .clear,
-                radius: 6,
-                x: 0,
-                y: 2
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(category.displayTitle)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .animation(Motion.light, value: selectedCategory)
     }
 
     // MARK: - Chat Sheet
@@ -353,7 +305,7 @@ struct MissionPortfolioView: View {
             Text(missionStore.mission.statement.isEmpty
                  ? "Discover what matters in your life"
                  : missionStore.mission.statement)
-                .font(.title3.weight(.bold))
+                .font(Typography.editorialTitle)
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.leading)
                 .lineSpacing(4)
@@ -381,13 +333,7 @@ struct MissionPortfolioView: View {
                 .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(Spacing.md)
-        .background(ColorTheme.surface())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(ColorTheme.border(), lineWidth: 0.5)
-        )
+        .centurionCard(elevated: true)
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 10)
     }
@@ -957,26 +903,6 @@ struct MissionPortfolioView: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.orange.opacity(0.15), lineWidth: 0.5)
         )
-    }
-
-    // MARK: - Empty State
-
-    private func emptyCategory(_ title: String, _ subtitle: String) -> some View {
-        VStack(spacing: Spacing.md) {
-            Spacer().frame(height: 60)
-            Image(systemName: "sparkle")
-                .font(.system(size: 32))
-                .foregroundColor(ColorTheme.dimAccent())
-            Text(title)
-                .font(.headline)
-                .foregroundColor(ColorTheme.primaryText())
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-            Spacer().frame(height: 60)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private func urgencyBadge(_ urgency: DecisionItem.Urgency) -> some View {

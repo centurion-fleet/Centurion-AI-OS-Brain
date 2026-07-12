@@ -62,29 +62,13 @@ struct ConversationListView: View {
     // MARK: - Section Headers
 
     private var missionSectionHeader: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "target")
-                .font(.caption)
-                .foregroundColor(ColorTheme.accent())
-            Text("ACTIVE MISSIONS")
-                .font(.system(size: 12, weight: .semibold, design: .default))
-                .foregroundColor(ColorTheme.mutedText())
-        }
-        .textCase(nil)
-        .padding(.top, Spacing.xs)
+        CenturionSectionHeader(title: "Active Missions", icon: "target")
+            .padding(.top, Spacing.xs)
     }
 
     private var standaloneSectionHeader: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "message.fill")
-                .font(.caption)
-                .foregroundColor(ColorTheme.dimAccent())
-            Text("CHATS")
-                .font(.system(size: 12, weight: .semibold, design: .default))
-                .foregroundColor(ColorTheme.mutedText())
-        }
-        .textCase(nil)
-        .padding(.top, Spacing.xs)
+        CenturionSectionHeader(title: "Chats", icon: "message.fill")
+            .padding(.top, Spacing.xs)
     }
 
     // MARK: - Conversation Row
@@ -147,33 +131,21 @@ struct ConversationListView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: connectionManager.connectionState == .connected
-                  ? "message.fill"
-                  : "antenna.radiowaves.left.and.right")
-                .font(.system(size: 40))
-                .foregroundColor(ColorTheme.mutedText())
-
+        Group {
             if connectionManager.connectionState == .connected {
-                Text("No conversations yet")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(ColorTheme.primaryText())
-                Text("Chat about a mission target or send a message — conversations appear here automatically.")
-                    .font(.system(size: 14))
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
+                EmptyState(
+                    icon: "message.fill",
+                    title: "No conversations yet",
+                    message: "Chat about a mission target or send a message — conversations appear here automatically."
+                )
             } else if connectionManager.connectionState == .discovering {
-                ProgressView()
-                    .tint(ColorTheme.accent())
-                Text("Looking for your Centurion…")
-                    .font(.system(size: 15))
-                    .foregroundColor(ColorTheme.mutedText())
+                LoadingState(message: "Looking for your Centurion…")
             } else {
-                Text("Not connected")
-                    .font(.system(size: 17, weight: .semibold))
-                Text("Go to Settings to connect")
-                    .font(.system(size: 14))
-                    .foregroundColor(ColorTheme.mutedText())
+                EmptyState(
+                    icon: "antenna.radiowaves.left.and.right",
+                    title: "Not connected",
+                    message: "Open You to link your iPhone to your Centurion."
+                )
             }
         }
         .padding()

@@ -238,3 +238,91 @@ code { font-size: 0.875rem; }
   display: none;
 }
 
+/* Swarm constellation orb motion (dashboard /mission) */
+@keyframes swarm-breath {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes swarm-beacon {
+  0% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+}
+
+@keyframes swarm-ripple {
+  0% {
+    transform: scale(0.78);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.02);
+    opacity: 0;
+  }
+}
+
+@keyframes swarm-orbit-drift {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.swarm-orb-pulse-idle span:nth-child(2),
+.swarm-orb-pulse-forming span:nth-child(2) {
+  animation: swarm-breath 3.5s ease-in-out infinite;
+}
+
+.swarm-orb-pulse-active span:nth-child(2) {
+  animation: swarm-breath 3s ease-in-out infinite;
+}
+
+.swarm-orb-pulse-idle span:first-child,
+.swarm-orb-pulse-forming span:first-child {
+  animation: swarm-orbit-drift 36s linear infinite;
+}
+
+.swarm-orb-pulse-waiting span:first-child,
+.swarm-orb-pulse-attention span:first-child {
+  animation: swarm-beacon 1.2s ease-out infinite;
+}
+
+.swarm-orb-pulse-attention::after,
+.swarm-orb-pulse-waiting::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid color-mix(in srgb, #ebc773 35%, transparent);
+  animation: swarm-ripple 2.4s ease-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swarm-orb-pulse-idle span,
+  .swarm-orb-pulse-forming span,
+  .swarm-orb-pulse-active span,
+  .swarm-orb-pulse-waiting span,
+  .swarm-orb-pulse-attention span,
+  .swarm-orb-pulse-attention::after,
+  .swarm-orb-pulse-waiting::after {
+    animation: none !important;
+  }
+}
+

@@ -11,60 +11,85 @@ struct ThinkingRecoverySheet: View {
     let initialMessage: String
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text(plainStatusMessage)
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.mutedText())
-                } header: {
-                    Text("What we found")
-                }
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button("Close") { dismiss() }
+                    .buttonStyle(CenturionGhostButtonStyle())
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.top, Spacing.sm)
 
-                if connectionManager.thinkingStatus?.lastGoodAvailable == true {
-                    Section {
-                        Button("Restore last working setup") {
+            ScrollView {
+                VStack(spacing: Spacing.lg) {
+                    SheetHeader(
+                        title: "Fix Thinking Service",
+                        subtitle: "We'll get your Centurion thinking again"
+                    )
+
+                    ErrorState(
+                        title: "Something needs attention",
+                        message: plainStatusMessage
+                    )
+
+                    if connectionManager.thinkingStatus?.lastGoodAvailable == true {
+                        Button {
                             Task { await restoreLastGood() }
+                        } label: {
+                            if isWorking {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text("Restore last working setup")
+                            }
                         }
+                        .buttonStyle(CenturionPrimaryButtonStyle())
                         .disabled(isWorking)
+                        .padding(.horizontal, Spacing.md)
                         .accessibilityLabel("Restore last working setup")
                     }
-                }
 
-                Section {
                     Button("Get Help") {
                         showGetHelp = true
                     }
+                    .buttonStyle(CenturionSecondaryButtonStyle())
+                    .padding(.horizontal, Spacing.md)
                     .accessibilityLabel("Get Help")
 
                     Text("API keys and deeper changes are made on your Centurion computer, not on this iPhone.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .padding(.horizontal, Spacing.lg)
+
+                    if !statusMessage.isEmpty {
+                        Text(statusMessage)
+                            .font(.subheadline)
+                            .foregroundColor(ColorTheme.primaryText())
+                            .multilineTextAlignment(.center)
+                            .padding(Spacing.md)
+                            .frame(maxWidth: .infinity)
+                            .centurionCard()
+                            .padding(.horizontal, Spacing.md)
+                    }
                 }
+                .padding(.bottom, Spacing.xl)
             }
-            .navigationTitle("Fix Thinking Service")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                }
+        }
+        .background(
+            ZStack {
+                ColorTheme.background()
+                ColorTheme.atmosphericVeil()
+                    .ignoresSafeArea()
             }
-            .task {
-                await connectionManager.refreshThinkingStatus()
-            }
-            .sheet(isPresented: $showGetHelp) {
-                GetHelpView()
-                    .environmentObject(connectionManager)
-            }
-            .overlay(alignment: .bottom) {
-                if !statusMessage.isEmpty {
-                    Text(statusMessage)
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.primaryText())
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(ColorTheme.surface())
-                }
-            }
+        )
+        .task {
+            await connectionManager.refreshThinkingStatus()
+        }
+        .sheet(isPresented: $showGetHelp) {
+            GetHelpView()
+                .environmentObject(connectionManager)
         }
     }
 

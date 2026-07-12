@@ -22,6 +22,41 @@ export type TargetType =
 
 export type TargetStatus = "not_started" | "in_progress" | "complete" | "blocked";
 
+/** Orb animation state — shared with iOS SwarmSummary.pulse */
+export type SwarmPulse =
+  | "idle"
+  | "active"
+  | "attention"
+  | "waiting"
+  | "blocked"
+  | "complete"
+  | "forming";
+
+export type SwarmFormationSource = "chat" | "meeting" | "manual";
+
+export interface SwarmParticipant {
+  id: string;
+  name: string;
+  kind: "centurion" | "human";
+  role: "owner" | "operator" | "observer";
+  is_active?: boolean;
+}
+
+/** Slim cross-platform Swarm card model for constellation UI */
+export interface SwarmSummary {
+  id: string;
+  mission_id?: string | null;
+  display_name: string;
+  objective: string;
+  status: string;
+  pulse: SwarmPulse;
+  formation_source: SwarmFormationSource;
+  participants: SwarmParticipant[];
+  pending_signal_count: number;
+  updated_at: string;
+  attention_score?: number;
+}
+
 export interface MissionProject {
   id: string;
   title: string;

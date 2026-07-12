@@ -15,6 +15,8 @@ struct GetHelpView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
+                    FullBrandHeader()
+
                     introSection
 
                     if !supportCode.isEmpty {
@@ -24,20 +26,14 @@ struct GetHelpView: View {
                     actionButtons
 
                     if !statusMessage.isEmpty {
-                        Text(statusMessage)
-                            .font(.subheadline)
-                            .foregroundColor(ColorTheme.primaryText())
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(ColorTheme.surface())
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        statusSection
                     }
 
                     footerNote
                 }
                 .padding()
             }
-            .background(ColorTheme.background())
+            .background(secondaryBackground)
             .navigationTitle("Get Help")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -49,53 +45,65 @@ struct GetHelpView: View {
         }
     }
 
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
+        }
+    }
+
     private var introSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Your Centurion can prepare a short support code on your computer.")
-                .font(.body)
-                .foregroundColor(ColorTheme.primaryText())
+        AtmosphericSurface {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                CenturionSectionHeader(title: "Support", icon: "lifepreserver")
 
-            Text("Share the code with your advisor — nothing leaves your network unless you choose to share it.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
+                Text("Your Centurion can prepare a short support code on your computer.")
+                    .font(.body)
+                    .foregroundColor(ColorTheme.primaryText())
 
-            Text("For step-by-step help anytime, open Adrian from Connect or the You tab.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
+                Text("Share the code with your advisor — nothing leaves your network unless you choose to share it.")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineSpacing(3)
+
+                Text("For step-by-step help anytime, open Adrian from Connect or the You tab.")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineSpacing(3)
+            }
         }
     }
 
     private var supportCodeSection: some View {
-        VStack(spacing: Spacing.md) {
-            Text(supportCode)
-                .font(.system(size: 36, weight: .semibold, design: .rounded))
-                .foregroundColor(ColorTheme.accent())
-                .tracking(2)
-                .accessibilityLabel("Support code \(supportCode)")
+        AtmosphericSurface(elevated: true, showRim: true) {
+            VStack(spacing: Spacing.md) {
+                CenturionSectionHeader(title: "Your Code", icon: "number")
 
-            if !supportSummary.isEmpty {
-                Text(supportSummary)
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-            }
+                Text(supportCode)
+                    .font(.system(size: 36, weight: .semibold, design: .rounded))
+                    .foregroundColor(ColorTheme.accent())
+                    .tracking(2)
+                    .accessibilityLabel("Support code \(supportCode)")
 
-            Button("Copy Support Code") {
-                UIPasteboard.general.string = supportCode
-                Haptics.success()
-                statusMessage = "Support code copied."
+                if !supportSummary.isEmpty {
+                    Text(supportSummary)
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                }
+
+                Button("Copy Support Code") {
+                    UIPasteboard.general.string = supportCode
+                    Haptics.success()
+                    statusMessage = "Support code copied."
+                }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .accessibilityHint("Copies the support code to the clipboard")
             }
-            .buttonStyle(AmberButtonStyle())
-            .accessibilityHint("Copies the support code to the clipboard")
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
-        .padding(Spacing.lg)
-        .background(ColorTheme.surface())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(ColorTheme.border(), lineWidth: 0.5)
-        )
     }
 
     private var actionButtons: some View {
@@ -104,9 +112,8 @@ struct GetHelpView: View {
                 Task { await generateSupportCode() }
             } label: {
                 Text(didGenerateCode ? "Create New Support Code" : "Send to Support")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(AmberButtonStyle())
+            .buttonStyle(CenturionPrimaryButtonStyle())
             .disabled(isWorking || connectionManager.connectionState != .connected)
             .accessibilityLabel("Send to Support")
             .accessibilityHint("Creates a support code on your Centurion")
@@ -115,10 +122,8 @@ struct GetHelpView: View {
                 Task { await runAutoFix() }
             } label: {
                 Text("Try to Fix Automatically")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(ColorTheme.accent())
+            .buttonStyle(CenturionSecondaryButtonStyle())
             .disabled(isWorking || connectionManager.connectionState != .connected)
             .accessibilityLabel("Try to Fix Automatically")
             .accessibilityHint("Restores your last working thinking service setup")
@@ -127,11 +132,19 @@ struct GetHelpView: View {
                 Task { await checkAgain() }
             } label: {
                 Text("Check Again")
-                    .frame(maxWidth: .infinity)
             }
-            .font(.subheadline.weight(.medium))
-            .foregroundColor(ColorTheme.accent())
+            .buttonStyle(CenturionGhostButtonStyle())
             .disabled(isWorking || connectionManager.connectionState != .connected)
+        }
+    }
+
+    private var statusSection: some View {
+        AtmosphericSurface {
+            Text(statusMessage)
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.primaryText())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineSpacing(3)
         }
     }
 

@@ -138,4 +138,45 @@ enum ColorTheme {
                 : UIColor(red: 0.176, green: 0.165, blue: 0.141, alpha: 0.45)  // rgba(45,42,36,0.45)
         })
     }
+
+    // MARK: - Brand ramp (Art Deco / atmospheric)
+
+    /// Warm amber gold — brand primary in dark, accent companion in light
+    static func amber() -> Color {
+        Color(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor(red: 1.0, green: 0.843, blue: 0.0, alpha: 1.0)
+                : UIColor(red: 0.722, green: 0.478, blue: 0.212, alpha: 1.0)   // #b87a36
+        })
+    }
+
+    static func agedBronze() -> Color {
+        Color(red: 0.55, green: 0.42, blue: 0.28)
+    }
+
+    static func atmosphereTeal() -> Color {
+        Color(red: 0.22, green: 0.58, blue: 0.56)
+    }
+
+    static func pearlHighlight() -> Color {
+        Color(red: 1.0, green: 0.96, blue: 0.88)
+    }
+
+    /// Elevated hero / modal surfaces
+    static func surfaceElevated() -> Color {
+        Color(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor(red: 0.055, green: 0.20, blue: 0.20, alpha: 1.0)
+                : UIColor(red: 1.0, green: 0.99, blue: 0.97, alpha: 1.0)
+        })
+    }
+
+    /// Atmospheric vignette tint over backgrounds
+    static func atmosphericVeil() -> Color {
+        Color(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor(red: 0.22, green: 0.58, blue: 0.56, alpha: 0.06)
+                : UIColor(red: 0.722, green: 0.478, blue: 0.212, alpha: 0.04)
+        })
+    }
 }

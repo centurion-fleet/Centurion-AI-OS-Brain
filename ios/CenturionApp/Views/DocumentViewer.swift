@@ -11,70 +11,26 @@ struct DocumentViewer: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Header
-                VStack(alignment: .leading, spacing: 12) {
-                    // Type badge
-                    HStack(spacing: 6) {
-                        Image(systemName: output.type.icon)
-                            .font(.system(size: 10))
-                        Text(output.type.rawValue.uppercased())
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                    }
-                    .foregroundColor(ColorTheme.accent())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(ColorTheme.accent().opacity(0.1))
-                    .clipShape(Capsule())
+                documentHeader
 
-                    // Title
-                    Text(output.title)
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                        .foregroundColor(ColorTheme.primaryText())
-                        .lineSpacing(4)
-
-                    // Meta row
-                    HStack(spacing: 12) {
-                        if let mission = output.relatedMission {
-                            Text(mission)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(ColorTheme.accent())
-                        }
-                        Text("\(output.wordCount) words")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(ColorTheme.mutedText())
-                        Text(output.sourceLoop)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    // Source path
-                    Text(output.filePath)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundColor(ColorTheme.mutedText())
-
-                    // Divider
-                    Rectangle()
-                        .fill(ColorTheme.accent().opacity(0.15))
-                        .frame(height: 1)
-                        .padding(.top, 8)
-                }
-                .padding(.horizontal)
-                .padding(.top)
-
-                // Body — rendered as markdown-like styled text
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.md) {
                     let blocks = parseContent(output.content)
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                         renderedBlock(block)
                     }
                 }
-                .padding()
+                .padding(Spacing.md)
             }
             .frame(maxWidth: 428)
             .frame(maxWidth: .infinity)
         }
-        .background(ColorTheme.background())
-        .navigationTitle(output.title)
+        .background(
+            ZStack {
+                ColorTheme.background()
+                ColorTheme.atmosphericVeil()
+                    .ignoresSafeArea()
+            }
+        )
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -83,14 +39,68 @@ struct DocumentViewer: View {
                     showShare = true
                 }) {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14))
+                        .font(.body.weight(.medium))
                         .foregroundColor(ColorTheme.accent())
                 }
+                .accessibilityLabel("Share document")
             }
         }
         .sheet(isPresented: $showShare) {
             shareSheet
         }
+    }
+
+    private var documentHeader: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: 6) {
+                Image(systemName: output.type.icon)
+                    .font(.caption.weight(.semibold))
+                Text(output.type.rawValue.uppercased())
+                    .font(Typography.sectionLabel)
+                    .tracking(1.5)
+            }
+            .foregroundColor(ColorTheme.accent())
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xxs)
+            .background(ColorTheme.accent().opacity(0.1))
+            .clipShape(Capsule())
+
+            Text(output.title)
+                .font(Typography.editorialTitle)
+                .foregroundColor(ColorTheme.primaryText())
+                .lineSpacing(4)
+
+            HStack(spacing: Spacing.sm) {
+                if let mission = output.relatedMission {
+                    Text(mission)
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(ColorTheme.accent())
+                }
+                Text("\(output.wordCount) words")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                Text(output.sourceLoop)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            Text(output.filePath)
+                .font(.caption2.monospaced())
+                .foregroundColor(ColorTheme.mutedText())
+
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [ColorTheme.accent().opacity(0.15), ColorTheme.border()],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1)
+                .padding(.top, Spacing.xs)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.md)
     }
 
     // MARK: - Content Rendering
@@ -232,13 +242,7 @@ struct DocumentViewer: View {
                     .foregroundColor(ColorTheme.accent())
                     .lineSpacing(4)
             }
-            .padding()
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(ColorTheme.border(), lineWidth: 0.5)
-            )
+            .centurionCard()
         }
     }
 
@@ -249,57 +253,45 @@ struct DocumentViewer: View {
     // MARK: - Share
 
     private var shareSheet: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Image(systemName: output.type.icon)
-                    .font(.system(size: 36))
-                    .foregroundColor(ColorTheme.accent())
+        VStack(spacing: Spacing.lg) {
+            SheetHeader(title: "Share", subtitle: output.title)
 
-                Text(output.title)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+            Image(systemName: output.type.icon)
+                .font(.system(size: 36, weight: .light))
+                .foregroundColor(ColorTheme.accent().opacity(0.7))
 
-                Text("\(output.wordCount) words • \(output.sourceLoop)")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
+            Text("\(output.wordCount) words · \(output.sourceLoop)")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
 
-                Button(action: {
-                    UIPasteboard.general.string = output.content
-                    Haptics.success()
-                }) {
-                    Label("Copy to Clipboard", systemImage: "doc.on.doc")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.accent())
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .background(ColorTheme.accent().opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                Button(action: {
-                    let activityVC = UIActivityViewController(
-                        activityItems: [output.title, output.content],
-                        applicationActivities: nil
-                    )
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let root = windowScene.windows.first?.rootViewController {
-                        root.present(activityVC, animated: true)
-                    }
-                }) {
-                    Label("Share...", systemImage: "square.and.arrow.up")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.accent())
-                }
-                .buttonStyle(.plain)
+            Button {
+                UIPasteboard.general.string = output.content
+                Haptics.success()
+            } label: {
+                Label("Copy to Clipboard", systemImage: "doc.on.doc")
             }
-            .padding()
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showShare = false }
-                        .foregroundColor(ColorTheme.accent())
+            .buttonStyle(CenturionSecondaryButtonStyle())
+            .padding(.horizontal, Spacing.md)
+
+            Button {
+                let activityVC = UIActivityViewController(
+                    activityItems: [output.title, output.content],
+                    applicationActivities: nil
+                )
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let root = windowScene.windows.first?.rootViewController {
+                    root.present(activityVC, animated: true)
                 }
+            } label: {
+                Label("Share…", systemImage: "square.and.arrow.up")
             }
+            .buttonStyle(CenturionPrimaryButtonStyle())
+            .padding(.horizontal, Spacing.md)
+
+            Spacer()
         }
+        .padding(.top, Spacing.lg)
+        .background(ColorTheme.background())
         .presentationDetents([.medium])
     }
 }

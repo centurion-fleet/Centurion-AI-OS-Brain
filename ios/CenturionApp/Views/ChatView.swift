@@ -15,18 +15,21 @@ struct ChatView: View {
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var dataMode: AppDataMode
+    @EnvironmentObject private var swarmStore: SwarmStore
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
     @FocusState private var isFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The currently selected conversation (nil = clean empty state)
     @State private var selectedConversation: Conversation?
 
     /// Pull-down tray state
     @State private var showTray = false
+    @State private var showFormationSheet = false
 
     var body: some View {
         Group {
@@ -62,6 +65,16 @@ struct ChatView: View {
 
             if let sendError {
                 llmErrorBanner(sendError)
+            }
+
+            if let proposal = swarmStore.formationProposal {
+                SwarmFormationCard(
+                    proposal: proposal,
+                    onStart: { showFormationSheet = true },
+                    onDismiss: { swarmStore.dismissFormationProposal() }
+                )
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.xs)
             }
 
             if showTray {
@@ -106,6 +119,12 @@ struct ChatView: View {
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(initialMessage: sendError ?? "Your Centurion's thinking service needs attention.")
                 .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showFormationSheet) {
+            if let proposal = swarmStore.formationProposal {
+                SwarmFormationSheet(proposal: proposal)
+                    .environmentObject(swarmStore)
+            }
         }
     }
 
@@ -279,39 +298,48 @@ struct ChatView: View {
     // MARK: - Status Banners
 
     private var offlineBanner: some View {
-        HStack(spacing: Spacing.sm) {
-            Image(systemName: "wifi.slash")
-                .foregroundColor(ColorTheme.mutedText())
-            Text("Not connected — link your Centurion in the Connect tab to send messages.")
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
+        AtmosphericSurface {
+            HStack(alignment: .top, spacing: Spacing.sm) {
+                Image(systemName: "wifi.slash")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                Text("Not connected — link your Centurion in You to send messages.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(ColorTheme.surface())
+        .padding(.top, Spacing.xs)
     }
 
     private func llmErrorBanner(_ message: String) -> some View {
         Button {
             showRecoverySheet = true
         } label: {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack(spacing: Spacing.sm) {
+            AtmosphericSurface(elevated: true) {
+                HStack(alignment: .top, spacing: Spacing.sm) {
                     Image(systemName: "exclamationmark.circle")
+                        .font(.subheadline)
                         .foregroundColor(ColorTheme.error())
                     Text("Your Centurion is having trouble thinking right now. Tap to fix.")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(ColorTheme.primaryText())
                         .multilineTextAlignment(.leading)
+                        .lineSpacing(3)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ColorTheme.error().opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .stroke(ColorTheme.error().opacity(0.25), lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.xs)
         .accessibilityLabel("Your Centurion is having trouble thinking right now. Tap to fix.")
         .accessibilityHint("Opens the Fix Thinking Service screen")
     }
@@ -336,99 +364,74 @@ struct ChatView: View {
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: Spacing.md) {
+        VStack {
             Spacer()
-
-            Image(systemName: "message.fill")
-                .font(.system(size: 40))
-                .foregroundColor(ColorTheme.accent().opacity(0.45))
-
-            Text("All messages from your Centurion appear here.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.xl)
-
-            Text("Tap Conversations above to open a thread.")
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText().opacity(0.8))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.xl)
-
+            EmptyState(
+                icon: "message.fill",
+                title: "Your conversations",
+                message: "All messages from your Centurion appear here. Tap Conversations above to open a thread."
+            )
             Spacer()
         }
         .frame(maxWidth: 428)
     }
 
     private func emptyChatState(context: ConversationContext) -> some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 36))
-                .foregroundColor(ColorTheme.mutedText())
-
-            Text("Chat about \(context.displayTitle)")
-                .font(.headline)
-                .foregroundColor(ColorTheme.primaryText())
-                .multilineTextAlignment(.center)
-
-            Text("Messages here appear in the full chat stream too.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-        }
-        .padding()
+        EmptyState(
+            icon: "bubble.left.and.bubble.right",
+            title: "Chat about \(context.displayTitle)",
+            message: "Messages here appear in the full chat stream too."
+        )
     }
 
     // MARK: - Input Bar
 
     private var inputBar: some View {
         VStack(spacing: 0) {
-            Rectangle()
-                .fill(ColorTheme.border())
-                .frame(height: 0.5)
+            AtmosphericSurface(elevated: true) {
+                HStack(spacing: Spacing.sm) {
+                    TextField(
+                        selectedConversation != nil
+                            ? "Message about \(selectedConversation!.displayTitle)…"
+                            : "Message your Centurion…",
+                        text: $messageText
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .focused($isFocused)
+                    .disabled(isSending || connectionManager.connectionState != .connected)
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.vertical, Spacing.sm)
+                    .background(ColorTheme.chatInput())
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                            .stroke(isFocused ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
+                    )
+                    .animation(Motion.light, value: isFocused)
 
-            HStack(spacing: Spacing.sm) {
-                TextField(
-                    selectedConversation != nil
-                        ? "Message about \(selectedConversation!.displayTitle)…"
-                        : "Message your Centurion…",
-                    text: $messageText
-                )
-                .textFieldStyle(.plain)
-                .font(.system(size: 16))
-                .focused($isFocused)
-                .disabled(isSending || connectionManager.connectionState != .connected)
-                .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
-                .background(ColorTheme.chatInput())
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(isFocused ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
-                )
-                .animation(Motion.light, value: isFocused)
-
-                if isSending {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .frame(width: 40, height: 40)
-                } else {
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(
-                                messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? ColorTheme.mutedText()
-                                : ColorTheme.accent()
-                            )
+                    if isSending {
+                        ProgressView()
+                            .tint(ColorTheme.accent())
+                            .scaleEffect(0.8)
+                            .frame(width: 40, height: 40)
+                    } else {
+                        Button(action: sendMessage) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(
+                                    messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? ColorTheme.mutedText()
+                                    : ColorTheme.accent()
+                                )
+                        }
+                        .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .animation(Motion.light, value: messageText)
                     }
-                    .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .animation(Motion.light, value: messageText)
                 }
             }
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
-            .background(.ultraThinMaterial)
         }
         .padding(.bottom, Spacing.lg)
     }
@@ -512,11 +515,17 @@ struct ChatView: View {
                 .padding(.vertical, Spacing.sm)
                 .background(message.role == .user
                     ? ColorTheme.accent().opacity(0.12)
-                    : ColorTheme.surface())
+                    : ColorTheme.surfaceElevated())
                 .clipShape(BubbleShape(role: message.role))
                 .overlay(
                     BubbleShape(role: message.role)
                         .stroke(ColorTheme.border(), lineWidth: message.role == .user ? 0 : 0.5)
+                )
+                .shadow(
+                    color: Elevation.cardShadow(colorScheme: colorScheme).opacity(0.65),
+                    radius: 4,
+                    x: 0,
+                    y: 2
                 )
         }
 

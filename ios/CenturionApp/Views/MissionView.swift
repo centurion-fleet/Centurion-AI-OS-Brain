@@ -12,6 +12,7 @@ struct MissionView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
+                FullBrandHeader()
                 missionHero
                 missionDiscoverySection
                 missionTargetsSection
@@ -19,7 +20,13 @@ struct MissionView: View {
             }
             .padding()
         }
-        .background(ColorTheme.background())
+        .background(
+            ZStack {
+                ColorTheme.background()
+                ColorTheme.atmosphericVeil()
+                    .ignoresSafeArea()
+            }
+        )
         .navigationTitle("Mission")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $isDiscovering) {
@@ -38,56 +45,49 @@ struct MissionView: View {
     // MARK: - Hero
 
     private var missionHero: some View {
-        VStack(spacing: Spacing.md) {
-            if missionStore.hasMissionStatement {
-                Text("WHAT YOU'RE BUILDING TOWARD")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(ColorTheme.accent())
-                    .tracking(2)
+        AtmosphericSurface(elevated: true, showRim: missionStore.hasMissionStatement) {
+            VStack(spacing: Spacing.md) {
+                if missionStore.hasMissionStatement {
+                    Text("WHAT YOU'RE BUILDING TOWARD")
+                        .font(Typography.sectionLabel)
+                        .foregroundColor(ColorTheme.accent())
+                        .tracking(2)
 
-                Text(missionStore.mission.statement)
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(ColorTheme.primaryText())
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(6)
+                    Text(missionStore.mission.statement)
+                        .font(Typography.editorialTitle)
+                        .foregroundColor(ColorTheme.primaryText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(6)
 
-                if !profile.whyThisMission.isEmpty {
-                    Text(profile.whyThisMission)
+                    if !profile.whyThisMission.isEmpty {
+                        Text(profile.whyThisMission)
+                            .font(.subheadline)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+                    }
+
+                    Text("This is about you — your life, your purpose, your commitments.")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .padding(.top, Spacing.xs)
+                } else {
+                    Text("YOUR LIFE\nMISSION")
+                        .font(Typography.editorialTitle)
+                        .foregroundColor(ColorTheme.primaryText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(6)
+
+                    Text("Your Centurion exists to help you discover what matters,\nthen walk beside you as you live it.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
-
-                Text("This is about you — your life, your purpose, your commitments.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-                    .padding(.top, Spacing.xs)
-            } else {
-                Text("YOUR LIFE\nMISSION")
-                    .font(.system(size: 28, weight: .bold, design: .serif))
-                    .foregroundColor(ColorTheme.primaryText())
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(6)
-
-                Text("Your Centurion exists to help you discover what matters,\nthen walk beside you as you live it.")
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
             }
+            .frame(maxWidth: .infinity)
         }
-        .padding(.vertical, Spacing.lg)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(ColorTheme.surface())
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(ColorTheme.accent().opacity(0.15), lineWidth: 1)
-                )
-        )
     }
 
     // MARK: - Mission Discovery
@@ -111,11 +111,9 @@ struct MissionView: View {
                     Text(missionStore.hasMissionStatement
                          ? "Refine Mission Discovery"
                          : "Begin Mission Discovery")
-                        .fontWeight(.semibold)
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(AmberButtonStyle())
+            .buttonStyle(CenturionPrimaryButtonStyle())
             .padding(.top, Spacing.sm)
         }
     }
@@ -174,11 +172,9 @@ struct MissionView: View {
                 HStack {
                     Image(systemName: profile.hasContext ? "pencil" : "plus.circle")
                     Text(profile.hasContext ? "Edit About You" : "Add context about you")
-                        .fontWeight(.semibold)
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(AmberButtonStyle())
+            .buttonStyle(CenturionPrimaryButtonStyle())
         }
     }
 
@@ -197,9 +193,7 @@ struct MissionView: View {
                 profileTags(title: "Help with", tags: profile.delegatePreferences)
             }
         }
-        .padding()
-        .background(ColorTheme.surface())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .centurionCard()
     }
 
     private func profileRow(title: String, value: String) -> some View {
@@ -224,19 +218,12 @@ struct MissionView: View {
     }
 
     private var emptyTargetsPrompt: some View {
-        VStack(spacing: Spacing.sm) {
-            Image(systemName: "target")
-                .font(.system(size: 28))
-                .foregroundColor(ColorTheme.mutedText().opacity(0.5))
-            Text("Complete Mission Discovery to define your commitments.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.lg)
-        .background(ColorTheme.surface())
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        EmptyState(
+            icon: "target",
+            title: "No commitments yet",
+            message: "Complete Mission Discovery to define your commitments."
+        )
+        .centurionCard()
     }
 }
 
@@ -288,13 +275,11 @@ struct LifeMissionTargetRow: View {
                 Spacer()
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? ColorTheme.accent().opacity(0.06) : ColorTheme.surface())
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(isSelected ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: 1)
-                    )
+            .background(isSelected ? ColorTheme.accent().opacity(0.06) : Color.clear)
+            .centurionCard(elevated: isSelected)
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .stroke(isSelected ? ColorTheme.accent().opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

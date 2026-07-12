@@ -22,6 +22,20 @@ struct SplashView: View {
         ZStack {
             ColorTheme.background()
                 .ignoresSafeArea()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
+
+            RadialGradient(
+                colors: [
+                    ColorTheme.atmosphereTeal().opacity(0.12),
+                    ColorTheme.accent().opacity(0.06),
+                    .clear,
+                ],
+                center: .center,
+                startRadius: 20,
+                endRadius: 280
+            )
+            .ignoresSafeArea()
 
             Circle()
                 .fill(
@@ -39,6 +53,7 @@ struct SplashView: View {
                 .frame(width: 220, height: 220)
 
             ZStack {
+                MetallicRim(diameter: 160, opacity: phase == .glow ? 0.35 : 0.55)
                 Circle()
                     .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 1)
                     .frame(width: 160, height: 160)
@@ -60,27 +75,35 @@ struct SplashView: View {
                     .frame(height: 140)
 
                 Text("CENTURION")
-                    .font(.system(size: 28, weight: .bold, design: .serif))
-                    .foregroundColor(ColorTheme.primaryText())
-                    .tracking(6)
-                    .opacity(phase == .glow ? 0.4 : 1)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(ColorTheme.mutedText())
+                    .tracking(4)
+                    .opacity(phase == .glow ? 0.4 : taglineOpacity)
 
                 Text("Live Your Personal Mission")
-                    .font(.system(size: 12))
+                    .font(.subheadline)
                     .foregroundColor(ColorTheme.dimAccent())
-                    .tracking(3)
+                    .tracking(1.5)
                     .opacity(taglineOpacity)
+                    .padding(.top, Spacing.sm)
 
                 Rectangle()
-                    .fill(ColorTheme.accent().opacity(0.3))
-                    .frame(width: 60, height: 1)
-                    .padding(.top, 18)
-                    .padding(.bottom, 12)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.clear, ColorTheme.accent().opacity(0.35), Color.clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 80, height: 1)
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, Spacing.sm)
+                    .opacity(taglineOpacity)
 
                 Text("MISSION HORIZON")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(Typography.sectionLabel)
                     .foregroundColor(ColorTheme.accent())
-                    .tracking(8)
+                    .tracking(6)
                     .opacity(missionHorizonOpacity)
 
                 Text("Your lifelong companion")

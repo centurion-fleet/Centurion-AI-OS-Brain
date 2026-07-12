@@ -715,6 +715,26 @@ def _tail_lines(path: Path, n: int) -> List[str]:
     return lines[-n:] if n > 0 else lines
 
 
+def _map_swarm_pulse_from_project(status: str, sprint_phase: str, blocked_tasks: int) -> str:
+    if blocked_tasks > 0:
+        return "blocked"
+    if status == "completed":
+        return "complete"
+    if sprint_phase in ("execute", "plan"):
+        return "active"
+    if status == "draft":
+        return "idle"
+    return "idle"
+
+
+@app.get("/api/swarm/sync")
+async def swarm_sync(since: str | None = None):
+    """Return Brain-owned collaboration data for dashboard /mission."""
+    from centurion_cli.swarm_state import get_swarm_snapshot
+
+    return get_swarm_snapshot(since=since)
+
+
 @app.post("/api/gateway/restart")
 async def restart_gateway():
     """Kick off a ``centurion gateway restart`` in the background."""

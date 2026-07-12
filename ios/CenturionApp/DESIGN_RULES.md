@@ -2,7 +2,7 @@
 
 **Version:** 1.1 · **Product:** CenturionAI Remote (iOS) · **Audience:** Successful adults 50+, non-technical, newly self-directed with personal AI
 
-**Locked release (v1.1):** Calm Remote UX (device link ≠ thinking, Get Help, plain language) + **Adrian** online (Connect & You only, founder mission-first personality). Do not regress without explicit product review.
+**Locked release (v1.1):** Calm Remote UX (device link ≠ thinking, Get Help, plain language) + **Adrian** online (You only, founder mission-first personality). Do not regress without explicit product review.
 
 This ruleset synthesizes the **2025–2026 Apple Design Awards** criteria, **WWDC25/26 design principles**, **Human Interface Guidelines**, and **Centurion Companion Calm** — our audience-specific layer.
 
@@ -83,7 +83,7 @@ Never ask "what is your mission?" in Soul flows. Never describe human story/valu
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.
 - **Max 1** decision per screen for first-run flows.
-- **Max 5** tabs only if each is self-explanatory; prefer progressive disclosure over more tabs.
+- **Three tabs** — Chat, Home, You. Prefer progressive disclosure over more tabs. Link, thinking, privacy, and Family Beneficiary Program live under You.
 
 ### Emotional tone
 - Warm, direct, respectful — like a trusted advisor, not a startup landing page.
@@ -92,7 +92,7 @@ Never ask "what is your mission?" in Soul flows. Never describe human story/valu
 
 ### First-run journey (target)
 1. Welcome — what this is, in one paragraph.
-2. Connect — find Centurion on your network (guided).
+2. Link — find Centurion on your network in **You** (guided).
 3. Mission Discovery — optional but invited, ceremonial.
 4. Pulse — calm view of what your Centurion is doing for you.
 
@@ -102,34 +102,43 @@ Never ask "what is your mission?" in Soul flows. Never describe human story/valu
 
 Use tokens from `Utils/CenturionTheme.swift` and `Utils/DesignSystem.swift` only.
 
+### Tab chrome (v2 — award restyle)
+
+Use `MainTabChrome` on all **four** main tabs with **`CompactBrandHeader`** (app mark + "PERSONAL CENTURION").
+
+| Context | Header |
+|---------|--------|
+| Main tabs (Chat, Home, You) | `CompactBrandHeader` via `MainTabChrome` |
+| Secondary screens (Mission, Soul, Get Help, Adrian, Privacy & Trust, Discovery, …) | `FullBrandHeader` |
+| Sheets / modals | `SheetHeader` or navigation title only — no full brand |
+
+Full token + component reference: **`STYLING_GUIDE.md`**.
+
 | Token | Rule |
 |-------|------|
 | **Spacing** | `Spacing.*` multiples of 4 only |
-| **Cards** | `.cardStyle()` — no hand-rolled duplicate card chrome |
-| **Corners** | 16pt cards, 12pt buttons, 20pt hero surfaces — document new radii before adding |
-| **Typography** | `.title`, `.title2`, `.headline`, `.body`, `.subheadline`, `.caption` — serif only for mission/editorial headlines |
+| **Cards** | `.centurionCard()` — no hand-rolled duplicate card chrome |
+| **Corners** | `Radius.sm/md/lg` — document new radii in STYLING_GUIDE before adding |
+| **Typography** | `Typography.*` — serif only for mission/editorial |
 | **Min body size** | 17pt equivalent at default Dynamic Type |
 | **Min touch target** | 44×44pt hit area on all tappable elements |
 | **Motion** | `Motion.*` springs; honor `@Environment(\.accessibilityReduceMotion)` |
 | **Haptics** | Meaningful events only — never per-keystroke |
 
-### Tab chrome
-- Remote, Pulse, Security: `TabPageChrome` (no `BrandHeader`).
-- Connect: pairing ceremony may use `BrandHeader` once.
-- Settings: native `Form` — familiar to iOS users.
-
 ---
 
 ## 5. Information architecture lock
 
-### Five tabs — human names (display)
+### Three tabs — human names (display)
 | Tab | User-facing purpose | Default content |
 |-----|---------------------|-----------------|
-| Connect | Link to your Centurion | Connection status + simple reassurance |
 | Chat | Talk with your Centurion | Conversations, calm messaging |
 | Home | What your Centurion is doing | Human outcomes, not agent topology |
-| Privacy | Your data stays yours | Plain-language trust; crypto behind "Technical details" |
-| You | Mission, about you, appearance | Personal, not administrative |
+| You | Sales story + personal hub | Family Beneficiary Program, link, thinking, mission, privacy, collaborations |
+
+**Connect is not a tab.** Device link, thinking service, and pairing live under **You → Your link** and **How Your Centurion Thinks**.
+
+**Privacy is not a separate tab.** Full privacy comparison lives under **You → Privacy & Trust** (`SecurityHubView`).
 
 *(Implementation may still use internal names during migration.)*
 
@@ -145,7 +154,7 @@ Use tokens from `Utils/CenturionTheme.swift` and `Utils/DesignSystem.swift` only
 ### Progressive disclosure
 - **Layer 1 (default):** Outcome + one action.
 - **Layer 2 (tap):** Context and options.
-- **Layer 3 (Settings / Privacy):** Technical truth for the curious.
+- **Layer 3 (You → Privacy & Trust / Settings):** Technical truth and comparison tables for the curious — and for clients who need to answer "AI is unsafe" pushback.
 
 ---
 
@@ -167,7 +176,7 @@ Before any release:
 - [ ] Dynamic Type to AX5 without clipping on primary flows
 - [ ] Contrast ≥ 4.5:1 for body text (WCAG AA)
 - [ ] Reduce Motion disables orbital/loop animations
-- [ ] Accessibility Nutrition Labels evaluated for Connect, Chat, Mission Discovery, Settings
+- [ ] Accessibility Nutrition Labels evaluated for Chat, You, Mission Discovery
 
 ---
 
@@ -209,7 +218,7 @@ Before any release:
 ### Adrian (cloud-backed) — locked
 
 - **Adrian** is Adrian online — Centurion's creator, cloud-hosted at `adrian.centurion.ai`; no customer API keys.
-- **Placement:** inline entry on **Connect** (`Talk to Adrian` beside Get Help) and **You** → Support only. No global floating control on other tabs.
+- **Placement:** **You** → Support only (`Talk to Adrian` beside Get Help). No global floating control on other tabs.
 - **Passion:** help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
 - **Evolving mission:** missions change over time; never treat mission as a one-time checkbox.
 - **Personality:** listen first; one step at a time (Loop: understand → act → adjust); expert before advising; plain language.
@@ -219,10 +228,130 @@ Before any release:
 
 ### Do not regress (v1.1 ship gate)
 
-- [ ] Device link and thinking service remain separate cards/status on Connect
+- [ ] Device link and thinking service remain separate sections on You
 - [ ] No provider slugs or dev jargon on default iPhone surfaces
-- [ ] Adrian not promoted on Chat, Home, or Privacy tabs
+- [ ] Adrian not promoted on Chat or Home tabs
 - [ ] Adrian intro reflects mission-first founder voice, not generic helpdesk tone
+
+---
+
+## 11. Swarm / Collaborations (locked)
+
+**Placement:** Ambient constellation on **Home** — not a sixth tab. Progressive drill-in via orb tap (detail sheet) and "+N" (full constellation sheet). Tertiary list in **You → Collaborations**.
+
+### Language rules
+
+| Never (default UI) | Always |
+|--------------------|--------|
+| Swarm, sub-agent, kanban, column, task board | Collaboration, your Centurions |
+| Blocked task, sprint phase, dispatcher | Paused, in progress, needs your choice |
+| Agent topology, spawn tree | Show how it's working (opt-in) |
+
+### Pulse ↔ orb vocabulary
+
+| Internal `pulse` | User-facing (orb + subtitle) | Home badge |
+|------------------|------------------------------|------------|
+| `idle` | Working smoothly | none |
+| `active` | In progress | Working on now dot |
+| `attention` / `waiting` | Needs your choice / Waiting for you | Decisions pill + orb beacon |
+| `blocked` | Paused | See what's needed |
+| `complete` | Finished for you | Wins (48h) |
+
+**No red/error colors for Swarm attention** — reserve red for connection loss only.
+
+### Human attention model
+
+- Humans see **Signals** only (decisions, ceremonies) — not handoffs, tool progress, or activity log.
+- Digest setting: **Tell me when needed** (default) vs **Daily summary**.
+- Formation: proposed in Chat after conversation — never a blank create form on Home.
+
+### Brain vs Remote architecture
+
+Centurion Remote is a pocket mission cockpit, not the collaboration database.
+The Linux Centurion Brain owns all collaboration state under the active
+`CENTURION_HOME`:
+
+| Layer | Owns | Remote sees |
+|-------|------|-------------|
+| Linux Brain | kanban boards, workspaces, portal tokens, artifacts, Signals, outcomes | mission-progress summaries and actions |
+| iPhone Remote | digest preference, last-seen timestamps, transient render cache | no canonical Swarm data |
+
+Default mobile surfaces must include everything the human needs to progress
+their mission while out in the world:
+
+- Orient: constellation, Pulse badges, mission grounding.
+- Decide: open Signals with one clear action.
+- Receive: finished documents/outcomes, readable and shareable.
+- Steer: Discuss with collaboration context carried back to the Brain.
+- Form: confirm a collaboration; the Brain creates the board/project.
+
+### Collaboration isolation
+
+One collaboration maps to one hard sharing boundary:
+
+- LAN-local collaboration: one kanban board (`CENTURION_KANBAN_BOARD` pins
+  workers so they cannot see other boards).
+- Portal collaboration: one `ctk_proj_*` project token.
+- Files: one collaboration workspace path; Remote never shows raw paths by
+  default.
+- Memory and chat: scope by `swarm_id` / board slug before adding mission
+  context.
+
+Centurions may share comments, tasks, artifacts, and outcomes inside that
+collaboration boundary. They must not see unrelated boards, portal projects,
+workspaces, memories, or chat context unless the human explicitly links them.
+
+### Ship gate (Swarm UX)
+
+- [ ] No sixth tab for collaborations
+- [ ] Home hero shows constellation (not a task list) when swarms exist
+- [ ] Default surfaces use plain language from table above
+- [ ] Orb motion honors Reduce Motion
+- [ ] Demo swarms labeled when `showsDemoContent` is on
+- [ ] Remote reads collaboration state from the Centurion Brain; iPhone stores
+      only preferences/cache
+- [ ] Dashboard `/mission` and Remote use the same Brain-owned snapshot service
+
+---
+
+## 12. Orb visual system (locked)
+
+Two orb families share `OrbDesign` tokens in `DesignSystem.swift`:
+
+| Orb | Meaning | Motion character |
+|-----|---------|------------------|
+| **Mission Orb** | Human's Life Mission — gravitational north star | Ultra-slow 6s breath; compass rose; never urgent |
+| **Swarm Orb** | One collaboration — Centurions at work | Pulse-driven; same state machine as §11 |
+
+### Material language (both orbs)
+
+- **Atmosphere veil** — radial teal→accent mist behind the orb (moody, not neon).
+- **Art Deco arcs** — three trimmed metallic ring segments (120° offset), slow drift.
+- **Gem core** — pearl highlight + radial gradient nucleus; specular offset highlight.
+- **Human gold** — `#EBC773` participant node; invitation states warm this, never red.
+
+### Swarm pulse → emotional read (motion states fixed)
+
+| `pulse` | Existing motion | Enhanced emotional layer |
+|---------|-----------------|--------------------------|
+| `idle` / `forming` | 3.5s breath + slow orbit | Hearth mist; satellites drift lazily |
+| `active` | 3s breath + 10s rotation | Filaments to active Centurions; core glow pulse |
+| `attention` | 0.8s beacon | Gold invitation ripple + gradient halo |
+| `waiting` | 2-count beacon | Ripple with pause between cycles; human node scales with beacon |
+| `blocked` | 2.5s throb | Mist contracts; core dims — held breath, not failure |
+| `complete` | still | Pearl afterglow ring; settled gem |
+
+### Mission Orb states
+
+- **Unset mission** — seed constellation dots; lower mist; invite Discovery.
+- **Set mission** — brighter core; tether line to collaboration row on Home hero.
+
+### Ship gate (orbs)
+
+- [ ] All orb motion respects Reduce Motion
+- [ ] No red for collaboration attention
+- [ ] Mission Orb appears above collaboration constellation on Home when swarms exist
+- [ ] VoiceOver describes mission/collaboration state without internal pulse names
 
 ---
 

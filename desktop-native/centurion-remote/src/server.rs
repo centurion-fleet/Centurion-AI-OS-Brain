@@ -324,6 +324,103 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::SwarmSnapshot { id, since } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_snapshot",
+                        serde_json::json!({ "since": since }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmSnapshotResponse {
+                        id,
+                        snapshot: payload
+                            .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::BeneficiarySnapshot { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "beneficiary_snapshot", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::BeneficiarySnapshotResponse {
+                        id,
+                        snapshot: payload
+                            .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::BeneficiarySetFamilyMember { id, first_name } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "beneficiary_set_family_member",
+                        serde_json::json!({ "first_name": first_name }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::BeneficiarySetFamilyMemberResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        snapshot: payload
+                            .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::BeneficiarySubmitColleague {
+                id,
+                name,
+                email,
+                phone,
+                non_family_attested,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "beneficiary_submit_colleague",
+                        serde_json::json!({
+                            "name": name,
+                            "email": email,
+                            "phone": phone,
+                            "non_family_attested": non_family_attested,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::BeneficiarySubmitColleagueResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        snapshot: payload
+                            .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::Ping => RemoteMessage::Pong,
             _ => RemoteMessage::Error {
                 id: None,

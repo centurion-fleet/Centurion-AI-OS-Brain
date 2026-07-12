@@ -50,7 +50,7 @@ struct MissionDiscoveryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ColorTheme.background().ignoresSafeArea()
+                secondaryBackground.ignoresSafeArea()
 
                 if showIntro {
                     introScreen
@@ -102,7 +102,6 @@ struct MissionDiscoveryView: View {
                 if !initialAnswers.isEmpty {
                     showIntro = false
                     if initialAnswers.values.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-                        // Returning user — skip intro, land on first unanswered or summary
                         if Self.questions.allSatisfy({ !(initialAnswers[$0.id]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }) {
                             showSummary = true
                         }
@@ -120,11 +119,18 @@ struct MissionDiscoveryView: View {
                 case .notConnected:
                     Alert(
                         title: Text("Not Connected"),
-                        message: Text("Pair with your Centurion in the Connect tab first, then share your mission."),
+                        message: Text("Pair with your Centurion in You first, then share your mission."),
                         dismissButton: .default(Text("OK"))
                     )
                 }
             }
+        }
+    }
+
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
         }
     }
 
@@ -134,21 +140,25 @@ struct MissionDiscoveryView: View {
         VStack(spacing: Spacing.xxl) {
             Spacer()
 
-            VStack(spacing: Spacing.lg) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 42))
-                    .foregroundColor(ColorTheme.accent().opacity(0.7))
+            AtmosphericSurface(elevated: true, showRim: true) {
+                VStack(spacing: Spacing.lg) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 42))
+                        .foregroundColor(ColorTheme.accent().opacity(0.7))
 
-                Text("A Quiet Space")
-                    .font(.system(size: 34, weight: .bold, design: .serif))
-                    .foregroundColor(ColorTheme.primaryText())
+                    Text("A Quiet Space")
+                        .font(Typography.editorialTitle)
+                        .foregroundColor(ColorTheme.primaryText())
 
-                Text("This is time set aside for you.\nTo listen to what matters most.")
-                    .font(.system(size: 17, weight: .medium, design: .serif))
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(6)
+                    Text("This is time set aside for you.\nTo listen to what matters most.")
+                        .font(.system(size: 17, weight: .medium, design: .serif))
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(6)
+                }
+                .frame(maxWidth: .infinity)
             }
+            .padding(.horizontal, Spacing.lg)
 
             Spacer()
 
@@ -159,12 +169,9 @@ struct MissionDiscoveryView: View {
                 Haptics.mediumTap()
             } label: {
                 Text("Begin")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
             }
-            .buttonStyle(AmberButtonStyle())
-            .padding(.horizontal, 40)
+            .buttonStyle(CenturionPrimaryButtonStyle())
+            .padding(.horizontal, Spacing.xl)
             .padding(.bottom, 50)
         }
     }
@@ -180,7 +187,7 @@ struct MissionDiscoveryView: View {
                         .frame(width: 6, height: 6)
                 }
             }
-            .padding(.top, 12)
+            .padding(.top, Spacing.sm)
 
             Spacer()
 
@@ -188,51 +195,45 @@ struct MissionDiscoveryView: View {
                 let question = Self.questions[currentIndex]
 
                 VStack(spacing: Spacing.xl) {
-                    Text(question.section)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundColor(ColorTheme.accent())
-                        .tracking(3)
-                        .opacity(0.8)
+                    CenturionSectionHeader(
+                        title: question.section,
+                        icon: sectionIcon(for: question.section)
+                    )
+                    .padding(.horizontal, Spacing.lg)
 
                     Text(question.question)
                         .font(.system(size: 22, weight: .medium, design: .serif))
                         .foregroundColor(ColorTheme.primaryText())
                         .multilineTextAlignment(.center)
                         .lineSpacing(8)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, Spacing.lg)
                         .transition(.opacity.combined(with: .move(edge: .trailing)))
 
-                    ZStack(alignment: .topLeading) {
-                        if (answers[question.id] ?? "").isEmpty, !question.placeholder.isEmpty {
-                            Text(question.placeholder)
-                                .font(.body)
-                                .foregroundColor(ColorTheme.mutedText().opacity(0.6))
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 28)
-                                .allowsHitTesting(false)
-                        }
+                    AtmosphericSurface {
+                        ZStack(alignment: .topLeading) {
+                            if (answers[question.id] ?? "").isEmpty, !question.placeholder.isEmpty {
+                                Text(question.placeholder)
+                                    .font(.body)
+                                    .foregroundColor(ColorTheme.mutedText().opacity(0.6))
+                                    .padding(.vertical, Spacing.xs)
+                                    .allowsHitTesting(false)
+                            }
 
-                        TextEditor(text: binding(for: question.id))
-                            .scrollContentBackground(.hidden)
-                            .font(.body)
-                            .foregroundColor(ColorTheme.primaryText())
-                            .frame(minHeight: 160)
-                            .padding(20)
+                            TextEditor(text: binding(for: question.id))
+                                .scrollContentBackground(.hidden)
+                                .font(.body)
+                                .foregroundColor(ColorTheme.primaryText())
+                                .frame(minHeight: 160)
+                        }
                     }
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(ColorTheme.border().opacity(0.5), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Spacing.md)
                 }
                 .id(currentIndex)
             }
 
             Spacer()
 
-            HStack(spacing: 16) {
+            HStack(spacing: Spacing.md) {
                 if currentIndex > 0 {
                     Button {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -242,7 +243,7 @@ struct MissionDiscoveryView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .medium))
-                            .padding(14)
+                            .padding(Spacing.sm + 2)
                             .background(ColorTheme.surface())
                             .clipShape(Circle())
                     }
@@ -259,13 +260,9 @@ struct MissionDiscoveryView: View {
                         Haptics.mediumTap()
                     } label: {
                         Text("Continue")
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(.horizontal, 36)
-                            .padding(.vertical, 14)
-                            .background(ColorTheme.accent())
-                            .foregroundColor(.white)
-                            .clipShape(Capsule())
                     }
+                    .buttonStyle(CenturionPrimaryButtonStyle())
+                    .frame(maxWidth: 200)
                 } else {
                     Button {
                         prepareSynthesis()
@@ -275,17 +272,22 @@ struct MissionDiscoveryView: View {
                         Haptics.success()
                     } label: {
                         Text("Complete My Mission")
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(.horizontal, 36)
-                            .padding(.vertical, 14)
-                            .background(ColorTheme.accent())
-                            .foregroundColor(.white)
-                            .clipShape(Capsule())
                     }
+                    .buttonStyle(CenturionPrimaryButtonStyle())
                 }
             }
-            .padding(.bottom, 40)
-            .padding(.horizontal, 24)
+            .padding(.bottom, Spacing.xl)
+            .padding(.horizontal, Spacing.lg)
+        }
+    }
+
+    private func sectionIcon(for section: String) -> String {
+        switch section {
+        case "What Matters Most": return "heart"
+        case "Responsibility & Ownership": return "hand.raised"
+        case "Natural Energy & Aliveness": return "bolt"
+        case "Long-term Vision": return "binoculars"
+        default: return "sparkles"
         }
     }
 
@@ -356,59 +358,52 @@ struct MissionSynthesisReviewView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.xl) {
-                VStack(spacing: Spacing.md) {
-                    Text("Your life mission")
-                        .font(.title2.weight(.bold))
-                        .foregroundColor(ColorTheme.primaryText())
+                FullBrandHeader()
 
-                    Text("We've distilled your reflections into words that describe what you're living toward. Edit until it feels true.")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.mutedText())
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                }
-                .padding(.top, Spacing.lg)
+                AtmosphericSurface(elevated: true) {
+                    VStack(spacing: Spacing.md) {
+                        Text("Your life mission")
+                            .font(Typography.editorialTitle)
+                            .foregroundColor(ColorTheme.primaryText())
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Your life mission")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(ColorTheme.accent())
-                    TextEditor(text: $statement)
-                        .scrollContentBackground(.hidden)
-                        .font(.body)
-                        .frame(minHeight: 100)
-                        .padding(Spacing.md)
-                        .background(ColorTheme.surface())
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        Text("We've distilled your reflections into words that describe what you're living toward. Edit until it feels true.")
+                            .font(.subheadline)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .lineSpacing(4)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Why it matters")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(ColorTheme.accent())
-                    TextEditor(text: $why)
-                        .scrollContentBackground(.hidden)
-                        .font(.body)
-                        .frame(minHeight: 80)
-                        .padding(Spacing.md)
-                        .background(ColorTheme.surface())
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    CenturionSectionHeader(title: "Your Life Mission", icon: "target")
+                    AtmosphericSurface {
+                        TextEditor(text: $statement)
+                            .scrollContentBackground(.hidden)
+                            .font(.body)
+                            .frame(minHeight: 100)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    CenturionSectionHeader(title: "Why It Matters", icon: "heart")
+                    AtmosphericSurface {
+                        TextEditor(text: $why)
+                            .scrollContentBackground(.hidden)
+                            .font(.body)
+                            .frame(minHeight: 80)
+                    }
                 }
 
                 VStack(spacing: Spacing.md) {
                     Button(action: onApprove) {
                         Text("This feels right")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
                     }
-                    .buttonStyle(AmberButtonStyle())
+                    .buttonStyle(CenturionPrimaryButtonStyle())
 
                     Button(action: onBack) {
                         Text("Review my answers")
-                            .font(.subheadline)
-                            .foregroundColor(ColorTheme.accent())
                     }
+                    .buttonStyle(CenturionGhostButtonStyle())
                 }
             }
             .padding()
@@ -429,41 +424,31 @@ struct MissionSummaryView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.xxl) {
-                VStack(spacing: Spacing.md) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 32))
-                        .foregroundColor(ColorTheme.accent().opacity(0.6))
+                FullBrandHeader()
 
-                    Text("What you've discovered")
-                        .font(.system(size: 34, weight: .bold, design: .serif))
-                        .foregroundColor(ColorTheme.primaryText())
-
-                    Text("This is about your life — what matters and what you're building.\nIt can evolve with you.")
-                        .font(.system(size: 16, weight: .medium, design: .serif))
-                        .foregroundColor(ColorTheme.mutedText())
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(5)
-                }
-                .padding(.top, Spacing.xl)
+                SuccessMoment(
+                    title: "What you've discovered",
+                    message: "This is about your life — what matters and what you're building.\nIt can evolve with you."
+                )
 
                 VStack(alignment: .leading, spacing: Spacing.lg) {
+                    CenturionSectionHeader(title: "Your Reflections", icon: "text.quote")
+
                     ForEach(questions) { question in
                         if let answer = answers[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines),
                            !answer.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(question.section.uppercased())
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                    .foregroundColor(ColorTheme.accent())
-                                    .tracking(1)
-
-                                Text(answer)
-                                    .font(.system(size: 17))
-                                    .foregroundColor(ColorTheme.primaryText())
-                                    .lineSpacing(6)
+                            AtmosphericSurface {
+                                VStack(alignment: .leading, spacing: Spacing.sm) {
+                                    CenturionSectionHeader(
+                                        title: question.section,
+                                        icon: "sparkles"
+                                    )
+                                    Text(answer)
+                                        .font(.body)
+                                        .foregroundColor(ColorTheme.primaryText())
+                                        .lineSpacing(6)
+                                }
                             }
-                            .padding(20)
-                            .background(ColorTheme.surface())
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
                         }
                     }
                 }
@@ -471,32 +456,25 @@ struct MissionSummaryView: View {
                 VStack(spacing: Spacing.md) {
                     Button(action: onEdit) {
                         Text("Edit My Answers")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(ColorTheme.accent())
                     }
+                    .buttonStyle(CenturionGhostButtonStyle())
 
                     Button(action: onShare) {
                         HStack {
                             if isSharing {
                                 ProgressView()
-                                    .tint(.black)
+                                    .tint(.white)
                             }
                             Text("Share With My Centurion")
-                                .font(.headline)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
                     }
-                    .buttonStyle(AmberButtonStyle())
+                    .buttonStyle(CenturionPrimaryButtonStyle())
                     .disabled(isSharing)
 
                     Button(action: onDone) {
                         Text("Save to Pulse")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
                     }
-                    .buttonStyle(AmberButtonStyle())
+                    .buttonStyle(CenturionSecondaryButtonStyle())
                 }
                 .padding(.top, Spacing.lg)
             }

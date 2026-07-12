@@ -6,7 +6,7 @@ enum MessageError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConnected:
-            return "Connect to your Centurion in the Connect tab before sending messages."
+            return "Connect to your Centurion in You before sending messages."
         }
     }
 }

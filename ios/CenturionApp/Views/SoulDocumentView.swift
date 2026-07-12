@@ -10,38 +10,36 @@ struct SoulDocumentView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                coverPage
+            VStack(spacing: Spacing.lg) {
+                FullBrandHeader()
+
+                soulHero
 
                 if soul.isValid {
                     soulContent
+
+                    Button(action: {
+                        Haptics.mediumTap()
+                        showInterview = true
+                    }) {
+                        HStack(spacing: Spacing.xs) {
+                            Image(systemName: "pencil")
+                                .font(.subheadline)
+                            Text("Shape Your Centurion")
+                        }
+                    }
+                    .buttonStyle(CenturionSecondaryButtonStyle())
+                    .padding(.bottom, Spacing.lg)
                 } else {
                     emptyState
+                        .padding(.bottom, Spacing.lg)
                 }
-
-                Button(action: {
-                    Haptics.mediumTap()
-                    showInterview = true
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: soul.isValid ? "pencil" : "sparkles")
-                            .font(.subheadline)
-                        Text(soul.isValid ? "Shape Your Centurion" : "Set Up Your Centurion's Soul")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .foregroundColor(ColorTheme.accent())
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(ColorTheme.accent().opacity(0.1))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, Spacing.lg)
             }
             .frame(maxWidth: 428)
             .padding()
             .frame(maxWidth: .infinity)
         }
+        .background(secondaryBackground)
         .navigationTitle("Your Centurion's Soul")
         .toolbar {
             if soul.isValid {
@@ -67,50 +65,55 @@ struct SoulDocumentView: View {
         }
     }
 
-    // MARK: - Cover
-
-    private var coverPage: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 48))
-                .foregroundColor(ColorTheme.accent())
-
-            Text("Your Centurion's Soul")
-                .font(.title.weight(.bold))
-                .foregroundColor(ColorTheme.primaryText())
-                .multilineTextAlignment(.center)
-
-            Text("How your companion speaks and behaves")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-
-            if !soul.personalitySummary.isEmpty {
-                Text(soul.personalitySummary)
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.dimAccent())
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                    .padding(.top, Spacing.sm)
-            }
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
         }
-        .padding(.vertical, Spacing.xl)
-        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Hero
+
+    private var soulHero: some View {
+        AtmosphericSurface(elevated: true, showRim: true) {
+            VStack(spacing: Spacing.md) {
+                CenturionSectionHeader(title: "Personality", icon: "sparkles")
+
+                Text("Your Centurion's Soul")
+                    .font(Typography.editorialTitle)
+                    .foregroundColor(ColorTheme.primaryText())
+                    .multilineTextAlignment(.center)
+
+                Text("How your companion speaks and behaves")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
+
+                if !soul.personalitySummary.isEmpty {
+                    Text(soul.personalitySummary)
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.dimAccent())
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.top, Spacing.xs)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
     }
 
     private var emptyState: some View {
-        VStack(spacing: Spacing.md) {
-            Text("Your Centurion's personality isn't set yet.")
-                .font(.headline)
-                .foregroundColor(ColorTheme.primaryText())
-            Text("Define how it speaks, what it always does, and what it never does. This is separate from your life mission — it's about your AI companion.")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-        }
-        .padding()
-        .cardStyle()
+        EmptyState(
+            icon: "sparkles",
+            title: "Not set yet",
+            message: "Define how it speaks, what it always does, and what it never does. This is separate from your life mission — it's about your AI companion.",
+            actionTitle: "Set Up Your Centurion's Soul",
+            action: {
+                Haptics.mediumTap()
+                showInterview = true
+            }
+        )
     }
 
     private var soulContent: some View {
@@ -137,7 +140,7 @@ struct SoulDocumentView: View {
                 sectionCard(icon: "xmark.circle", title: "Never Does", tags: soul.neverDo)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: Spacing.xs) {
                 Rectangle()
                     .fill(ColorTheme.accent().opacity(0.2))
                     .frame(width: 40, height: 1)
@@ -150,101 +153,89 @@ struct SoulDocumentView: View {
     }
 
     private func sectionCard(icon: String, title: String, content: String? = nil, tags: [String]? = nil) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.accent())
-                Text(title)
-                    .font(.headline)
-                    .foregroundColor(ColorTheme.primaryText())
-                Spacer()
-            }
+        AtmosphericSurface {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                CenturionSectionHeader(title: title, icon: icon)
 
-            if let content = content, !content.isEmpty {
-                Text(content)
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .lineSpacing(4)
-            }
+                if let content = content, !content.isEmpty {
+                    Text(content)
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineSpacing(4)
+                }
 
-            if let tags = tags, !tags.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 6)], alignment: .leading, spacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(ColorTheme.accent())
-                                .frame(width: 4, height: 4)
-                            Text(tag)
-                                .font(.caption)
-                                .foregroundColor(ColorTheme.primaryText())
+                if let tags = tags, !tags.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 6)], alignment: .leading, spacing: 6) {
+                        ForEach(tags, id: \.self) { tag in
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(ColorTheme.accent())
+                                    .frame(width: 4, height: 4)
+                                Text(tag)
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.primaryText())
+                            }
                         }
                     }
                 }
             }
         }
-        .padding()
-        .cardStyle()
     }
 
     // MARK: - Share
 
     private var shareSheet: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                VStack(spacing: 16) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 36))
-                        .foregroundColor(ColorTheme.accent())
+            ScrollView {
+                VStack(spacing: Spacing.lg) {
+                    SheetHeader(title: "Your Centurion's Soul")
 
-                    Text("Your Centurion's Soul")
-                        .font(.title3.weight(.bold))
+                    AtmosphericSurface(elevated: true) {
+                        VStack(spacing: Spacing.md) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 36))
+                                .foregroundColor(ColorTheme.accent())
 
-                    if !soul.personalitySummary.isEmpty {
-                        Text(soul.personalitySummary)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
+                            if !soul.personalitySummary.isEmpty {
+                                Text(soul.personalitySummary)
+                                    .font(.subheadline)
+                                    .foregroundColor(ColorTheme.primaryText())
+                                    .multilineTextAlignment(.center)
+                                    .lineSpacing(4)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                }
-                .foregroundColor(ColorTheme.primaryText())
-                .padding()
-                .frame(maxWidth: .infinity)
-                .cardStyle()
 
-                Text("Share how your Centurion is configured to work with you.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
+                    Text("Share how your Centurion is configured to work with you.")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .multilineTextAlignment(.center)
 
-                Button(action: {
-                    Haptics.mediumTap()
-                    UIPasteboard.general.string = generateShareText()
-                }) {
-                    Label("Copy to Clipboard", systemImage: "doc.on.doc")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.accent())
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .background(ColorTheme.accent().opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                Button(action: {
-                    Haptics.mediumTap()
-                    let text = generateShareText()
-                    let activityVC = UIActivityViewController(activityItems: [text], applicationActivities: nil)
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let root = windowScene.windows.first?.rootViewController {
-                        root.present(activityVC, animated: true)
+                    Button(action: {
+                        Haptics.mediumTap()
+                        UIPasteboard.general.string = generateShareText()
+                    }) {
+                        Label("Copy to Clipboard", systemImage: "doc.on.doc")
                     }
-                }) {
-                    Label("Share...", systemImage: "square.and.arrow.up")
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.accent())
+                    .buttonStyle(CenturionSecondaryButtonStyle())
+
+                    Button(action: {
+                        Haptics.mediumTap()
+                        let text = generateShareText()
+                        let activityVC = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let root = windowScene.windows.first?.rootViewController {
+                            root.present(activityVC, animated: true)
+                        }
+                    }) {
+                        Label("Share...", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(CenturionGhostButtonStyle())
                 }
-                .buttonStyle(.plain)
+                .padding()
             }
-            .padding()
+            .background(ColorTheme.background())
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showShareSheet = false }

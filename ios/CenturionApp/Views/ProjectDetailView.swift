@@ -20,7 +20,9 @@ struct ProjectDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Spacing.md) {
+            VStack(spacing: Spacing.lg) {
+                FullBrandHeader()
+
                 programHeader
 
                 if targets.isEmpty {
@@ -33,6 +35,7 @@ struct ProjectDetailView: View {
             .padding()
             .frame(maxWidth: .infinity)
         }
+        .background(secondaryBackground)
         .navigationTitle(program.name)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -43,6 +46,14 @@ struct ProjectDetailView: View {
         }
         .sheet(item: $chatTarget) { target in
             chatSheet(for: target.context)
+        }
+    }
+
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
         }
     }
 
@@ -79,35 +90,35 @@ struct ProjectDetailView: View {
     // MARK: - Program Header
 
     private var programHeader: some View {
-        VStack(spacing: Spacing.sm) {
-            HStack(spacing: Spacing.xs) {
-                Image(systemName: program.status.icon)
-                    .foregroundColor(ColorTheme.accent())
-                    .opacity(program.status.iconOpacity)
-                    .font(.title3)
-                Text(program.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(ColorTheme.primaryText())
-            }
+        AtmosphericSurface(elevated: true, showRim: true) {
+            VStack(spacing: Spacing.sm) {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: program.status.icon)
+                        .foregroundColor(ColorTheme.accent())
+                        .opacity(program.status.iconOpacity)
+                        .font(.title3)
+                    Text(program.name)
+                        .font(Typography.screenTitle)
+                        .foregroundColor(ColorTheme.primaryText())
+                }
 
-            Text(program.description)
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-
-            VStack(spacing: Spacing.xxs) {
-                ProgressView(value: Double(program.completedTaskCount), total: Double(max(program.taskCount, 1)))
-                    .tint(ColorTheme.accent())
-                Text("\(program.completedTaskCount) of \(program.taskCount) tasks complete")
-                    .font(.caption)
+                Text(program.description)
+                    .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+
+                VStack(spacing: Spacing.xxs) {
+                    ProgressView(value: Double(program.completedTaskCount), total: Double(max(program.taskCount, 1)))
+                        .tint(ColorTheme.accent())
+                    Text("\(program.completedTaskCount) of \(program.taskCount) tasks complete")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                .padding(.top, Spacing.xxs)
             }
-            .padding(.top, Spacing.xxs)
+            .frame(maxWidth: .infinity)
         }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .cardStyle()
         .opacity(isAppeared ? 1 : 0)
         .offset(y: isAppeared ? 0 : 8)
     }
@@ -115,26 +126,18 @@ struct ProjectDetailView: View {
     // MARK: - Empty State
 
     private var emptyTargets: some View {
-        VStack(spacing: Spacing.md) {
-            Image(systemName: "target")
-                .font(.system(size: 36))
-                .foregroundColor(ColorTheme.mutedText())
-            Text("No milestones yet")
-                .font(.headline)
-                .foregroundColor(ColorTheme.primaryText())
-            Text("Milestones will appear here once the Centurion creates them")
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-        }
-        .padding(.vertical, Spacing.xxl)
+        EmptyState(
+            icon: "target",
+            title: "No milestones yet",
+            message: "Milestones will appear here once the Centurion creates them"
+        )
     }
 
     // MARK: - Targets with Inline Tasks + Drag Reorder
 
     private var targetsList: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            SectionHeader(title: "Milestones", icon: "target")
+            CenturionSectionHeader(title: "Milestones", icon: "target")
 
             VStack(spacing: Spacing.xs) {
                 ForEach(targets) { target in
@@ -198,7 +201,6 @@ struct ProjectDetailView: View {
                 }
             }
         }
-        .cardStyle()
     }
 
     // MARK: - Target Row
@@ -206,20 +208,17 @@ struct ProjectDetailView: View {
     private func targetRow(_ target: MissionTarget) -> some View {
         let isExpanded = expandedTargetId == target.id
 
-        return VStack(spacing: 0) {
+        return AtmosphericSurface(elevated: isExpanded) {
             HStack(spacing: Spacing.sm) {
-                // Drag handle
                 Image(systemName: "line.horizontal.3")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
                     .padding(.trailing, 2)
 
-                // Status dot
                 Circle()
                     .fill(targetStatusColor(target.status))
                     .frame(width: 8, height: 8)
 
-                // Title/status — tappable to expand
                 Button(action: {
                     Haptics.lightTap()
                     withAnimation(Motion.heavy) {
@@ -244,7 +243,6 @@ struct ProjectDetailView: View {
 
                 Spacer()
 
-                // Chat button — NOT nested inside another Button
                 Button(action: { openTargetChat(target) }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 12, weight: .regular))
@@ -253,45 +251,37 @@ struct ProjectDetailView: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 4)
 
-                // Chevron
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.accent())
             }
-            .padding(Spacing.sm)
-            .background(isExpanded ? ColorTheme.accent().opacity(0.04) : ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isExpanded ? ColorTheme.accent().opacity(0.3) : ColorTheme.border(), lineWidth: isExpanded ? 1 : 0.5)
-            )
         }
     }
 
     // MARK: - Inline Tasks
 
     private func inlineTasks(for target: MissionTarget, parentTarget: MissionTarget) -> some View {
-        VStack(spacing: 0) {
-            if target.tasks.isEmpty {
-                Text("No tasks yet")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .padding(.vertical, Spacing.sm)
-                    .frame(maxWidth: .infinity)
-            } else {
-                ForEach(target.tasks) { task in
-                    taskRow(task, in: target)
-                    if task.id != target.tasks.last?.id {
-                        Divider()
-                            .padding(.leading, 44)
+        AtmosphericSurface {
+            VStack(spacing: 0) {
+                if target.tasks.isEmpty {
+                    Text("No tasks yet")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .padding(.vertical, Spacing.sm)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    ForEach(target.tasks) { task in
+                        taskRow(task, in: target)
+                        if task.id != target.tasks.last?.id {
+                            Divider()
+                                .padding(.leading, 44)
+                        }
                     }
                 }
             }
         }
-        .padding(.leading, 32)
-        .padding(.vertical, Spacing.xxs)
-        .background(ColorTheme.surface().opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(.leading, Spacing.lg)
+        .padding(.top, Spacing.xxs)
     }
 
     private func taskRow(_ task: MissionTask, in target: MissionTarget) -> some View {
@@ -326,7 +316,6 @@ struct ProjectDetailView: View {
                     .frame(maxWidth: 100, alignment: .trailing)
             }
 
-            // Chat button — thin grey line icon
             Button(action: { openTaskChat(task, in: target) }) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 11, weight: .regular))
@@ -334,8 +323,7 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, Spacing.xs)
+        .padding(.vertical, Spacing.xxs)
     }
 
     // MARK: - Three-Dot Status System

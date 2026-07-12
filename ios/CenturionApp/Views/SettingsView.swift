@@ -1,14 +1,22 @@
 import SwiftUI
 
+/// You tab — sales hero, personal hub, link, thinking, mission, collaborations, privacy, support, prefs.
 struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var adrianService: AdrianService
+    @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
     @State private var showGetHelp = false
     @State private var showAdrian = false
+    @State private var showCollaborations = false
+    @State private var selectedCollaboration: SwarmSummary?
+    @State private var showPrivacyTrust = false
+    @State private var showPairingSheet = false
+    @State private var showRecoverySheet = false
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
@@ -22,233 +30,376 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Identity") {
-                    HStack {
-                        Label("Device Name", systemImage: "iphone")
-                            .foregroundColor(ColorTheme.primaryText())
-                        Spacer()
-                        Text(UIDevice.current.name)
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    HStack {
-                        Label("Security Code", systemImage: "key.fill")
-                            .foregroundColor(ColorTheme.primaryText())
-                        Spacer()
-                        Button("Show") { showKeyExport = true }
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.accent())
-                    }
+        TabPageChrome(title: "You") {
+            ScrollView {
+                VStack(spacing: Spacing.lg) {
+                    CenturionShowcaseSection()
+                    DeviceLinkSection(showPairingSheet: $showPairingSheet)
+                    ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                    youSection
+                    collaborationsSection
+                    privacySection
+                    supportSection
+                    identitySection
+                    appearanceSection
+                    aboutSection
+                    resetSection
                 }
-
-                Section("You") {
-                    NavigationLink(destination: MissionView()) {
-                        HStack {
-                            Image(systemName: "target")
-                                .foregroundColor(ColorTheme.accent())
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Your Mission")
-                                    .foregroundColor(ColorTheme.primaryText())
-                                Text(missionStore.hasMissionStatement
-                                     ? missionStore.mission.statement
-                                     : "Your life purpose and commitments")
-                                    .font(.caption)
-                                    .foregroundColor(ColorTheme.mutedText())
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-
-                    NavigationLink(destination: SoulDocumentView()) {
-                        HStack {
-                            Image(systemName: "sparkles")
-                                .foregroundColor(ColorTheme.accent())
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Your Centurion's Soul")
-                                    .foregroundColor(ColorTheme.primaryText())
-                                Text(missionStore.hasSoulConfiguration
-                                     ? "Personality and rules configured"
-                                     : "Personality and rules for your AI")
-                                    .font(.caption)
-                                    .foregroundColor(ColorTheme.mutedText())
-                            }
-                        }
-                    }
-                }
-
-                Section("Connection") {
-                    HStack {
-                        Label("Device link", systemImage: "app.connected.to.app.below.fill")
-                        Spacer()
-                        Text(connectionManager.connectionState == .connected ? "Linked" : "Not linked")
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    if connectionManager.connectionState == .connected {
-                        Button(role: .destructive) {
-                            connectionManager.disconnect()
-                        } label: {
-                            Label("Disconnect", systemImage: "power")
-                        }
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Label("Thinking service", systemImage: "brain.head.profile")
-                        Spacer()
-                        Text(connectionManager.llmHealth.label)
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    if let status = connectionManager.thinkingStatus,
-                       status.lastGoodAvailable,
-                       connectionManager.llmHealth.needsAttention {
-                        Text("Last working setup is available.")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    Text("Change on your computer")
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.mutedText())
-                } header: {
-                    Text("How Your Centurion Thinks")
-                }
-                .task(id: connectionManager.connectionState) {
-                    guard connectionManager.connectionState == .connected else { return }
-                    await connectionManager.refreshThinkingStatus()
-                }
-
-                Section {
-                    Button {
-                        showGetHelp = true
-                    } label: {
-                        Label("Get Help", systemImage: "lifepreserver")
-                    }
-                    .accessibilityLabel("Get Help")
-                    .accessibilityHint("Create a support code or try automatic recovery")
-
-                    Button {
-                        showAdrian = true
-                    } label: {
-                        Label("Talk to Adrian", systemImage: "person.crop.circle.fill")
-                    }
-                    .accessibilityLabel("Talk to Adrian")
-                    .accessibilityHint("Open Adrian online — caring expert guidance from Centurion's creator")
-                } header: {
-                    Text("Support")
-                } footer: {
-                    Text("Adrian helps you live your mission — listen first, one step at a time.")
-                }
-
-                Section("Appearance") {
-                    Picker("Theme", selection: appearanceBinding) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            Label(mode.rawValue, systemImage: mode.icon).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(ColorTheme.accent())
-                }
-
-                Section("Privacy") {
-                    privacyRow("Private on your network",
-                               "Messages stay between your iPhone and Centurion")
-                    privacyRow("Encrypted in transit",
-                               "Protected the same way sensitive apps protect your data")
-                    privacyRow("No cloud account",
-                               "You don't need to sign in to a third-party service")
-                }
-
-                Section("About") {
-                    HStack {
-                        Spacer()
-                        VStack(spacing: Spacing.sm) {
-                            CenturionAppMark(size: 64)
-                            Text("CenturionAI Remote")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(ColorTheme.primaryText())
-                        }
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-
-                    HStack {
-                        Label("Version", systemImage: "info.circle")
-                        Spacer()
-                        Text(appVersion)
-                            .foregroundColor(ColorTheme.mutedText())
-                    }
-
-                    HStack {
-                        Label("Release", systemImage: "sparkle")
-                        Spacer()
-                        Text("Mission Horizon")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.accent())
-                    }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        showResetConfirmation = true
-                    } label: {
-                        Label("Reset Identity", systemImage: "trash")
-                    }
-                } footer: {
-                    Text("This will get a new pairing code. You'll need to link again in Connect.")
-                }
+                .frame(maxWidth: 428)
+                .padding()
+                .frame(maxWidth: .infinity)
             }
-            .background(ColorTheme.background())
-            .navigationTitle("You")
-            .navigationBarTitleDisplayMode(.inline)
-            .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListHeaderHeight, 0)
-            .alert("Reset Identity?", isPresented: $showResetConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset", role: .destructive) {
-                    connectionManager.disconnect()
-                    try? IdentityKey.reset()
-                }
-            } message: {
-                Text("Your iPhone will get a new security identity. Approve it again on your Centurion before reconnecting.")
+        }
+        .alert("Reset Identity?", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                connectionManager.disconnect()
+                try? IdentityKey.reset()
             }
-            .sheet(isPresented: $showKeyExport) {
-                KeyExportView()
-            }
-            .sheet(isPresented: $showGetHelp) {
-                GetHelpView()
-                    .environmentObject(connectionManager)
-            }
-            .sheet(isPresented: $showAdrian) {
-                AdrianView { action in
-                    AdrianNavigation.handleAction(
-                        action,
-                        showAdrian: $showAdrian,
-                        showGetHelp: $showGetHelp,
-                        connectionManager: connectionManager
-                    )
-                }
-                .environmentObject(adrianService)
+        } message: {
+            Text("Your iPhone will get a new security identity. Approve it again on your Centurion before reconnecting.")
+        }
+        .sheet(isPresented: $showKeyExport) {
+            KeyExportView()
+        }
+        .sheet(isPresented: $showPairingSheet) {
+            ConnectionPairingSheet()
                 .environmentObject(connectionManager)
-                .environmentObject(missionStore)
+        }
+        .sheet(isPresented: $showRecoverySheet) {
+            ThinkingRecoverySheet(
+                initialMessage: "Your Centurion's thinking service needs attention."
+            )
+            .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showGetHelp) {
+            GetHelpView()
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showAdrian) {
+            AdrianView { action in
+                AdrianNavigation.handleAction(
+                    action,
+                    showAdrian: $showAdrian,
+                    showGetHelp: $showGetHelp,
+                    connectionManager: connectionManager
+                )
+            }
+            .environmentObject(adrianService)
+            .environmentObject(connectionManager)
+            .environmentObject(missionStore)
+        }
+        .sheet(isPresented: $showCollaborations) {
+            ConstellationView { swarm in
+                showCollaborations = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    selectedCollaboration = swarm
+                }
+            }
+            .environmentObject(swarmStore)
+        }
+        .sheet(item: $selectedCollaboration) { swarm in
+            SwarmDetailSheet(swarm: swarm)
+                .environmentObject(swarmStore)
+        }
+        .sheet(isPresented: $showPrivacyTrust) {
+            NavigationStack {
+                SecurityHubView()
+                    .environmentObject(connectionManager)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showPrivacyTrust = false }
+                                .foregroundColor(ColorTheme.accent())
+                        }
+                    }
             }
         }
     }
 
-    private func privacyRow(_ title: String, _ description: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundColor(ColorTheme.primaryText())
-            Text(description)
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
+    // MARK: - Sections
+
+    private var youSection: some View {
+        settingsSection(title: "You", icon: "sparkles") {
+            NavigationLink(destination: MissionView()) {
+                CenturionListRow(
+                    icon: "target",
+                    title: "Your Mission",
+                    subtitle: missionStore.hasMissionStatement
+                        ? missionStore.mission.statement
+                        : "Your life purpose and commitments"
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            NavigationLink(destination: SoulDocumentView()) {
+                CenturionListRow(
+                    icon: "sparkles",
+                    title: "Your Centurion's Soul",
+                    subtitle: missionStore.hasSoulConfiguration
+                        ? "Personality and rules configured"
+                        : "Personality and rules for your AI"
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 2)
+    }
+
+    private var collaborationsSection: some View {
+        settingsSection(
+            title: "Collaborations",
+            icon: "circle.hexagongrid.fill",
+            footer: "Collaborations live on Home as orbs — not a separate tab. You're notified only when a choice is needed."
+        ) {
+            Button {
+                showCollaborations = true
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .font(.body)
+                        .foregroundColor(ColorTheme.accent())
+                        .frame(width: 24)
+                    Text("Active collaborations")
+                        .font(.body)
+                        .foregroundColor(ColorTheme.primaryText())
+                    Spacer()
+                    Text("\(swarmStore.heroSwarms.count)")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                .padding(.vertical, Spacing.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Picker("Notifications", selection: Binding(
+                get: { swarmStore.digestMode },
+                set: { swarmStore.setDigestMode($0) }
+            )) {
+                ForEach(SwarmStore.SwarmDigestMode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .tint(ColorTheme.accent())
+        }
+    }
+
+    private var supportSection: some View {
+        settingsSection(
+            title: "Support",
+            icon: "lifepreserver",
+            footer: "Adrian helps you live your mission — listen first, one step at a time."
+        ) {
+            Button { showGetHelp = true } label: {
+                CenturionListRow(icon: "lifepreserver", title: "Get Help", showChevron: false)
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button { showAdrian = true } label: {
+                CenturionListRow(icon: "person.crop.circle.fill", title: "Talk to Adrian", showChevron: false)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var identitySection: some View {
+        settingsSection(title: "Identity", icon: "person.crop.circle") {
+            settingsRow(icon: "iphone", title: "Device Name") {
+                Text(UIDevice.current.name)
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            sectionDivider
+
+            settingsRow(icon: "key.fill", title: "Security Code") {
+                Button("Show") { showKeyExport = true }
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(ColorTheme.accent())
+            }
+        }
+    }
+
+    private var appearanceSection: some View {
+        settingsSection(title: "Appearance", icon: "paintbrush.fill") {
+            settingsRow(icon: "paintbrush.fill", title: "Theme") {
+                Picker("Theme", selection: appearanceBinding) {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(ColorTheme.accent())
+                .labelsHidden()
+            }
+        }
+    }
+
+    private var privacySection: some View {
+        settingsSection(
+            title: "Privacy & Trust",
+            icon: "lock.shield",
+            footer: "Share this with leadership when someone says AI is \"too risky\" — Centurion is built differently."
+        ) {
+            Button { showPrivacyTrust = true } label: {
+                CenturionListRow(
+                    icon: "lock.shield.fill",
+                    title: "Privacy & Trust",
+                    subtitle: "Why Centurion is different — comparisons & calm answers"
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            CenturionReassuranceRow(
+                icon: "network",
+                title: "Private on your network",
+                detail: "Messages stay between your iPhone and Centurion"
+            )
+
+            sectionDivider
+
+            CenturionReassuranceRow(
+                icon: "lock.fill",
+                title: "Encrypted in transit",
+                detail: "Protected the same way sensitive apps protect your data"
+            )
+
+            sectionDivider
+
+            CenturionReassuranceRow(
+                icon: "person.crop.circle.badge.checkmark",
+                title: "No cloud account",
+                detail: "You don't need to sign in to a third-party service for the private link"
+            )
+        }
+    }
+
+    private var aboutSection: some View {
+        settingsSection(title: "About", icon: "info.circle") {
+            VStack(spacing: Spacing.sm) {
+                CenturionAppMark(size: 64)
+                Text("CenturionAI Remote")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(ColorTheme.primaryText())
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.sm)
+
+            sectionDivider
+
+            settingsRow(icon: "info.circle", title: "Version") {
+                Text(appVersion)
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            sectionDivider
+
+            settingsRow(icon: "sparkle", title: "Release") {
+                Text("Mission Horizon")
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(ColorTheme.accent())
+            }
+        }
+    }
+
+    private var resetSection: some View {
+        settingsSection(
+            title: "Danger Zone",
+            icon: "exclamationmark.triangle",
+            footer: "Not sure you need this? Tap Talk to Adrian in Support above — Adrian can help first. Resetting gives you a new pairing code; you'll need to link again in You."
+        ) {
+            Button(role: .destructive) {
+                showResetConfirmation = true
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "trash")
+                        .font(.body)
+                        .foregroundColor(ColorTheme.error())
+                        .frame(width: 24)
+                    Text("Reset Identity")
+                        .font(.body)
+                        .foregroundColor(ColorTheme.error())
+                    Spacer()
+                }
+                .padding(.vertical, Spacing.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Layout Helpers
+
+    private var sectionDivider: some View {
+        Rectangle()
+            .fill(ColorTheme.border())
+            .frame(height: 0.5)
+    }
+
+    private func settingsSection<Content: View>(
+        title: String,
+        icon: String,
+        footer: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        SettingsSectionCard(title: title, icon: icon, footer: footer, content: content())
+    }
+
+    private func settingsRow<Trailing: View>(
+        icon: String,
+        title: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(ColorTheme.accent())
+                .frame(width: 24)
+            Text(title)
+                .font(.body)
+                .foregroundColor(ColorTheme.primaryText())
+            Spacer()
+            trailing()
+        }
+        .padding(.vertical, Spacing.xs)
+    }
+}
+
+// MARK: - Settings Section Card
+
+private struct SettingsSectionCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let footer: String?
+    let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            CenturionSectionHeader(title: title, icon: icon)
+            AtmosphericSurface {
+                VStack(spacing: Spacing.sm) {
+                    content
+                }
+            }
+            if let footer {
+                Text(footer)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .padding(.horizontal, Spacing.xs)
+                    .lineSpacing(2)
+            }
+        }
     }
 }
 
@@ -259,50 +410,45 @@ struct KeyExportView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            VStack(spacing: Spacing.lg) {
+                SheetHeader(
+                    title: "Your iPhone Security Code",
+                    subtitle: "Approve this code on your Centurion → Devices when pairing for the first time."
+                )
+
                 Image(systemName: "key.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 44, weight: .medium))
                     .foregroundColor(ColorTheme.accent())
-
-                Text("Your iPhone Security Code")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ColorTheme.primaryText())
-
-                Text("Approve this code on your Centurion → Devices when pairing for the first time.")
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
+                    .symbolRenderingMode(.hierarchical)
 
                 if let loadError {
-                    Text(loadError)
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.error())
+                    ErrorState(
+                        title: "Couldn't load code",
+                        message: loadError,
+                        retryTitle: "Try again",
+                        onRetry: loadFingerprint
+                    )
                 } else {
-                    Text(fingerprint)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(ColorTheme.primaryText())
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(ColorTheme.surface())
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(ColorTheme.border(), lineWidth: 0.5)
-                        )
-                }
-
-                if !fingerprint.isEmpty {
-                    Button("Copy Code") {
-                        UIPasteboard.general.string = fingerprint
-                        Haptics.success()
+                    AtmosphericSurface(elevated: true) {
+                        Text(fingerprint)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(ColorTheme.primaryText())
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    .buttonStyle(AmberButtonStyle())
+
+                    if !fingerprint.isEmpty {
+                        Button("Copy Code") {
+                            UIPasteboard.general.string = fingerprint
+                            Haptics.success()
+                        }
+                        .buttonStyle(CenturionPrimaryButtonStyle())
+                    }
                 }
 
                 Spacer()
             }
             .padding()
+            .background(ColorTheme.background())
             .onAppear(perform: loadFingerprint)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -317,6 +463,7 @@ struct KeyExportView: View {
         do {
             let identity = try IdentityKey.loadOrCreate()
             fingerprint = identity.fingerprint
+            loadError = nil
         } catch {
             loadError = "Your secure identity couldn't be loaded."
         }

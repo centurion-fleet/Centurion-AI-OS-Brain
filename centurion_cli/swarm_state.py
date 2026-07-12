@@ -1,0 +1,325 @@
+"""Brain-owned collaboration snapshots for Remote and dashboard clients.
+
+This module is intentionally UI-shaped but not UI-owned.  The Linux
+Centurion Brain remains the source of truth: local collaborations are read
+from kanban boards, cloud collaborations are projected from Mission Control,
+and mobile clients receive only slim mission-progress DTOs.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _iso_from_epoch(value: int | None) -> str:
+    if not value:
+        return _now_iso()
+    return (
+        datetime.fromtimestamp(int(value), tz=timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _coerce_iso(value: Any) -> str:
+    text = str(value or "").strip()
+    return text or _now_iso()
+
+
+def _pulse_from_tasks(status: str, sprint_phase: str, tasks: list[Any]) -> str:
+    if any(getattr(task, "status", "") == "blocked" for task in tasks):
+        return "blocked"
+    if status == "completed":
+        return "complete"
+    if any(getattr(task, "status", "") == "running" for task in tasks):
+        return "active"
+    if sprint_phase in {"execute", "plan"}:
+        return "active"
+    return "idle"
+
+
+def _pulse_from_project(status: str, sprint_phase: str, blocked_tasks: int) -> str:
+    if blocked_tasks > 0:
+        return "blocked"
+    if status == "completed":
+        return "complete"
+    if sprint_phase in {"execute", "plan"}:
+        return "active"
+    if status == "draft":
+        return "idle"
+    return "idle"
+
+
+def _attention_score(pulse: str, pending_signal_count: int) -> int:
+    base = {
+        "waiting": 100,
+        "attention": 90,
+        "blocked": 70,
+        "active": 50,
+        "forming": 40,
+        "idle": 20,
+        "complete": 5,
+    }.get(pulse, 20)
+    return base + pending_signal_count * 5
+
+
+def _task_signal_id(board_slug: str, task_id: str) -> str:
+    return f"{board_slug}:{task_id}:signal"
+
+
+def _task_outcome_id(board_slug: str, task_id: str) -> str:
+    return f"{board_slug}:{task_id}:outcome"
+
+
+def _local_board_snapshot() -> dict[str, Any]:
+    """Return collaboration summaries derived from local kanban boards."""
+    try:
+        from centurion_cli import kanban_db
+    except Exception:
+        return {"swarms": [], "signals": [], "outcomes": [], "activities": []}
+
+    swarms: list[dict[str, Any]] = []
+    signals: list[dict[str, Any]] = []
+    outcomes: list[dict[str, Any]] = []
+    activities: list[dict[str, Any]] = []
+
+    try:
+        boards = kanban_db.list_boards(include_archived=False)
+    except Exception:
+        return {"swarms": [], "signals": [], "outcomes": [], "activities": []}
+
+    for board in boards:
+        slug = str(board.get("slug") or board.get("id") or "").strip()
+        if not slug:
+            continue
+        try:
+            conn = kanban_db.connect(board=slug)
+            tasks = kanban_db.list_tasks(conn, include_archived=False, order_by="updated", limit=50)
+        except Exception:
+            continue
+        finally:
+            try:
+                conn.close()  # type: ignore[name-defined]
+            except Exception:
+                pass
+
+        # Hide a completely empty default board; it is not a collaboration yet.
+        if slug == kanban_db.DEFAULT_BOARD and not tasks:
+            continue
+
+        blocked = [task for task in tasks if task.status == "blocked"]
+        running = [task for task in tasks if task.status == "running"]
+        done = [task for task in tasks if task.status == "done"]
+        pulse = _pulse_from_tasks("active", "execute", tasks)
+        updated_at = max((task.started_at or task.created_at for task in tasks), default=None)
+        title = str(board.get("name") or board.get("title") or slug.replace("-", " ").title())
+        objective = str(board.get("description") or "Your Centurions are working together on this collaboration.")
+
+        swarms.append(
+            {
+                "id": slug,
+                "mission_id": board.get("mission_id"),
+                "display_name": title,
+                "objective": objective,
+                "status": "running" if pulse != "complete" else "complete",
+                "pulse": "waiting" if blocked else pulse,
+                "formation_source": "manual",
+                "participants": [
+                    {
+                        "id": "human-owner",
+                        "name": "You",
+                        "kind": "human",
+                        "role": "owner",
+                        "is_active": False,
+                    },
+                    {
+                        "id": "centurion-worker",
+                        "name": "Your Centurion",
+                        "kind": "centurion",
+                        "role": "operator",
+                        "is_active": bool(running),
+                    },
+                ],
+                "pending_signal_count": len(blocked),
+                "updated_at": _iso_from_epoch(updated_at),
+                "completed_at": _iso_from_epoch(max((task.completed_at or 0 for task in done), default=0))
+                if done and len(done) == len(tasks)
+                else None,
+                "attention_score": _attention_score("waiting" if blocked else pulse, len(blocked)),
+                "source": "kanban",
+                "kanban_board_slug": slug,
+            }
+        )
+
+        for task in blocked[:5]:
+            signals.append(
+                {
+                    "id": _task_signal_id(slug, task.id),
+                    "swarm_id": slug,
+                    "type": "decision",
+                    "message": task.last_failure_error
+                    or task.body
+                    or f"{task.title} needs your choice.",
+                    "status": "open",
+                    "created_at": _iso_from_epoch(task.started_at or task.created_at),
+                }
+            )
+
+        for task in done[:5]:
+            if not task.result:
+                continue
+            outcomes.append(
+                {
+                    "id": _task_outcome_id(slug, task.id),
+                    "swarm_id": slug,
+                    "description": task.result,
+                    "status": "ready",
+                    "owner_name": task.assignee or "Your Centurion",
+                    "created_at": _iso_from_epoch(task.completed_at or task.started_at or task.created_at),
+                }
+            )
+
+        for task in tasks[:8]:
+            activities.append(
+                {
+                    "id": f"{slug}:{task.id}:activity",
+                    "swarm_id": slug,
+                    "kind": task.status,
+                    "summary": task.title,
+                    "at": _iso_from_epoch(task.started_at or task.created_at),
+                }
+            )
+
+    return {
+        "swarms": swarms,
+        "signals": signals,
+        "outcomes": outcomes,
+        "activities": activities,
+    }
+
+
+def _portal_snapshot(since: str | None = None) -> dict[str, Any]:
+    """Return Mission Control projection when a project token is configured."""
+    try:
+        from gateway.swarm_mc import SwarmMcClient, load_mc_config
+    except Exception:
+        return {
+            "ok": False,
+            "source": "local",
+            "message": "Mission Control client unavailable",
+            "swarms": [],
+            "projects": [],
+            "targets": [],
+            "tasks": [],
+        }
+
+    cfg = load_mc_config()
+    project_id = cfg.get("project_id", "")
+    token = cfg.get("project_token", "")
+    install_id = cfg.get("install_id", "")
+    if not project_id or not token.startswith("ctk_proj_") or not install_id:
+        return {
+            "ok": False,
+            "source": "local",
+            "message": "Mission Control not connected — run centurion swarm connect",
+            "swarms": [],
+            "projects": [],
+            "targets": [],
+            "tasks": [],
+        }
+
+    try:
+        client = SwarmMcClient(project_token=token, install_id=install_id)
+        data = client.sync(project_id, since)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": "local",
+            "message": f"Mission Control sync failed: {exc}",
+            "swarms": [],
+            "projects": [],
+            "targets": [],
+            "tasks": [],
+        }
+    projects = data.get("projects") or []
+    targets = data.get("targets") or []
+    tasks = data.get("tasks") or []
+    if not projects and project_id:
+        projects = [
+            {
+                "id": project_id,
+                "title": data.get("project_title") or "Mission Control Project",
+                "purpose": data.get("project_purpose"),
+                "slug": data.get("project_slug") or project_id,
+                "status": data.get("project_status") or "active",
+                "sprint_phase": data.get("sprint_phase") or "execute",
+                "sort_order": 0,
+                "created_at": data.get("created_at") or "",
+                "updated_at": data.get("updated_at") or "",
+            }
+        ]
+
+    swarms: list[dict[str, Any]] = []
+    for project in projects:
+        pid = str(project.get("id") or project_id)
+        project_tasks = [t for t in tasks if str(t.get("project_id", "")) == pid]
+        blocked = sum(1 for t in project_tasks if t.get("status") == "blocked")
+        pulse = _pulse_from_project(
+            str(project.get("status") or "active"),
+            str(project.get("sprint_phase") or "execute"),
+            blocked,
+        )
+        swarms.append(
+            {
+                "id": pid,
+                "mission_id": project.get("program_id") or project.get("mission_id"),
+                "display_name": project.get("title") or "Collaboration",
+                "objective": project.get("purpose") or "",
+                "status": "complete" if project.get("status") == "completed" else "running",
+                "pulse": pulse,
+                "formation_source": "manual",
+                "participants": [],
+                "pending_signal_count": blocked,
+                "updated_at": _coerce_iso(project.get("updated_at")),
+                "attention_score": _attention_score(pulse, blocked),
+                "source": "portal",
+                "portal_project_id": pid,
+            }
+        )
+
+    return {
+        "ok": True,
+        "source": "portal",
+        "project_id": project_id,
+        "swarms": swarms,
+        "projects": projects,
+        "targets": targets,
+        "tasks": tasks,
+    }
+
+
+def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
+    """Return the Brain-owned collaboration snapshot for Remote/dashboard."""
+    local = _local_board_snapshot()
+    portal = _portal_snapshot(since)
+    swarms = [*portal.get("swarms", []), *local["swarms"]]
+    swarms.sort(key=lambda item: int(item.get("attention_score") or 0), reverse=True)
+    return {
+        "ok": True,
+        "source": "brain",
+        "portal": portal,
+        "swarms": swarms,
+        "signals": local["signals"],
+        "outcomes": local["outcomes"],
+        "activities": local["activities"],
+        "projects": portal.get("projects", []),
+        "targets": portal.get("targets", []),
+        "tasks": portal.get("tasks", []),
+        "message": portal.get("message"),
+    }

@@ -16,7 +16,15 @@ import type {
   MissionProject,
   MissionTarget,
   MissionTask,
+  SwarmSummary,
 } from "./types";
+import {
+  fetchSwarmSync,
+  normalizeMissionProjects,
+  normalizeMissionTargets,
+  normalizeMissionTasks,
+  swarmsFromProjects,
+} from "@/lib/swarm-sync";
 
 /* ---- Seed data ---- */
 
@@ -86,6 +94,8 @@ interface StoredData {
   projects: MissionProject[];
   targets: MissionTarget[];
   tasks: MissionTask[];
+  swarms: SwarmSummary[];
+  syncSource: "local" | "portal" | "brain";
 }
 
 /* ---- Context ---- */
@@ -94,6 +104,11 @@ interface MissionContextValue {
   projects: MissionProject[];
   targets: MissionTarget[];
   tasks: MissionTask[];
+  swarms: SwarmSummary[];
+  syncSource: "local" | "portal" | "brain";
+  syncError: string | null;
+  isSyncing: boolean;
+  refreshSync: () => Promise<void>;
 
   // Projects
   addProject: (project: Omit<MissionProject, "id" | "createdAt" | "updatedAt">) => void;
@@ -126,13 +141,57 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as StoredData;
-        if (parsed.projects?.length) return parsed;
+        if (parsed.projects?.length) {
+          return {
+            projects: parsed.projects,
+            targets: parsed.targets ?? [],
+            tasks: parsed.tasks ?? [],
+            swarms: parsed.swarms ?? swarmsFromProjects(parsed.projects, parsed.tasks ?? []),
+            syncSource: parsed.syncSource ?? "local",
+          };
+        }
       }
     } catch {
       // ignore
     }
-    return { projects: SEED_PROJECTS, targets: SEED_TARGETS, tasks: SEED_TASKS };
+    const projects = SEED_PROJECTS;
+    const tasks = SEED_TASKS;
+    return {
+      projects,
+      targets: SEED_TARGETS,
+      tasks,
+      swarms: swarmsFromProjects(projects, tasks),
+      syncSource: "local",
+    };
   });
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const refreshSync = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const payload = await fetchSwarmSync();
+      setSyncError(payload.ok ? null : payload.message ?? "Mission Control not connected");
+      if (payload.ok && (payload.projects.length > 0 || payload.swarms.length > 0)) {
+        const projects = normalizeMissionProjects(payload.projects);
+        const targets = normalizeMissionTargets(payload.targets);
+        const tasks = normalizeMissionTasks(payload.tasks);
+        const swarms =
+          payload.swarms.length > 0
+            ? payload.swarms
+            : swarmsFromProjects(projects, tasks);
+        setData({ projects, targets, tasks, swarms, syncSource: payload.source === "local" ? "local" : "brain" });
+      }
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSync();
+  }, [refreshSync]);
 
   // Persist to localStorage on every change
   useEffect(() => {
@@ -143,7 +202,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     }
   }, [data]);
 
-  const { projects, targets, tasks } = data;
+  const { projects, targets, tasks, swarms, syncSource } = data;
 
   // -- Projects --
   const addProject = useCallback(
@@ -262,6 +321,11 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       projects,
       targets,
       tasks,
+      swarms,
+      syncSource,
+      syncError,
+      isSyncing,
+      refreshSync,
       addProject,
       updateProject,
       deleteProject,
@@ -279,6 +343,11 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       projects,
       targets,
       tasks,
+      swarms,
+      syncSource,
+      syncError,
+      isSyncing,
+      refreshSync,
       addProject,
       updateProject,
       deleteProject,

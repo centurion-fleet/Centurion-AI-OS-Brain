@@ -76,69 +76,7 @@ enum Spacing {
     static let xxl: CGFloat = 48
 }
 
-// MARK: - Card Style
-
-/// Reusable card modifier — every surface card in the app uses this.
-struct CardStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(Spacing.md)
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(ColorTheme.border(), lineWidth: 0.5)
-            )
-    }
-}
-
-extension View {
-    func cardStyle() -> some View {
-        modifier(CardStyle())
-    }
-}
-
-// MARK: - Tab Page Chrome
-
-/// Uniform layout for main tabs: inline nav title, optional header row, no app branding.
-struct TabPageChrome<Header: View, Content: View>: View {
-    let title: String
-    let header: Header
-    let content: Content
-
-    init(
-        title: String,
-        @ViewBuilder header: () -> Header,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.header = header()
-        self.content = content()
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                header
-                content
-            }
-            .background(ColorTheme.background())
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-}
-
-extension TabPageChrome where Header == EmptyView {
-    init(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.header = EmptyView()
-        self.content = content()
-    }
-}
+// MARK: - Deferred Tab Content
 
 /// Defers heavy tab content until first visit, then preserves state when switching tabs.
 struct DeferredTabContent<Content: View>: View {
@@ -192,13 +130,86 @@ struct DemoDataBanner: View {
         }
         .padding(Spacing.md)
         .background(ColorTheme.accent().opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
                 .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Sample updates. These are examples until you link your Centurion in Connect.")
+    }
+}
+
+// MARK: - Orb Design System
+
+/// Living orb vocabulary — collaborations (Swarm) and Life Mission (Mission).
+/// Motion states are locked; materials and atmosphere enhance emotional read.
+enum OrbDesign {
+    // MARK: Colors
+
+    static let humanGold = Color(red: 0.92, green: 0.78, blue: 0.45)
+    static let atmosphereTeal = Color(red: 0.22, green: 0.58, blue: 0.56)
+    static let agedBronze = Color(red: 0.55, green: 0.42, blue: 0.28)
+    static let pearlHighlight = Color(red: 1.0, green: 0.96, blue: 0.88)
+
+    static func centurionAccent(index: Int) -> Color {
+        let palette = [ColorTheme.accent(), atmosphereTeal, Color(red: 0.62, green: 0.48, blue: 0.82)]
+        return palette[index % palette.count]
+    }
+
+    // MARK: Motion durations (paired with existing pulse triggers)
+
+    enum Duration {
+        static let idleBreath: Double = 3.5
+        static let activeBreath: Double = 3.0
+        static let activeOrbit: Double = 10.0
+        static let attentionBeacon: Double = 0.8
+        static let waitingBeacon: Double = 1.2
+        static let blockedThrob: Double = 2.5
+        static let mistDrift: Double = 5.5
+        static let missionBreath: Double = 6.0
+        static let invitationRipple: Double = 2.4
+    }
+
+    // MARK: Materials
+
+    static func coreGradient(accent: Color, intensity: Double = 1.0) -> RadialGradient {
+        RadialGradient(
+            colors: [
+                pearlHighlight.opacity(0.95 * intensity),
+                accent.opacity(0.92 * intensity),
+                accent.opacity(0.55 * intensity),
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: 24
+        )
+    }
+
+    static func atmosphereGradient(accent: Color) -> RadialGradient {
+        RadialGradient(
+            colors: [
+                accent.opacity(0.22),
+                atmosphereTeal.opacity(0.08),
+                Color.clear,
+            ],
+            center: .center,
+            startRadius: 8,
+            endRadius: 80
+        )
+    }
+
+    static func metallicRimGradient(accent: Color) -> AngularGradient {
+        AngularGradient(
+            colors: [
+                accent.opacity(0.65),
+                agedBronze.opacity(0.45),
+                accent.opacity(0.15),
+                pearlHighlight.opacity(0.35),
+                accent.opacity(0.65),
+            ],
+            center: .center
+        )
     }
 }
 
@@ -221,49 +232,12 @@ private struct ReduceMotionAnimationModifier<V: Equatable>: ViewModifier {
     }
 }
 
-// MARK: - Section Header
-
-/// Premium section header with amber accent line
-struct SectionHeader: View {
-    let title: String
-    let icon: String
-    
-    var body: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(ColorTheme.accent())
-            
-            Text(title)
-                .font(.system(size: 14, weight: .semibold, design: .default))
-                .textCase(.uppercase)
-                .foregroundColor(ColorTheme.mutedText())
-            
-            Spacer()
-            
-            Rectangle()
-                .fill(ColorTheme.border())
-                .frame(height: 1)
-                .frame(maxWidth: 60)
-        }
-    }
-}
+// MARK: - Section Header (see CenturionSectionHeader in CenturionComponents.swift)
+typealias SectionHeader = CenturionSectionHeader
 
 // MARK: - Premium Button Styles
 
-struct AmberButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(.white)
-            .padding(.horizontal, Spacing.lg)
-            .padding(.vertical, Spacing.sm)
-            .background(ColorTheme.accent())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(Motion.light, value: configuration.isPressed)
-    }
-}
+typealias AmberButtonStyle = CenturionPrimaryButtonStyle
 
 // MARK: - Connection Status Dot
 
@@ -312,32 +286,11 @@ struct CenturionAppMark: View {
     }
 }
 
-// MARK: - App Brand Header
+// MARK: - App Brand Header (legacy — prefer FullBrandHeader)
 
-/// Consistent brand header for every page — Icon + name + version.
-/// Replaces all toolbar principals and page titles with one unified layout.
+/// @deprecated Use `FullBrandHeader` for secondary screens.
 struct BrandHeader: View {
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(ColorTheme.accent().opacity(0.08))
-                    .frame(width: 60, height: 60)
-
-                CenturionAppMark(size: 52)
-            }
-            
-            VStack(spacing: 2) {
-                Text("CenturionAI Remote")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(ColorTheme.primaryText())
-
-                Text("Your private companion on your network")
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        FullBrandHeader()
     }
 }

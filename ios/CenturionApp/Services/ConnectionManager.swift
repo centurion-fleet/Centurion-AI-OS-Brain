@@ -289,6 +289,48 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
+    func fetchSwarmSnapshot() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "swarm_snapshot")
+        return payload["snapshot"] as? [String: Any] ?? [:]
+    }
+
+    func fetchBeneficiarySnapshot() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "beneficiary_snapshot")
+        return payload["snapshot"] as? [String: Any] ?? [:]
+    }
+
+    func setFamilyBeneficiary(firstName: String) async throws -> [String: Any] {
+        let payload = try await invokeRemote(
+            action: "beneficiary_set_family_member",
+            extra: ["first_name": firstName]
+        )
+        if let snapshot = payload["snapshot"] as? [String: Any] {
+            return snapshot
+        }
+        throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not save beneficiary.")
+    }
+
+    func submitColleagueReferral(
+        name: String,
+        email: String,
+        phone: String,
+        nonFamilyAttested: Bool
+    ) async throws -> [String: Any] {
+        let payload = try await invokeRemote(
+            action: "beneficiary_submit_colleague",
+            extra: [
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "non_family_attested": nonFamilyAttested,
+            ]
+        )
+        if let snapshot = payload["snapshot"] as? [String: Any] {
+            return snapshot
+        }
+        throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not submit referral.")
+    }
+
     private func invokeRemote(action: String, extra: [String: Any] = [:]) async throws -> [String: Any] {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
@@ -329,6 +371,10 @@ final class ConnectionManager: ObservableObject {
             "health_check_response": "health_check",
             "support_bundle_response": "support_bundle",
             "support_auto_fix_response": "support_auto_fix",
+            "swarm_snapshot_response": "swarm_snapshot",
+            "beneficiary_snapshot_response": "beneficiary_snapshot",
+            "beneficiary_set_family_member_response": "beneficiary_set_family_member",
+            "beneficiary_submit_colleague_response": "beneficiary_submit_colleague",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {

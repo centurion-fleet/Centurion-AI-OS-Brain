@@ -26,6 +26,7 @@ struct HumanContextInterviewView: View {
                 progressBar
                 questionView
             }
+            .background(secondaryBackground)
             .navigationTitle("About You")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -45,6 +46,14 @@ struct HumanContextInterviewView: View {
                 }
             }
             .onAppear { prefillFromExisting() }
+        }
+    }
+
+    private var secondaryBackground: some View {
+        ZStack {
+            ColorTheme.background()
+            ColorTheme.atmosphericVeil()
+                .ignoresSafeArea()
         }
     }
 
@@ -83,18 +92,20 @@ struct HumanContextInterviewView: View {
     }
 
     private var progressBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.xs) {
             HStack {
                 Text(currentQuestion.stage)
-                    .font(.caption.weight(.semibold))
+                    .font(Typography.sectionLabel)
                     .foregroundColor(ColorTheme.accent())
+                    .textCase(.uppercase)
+                    .tracking(1.5)
                 Spacer()
                 Text("\(currentQuestionIndex + 1) of \(questions.count)")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
-            .padding(.horizontal)
-            .padding(.top, 12)
+            .padding(.horizontal, Spacing.md)
+            .padding(.top, Spacing.sm)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -108,7 +119,7 @@ struct HumanContextInterviewView: View {
                 }
             }
             .frame(height: 2)
-            .padding(.horizontal)
+            .padding(.horizontal, Spacing.md)
         }
     }
 
@@ -122,25 +133,32 @@ struct HumanContextInterviewView: View {
 
     private var questionView: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                Spacer().frame(height: 32)
-
-                Text(currentQuestion.question)
-                    .font(.title2.weight(.bold))
-                    .foregroundColor(ColorTheme.primaryText())
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .padding(.horizontal)
-
-                if !currentQuestion.hint.isEmpty {
-                    Text(currentQuestion.hint)
-                        .font(.subheadline)
-                        .foregroundColor(ColorTheme.dimAccent())
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+            VStack(spacing: Spacing.lg) {
+                if currentQuestionIndex == 0 {
+                    FullBrandHeader()
                 }
 
-                Spacer().frame(height: 12)
+                Spacer().frame(height: Spacing.md)
+
+                AtmosphericSurface(elevated: true) {
+                    VStack(spacing: Spacing.md) {
+                        Text(currentQuestion.question)
+                            .font(Typography.editorialTitle)
+                            .foregroundColor(ColorTheme.primaryText())
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(4)
+
+                        if !currentQuestion.hint.isEmpty {
+                            Text(currentQuestion.hint)
+                                .font(.subheadline)
+                                .foregroundColor(ColorTheme.dimAccent())
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(3)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, Spacing.md)
 
                 switch currentQuestion.inputType {
                 case .text:
@@ -155,16 +173,10 @@ struct HumanContextInterviewView: View {
 
                 Button(action: nextQuestion) {
                     Text(currentQuestionIndex < questions.count - 1 ? "Next" : "Done")
-                        .font(.headline)
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(ColorTheme.accent())
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal)
-                .padding(.bottom, 20)
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .padding(.horizontal, Spacing.md)
+                .padding(.bottom, Spacing.lg)
             }
             .frame(maxWidth: 428)
             .frame(maxWidth: .infinity)
@@ -172,45 +184,35 @@ struct HumanContextInterviewView: View {
     }
 
     private var textInput: some View {
-        TextField(currentQuestion.placeholder, text: textBinding)
-            .textFieldStyle(.plain)
-            .font(.body)
-            .foregroundColor(ColorTheme.primaryText())
-            .padding()
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(ColorTheme.border(), lineWidth: 1)
-            )
-            .padding(.horizontal)
+        AtmosphericSurface {
+            TextField(currentQuestion.placeholder, text: textBinding)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundColor(ColorTheme.primaryText())
+        }
+        .padding(.horizontal, Spacing.md)
     }
 
     private var multilineInput: some View {
-        TextEditor(text: textBinding)
-            .font(.body)
-            .foregroundColor(ColorTheme.primaryText())
-            .scrollContentBackground(.hidden)
-            .padding()
-            .frame(minHeight: 150)
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(ColorTheme.border(), lineWidth: 1)
-            )
-            .padding(.horizontal)
+        AtmosphericSurface {
+            TextEditor(text: textBinding)
+                .font(.body)
+                .foregroundColor(ColorTheme.primaryText())
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 150)
+        }
+        .padding(.horizontal, Spacing.md)
     }
 
     private var tagInputView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Spacing.sm) {
             let tags = currentTags
             if !tags.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: 8) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: Spacing.xs) {
                     ForEach(tags, id: \.self) { tag in
                         HStack(spacing: 4) {
                             Text(tag)
-                                .font(.system(size: 12))
+                                .font(.caption)
                                 .foregroundColor(ColorTheme.primaryText())
                             Button(action: { removeTag(tag) }) {
                                 Image(systemName: "xmark")
@@ -219,35 +221,30 @@ struct HumanContextInterviewView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, Spacing.sm)
                         .padding(.vertical, 6)
                         .background(ColorTheme.accent().opacity(0.1))
                         .clipShape(Capsule())
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, Spacing.md)
             }
 
-            HStack {
-                TextField("Type and press return...", text: $tagInput)
-                    .textFieldStyle(.plain)
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.primaryText())
-                    .onSubmit { addTag() }
-                Button(action: addTag) {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(ColorTheme.accent())
+            AtmosphericSurface {
+                HStack {
+                    TextField("Type and press return...", text: $tagInput)
+                        .textFieldStyle(.plain)
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.primaryText())
+                        .onSubmit { addTag() }
+                    Button(action: addTag) {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
-            .padding()
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(ColorTheme.border(), lineWidth: 1)
-            )
-            .padding(.horizontal)
+            .padding(.horizontal, Spacing.md)
         }
     }
 

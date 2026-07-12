@@ -103,6 +103,47 @@ pub enum RemoteMessage {
         thinking_health: String,
         restored: bool,
     },
+    SwarmSnapshot {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        since: Option<String>,
+    },
+    SwarmSnapshotResponse {
+        id: Uuid,
+        snapshot: serde_json::Value,
+    },
+    BeneficiarySnapshot {
+        id: Uuid,
+    },
+    BeneficiarySnapshotResponse {
+        id: Uuid,
+        snapshot: serde_json::Value,
+    },
+    BeneficiarySetFamilyMember {
+        id: Uuid,
+        first_name: String,
+    },
+    BeneficiarySetFamilyMemberResponse {
+        id: Uuid,
+        ok: bool,
+        snapshot: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    BeneficiarySubmitColleague {
+        id: Uuid,
+        name: String,
+        email: String,
+        phone: String,
+        non_family_attested: bool,
+    },
+    BeneficiarySubmitColleagueResponse {
+        id: Uuid,
+        ok: bool,
+        snapshot: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
     Ready,
     Ping,
     Pong,

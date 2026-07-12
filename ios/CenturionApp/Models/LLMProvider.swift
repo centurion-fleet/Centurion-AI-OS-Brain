@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// LLM backends your Centurion can think through.
-/// Status is surfaced on the Connect tab so provider outages never feel like Centurion failures.
+/// Status is surfaced in You so provider outages never feel like Centurion failures.
 enum LLMProvider: String, CaseIterable, Identifiable, Codable {
     case deepseek
     case claude

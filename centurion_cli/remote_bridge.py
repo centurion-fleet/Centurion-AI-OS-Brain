@@ -63,6 +63,14 @@ def handle_request(
         return _handle_support_bundle(request_id)
     if action == "support_auto_fix":
         return _handle_support_auto_fix(request_id)
+    if action == "swarm_snapshot":
+        return _handle_swarm_snapshot(request, request_id)
+    if action == "beneficiary_snapshot":
+        return _handle_beneficiary_snapshot(request_id)
+    if action == "beneficiary_set_family_member":
+        return _handle_beneficiary_set_family_member(request, request_id)
+    if action == "beneficiary_submit_colleague":
+        return _handle_beneficiary_submit_colleague(request, request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -255,6 +263,72 @@ def _handle_support_auto_fix(request_id: str) -> dict[str, Any]:
         }
     except Exception as exc:
         return _error_response(request_id, action="support_auto_fix", exc=exc)
+
+
+def _handle_swarm_snapshot(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.swarm_state import get_swarm_snapshot
+
+        snapshot = get_swarm_snapshot(since=request.get("since"))
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "swarm_snapshot",
+            "snapshot": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_snapshot", exc=exc)
+
+
+def _handle_beneficiary_snapshot(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.beneficiary_state import get_beneficiary_snapshot
+
+        snapshot = get_beneficiary_snapshot()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "beneficiary_snapshot",
+            "snapshot": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="beneficiary_snapshot", exc=exc)
+
+
+def _handle_beneficiary_set_family_member(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.beneficiary_state import set_family_beneficiary
+
+        first_name = str(request.get("first_name") or request.get("family_beneficiary_first_name") or "")
+        snapshot = set_family_beneficiary(first_name)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "beneficiary_set_family_member",
+            "snapshot": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="beneficiary_set_family_member", exc=exc)
+
+
+def _handle_beneficiary_submit_colleague(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.beneficiary_state import submit_colleague_referral
+
+        snapshot = submit_colleague_referral(
+            name=str(request.get("name") or ""),
+            email=str(request.get("email") or ""),
+            phone=str(request.get("phone") or ""),
+            non_family_attested=bool(request.get("non_family_attested")),
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "beneficiary_submit_colleague",
+            "snapshot": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="beneficiary_submit_colleague", exc=exc)
 
 
 def _error_response(

@@ -1,5 +1,12 @@
 #[cfg(target_os = "linux")]
+mod adrian;
+#[cfg(target_os = "linux")]
+mod adrian_dialog;
+
+#[cfg(target_os = "linux")]
 mod linux {
+    use crate::adrian::AdrianChatContext;
+    use crate::adrian_dialog::{show_adrian_dialog, AdrianDialogHooks};
     use adw::prelude::*;
     use gtk4 as gtk;
     use libadwaita as adw;
@@ -182,6 +189,19 @@ mod linux {
         restart.set_size_request(-1, 44);
         status_card.append(&restart);
 
+        let support_links = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        support_links.set_halign(gtk::Align::Center);
+        support_links.set_margin_top(8);
+        let get_help_link = gtk::Button::with_label("Get Help");
+        get_help_link.add_css_class("flat");
+        get_help_link.add_css_class("link");
+        let talk_to_adrian_link = gtk::Button::with_label("Talk to Adrian");
+        talk_to_adrian_link.add_css_class("flat");
+        talk_to_adrian_link.add_css_class("link");
+        support_links.append(&get_help_link);
+        support_links.append(&talk_to_adrian_link);
+        status_card.append(&support_links);
+
         let home = gtk::Box::new(gtk::Orientation::Vertical, 24);
         home.set_margin_top(32);
         home.set_margin_bottom(32);
@@ -314,6 +334,16 @@ mod linux {
         settings_list.append(&support_bundle_row);
         settings_list.append(&support_lookup_row);
 
+        let adrian_row = adw::ActionRow::builder()
+            .title("Talk to Adrian")
+            .subtitle("Mission-first guidance from Centurion's creator — over the internet")
+            .icon_name("avatar-default-symbolic")
+            .build();
+        let adrian_button = gtk::Button::with_label("Open");
+        adrian_button.set_valign(gtk::Align::Center);
+        adrian_row.add_suffix(&adrian_button);
+        settings_list.append(&adrian_row);
+
         settings.append(&settings_list);
 
         let chat = build_chat_page();
@@ -421,6 +451,24 @@ mod linux {
         lookup_button.connect_clicked({
             let window = window.clone();
             move |_| show_support_lookup_dialog(&window)
+        });
+        let open_adrian = {
+            let window = window.clone();
+            let stack = stack.clone();
+            let thinking_settings_row = thinking_settings_row.clone();
+            move || open_adrian_dialog(&window, &stack, &thinking_settings_row)
+        };
+        adrian_button.connect_clicked({
+            let open_adrian = open_adrian.clone();
+            move |_| open_adrian()
+        });
+        talk_to_adrian_link.connect_clicked({
+            let open_adrian = open_adrian.clone();
+            move |_| open_adrian()
+        });
+        get_help_link.connect_clicked({
+            let window = window.clone();
+            move |_| show_support_health_dialog(&window)
         });
         restart.connect_clicked(move |_| {
             let result = supervisor.borrow_mut().restart();
@@ -922,6 +970,77 @@ mod linux {
             result_dialog.present();
             dialog.close();
         });
+    }
+
+    fn build_adrian_context() -> AdrianChatContext {
+        let connection_state = if remote_listener_active() {
+            "connected"
+        } else {
+            "disconnected"
+        };
+        let (thinking_health, thinking_message) =
+            if let Some(response) = run_provider_command(&["status", "--json"]) {
+                if let Some(status) = response.status {
+                    let health = match status.health.as_str() {
+                        "ok" => "working_normally",
+                        "degraded" => "needs_attention",
+                        _ => "needs_attention",
+                    };
+                    (health.to_owned(), status.health_message)
+                } else {
+                    ("unknown".to_owned(), String::new())
+                }
+            } else {
+                ("unknown".to_owned(), String::new())
+            };
+        AdrianChatContext {
+            app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            connection_state: connection_state.to_owned(),
+            thinking_health,
+            thinking_message,
+            has_mission: false,
+            active_target_count: 0,
+            mission_summary: String::new(),
+            support_code: String::new(),
+        }
+    }
+
+    fn open_adrian_dialog(
+        window: &adw::ApplicationWindow,
+        stack: &gtk::Stack,
+        thinking_settings_row: &adw::ActionRow,
+    ) {
+        let stack = stack.clone();
+        let window = window.clone();
+        let thinking_settings_row = thinking_settings_row.clone();
+        let hooks = AdrianDialogHooks {
+            build_context: Rc::new(build_adrian_context),
+            on_action: Rc::new(move |action_id: &str| {
+                match action_id {
+                    "open_connect" => stack.set_visible_child_name("home"),
+                    "open_get_help" => show_support_health_dialog(&window),
+                    "try_auto_fix" => {
+                        if let Some(response) = run_provider_command(&["restore", "--json"]) {
+                            let message = response
+                                .message
+                                .or_else(|| {
+                                    response.result.and_then(|value| {
+                                        value
+                                            .get("message")
+                                            .and_then(|m| m.as_str())
+                                            .map(str::to_owned)
+                                    })
+                                })
+                                .unwrap_or_else(|| "Restore finished.".to_owned());
+                            thinking_settings_row.set_subtitle(&message);
+                        }
+                    }
+                    "open_mission" => stack.set_visible_child_name("chat"),
+                    _ => {}
+                }
+            }),
+        };
+        show_adrian_dialog(&window, hooks);
     }
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main application entry — five tabs.
+/// Main application entry — three tabs: Chat, Home, You.
 /// Only the selected tab is built (lazy) so launch stays fast.
 struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -9,67 +9,42 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
 
-    private var showThinkingAttentionBadge: Bool {
-        connectionManager.connectionState == .connected && connectionManager.llmHealth.needsAttention
+    private var showYouAttentionBadge: Bool {
+        if connectionManager.connectionState != .connected { return true }
+        return connectionManager.llmHealth.needsAttention
     }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             DeferredTabContent(tag: 0, selection: $selectedTab, loadedTabs: $loadedTabs) {
-                ConnectionView()
-            }
-            .tabItem {
-                Label(
-                    "Connect",
-                    systemImage: connectionManager.connectionState == .connected
-                        ? "app.connected.to.app.below.fill"
-                        : "antenna.radiowaves.left.and.right"
-                )
-            }
-            .badge(showThinkingAttentionBadge ? "!" : nil)
-            .tag(0)
-
-            DeferredTabContent(tag: 1, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 ChatView()
             }
             .tabItem {
                 Label("Chat", systemImage: "message.fill")
             }
-            .tag(1)
+            .tag(0)
 
-            DeferredTabContent(tag: 2, selection: $selectedTab, loadedTabs: $loadedTabs) {
+            DeferredTabContent(tag: 1, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 MissionPortfolioView()
             }
             .tabItem {
                 Label("Home", systemImage: "waveform.path.ecg")
             }
-            .tag(2)
+            .tag(1)
 
-            DeferredTabContent(tag: 3, selection: $selectedTab, loadedTabs: $loadedTabs) {
-                SecurityHubView()
-            }
-            .tabItem {
-                Label(
-                    "Privacy",
-                    systemImage: connectionManager.connectionState == .connected
-                        ? "lock.shield.fill"
-                        : "shield"
-                )
-            }
-            .tag(3)
-
-            DeferredTabContent(tag: 4, selection: $selectedTab, loadedTabs: $loadedTabs) {
+            DeferredTabContent(tag: 2, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 SettingsView()
             }
             .tabItem {
-                Label("You", systemImage: "gearshape.fill")
+                Label("You", systemImage: "person.crop.circle")
             }
-            .tag(4)
+            .badge(showYouAttentionBadge ? "!" : nil)
+            .tag(2)
         }
         .tint(ColorTheme.accent())
         .onReceive(NotificationCenter.default.publisher(for: .centurionSelectTab)) { notification in
             if let tab = notification.object as? Int {
-                selectedTab = tab
+                selectedTab = remapLegacyTab(tab)
             }
         }
         .task(priority: .utility) {
@@ -79,6 +54,17 @@ struct ContentView: View {
                     messageService.seedInitialData()
                 }
             }
+        }
+    }
+
+    /// Maps pre-3-tab indices: Connect(0)→You(2), Chat(1)→0, Home(2)→1, You(3)→2.
+    private func remapLegacyTab(_ tab: Int) -> Int {
+        switch tab {
+        case 0: return 2
+        case 1: return 0
+        case 2: return 1
+        case 3: return 2
+        default: return min(max(tab, 0), 2)
         }
     }
 }

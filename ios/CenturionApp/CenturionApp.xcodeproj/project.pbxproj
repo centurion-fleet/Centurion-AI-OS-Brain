@@ -39,6 +39,7 @@
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
 		CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */; };
 		CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D533936FBAD883AD748A223 /* DesignSystem.swift */; };
+		CMPNTS01E6F7A8192B3C6 /* CenturionComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CMPNTS01E6F7A8192B3C5 /* CenturionComponents.swift */; };
 		D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */; };
 		D3655C930D9D16EEDC17A92E /* MissionDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */; };
 		D514204DF4E162E34C6756F1 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2816DC1C66616790651EBA30 /* Message.swift */; };
@@ -50,6 +51,16 @@
 		H3R4LDMDL01E6F7A8192B3C6 /* AdrianModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDMDL01E6F7A8192B3C5 /* AdrianModels.swift */; };
 		H3R4LDSVC01E6F7A8192B3C6 /* AdrianService.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDSVC01E6F7A8192B3C5 /* AdrianService.swift */; };
 		H3R4LDVW01E6F7A8192B3C6 /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = H3R4LDVW01E6F7A8192B3C5 /* AdrianView.swift */; };
+		SWARMCON01E6F7A8192B3C6 /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMCON01E6F7A8192B3C5 /* ConstellationView.swift */; };
+		SWARMDTL01E6F7A8192B3C6 /* SwarmDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMDTL01E6F7A8192B3C5 /* SwarmDetailSheet.swift */; };
+		SWARMFRM01E6F7A8192B3C6 /* SwarmFormationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMFRM01E6F7A8192B3C5 /* SwarmFormationViews.swift */; };
+		SWARMMDL01E6F7A8192B3C6 /* SwarmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMMDL01E6F7A8192B3C5 /* SwarmModels.swift */; };
+		SWARMORB01E6F7A8192B3C6 /* SwarmOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMORB01E6F7A8192B3C5 /* SwarmOrb.swift */; };
+		MISSORB01E6F7A8192B3C6 /* MissionOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = MISSORB01E6F7A8192B3C5 /* MissionOrb.swift */; };
+		SWARMSTR01E6F7A8192B3C6 /* SwarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SWARMSTR01E6F7A8192B3C5 /* SwarmStore.swift */; };
+		BENEFMDL01E6F7A8192B3C6 /* BeneficiaryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BENEFMDL01E6F7A8192B3C5 /* BeneficiaryModels.swift */; };
+		BENEFSTR01E6F7A8192B3C6 /* BeneficiaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BENEFSTR01E6F7A8192B3C5 /* BeneficiaryStore.swift */; };
+		SHOWCASE01E6F7A8192B3C6 /* CenturionShowcaseSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHOWCASE01E6F7A8192B3C5 /* CenturionShowcaseSection.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
 /* End PBXBuildFile section */
 
@@ -70,8 +81,19 @@
 		5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionDiscoveryView.swift; sourceTree = "<group>"; };
 		6A427BD838F46B4F357B51D9 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		6D533936FBAD883AD748A223 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		CMPNTS01E6F7A8192B3C5 /* CenturionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionComponents.swift; sourceTree = "<group>"; };
 		715E25DBDBADAB367351854A /* MessageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageService.swift; sourceTree = "<group>"; };
 		762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionPortfolioView.swift; sourceTree = "<group>"; };
+		SWARMCON01E6F7A8192B3C5 /* ConstellationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConstellationView.swift; sourceTree = "<group>"; };
+		SWARMDTL01E6F7A8192B3C5 /* SwarmDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmDetailSheet.swift; sourceTree = "<group>"; };
+		SWARMFRM01E6F7A8192B3C5 /* SwarmFormationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmFormationViews.swift; sourceTree = "<group>"; };
+		SWARMMDL01E6F7A8192B3C5 /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
+		SWARMORB01E6F7A8192B3C5 /* SwarmOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmOrb.swift; sourceTree = "<group>"; };
+		MISSORB01E6F7A8192B3C5 /* MissionOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionOrb.swift; sourceTree = "<group>"; };
+		SWARMSTR01E6F7A8192B3C5 /* SwarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmStore.swift; sourceTree = "<group>"; };
+		BENEFMDL01E6F7A8192B3C5 /* BeneficiaryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeneficiaryModels.swift; sourceTree = "<group>"; };
+		BENEFSTR01E6F7A8192B3C5 /* BeneficiaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeneficiaryStore.swift; sourceTree = "<group>"; };
+		SHOWCASE01E6F7A8192B3C5 /* CenturionShowcaseSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionShowcaseSection.swift; sourceTree = "<group>"; };
 		7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannel.swift; sourceTree = "<group>"; };
 		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
@@ -116,10 +138,16 @@
 			isa = PBXGroup;
 			children = (
 				815E8C975CB35A4357AFF0E1 /* ChatView.swift */,
+				SHOWCASE01E6F7A8192B3C5 /* CenturionShowcaseSection.swift */,
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
 				3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */,
 				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
 				C9F5A3D40E6F7A8192B3C5 /* GetHelpView.swift */,
+				SWARMCON01E6F7A8192B3C5 /* ConstellationView.swift */,
+				SWARMDTL01E6F7A8192B3C5 /* SwarmDetailSheet.swift */,
+				SWARMFRM01E6F7A8192B3C5 /* SwarmFormationViews.swift */,
+				SWARMORB01E6F7A8192B3C5 /* SwarmOrb.swift */,
+				MISSORB01E6F7A8192B3C5 /* MissionOrb.swift */,
 				H3R4LDBAR01E6F7A8192B3C5 /* AdrianLink.swift */,
 				H3R4LDVW01E6F7A8192B3C5 /* AdrianView.swift */,
 				B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */,
@@ -153,6 +181,7 @@
 				463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */,
 				4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */,
 				6D533936FBAD883AD748A223 /* DesignSystem.swift */,
+				CMPNTS01E6F7A8192B3C5 /* CenturionComponents.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -168,6 +197,8 @@
 				51401B6F9885163352D34464 /* SoulDocument.swift */,
 				A7F3E2B19C4D5E6F7081A2B3 /* ThinkingService.swift */,
 				H3R4LDMDL01E6F7A8192B3C5 /* AdrianModels.swift */,
+				SWARMMDL01E6F7A8192B3C5 /* SwarmModels.swift */,
+				BENEFMDL01E6F7A8192B3C5 /* BeneficiaryModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -182,6 +213,8 @@
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
 				H3R4LDSVC01E6F7A8192B3C5 /* AdrianService.swift */,
+				SWARMSTR01E6F7A8192B3C5 /* SwarmStore.swift */,
+				BENEFSTR01E6F7A8192B3C5 /* BeneficiaryStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -297,12 +330,23 @@
 				H3R4LDMDL01E6F7A8192B3C6 /* AdrianModels.swift in Sources */,
 				H3R4LDSVC01E6F7A8192B3C6 /* AdrianService.swift in Sources */,
 				H3R4LDVW01E6F7A8192B3C6 /* AdrianView.swift in Sources */,
+				SWARMCON01E6F7A8192B3C6 /* ConstellationView.swift in Sources */,
+				SWARMDTL01E6F7A8192B3C6 /* SwarmDetailSheet.swift in Sources */,
+				SWARMFRM01E6F7A8192B3C6 /* SwarmFormationViews.swift in Sources */,
+				SWARMMDL01E6F7A8192B3C6 /* SwarmModels.swift in Sources */,
+				SWARMORB01E6F7A8192B3C6 /* SwarmOrb.swift in Sources */,
+				MISSORB01E6F7A8192B3C6 /* MissionOrb.swift in Sources */,
+				SWARMSTR01E6F7A8192B3C6 /* SwarmStore.swift in Sources */,
+				BENEFMDL01E6F7A8192B3C6 /* BeneficiaryModels.swift in Sources */,
+				BENEFSTR01E6F7A8192B3C6 /* BeneficiaryStore.swift in Sources */,
+				SHOWCASE01E6F7A8192B3C6 /* CenturionShowcaseSection.swift in Sources */,
 				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
 				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
 				776C89C43273562535733334 /* ContentView.swift in Sources */,
 				A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */,
 				B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */,
 				CFAC90CD8E028E52CCCF126E /* DesignSystem.swift in Sources */,
+				CMPNTS01E6F7A8192B3C6 /* CenturionComponents.swift in Sources */,
 				93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */,
 				8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */,
 				D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */,

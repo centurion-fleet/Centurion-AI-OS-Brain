@@ -23,6 +23,7 @@ import { usePageHeader } from "@/contexts/usePageHeader";
 import { PluginSlot } from "@/plugins";
 import { cn, themedBody } from "@/lib/utils";
 import { useMission, MissionProvider } from "./context";
+import { SwarmConstellationHero } from "./SwarmConstellation";
 import type { SprintPhase } from "./types";
 
 const SPRINT_LABELS: Record<SprintPhase, string> = {
@@ -48,7 +49,7 @@ export default function MissionPortfolioPage() {
 }
 
 function MissionPortfolioPageInner() {
-  const { projects, targets, addProject } = useMission();
+  const { projects, targets, swarms, syncSource, syncError, isSyncing, refreshSync, addProject } = useMission();
   const navigate = useNavigate();
   const { setEnd } = usePageHeader();
 
@@ -103,6 +104,27 @@ function MissionPortfolioPageInner() {
   return (
     <div className="flex flex-col gap-6">
       <PluginSlot name="mission:top" />
+
+      <SwarmConstellationHero swarms={swarms} />
+
+      {syncSource === "brain" && (
+        <p className="text-xs text-muted-foreground">
+          Synced from your Centurion Brain
+          {isSyncing ? "…" : ""}
+        </p>
+      )}
+      {syncError && syncSource === "local" && (
+        <p className="text-xs text-muted-foreground">
+          {syncError}. Showing local portfolio.
+          <button
+            type="button"
+            className="ml-2 text-[var(--centurion-gold)] hover:underline"
+            onClick={() => void refreshSync()}
+          >
+            Retry sync
+          </button>
+        </p>
+      )}
 
       {/* Create modal */}
       {showCreate && (

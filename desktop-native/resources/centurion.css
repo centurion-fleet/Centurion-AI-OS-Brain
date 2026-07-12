@@ -34,6 +34,31 @@ button.suggested-action {
   font-weight: 600;
 }
 
+button.link {
+  color: @centurion_amber;
+  font-weight: 600;
+}
+
+.centurion-adrian-user {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: alpha(@centurion_amber, 0.14);
+}
+
+.centurion-adrian-bot {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: alpha(@window_fg_color, 0.06);
+}
+
+button.pill {
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: alpha(@centurion_amber, 0.12);
+  color: @centurion_amber;
+  font-weight: 600;
+}
+
 stackswitcher button {
   min-height: 36px;
   min-width: 96px;

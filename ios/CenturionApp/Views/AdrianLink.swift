@@ -37,10 +37,10 @@ enum AdrianNavigation {
         switch action {
         case .openConnect:
             showAdrian.wrappedValue = false
-            selectTab(0)
+            selectTab(2)
         case .openMission:
             showAdrian.wrappedValue = false
-            selectTab(2)
+            selectTab(1)
         case .openGetHelp:
             showAdrian.wrappedValue = false
             showGetHelp?.wrappedValue = true
