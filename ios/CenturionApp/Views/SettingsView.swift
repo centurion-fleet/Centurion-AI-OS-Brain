@@ -137,11 +137,11 @@ struct SettingsView: View {
                         Label("Talk to Adrian", systemImage: "person.crop.circle.fill")
                     }
                     .accessibilityLabel("Talk to Adrian")
-                    .accessibilityHint("Open Centurion's cloud support guide")
+                    .accessibilityHint("Open Adrian online — caring expert guidance from Centurion's creator")
                 } header: {
                     Text("Support")
                 } footer: {
-                    Text("Adrian works over the internet — even when your Centurion isn't linked.")
+                    Text("Adrian helps you live your mission — listen first, one step at a time.")
                 }
 
                 Section("Appearance") {

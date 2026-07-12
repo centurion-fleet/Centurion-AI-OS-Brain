@@ -219,14 +219,14 @@ def _fallback_reply(request: AdrianChatRequest) -> str:
     ctx = request.context
     if ctx.connection_state != "connected":
         return (
-            "I'm Adrian — Centurion's guide, always here even when your Centurion isn't linked yet.\n\n"
-            "Let's get you connected:\n"
+            "I'm Adrian online — let me understand what's happening first.\n\n"
+            "It sounds like your Centurion isn't linked yet. Here's one step at a time:\n"
             "1. Make sure your iPhone and Centurion computer share the same Wi‑Fi.\n"
             "2. Open Centurion on your computer.\n"
             "3. In this app, open Connect and tap your Centurion.\n"
             "4. Approve the link on your computer if asked.\n\n"
-            "While you try that, you can still review your mission in the Home tab — "
-            "staying on mission matters even when the link is down."
+            "While we fix that, your mission still matters — even a quiet moment in the Home tab "
+            "to dream what's next counts."
         )
     if ctx.thinking_health == "needs_attention":
         return (
@@ -239,8 +239,9 @@ def _fallback_reply(request: AdrianChatRequest) -> str:
             "how your Centurion thinks on the computer."
         )
     return (
-        "I'm Adrian, your Centurion support guide. Tell me what's getting in your way "
-        "and I'll walk you through it in plain language — so you can get back to your mission."
+        "I'm Adrian online. Tell me what's on your mind — something stuck, something you want to "
+        "understand, or a next chapter of your mission you're dreaming up. I'll listen first, "
+        "then we'll take one clear step together."
     )
 
 

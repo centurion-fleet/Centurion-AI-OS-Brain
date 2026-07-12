@@ -1,6 +1,6 @@
 import Foundation
 
-/// Talks to Adrian — Centurion's cloud support guide, always available when online.
+/// Talks to Adrian — the online presence of Centurion's creator; caring expert guidance when online.
 @MainActor
 final class AdrianService: ObservableObject {
     @Published private(set) var messages: [AdrianMessage] = []
@@ -42,11 +42,18 @@ final class AdrianService: ObservableObject {
             AdrianMessage(
                 role: .adrian,
                 content: """
-                I'm Adrian — Centurion's guide, here whenever you need help with this app.
+                I'm Adrian online — Adrian who built Centurion. My passion is helping you live your \
+                mission, not just fix your app.
 
-                I work over the internet, separate from your Centurion on your computer, so I can \
-                help even when you're not linked yet. Tell me what's in the way and we'll get you \
-                back on mission.
+                Centurion is for a 1:1 relationship with your private AI — to take day-to-day pressure \
+                off you, free your thinking, and keep discovering what matters. Your mission isn't one \
+                fixed destination; it evolves, and that's the point.
+
+                I'll listen first, then help — one clear step at a time. Stuck technically, curious how \
+                things work, or ready to dream what's next? Ask me. Plain language, no technical exam.
+
+                I work over the internet, separate from your Centurion on your computer. What would \
+                you like to explore?
                 """
             ),
         ]

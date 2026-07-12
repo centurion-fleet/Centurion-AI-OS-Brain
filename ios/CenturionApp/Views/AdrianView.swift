@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Chat sheet for Adrian — Centurion's cloud support guide.
+/// Chat with Adrian — the online presence of Centurion's creator.
 struct AdrianView: View {
     @EnvironmentObject private var adrianService: AdrianService
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -56,16 +56,18 @@ struct AdrianView: View {
                     .foregroundColor(ColorTheme.primaryText())
 
                 Text(
-                    "Adrian is Centurion's support guide — powered by Centurion so you never need an API key. "
-                        + "Adrian works over the internet, separate from your private Centurion link."
+                    "Adrian online is Adrian who created Centurion. His passion is helping you live "
+                        + "your mission — lift daily pressure, free your thinking, and deepen your "
+                        + "1:1 relationship with your private Centurion. Missions evolve; that's expected."
                 )
                 .font(.body)
                 .foregroundColor(ColorTheme.primaryText())
 
                 Text(
-                    "Adrian sees only what helps troubleshooting: whether you're linked, thinking health in plain words, "
-                        + "and a short mission summary if you've set one. Adrian never sees your Centurion chat history "
-                        + "or secrets."
+                    "Adrian listens first, then helps one step at a time. He works over the internet, "
+                        + "separate from your private Centurion link, and sees only what helps — link status, "
+                        + "thinking health in plain words, and a short mission summary if you've set one. "
+                        + "Never your chat history or secrets."
                 )
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())

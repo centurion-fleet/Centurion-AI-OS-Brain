@@ -1,30 +1,30 @@
 ---
 sidebar_position: 42
-title: Adrian — Support Guide
+title: Adrian — Creator Online
 ---
 
-# Adrian — Centurion's support guide
+# Adrian — Centurion's creator, online
 
-**Adrian** is Centurion's cloud support guide for CenturionAI Remote (iPhone). Centurion operates Adrian so customers never need their own API keys.
+**Adrian** is the online version of Adrian, the AI developer who created Centurion. Centurion operates Adrian so every customer gets caring, calming, expert advice — without the founder as first-line support, and without customers bringing their own API keys.
 
 ## Why Adrian exists
 
-Centurion uses AI to support its own customers — the same philosophy that powers the product: AI should help people stay on mission, not leave them debugging infrastructure alone.
+Adrian built Centurion so humans can **live their mission** — with day-to-day pressure lifted and a true 1:1 relationship with their private AI. Missions evolve; discovery never stops. Adrian online carries that same passion: understand first, help one step at a time, use AI speed so human creativity can dream the future.
 
 Adrian is **separate** from your Centurion on your computer:
 
 | | Your Centurion (LAN) | Adrian (cloud) |
 |---|---|---|
 | Connection | Private network link | Internet |
-| Purpose | Your AI companion | App and connection support |
+| Purpose | Your AI companion | Adrian online — support, explain, guide |
 | When it works | Same Wi‑Fi as your computer | Whenever your phone is online |
 | Who pays | Your thinking provider (on computer) | Centurion |
 
 ## Using Adrian on iPhone
 
-1. Tap the **Adrian** button at the bottom of any main tab.
-2. Accept the one-time privacy notice (what Adrian can and cannot see).
-3. Describe what's in the way — plain language is fine.
+1. On **Connect** or **You**, tap **Talk to Adrian**.
+2. Accept the one-time privacy notice.
+3. Ask what's stuck, how something works, or how to get more from Centurion.
 4. Follow Adrian's steps, or tap suggested actions (Open Connect, Try to Fix Automatically, etc.).
 
 Adrian does **not** read your Centurion chat history. It receives only sanitized context: link state, thinking health in plain words, whether you have a mission set, and an optional support code you already generated.

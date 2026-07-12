@@ -14,7 +14,7 @@ struct AdrianLink: View {
                 .foregroundColor(ColorTheme.accent())
         }
         .accessibilityLabel("Talk to Adrian")
-        .accessibilityHint("Open Centurion's cloud support guide")
+        .accessibilityHint("Open Adrian, Centurion's creator online — caring expert guidance")
     }
 }
 

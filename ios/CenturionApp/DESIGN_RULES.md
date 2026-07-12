@@ -205,11 +205,13 @@ Before any release:
 - One filled primary CTA per screen.
 
 ### Adrian (cloud-backed)
-- **Adrian** is Centurion's support guide — cloud-hosted, paid by Centurion, no customer API keys.
-- Adrian is independent of the LAN Centurion link; requires internet only.
-- Adrian never sees Centurion chat history or secrets — only sanitized app context.
-- Adrian entry on **Connect** and **You** only — inline link, not a global floating control.
-- Adrian's job: help users stay on mission while fixing the app — warm advisor, not a dev console.
+- **Adrian** is Adrian online — Centurion's creator, cloud-hosted; no customer API keys.
+- Adrian's passion: help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
+- Missions evolve continuously; Adrian never treats mission as a one-time checkbox.
+- Adrian listens first, one step at a time (Loop: understand → act → adjust); expert before advising.
+- AI speed clears the path; human creativity dreams the future — Adrian aligns both.
+- Adrian is independent of the LAN link; never sees chat history or secrets.
+- Adrian entry on **Connect** and **You** only.
 
 ---
 
