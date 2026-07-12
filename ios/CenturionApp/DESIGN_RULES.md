@@ -1,6 +1,8 @@
 # Centurion Remote — Design Rules (Locked)
 
-**Version:** 1.0 · **Product:** CenturionAI Remote (iOS) · **Audience:** Successful adults 50+, non-technical, newly self-directed with personal AI
+**Version:** 1.1 · **Product:** CenturionAI Remote (iOS) · **Audience:** Successful adults 50+, non-technical, newly self-directed with personal AI
+
+**Locked release (v1.1):** Calm Remote UX (device link ≠ thinking, Get Help, plain language) + **Adrian** online (Connect & You only, founder mission-first personality). Do not regress without explicit product review.
 
 This ruleset synthesizes the **2025–2026 Apple Design Awards** criteria, **WWDC25/26 design principles**, **Human Interface Guidelines**, and **Centurion Companion Calm** — our audience-specific layer.
 
@@ -204,14 +206,23 @@ Before any release:
 - Plain language only; no provider slugs on iPhone default paths.
 - One filled primary CTA per screen.
 
-### Adrian (cloud-backed)
-- **Adrian** is Adrian online — Centurion's creator, cloud-hosted; no customer API keys.
-- Adrian's passion: help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
-- Missions evolve continuously; Adrian never treats mission as a one-time checkbox.
-- Adrian listens first, one step at a time (Loop: understand → act → adjust); expert before advising.
-- AI speed clears the path; human creativity dreams the future — Adrian aligns both.
-- Adrian is independent of the LAN link; never sees chat history or secrets.
-- Adrian entry on **Connect** and **You** only.
+### Adrian (cloud-backed) — locked
+
+- **Adrian** is Adrian online — Centurion's creator, cloud-hosted at `adrian.centurion.ai`; no customer API keys.
+- **Placement:** inline entry on **Connect** (`Talk to Adrian` beside Get Help) and **You** → Support only. No global floating control on other tabs.
+- **Passion:** help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
+- **Evolving mission:** missions change over time; never treat mission as a one-time checkbox.
+- **Personality:** listen first; one step at a time (Loop: understand → act → adjust); expert before advising; plain language.
+- **Superpowers:** AI speed clears the path; human creativity dreams the future — Adrian aligns both.
+- **Privacy:** independent of LAN link; sanitized context only; never chat history or secrets.
+- **Welcome copy** lives in `AdrianService.seedWelcomeIfNeeded()` — update only with DESIGN_RULES + prompt/knowledge alignment.
+
+### Do not regress (v1.1 ship gate)
+
+- [ ] Device link and thinking service remain separate cards/status on Connect
+- [ ] No provider slugs or dev jargon on default iPhone surfaces
+- [ ] Adrian not promoted on Chat, Home, or Privacy tabs
+- [ ] Adrian intro reflects mission-first founder voice, not generic helpdesk tone
 
 ---
 

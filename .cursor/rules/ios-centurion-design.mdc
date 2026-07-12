@@ -1,61 +1,34 @@
 ---
-description: Centurion iOS design rules — Apple Design Award alignment, Companion Calm for 50+ users, visual and workflow consistency
+description: Locked design rules for CenturionAI Remote (iOS) — Calm Remote UX and Adrian
 globs: ios/CenturionApp/**/*
 alwaysApply: false
 ---
 
-# Centurion Remote iOS — Locked Design Rules
+# CenturionAI Remote — locked design (v1.1)
 
-Read `ios/CenturionApp/DESIGN_RULES.md` for full rationale. Enforce these on every iOS change.
+Canonical spec: [ios/CenturionApp/DESIGN_RULES.md](ios/CenturionApp/DESIGN_RULES.md)
 
-## Audience
-Successful adults 50+, non-technical, newly self-directed with personal AI. They must feel **calm and capable**, never like they're using a developer console.
+## Language (default UI)
 
-## Apple Design Award lens (2025–2026)
-Ship work that could score in: Delight, Inclusivity, Innovation, Interaction, Social Impact, Visuals. Innovation = native private Centurion link + mission-centered companion, not feature sprawl.
+Never: LLM, provider, Bonjour, mDNS, API key, model slug, file paths.
+Always: your Centurion, private connection, thinking service, Get Help, your mission.
 
-## Non-negotiables
+## Calm Remote UX (locked)
 
-### Language (default surfaces)
-- Say: "Your Centurion", "private connection", "working on now", "needs your choice", "documents"
-- **Mission** = the human (life purpose, commitments, About You context)
-- **Soul** = the Centurion (AI personality, tone, rules — not the human profile)
-- Never: Remote Control, LLM/provider/model, agent/sub-agent, loop phase, Bonjour/mDNS, crypto algorithm names, filesystem paths
-- Never duplicate mission language in Soul surfaces or AI personality language in Mission surfaces
+- **Device link** and **thinking service** are separate — never one merged status on default surfaces.
+- **Get Help** requires device link (support codes, auto-fix on host).
+- Max **one filled primary CTA** per screen on Connect.
+- Recoverable errors: plain words + retry; never simulated success when disconnected.
 
-### Typography & touch
-- Body copy: semantic styles (`.body`, `.headline`) — supports Dynamic Type
-- No fixed sizes below 15pt for readable content; never 6–10pt operational labels on default UI
-- Minimum 44×44pt tap targets
-- Honor `accessibilityReduceMotion` for orbital/loop/splash animations
+## Adrian online (locked)
 
-### Visual system
-- Colors/spacing/motion from `ColorTheme`, `Spacing`, `Motion` in DesignSystem/CenturionTheme
-- Cards: `.cardStyle()` — do not duplicate card chrome
-- Remote/Pulse/Security: `TabPageChrome` without BrandHeader
-- Serif for mission/editorial only; sans for actions
+- Adrian is **Adrian online** — founder voice, cloud-hosted (`adrian.centurion.ai`), Centurion-paid; users never bring API keys.
+- **Placement only:** Connect (`Talk to Adrian` beside Get Help) and You → Support. **No** floating/global Adrian on Chat, Home, or Privacy.
+- **North star:** help users live their **evolving mission** — lift pressure, free thinking, 1:1 with private Centurion.
+- **Personality:** understand first; Loop (one step at a time); expert before advising; AI speed + human creativity.
+- **Privacy:** sanitized context only; never Centurion chat history or secrets.
+- Keep iOS welcome (`AdrianService.seedWelcomeIfNeeded`), privacy gate (`AdrianView`), and backend (`centurion_cli/adrian/prompts.py`, `knowledge.md`) aligned.
 
-### Simplicity & IA
-- One primary action per screen; advanced/technical behind progressive disclosure
-- Max 3 concepts above the fold
-- Pulse categories map to human outcomes: Working on now / Finished / Documents / Needs your choice / Updates
-- Security/crypto details collapsed by default
+## PR review
 
-### Workflows
-- No preview data presented as live — label demo mode explicitly
-- Errors need visible message + retry (not haptic-only)
-- Tab switches must not reset conversation, forms, or navigation stacks
-- Mission Discovery: one clear Save path; Share is optional
-- Offline/disconnected states must block or clearly label simulated responses
-
-### Haptics
-- Meaningful transitions only — never per-keystroke in text fields
-
-## Anti-patterns (block PR)
-Fixed tiny fonts, hardcoded fake live data, LLM dial on main Connect for new users, duplicate Security+Settings crypto essays, nested share sheets, unreachable broken flows (Quick Chat selection), Mission/Soul copy overlap (human mission in Soul screen)
-
-## Pre-merge checklist
-- [ ] Plain-language copy on new strings
-- [ ] Dynamic Type spot-check on changed screens
-- [ ] VoiceOver labels on new controls
-- [ ] Uses design tokens, not raw magic numbers/colors
+Any change to `ios/CenturionApp/Views/` must pass DESIGN_RULES §3 language, §6 workflow, and §10 ship gate.
