@@ -32,7 +32,7 @@ from tools.file_tools import (
 
 
 def _tmp_file(content: str = "initial\n") -> str:
-    fd, path = tempfile.mkstemp(prefix=.centurion_file_state_test_", suffix=".txt")
+    fd, path = tempfile.mkstemp(prefix=".centurion_file_state_test_", suffix=".txt")
     with os.fdopen(fd, "w") as f:
         f.write(content)
     return path

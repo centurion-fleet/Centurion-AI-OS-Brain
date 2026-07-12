@@ -34,7 +34,7 @@ def cmd_swarm_link(args: argparse.Namespace) -> int:
         )
         if os.path.isfile(auth_path):
             try:
-                with open(auth_path) as f:
+                with open(auth_path, encoding="utf-8") as f:
                     auth = json.load(f)
                 pool = auth.get("credential_pool", {})
                 nous = pool.get("nous", [])

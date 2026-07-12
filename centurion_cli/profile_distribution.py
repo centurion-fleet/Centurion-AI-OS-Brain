@@ -614,7 +614,7 @@ def install_distribution(
         create_wrapper_script,
     )
 
-    with tempfile.TemporaryDirectory(prefix=.centurion_dist_install_") as tmp:
+    with tempfile.TemporaryDirectory(prefix=".centurion_dist_install_") as tmp:
         plan = plan_install(source, Path(tmp), override_name=name)
 
         if plan.existing and not force:
@@ -676,7 +676,7 @@ def update_distribution(
             "`centurion profile install <source> --name {canon} --force`."
         )
 
-    with tempfile.TemporaryDirectory(prefix=.centurion_dist_update_") as tmp:
+    with tempfile.TemporaryDirectory(prefix=".centurion_dist_update_") as tmp:
         plan = plan_install(
             existing_manifest.source,
             Path(tmp),
