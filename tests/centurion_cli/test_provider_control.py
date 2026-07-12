@@ -6,6 +6,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from centurion_cli import provider_control as pc
 from centurion_cli.model_switch import ModelSwitchResult
@@ -88,7 +89,7 @@ def test_apply_switch_persists_and_saves_lkg(monkeypatch, centurion_home):
     assert result.provider == "openrouter"
     assert result.model == "anthropic/claude-sonnet-4"
 
-    cfg = json.loads((centurion_home / "config.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load((centurion_home / "config.yaml").read_text(encoding="utf-8"))
     assert cfg["model"]["provider"] == "openrouter"
     assert cfg["model"]["default"] == "anthropic/claude-sonnet-4"
     assert pc.load_last_known_good() is not None
@@ -115,8 +116,7 @@ def test_remote_bridge_structured_chat_error():
 
 def test_remote_bridge_provider_status(monkeypatch):
     monkeypatch.setattr(
-        pc,
-        "get_status",
+        "centurion_cli.remote_bridge.get_status",
         lambda **_kw: pc.ProviderStatus(
             provider="openrouter",
             model="anthropic/claude-sonnet-4",
@@ -141,8 +141,7 @@ def test_remote_bridge_lkg_auto_recovery(monkeypatch):
         return f"recovered:{text}"
 
     monkeypatch.setattr(
-        pc,
-        "restore_last_known_good",
+        "centurion_cli.remote_bridge.restore_last_known_good",
         lambda **_kw: pc.ApplyResult(
             ok=True,
             provider="openrouter",

@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updated_at": "2026-05-11T16:41:16Z",
+  "updated_at": "2026-07-12T18:56:17Z",
   "metadata": {
-    "source": "centurion-ai-os repo",
-    "docs": "https://github.com/centurion-fleet/Centurion-AI-OS/docs/reference/model-catalog"
+    "source": "centurion-os repo",
+    "docs": "https://github.com/centurion-fleet/Centurion-AI-OS/tree/main/website/docs/reference/model-catalog"
   },
   "providers": {
     "openrouter": {

@@ -7,11 +7,11 @@ const config: Config = {
   tagline: 'The self-improving AI agent',
   favicon: 'img/favicon.ico',
 
-  url: 'https://github.com/centurion-fleet/Centurion-AI-OS',
-  baseUrl: '/docs/',
+  url: 'https://centurion-fleet.github.io',
+  baseUrl: '/Centurion-AI-OS/docs/',
 
-  organizationName: 'NousResearch',
-  projectName: 'centurion-ai-os',
+  organizationName: 'centurion-fleet',
+  projectName: 'Centurion-AI-OS',
 
   onBrokenLinks: 'warn',
 

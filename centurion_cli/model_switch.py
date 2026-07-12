@@ -1214,7 +1214,7 @@ def list_authenticated_providers(
         # Prefer auth.py PROVIDER_REGISTRY for env var names — it's our
         # source of truth.  models.dev can have wrong mappings (e.g.
         # minimax-cn → MINIMAX_API_KEY instead of MINIMAX_CN_API_KEY).
-        pconfig = PROVIDER_REGISTRY.get(provider_id)
+        pconfig = PROVIDER_REGISTRY.get(centurion_id)
         # Skip non-API-key auth providers here — they are handled in
         # section 2 (CENTURION_OVERLAYS) with proper auth store checking.
         if pconfig and pconfig.auth_type != "api_key":
@@ -1232,7 +1232,7 @@ def list_authenticated_providers(
             try:
                 from centurion_cli.auth import _load_auth_store
                 store = _load_auth_store()
-                if store and store.get("credential_pool", {}).get(provider_id):
+                if store and store.get("credential_pool", {}).get(centurion_id):
                     has_creds = True
             except Exception:
                 pass
@@ -1243,9 +1243,9 @@ def list_authenticated_providers(
         # For preferred providers, merge models.dev entries into the curated
         # catalog so newly released models (e.g. mimo-v2.5-pro on opencode-go)
         # show up in the picker without requiring a Centurion release.
-        model_ids = curated.get(provider_id, [])
+        model_ids = curated.get(centurion_id, [])
         if centurion_id in _MODELS_DEV_PREFERRED:
-            model_ids = _merge_with_models_dev(provider_id, model_ids)
+            model_ids = _merge_with_models_dev(centurion_id, model_ids)
         total = len(model_ids)
         top = model_ids[:max_models]
 
@@ -1280,7 +1280,7 @@ def list_authenticated_providers(
             continue
 
         # Resolve Centurion slug — e.g. "github-copilot" → "copilot"
-        centurion_slug = _mdev_to_catalog.get(pid, pid)
+        centurion_slug = _mdev_to_centurion.get(pid, pid)
         if centurion_slug.lower() in seen_slugs:
             continue
 
