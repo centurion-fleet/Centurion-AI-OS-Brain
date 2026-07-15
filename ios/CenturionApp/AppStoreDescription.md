@@ -57,7 +57,11 @@ Spring physics on every message. Haptic feedback on every interaction. Flat fros
 
 Centurion has no backdoors, no admin access, no ability to read your conversations — even if compelled. The encryption is so complete there's nothing to hack. There's nothing there.
 
-**A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit centurionfleet.com to learn more.
+**OWN IT ONCE**
+
+Buy a Personal Centurion once and receive free lifetime updates for both the Linux brain and this iPhone Remote. No monthly fees for the Centurion platform — unlike public AI subscriptions. Owners are invited to the weekly Sunday night AI Owners training session.
+
+**A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit personal-centurion.com to learn more.
 
 ## Keywords
 Crypto Chat, encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
