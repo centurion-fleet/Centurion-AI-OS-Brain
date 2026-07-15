@@ -183,9 +183,8 @@ async fn revoked_device_receives_error_on_next_message() {
 
 #[tokio::test]
 async fn smoke_bind_echo_round_trip() {
-    let bind = match std::env::var("CENTURION_REMOTE_SMOKE_BIND") {
-        Ok(value) => value,
-        Err(_) => return,
+    let Ok(bind) = std::env::var("CENTURION_REMOTE_SMOKE_BIND") else {
+        return;
     };
     sodiumoxide::init().expect("sodium");
     let address: std::net::SocketAddr = bind.parse().expect("smoke bind");

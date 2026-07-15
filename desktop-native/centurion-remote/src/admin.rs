@@ -79,9 +79,8 @@ pub async fn run(state: AdminState, path: PathBuf) -> io::Result<()> {
 async fn handle_connection(state: AdminState, stream: UnixStream) -> io::Result<()> {
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
-    let line = match lines.next_line().await? {
-        Some(line) => line,
-        None => return Ok(()),
+    let Some(line) = lines.next_line().await? else {
+        return Ok(());
     };
 
     let response = match serde_json::from_str::<AdminRequest>(&line) {
@@ -127,8 +126,7 @@ pub async fn query_sessions(path: &Path) -> io::Result<Vec<SessionView>> {
     match serde_json::from_str::<AdminResponse>(&line) {
         Ok(AdminResponse::Sessions { sessions }) => Ok(sessions),
         Ok(AdminResponse::Error { message }) => Err(io::Error::other(message)),
-        Ok(AdminResponse::Pong) => Ok(Vec::new()),
-        Ok(AdminResponse::ProviderStatus { .. }) => Ok(Vec::new()),
+        Ok(AdminResponse::Pong | AdminResponse::ProviderStatus { .. }) => Ok(Vec::new()),
         Err(error) => Err(io::Error::other(error)),
     }
 }

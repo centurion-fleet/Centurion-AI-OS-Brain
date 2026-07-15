@@ -36,6 +36,7 @@ pub async fn run(listener: TcpListener, state: ServerState) -> io::Result<()> {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_connection(
     mut stream: TcpStream,
     peer: SocketAddr,
@@ -180,7 +181,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::ProviderValidateResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         result: payload
                             .get("result")
                             .cloned()
@@ -205,7 +209,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::ProviderApplyResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         result: payload
                             .get("result")
                             .cloned()
@@ -222,10 +229,13 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::ProviderRestoreResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         restored: payload
                             .get("restored")
-                            .and_then(|v| v.as_bool())
+                            .and_then(serde_json::Value::as_bool)
                             .unwrap_or(false),
                         result: payload
                             .get("result")
@@ -247,7 +257,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::HealthCheckResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         snapshot: payload
                             .get("snapshot")
                             .cloned()
@@ -274,7 +287,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SupportBundleResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         code: payload
                             .get("code")
                             .and_then(|v| v.as_str())
@@ -311,7 +327,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SupportAutoFixResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         message: payload
                             .get("message")
                             .and_then(|v| v.as_str())
@@ -324,7 +343,7 @@ async fn handle_connection(
                             .to_owned(),
                         restored: payload
                             .get("restored")
-                            .and_then(|v| v.as_bool())
+                            .and_then(serde_json::Value::as_bool)
                             .unwrap_or(false),
                     },
                     Err(error) => bridge_error_response(Some(id), error),
@@ -371,7 +390,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SwarmConnectResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         message: payload
                             .get("message")
                             .and_then(|v| v.as_str())
@@ -402,7 +424,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SwarmInviteResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         message: payload
                             .get("message")
                             .and_then(|v| v.as_str())
@@ -444,7 +469,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::BeneficiarySetFamilyMemberResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         snapshot: payload
                             .get("snapshot")
                             .cloned()
@@ -480,7 +508,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::BeneficiarySubmitColleagueResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         snapshot: payload
                             .get("snapshot")
                             .cloned()
@@ -525,7 +556,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::RemoteModelApplyResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         result: payload
                             .get("result")
                             .cloned()
@@ -554,7 +588,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::RemoteModelSaveKeyResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         result: payload
                             .get("result")
                             .cloned()
@@ -576,7 +613,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::RemoteRoutingModeResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
                         routing_mode: payload
                             .get("routing_mode")
                             .and_then(|v| v.as_str())
@@ -609,7 +649,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::TelegramImportBundleResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         bundle: payload
                             .get("bundle")
                             .cloned()
@@ -634,7 +677,10 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::TelegramImportPreviewResponse {
                         id,
-                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
                         bundle: payload
                             .get("bundle")
                             .cloned()

@@ -235,11 +235,9 @@ impl PythonBridge {
         let mut body =
             serde_json::to_value(&request).expect("bridge request is always serializable");
         if let Value::Object(map) = &mut body {
-            if let Some(extra) = map.remove("extra") {
-                if let Value::Object(extra_map) = extra {
-                    for (key, value) in extra_map {
-                        map.insert(key, value);
-                    }
+            if let Some(Value::Object(extra_map)) = map.remove("extra") {
+                for (key, value) in extra_map {
+                    map.insert(key, value);
                 }
             }
         }
