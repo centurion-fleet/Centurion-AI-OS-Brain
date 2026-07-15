@@ -46,9 +46,11 @@ export CENTURION_HERALD_SERVER_KEY=optional-client-auth-key
 centurion adrian serve --host 0.0.0.0 --port 9120
 ```
 
-Production endpoint: `https://adrian.centurion.ai` (configured in the iOS app's `CenturionAdrianBaseURL`).
+Production endpoint: `https://help.personal-centurion.com/api/v1/chat` (same knowledge base as [Ask Adrian on the Help Center](https://help.personal-centurion.com/); configured in the iOS app's `CenturionAdrianBaseURL`).
 
-Knowledge base and system prompt live in `centurion_cli/adrian/knowledge.md` and `prompts.py` — update these as new support patterns emerge.
+Help articles live in the **personal-centurion-help-center** project (`content/`). Adrian on web (`/api/ask`) and mobile (`/api/v1/chat`) both retrieve from those articles via `lib/retrieval.ts`.
+
+For local development without the help site, `centurion adrian serve` still runs the Python fallback in `centurion_cli/adrian/` using `knowledge.md` — keep that file aligned when articles change, or point clients at a dev help-center URL.
 
 Environment variables:
 

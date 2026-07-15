@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// Opens the Personal Centurion help center in Safari.
+struct HelpCenterLink: View {
+    var title: String = "Browse Help Center"
+    var url: URL = CenturionHelp.baseURL
+
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Button {
+            Haptics.lightTap()
+            openURL(url)
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ColorTheme.accent())
+        }
+        .accessibilityLabel(title)
+        .accessibilityHint("Opens the Personal Centurion help website")
+    }
+}
+
 /// Inline entry for Adrian — matches Get Help link weight on Connect and You.
 struct AdrianLink: View {
     @Binding var showAdrian: Bool

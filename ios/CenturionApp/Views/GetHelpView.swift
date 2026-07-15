@@ -58,7 +58,7 @@ struct GetHelpView: View {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 CenturionSectionHeader(title: "Support", icon: "lifepreserver")
 
-                Text("Your Centurion can prepare a short support code on your computer.")
+                Text("Your Centurion can prepare a short support code on your Centurion brain.")
                     .font(.body)
                     .foregroundColor(ColorTheme.primaryText())
 
@@ -67,10 +67,14 @@ struct GetHelpView: View {
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
 
-                Text("For step-by-step help anytime, open Adrian from Connect or the You tab.")
+                Text("For step-by-step guides anytime, browse the Help Center or talk to Adrian from Connect or the You tab.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
+
+                HelpCenterLink()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, Spacing.xs)
             }
         }
     }
@@ -149,7 +153,7 @@ struct GetHelpView: View {
     }
 
     private var footerNote: some View {
-        Text("For deeper changes, use Centurion on your computer.")
+        Text("For deeper setup, use your Centurion brain.")
             .font(.caption)
             .foregroundColor(ColorTheme.mutedText())
             .frame(maxWidth: .infinity, alignment: .center)

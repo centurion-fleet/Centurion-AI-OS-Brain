@@ -55,13 +55,26 @@ enum AdrianAction: String {
 }
 
 enum AdrianConfig {
-    static let defaultBaseURL = "https://adrian.centurion.ai"
-
+    /// Adrian on iPhone uses the Help Center API — same articles as help.personal-centurion.com.
     static var baseURL: URL {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CenturionAdrianBaseURL") as? String,
            let url = URL(string: raw), !raw.isEmpty {
             return url
         }
-        return URL(string: defaultBaseURL)!
+        return CenturionHelp.baseURL
     }
+}
+
+/// Personal Centurion help center — single source of truth for support articles and Adrian answers.
+enum CenturionHelp {
+    static let baseURL = URL(string: "https://help.personal-centurion.com")!
+
+    static func article(category: String, slug: String) -> URL {
+        baseURL.appending(path: "docs/\(category)/\(slug)")
+    }
+
+    static let linkIPhone = article(category: "link-your-iphone", slug: "find-and-link")
+    static let thinkingService = article(category: "thinking-service", slug: "what-is-a-thinking-service")
+    static let troubleshooting = baseURL.appending(path: "docs/troubleshooting")
+    static let privacy = baseURL.appending(path: "docs/privacy-and-security")
 }

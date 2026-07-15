@@ -14,6 +14,8 @@ enum ConversationContext: Codable, Equatable, Hashable {
     case program(id: UUID, name: String)
     case target(id: UUID, name: String, programName: String)
     case task(id: UUID, name: String, targetName: String, programName: String)
+    /// A living commitment from the user's life mission (Mission → Active Commitments).
+    case commitment(id: UUID, title: String)
     case standalone(title: String)
 
     var displayTitle: String {
@@ -21,6 +23,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .program(_, let name): return name
         case .target(_, let name, _): return name
         case .task(_, let name, _, _): return name
+        case .commitment(_, let title): return title
         case .standalone(let title): return title
         }
     }
@@ -30,6 +33,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .program(_, let name): return name
         case .target(_, let name, let program): return "\(program) > \(name)"
         case .task(_, let name, let target, let program): return "\(program) > \(target) > \(name)"
+        case .commitment(_, let title): return "Commitment · \(title)"
         case .standalone: return "Chat"
         }
     }
@@ -39,6 +43,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .program: return "target"
         case .target: return "arrow.triangle.branch"
         case .task: return "checkmark.circle"
+        case .commitment: return "target"
         case .standalone: return "message.fill"
         }
     }
@@ -52,9 +57,16 @@ enum ConversationContext: Codable, Equatable, Hashable {
             return ("\(program) > \(name)", ColorTheme.accent().opacity(0.8))
         case .task(_, let name, let target, let program):
             return ("\(program) > \(target) > \(name)", ColorTheme.dimAccent())
+        case .commitment(_, let title):
+            return ("Commitment · \(title)", ColorTheme.accent())
         case .standalone:
             return ("Chat", ColorTheme.mutedText())
         }
+    }
+
+    var commitmentID: UUID? {
+        if case .commitment(let id, _) = self { return id }
+        return nil
     }
 
     /// Coding keys — flattened for Codable conformance
@@ -81,6 +93,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
             let targetName = try container.decode(String.self, forKey: .targetName)
             let programName = try container.decode(String.self, forKey: .programName)
             self = .task(id: id, name: name, targetName: targetName, programName: programName)
+        case "commitment":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let title = try container.decode(String.self, forKey: .title)
+            self = .commitment(id: id, title: title)
         case "standalone":
             let title = try container.decode(String.self, forKey: .title)
             self = .standalone(title: title)
@@ -107,6 +123,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
             try container.encode(name, forKey: .name)
             try container.encode(targetName, forKey: .targetName)
             try container.encode(programName, forKey: .programName)
+        case .commitment(let id, let title):
+            try container.encode("commitment", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(title, forKey: .title)
         case .standalone(let title):
             try container.encode("standalone", forKey: .type)
             try container.encode(title, forKey: .title)

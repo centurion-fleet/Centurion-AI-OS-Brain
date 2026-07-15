@@ -70,10 +70,18 @@ struct AdrianView: View {
                         .lineSpacing(4)
 
                         Text(
-                            "Adrian listens first, then helps one step at a time. He works over the internet, "
-                                + "separate from your private Centurion link, and sees only what helps — link status, "
-                                + "thinking health in plain words, and a short mission summary if you've set one. "
-                                + "Never your chat history or secrets."
+                            "Adrian listens first, then helps one step at a time. Answers are drawn from "
+                                + "the Personal Centurion Help Center at help.personal-centurion.com — "
+                                + "the same articles you can browse on the web."
+                        )
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineSpacing(4)
+
+                        Text(
+                            "He works over the internet, separate from your private Centurion link, "
+                                + "and sees only what helps — link status, thinking health in plain words, "
+                                + "and a short mission summary if you've set one. Never your chat history or secrets."
                         )
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())

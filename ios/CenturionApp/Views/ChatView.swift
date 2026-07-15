@@ -16,6 +16,7 @@ struct ChatView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var dataMode: AppDataMode
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var missionStore: MissionStore
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
@@ -377,11 +378,58 @@ struct ChatView: View {
     }
 
     private func emptyChatState(context: ConversationContext) -> some View {
-        EmptyState(
-            icon: "bubble.left.and.bubble.right",
-            title: "Chat about \(context.displayTitle)",
-            message: "Messages here appear in the full chat stream too."
-        )
+        let message: String
+        if case .commitment = context {
+            message = """
+            Ask to rename this commitment, sharpen its description, or turn it off on Home. \
+            When your Centurion applies a change, it updates here automatically.
+            """
+        } else {
+            message = "Messages here appear in the full chat stream too."
+        }
+        var subtitle = ""
+        if connectionManager.routingMode == "phoenix" {
+            subtitle = "Auto-select will pick an LLM when you send a message."
+        } else if let routed = connectionManager.lastRoutedDisplayName {
+            subtitle = "Last routed to \(routed)."
+        }
+        return VStack(spacing: Spacing.sm) {
+            EmptyState(
+                icon: "bubble.left.and.bubble.right",
+                title: "Chat about \(context.displayTitle)",
+                message: message
+            )
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+        }
+    }
+
+    private func attachmentChips(_ attachments: [MessageAttachment]) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            ForEach(attachments) { attachment in
+                if attachment.missing {
+                    Text(attachment.filename)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.vertical, 4)
+                        .background(ColorTheme.surfaceElevated())
+                        .clipShape(Capsule())
+                } else {
+                    ShareLink(item: URL(fileURLWithPath: attachment.localPath)) {
+                        Label(attachment.filename, systemImage: "paperclip")
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, Spacing.sm)
+                    .padding(.vertical, 4)
+                    .background(ColorTheme.surfaceElevated())
+                    .clipShape(Capsule())
+                }
+            }
+        }
     }
 
     // MARK: - Input Bar
@@ -460,7 +508,11 @@ struct ChatView: View {
 
         Task {
             do {
-                let conversation = try await messageService.sendMessage(text, in: context)
+                let conversation = try await messageService.sendMessage(
+                    text,
+                    in: context,
+                    missionStore: missionStore
+                )
                 selectedConversation = conversation
                 withAnimation(Motion.standard) {
                     showTray = false
@@ -527,6 +579,10 @@ struct ChatView: View {
                     x: 0,
                     y: 2
                 )
+
+            if !message.attachments.isEmpty {
+                attachmentChips(message.attachments)
+            }
         }
 
         if message.role == .centurion { Spacer(minLength: 48) }

@@ -20,6 +20,13 @@ final class ConnectionManager: ObservableObject {
     @Published var llmHealth: LLMHealthState = .unknown
     @Published var thinkingStatus: ThinkingServiceStatus?
     @Published var lastLLMError: (message: String, code: String?, retryable: Bool)?
+    @Published var remoteCatalog: RemoteModelCatalog?
+    @Published var routingMode: String = "manual"
+    @Published var lastRoutedDisplayName: String?
+    /// True when the model list came from the on-device fallback instead of the Mac.
+    @Published private(set) var thinkingCatalogUsedFallback = false
+    /// Display name of the Centurion being linked (shown during pairing).
+    @Published private(set) var activeConnectionTarget: String?
 
     private let bonjourDiscoverer = BonjourDiscoverer()
     private let secureChannel = SecureChannel()
@@ -106,6 +113,7 @@ final class ConnectionManager: ObservableObject {
     func connect(to device: CenturionDevice) {
         disconnect()
         connectionState = .connecting
+        activeConnectionTarget = device.name
         pendingDevice = device
 
         let endpoint = connectionEndpoint(for: device)
@@ -126,6 +134,7 @@ final class ConnectionManager: ObservableObject {
         connectedDevice = nil
         pendingDevice = nil
         currentSessionKey = nil
+        activeConnectionTarget = nil
         connectionState = .disconnected
         markDiscoveredDevicesDisconnected()
     }
@@ -164,6 +173,9 @@ final class ConnectionManager: ObservableObject {
            let responseText = response.text {
             llmHealth = .healthy
             lastLLMError = nil
+            if let routed = response.routedDisplayName, !routed.isEmpty {
+                lastRoutedDisplayName = routed
+            }
             if response.recovered == true {
                 await refreshThinkingStatus()
             }
@@ -209,6 +221,102 @@ final class ConnectionManager: ObservableObject {
         } catch {
             llmHealth = .unknown
         }
+    }
+
+    func refreshRoutingMode() async {
+        guard connectionState == .connected else { return }
+        do {
+            let payload = try await invokeRemote(action: "remote_routing_mode")
+            if let mode = payload["routing_mode"] as? String, !mode.isEmpty {
+                routingMode = mode
+            }
+        } catch {
+            // Keep the last known routing mode.
+        }
+    }
+
+    /// User-facing name for the active LLM (not the Centurion device name).
+    var thinkingServiceHeadline: String {
+        if routingMode == "phoenix", lastRoutedDisplayName?.isEmpty != false {
+            return "Auto-select"
+        }
+        if let name = activeThinkingDisplayName {
+            return name
+        }
+        return llmHealth.label
+    }
+
+    /// Secondary line under the thinking-service headline.
+    var thinkingServiceSubtitle: String {
+        if routingMode == "phoenix" {
+            if let routed = lastRoutedDisplayName, !routed.isEmpty {
+                return "Auto-select · last used \(routed)"
+            }
+            return "Picks an LLM based on your message"
+        }
+        if let status = thinkingStatus, !status.model.isEmpty {
+            return status.healthMessage.isEmpty
+                ? "Using \(thinkingServiceHeadline)"
+                : status.healthMessage
+        }
+        switch llmHealth {
+        case .healthy:
+            return "Your Centurion can answer messages."
+        case .unknown:
+            return "Checking with your Centurion…"
+        default:
+            return "Your Centurion may not be able to reply right now."
+        }
+    }
+
+    private var activeThinkingDisplayName: String? {
+        if let routed = lastRoutedDisplayName, !routed.isEmpty {
+            return routed
+        }
+        if let catalog = remoteCatalog,
+           let activeID = catalog.activeConnectorId,
+           let row = catalog.allConnectors.first(where: { $0.id == activeID }) {
+            return row.displayName
+        }
+        if let status = thinkingStatus, !status.model.isEmpty {
+            return RemoteModelCatalog.displayName(provider: status.provider, model: status.model)
+                ?? humanReadableModelName(status.model)
+        }
+        return nil
+    }
+
+    func friendlyRemoteError(_ error: Error) -> String {
+        if let connectionError = error as? ConnectionError {
+            return connectionError.localizedDescription
+        }
+        return error.localizedDescription
+    }
+
+    /// Load the built-in model list and merge live routing + active model from the Mac.
+    func loadFallbackThinkingCatalog() async -> RemoteModelCatalog {
+        thinkingCatalogUsedFallback = true
+        await refreshThinkingStatus()
+        await refreshRoutingMode()
+        let activeID: String?
+        if let status = thinkingStatus, !status.model.isEmpty {
+            activeID = RemoteModelCatalog.connectorID(provider: status.provider, model: status.model)
+        } else {
+            activeID = remoteCatalog?.activeConnectorId
+        }
+        let catalog = RemoteModelCatalog.bundled(
+            activeConnectorId: activeID,
+            routingMode: routingMode
+        )
+        remoteCatalog = catalog
+        return catalog
+    }
+
+    private func humanReadableModelName(_ model: String) -> String {
+        model
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
     }
 
     func restoreLastThinkingSetup() async -> ProviderSwitchResult {
@@ -331,6 +439,113 @@ final class ConnectionManager: ObservableObject {
         throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not submit referral.")
     }
 
+    func fetchRemoteModelCatalog() async -> RemoteModelCatalog {
+        do {
+            let payload = try await invokeRemote(action: "remote_model_catalog")
+            guard let catalogData = payload["catalog"] as? [String: Any] else {
+                return await loadFallbackThinkingCatalog()
+            }
+            let data = try JSONSerialization.data(withJSONObject: catalogData)
+            let catalog = try JSONDecoder().decode(RemoteModelCatalog.self, from: data)
+            remoteCatalog = catalog
+            routingMode = catalog.routingMode
+            thinkingCatalogUsedFallback = false
+            return catalog
+        } catch {
+            return await loadFallbackThinkingCatalog()
+        }
+    }
+
+    func applyRemoteModel(connectorId: String) async -> ProviderSwitchResult {
+        do {
+            let payload = try await invokeRemote(
+                action: "remote_model_apply",
+                extra: ["connector_id": connectorId]
+            )
+            let ok = payload["ok"] as? Bool ?? false
+            let result = payload["result"] as? [String: Any] ?? [:]
+            if let mode = payload["routing_mode"] as? String {
+                routingMode = mode
+            }
+            if ok {
+                await refreshThinkingStatus()
+                _ = await fetchRemoteModelCatalog()
+            }
+            return ProviderSwitchResult(
+                ok: ok,
+                message: (result["message"] as? String) ?? (ok ? "Thinking service updated." : "Could not switch."),
+                provider: result["provider"] as? String ?? "",
+                model: result["model"] as? String ?? ""
+            )
+        } catch let error as ConnectionError {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        } catch {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        }
+    }
+
+    func saveRemoteAPIKey(connectorId: String, key: String) async -> ProviderSwitchResult {
+        do {
+            let payload = try await invokeRemote(
+                action: "remote_model_save_key",
+                extra: ["connector_id": connectorId, "key": key]
+            )
+            let ok = payload["ok"] as? Bool ?? false
+            let result = payload["result"] as? [String: Any] ?? [:]
+            if ok {
+                _ = await fetchRemoteModelCatalog()
+            }
+            return ProviderSwitchResult(
+                ok: ok,
+                message: (result["message"] as? String) ?? (payload["message"] as? String) ?? "Could not save key.",
+                provider: "",
+                model: ""
+            )
+        } catch let error as ConnectionError {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        } catch {
+            return ProviderSwitchResult(ok: false, message: error.localizedDescription, provider: "", model: "")
+        }
+    }
+
+    func setRoutingMode(_ mode: String) async -> Bool {
+        do {
+            let payload = try await invokeRemote(
+                action: "remote_routing_mode",
+                extra: ["mode": mode]
+            )
+            let ok = payload["ok"] as? Bool ?? false
+            if let routing = payload["routing_mode"] as? String {
+                routingMode = routing
+            }
+            return ok
+        } catch {
+            return false
+        }
+    }
+
+    func previewTelegramImport() async throws -> TelegramImportBundle {
+        let payload = try await invokeRemote(action: "telegram_import_preview")
+        return try decodeTelegramBundle(from: payload["bundle"])
+    }
+
+    func importTelegramBundle(sessionId: String? = nil) async throws -> TelegramImportBundle {
+        var extra: [String: Any] = [:]
+        if let sessionId {
+            extra["session_id"] = sessionId
+        }
+        let payload = try await invokeRemote(action: "telegram_import_bundle", extra: extra)
+        return try decodeTelegramBundle(from: payload["bundle"])
+    }
+
+    private func decodeTelegramBundle(from value: Any?) throws -> TelegramImportBundle {
+        guard let bundleDict = value as? [String: Any] else {
+            throw ConnectionError.invalidResponse
+        }
+        let data = try JSONSerialization.data(withJSONObject: bundleDict)
+        return try JSONDecoder().decode(TelegramImportBundle.self, from: data)
+    }
+
     private func invokeRemote(action: String, extra: [String: Any] = [:]) async throws -> [String: Any] {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
@@ -375,6 +590,12 @@ final class ConnectionManager: ObservableObject {
             "beneficiary_snapshot_response": "beneficiary_snapshot",
             "beneficiary_set_family_member_response": "beneficiary_set_family_member",
             "beneficiary_submit_colleague_response": "beneficiary_submit_colleague",
+            "remote_model_catalog_response": "remote_model_catalog",
+            "remote_model_apply_response": "remote_model_apply",
+            "remote_model_save_key_response": "remote_model_save_key",
+            "remote_routing_mode_response": "remote_routing_mode",
+            "telegram_import_bundle_response": "telegram_import_bundle",
+            "telegram_import_preview_response": "telegram_import_preview",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {
@@ -419,6 +640,8 @@ final class ConnectionManager: ObservableObject {
                 case .failed(let error):
                     if self.connectionState == .connected {
                         self.handleConnectionLoss(self.friendlyConnectionError(error))
+                    } else if self.connectionState == .connecting {
+                        self.failConnection(self.friendlyConnectionError(error))
                     } else {
                         self.connectionState = .error(self.friendlyConnectionError(error))
                     }
@@ -443,6 +666,7 @@ final class ConnectionManager: ObservableObject {
         connectedDevice = nil
         pendingDevice = nil
         currentSessionKey = nil
+        activeConnectionTarget = nil
         markDiscoveredDevicesDisconnected()
         connectionState = .error(message)
     }
@@ -513,6 +737,7 @@ final class ConnectionManager: ObservableObject {
                     self.connection?.cancel()
                     self.connection = nil
                     self.currentSessionKey = nil
+                    self.activeConnectionTarget = nil
                     self.connectionState = .awaitingApproval(
                         status.message
                             ?? "Approve this iPhone on your Centurion, then try again."
@@ -546,6 +771,7 @@ final class ConnectionManager: ObservableObject {
             markDiscoveredDeviceConnected(pendingDevice.id)
         }
         connectionState = .connected
+        activeConnectionTarget = nil
         bonjourDiscoverer.stopDiscovery()
         startKeepalive()
         Task { await refreshThinkingStatus() }
@@ -627,6 +853,7 @@ final class ConnectionManager: ObservableObject {
         connectedDevice = nil
         currentSessionKey = nil
         markDiscoveredDevicesDisconnected()
+        activeConnectionTarget = nil
         connectionState = .error(message)
     }
 
@@ -805,11 +1032,17 @@ private struct RemoteEnvelope: Codable {
     let message: String?
     let retryable: Bool?
     let recovered: Bool?
+    let routedDisplayName: String?
     let ok: Bool?
     let status: [String: AnyCodable]?
     let options: [String: AnyCodable]?
     let result: [String: AnyCodable]?
     let restored: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case type, id, text, code, message, retryable, recovered, ok, status, options, result, restored
+        case routedDisplayName = "routed_display_name"
+    }
 
     var payload: [String: Any]? {
         if let status {
@@ -840,6 +1073,7 @@ private struct RemoteEnvelope: Codable {
         message = nil
         retryable = nil
         recovered = nil
+        routedDisplayName = nil
         ok = nil
         status = nil
         options = nil
@@ -930,7 +1164,8 @@ enum ConnectionError: Error, LocalizedError {
         case .encryptionFailed: return "Message encryption failed"
         case .connectionClosed: return "Your Centurion closed the connection"
         case .invalidResponse: return "Your Centurion sent an invalid response"
-        case .messageTooLarge: return "This message is too large to send"
+        case .messageTooLarge:
+            return "Your Centurion sent a response that was too large. Restart centurion-remote on your Mac, then try again."
         case .serverRejected(let message): return message
         }
     }

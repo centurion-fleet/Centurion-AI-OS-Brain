@@ -207,6 +207,19 @@ struct SettingsView: View {
                 CenturionListRow(icon: "person.crop.circle.fill", title: "Talk to Adrian", showChevron: false)
             }
             .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button {
+                UIApplication.shared.open(CenturionHelp.baseURL)
+            } label: {
+                CenturionListRow(
+                    icon: "book.pages",
+                    title: "Browse Help Center",
+                    subtitle: "help.personal-centurion.com"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

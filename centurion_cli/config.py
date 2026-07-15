@@ -1187,6 +1187,12 @@ DEFAULT_CONFIG = {
     "privacy": {
         "redact_pii": False,  # When True, hash user IDs and strip phone numbers from LLM context
     },
+
+    # Centurion Remote (iPhone) — model routing from the encrypted LAN bridge
+    "remote": {
+        # manual = user-selected connector; phoenix = keyword auto-router per turn
+        "routing_mode": "manual",
+    },
     
     # Text-to-speech configuration
     # Each provider supports an optional `max_text_length:` override for the
@@ -2517,6 +2523,14 @@ OPTIONAL_ENV_VARS = {
         "description": "ElevenLabs API key for premium text-to-speech voices",
         "prompt": "ElevenLabs API key",
         "url": "https://elevenlabs.io/",
+        "password": True,
+        "category": "tool",
+    },
+    "RUNWAY_API_KEY": {
+        "description": "Runway API key for Gen-4 video generation",
+        "prompt": "Runway API key",
+        "url": "https://runwayml.com/",
+        "tools": ["video_generate"],
         "password": True,
         "category": "tool",
     },

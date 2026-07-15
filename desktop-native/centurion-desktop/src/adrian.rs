@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-pub const DEFAULT_BASE_URL: &str = "https://adrian.centurion.ai";
+pub const DEFAULT_BASE_URL: &str = "https://help.personal-centurion.com";
 
 const WELCOME: &str = "I'm Adrian online — Adrian who built Centurion. My passion is helping you live \
 your mission, not just fix your app.\n\n\
@@ -13,7 +13,7 @@ off you, free your thinking, and keep discovering what matters. Your mission isn
 fixed destination; it evolves, and that's the point.\n\n\
 I'll listen first, then help — one clear step at a time. Stuck technically, curious how \
 things work, or ready to dream what's next? Ask me. Plain language, no technical exam.\n\n\
-I work over the internet, separate from your Centurion on your computer. What would \
+I work over the internet, separate from your Centurion on your Centurion brain. What would \
 you like to explore?";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -192,7 +192,7 @@ pub fn send_chat(
         context: context.clone(),
     };
 
-    let url = format!("{}/v1/chat", base_url().trim_end_matches('/'));
+    let url = format!("{}/api/v1/chat", base_url().trim_end_matches('/'));
     let response = ureq::post(&url)
         .set("Content-Type", "application/json")
         .set("X-Centurion-Install-ID", &install)

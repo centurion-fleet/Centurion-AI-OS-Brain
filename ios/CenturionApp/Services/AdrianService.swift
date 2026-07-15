@@ -42,18 +42,18 @@ final class AdrianService: ObservableObject {
             AdrianMessage(
                 role: .adrian,
                 content: """
-                I'm Adrian online — Adrian who built Centurion. My passion is helping you live your \
-                mission, not just fix your app.
+                I'm Adrian — your guide to Personal Centurion. Ask me anything: getting set up, \
+                linking your iPhone, privacy, or fixing a problem. I'll walk you through it, one \
+                clear step at a time.
 
-                Centurion is for a 1:1 relationship with your private AI — to take day-to-day pressure \
-                off you, free your thinking, and keep discovering what matters. Your mission isn't one \
-                fixed destination; it evolves, and that's the point.
+                My answers come from the same Help Center articles at help.personal-centurion.com — \
+                update those once, and both the website and this chat stay in sync.
 
-                I'll listen first, then help — one clear step at a time. Stuck technically, curious how \
-                things work, or ready to dream what's next? Ask me. Plain language, no technical exam.
+                I work over the internet, separate from your Centurion on your Centurion brain. \
+                I see only what helps — link status, thinking health, and a short mission summary \
+                if you've set one. Never your chat history or secrets.
 
-                I work over the internet, separate from your Centurion on your computer. What would \
-                you like to explore?
+                What would you like help with?
                 """
             ),
         ]
@@ -184,7 +184,7 @@ final class AdrianService: ObservableObject {
         }
 
         let payload = ChatPayload(installId: installID, messages: wireMessages, context: context)
-        var request = URLRequest(url: AdrianConfig.baseURL.appendingPathComponent("v1/chat"))
+        var request = URLRequest(url: AdrianConfig.baseURL.appendingPathComponent("api/v1/chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(installID, forHTTPHeaderField: "X-Centurion-Install-ID")

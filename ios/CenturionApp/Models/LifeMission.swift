@@ -378,8 +378,8 @@ struct CenturionOutput: Identifiable {
 // MARK: - Life Mission Targets (high-level aspirations — distinct from program targets in MissionProject)
 struct LifeMissionTarget: Identifiable, Codable {
     let id: UUID
-    let title: String
-    let description: String
+    var title: String
+    var description: String
     
     static func previewTargets() -> [LifeMissionTarget] {
         [

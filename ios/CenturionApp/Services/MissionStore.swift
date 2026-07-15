@@ -129,6 +129,39 @@ final class MissionStore: ObservableObject {
         markPersisted()
     }
 
+    func commitment(with id: UUID) -> LifeMissionTarget? {
+        mission.targets.first { $0.id == id }
+    }
+
+    @discardableResult
+    func applyCommitmentUpdate(_ payload: MissionCommitmentChat.UpdatePayload) -> Bool {
+        guard let id = UUID(uuidString: payload.commitment_id),
+              let index = mission.targets.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        if let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            mission.targets[index].title = title
+        }
+        if let description = payload.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty {
+            mission.targets[index].description = description
+        }
+        if let active = payload.active {
+            if active {
+                activeTargetIDs.insert(id)
+            } else {
+                activeTargetIDs.remove(id)
+            }
+            persistActiveTargets()
+        }
+
+        persistMission()
+        markPersisted()
+        return true
+    }
+
     func updateSoul(_ document: SoulDocument) {
         var updated = document
         updated.updatedAt = Date()

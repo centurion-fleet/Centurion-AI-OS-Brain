@@ -59,7 +59,7 @@ Centurion has no backdoors, no admin access, no ability to read your conversatio
 encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
 
 ## Support URL
-https://centurionfleet.com/support
+https://help.personal-centurion.com
 
 ## Marketing URL
 https://centurionfleet.com

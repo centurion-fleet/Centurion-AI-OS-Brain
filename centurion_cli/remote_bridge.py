@@ -20,13 +20,18 @@ from centurion_cli.provider_control import (
     LLM_CONFIG_INVALID,
     LLM_MODEL_INVALID,
     LLM_UNAVAILABLE,
+    apply_remote_switch,
     apply_switch,
     classify_llm_error,
+    get_routing_mode,
     get_status,
     list_options,
+    list_remote_options,
     load_last_known_good,
     record_successful_turn,
     restore_last_known_good,
+    save_remote_api_key,
+    set_routing_mode,
     validate_switch,
 )
 from centurion_cli.support_control import (
@@ -71,6 +76,18 @@ def handle_request(
         return _handle_beneficiary_set_family_member(request, request_id)
     if action == "beneficiary_submit_colleague":
         return _handle_beneficiary_submit_colleague(request, request_id)
+    if action == "remote_model_catalog":
+        return _handle_remote_model_catalog(request_id)
+    if action == "remote_model_apply":
+        return _handle_remote_model_apply(request, request_id)
+    if action == "remote_model_save_key":
+        return _handle_remote_model_save_key(request, request_id)
+    if action == "remote_routing_mode":
+        return _handle_remote_routing_mode(request, request_id)
+    if action == "telegram_import_bundle":
+        return _handle_telegram_import_bundle(request, request_id)
+    if action == "telegram_import_preview":
+        return _handle_telegram_import_preview(request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -104,15 +121,33 @@ def _handle_chat(
     if run_agent is None:
         run_agent = _run_agent_quiet
 
+    routed_connector_id = None
+    routed_display_name = ""
+    try:
+        if get_routing_mode() == "phoenix":
+            from centurion_cli.phoenix_router import describe_route, resolve as phoenix_resolve
+
+            routed_connector_id = phoenix_resolve(text.strip())
+            if routed_connector_id:
+                switch = apply_remote_switch(routed_connector_id, probe=False)
+                if switch.ok:
+                    routed_display_name = describe_route(routed_connector_id)
+    except Exception:
+        routed_connector_id = None
+
     try:
         response = run_agent(text.strip())
         record_successful_turn()
-        return {
+        payload = {
             "id": request_id,
             "ok": True,
             "action": "chat",
             "text": response or "",
         }
+        if routed_connector_id:
+            payload["routed_connector_id"] = routed_connector_id
+            payload["routed_display_name"] = routed_display_name
+        return payload
     except Exception as exc:
         return _error_response(
             request_id,
@@ -128,11 +163,14 @@ def _handle_chat(
 def _handle_provider_status(request_id: str) -> dict[str, Any]:
     try:
         status = get_status(probe=True)
+        payload = status.to_dict()
+        # Keep the flag but omit the snapshot — remote frames stay small on iPhone.
+        payload.pop("last_good", None)
         return {
             "id": request_id,
             "ok": True,
             "action": "provider_status",
-            "status": status.to_dict(),
+            "status": payload,
         }
     except Exception as exc:
         return _error_response(request_id, action="provider_status", exc=exc)
@@ -331,6 +369,113 @@ def _handle_beneficiary_submit_colleague(request: dict[str, Any], request_id: st
         return _error_response(request_id, action="beneficiary_submit_colleague", exc=exc)
 
 
+def _handle_remote_model_catalog(request_id: str) -> dict[str, Any]:
+    try:
+        catalog = list_remote_options(probe=False)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "remote_model_catalog",
+            "catalog": catalog,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="remote_model_catalog", exc=exc)
+
+
+def _handle_remote_model_apply(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    connector_id = str(request.get("connector_id") or "").strip()
+    try:
+        result = apply_remote_switch(connector_id, probe=True)
+        payload = {
+            "id": request_id,
+            "ok": result.ok,
+            "action": "remote_model_apply",
+            "result": result.to_dict(),
+            "routing_mode": get_routing_mode(),
+        }
+        if not result.ok:
+            payload["code"] = result.code or LLM_UNAVAILABLE
+            payload["error"] = result.message
+            payload["message"] = result.message
+            payload["retryable"] = result.code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"}
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="remote_model_apply", exc=exc)
+
+
+def _handle_remote_model_save_key(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    connector_id = str(request.get("connector_id") or "").strip()
+    key = str(request.get("key") or "")
+    try:
+        result = save_remote_api_key(connector_id, key)
+        payload = {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "remote_model_save_key",
+            "result": result,
+        }
+        if not result.get("ok"):
+            payload["message"] = result.get("message", "Could not save API key.")
+        return payload
+    except Exception as exc:
+        return _error_response(request_id, action="remote_model_save_key", exc=exc)
+
+
+def _handle_remote_routing_mode(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        if "mode" in request:
+            result = set_routing_mode(str(request.get("mode") or "manual"))
+            return {
+                "id": request_id,
+                "ok": bool(result.get("ok")),
+                "action": "remote_routing_mode",
+                "routing_mode": result.get("routing_mode", get_routing_mode()),
+                "message": result.get("message", ""),
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "remote_routing_mode",
+            "routing_mode": get_routing_mode(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="remote_routing_mode", exc=exc)
+
+
+def _handle_telegram_import_bundle(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.telegram_import import build_import_bundle
+
+        dry_run = bool(request.get("dry_run"))
+        session_id = str(request.get("session_id") or "").strip() or None
+        bundle = build_import_bundle(session_id=session_id, dry_run=dry_run)
+        return {
+            "id": request_id,
+            "ok": bool(bundle.get("ok")),
+            "action": "telegram_import_bundle",
+            "bundle": bundle,
+            "message": bundle.get("message", ""),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="telegram_import_bundle", exc=exc)
+
+
+def _handle_telegram_import_preview(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.telegram_import import build_import_bundle
+
+        bundle = build_import_bundle(dry_run=True)
+        return {
+            "id": request_id,
+            "ok": bool(bundle.get("ok")),
+            "action": "telegram_import_preview",
+            "bundle": bundle,
+            "message": bundle.get("message", ""),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="telegram_import_preview", exc=exc)
+
+
 def _error_response(
     request_id: str,
     *,
@@ -410,6 +555,8 @@ def _run_agent_quiet(text: str) -> str:
     logging.disable(logging.CRITICAL)
     os.environ.setdefault("CENTURION_YOLO_MODE", "1")
     os.environ.setdefault("CENTURION_ACCEPT_HOOKS", "1")
+    os.environ["CENTURION_DISABLE_OPENROUTER"] = "1"
+    os.environ["CENTURION_PLATFORM"] = "remote"
     with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stdout(
         devnull
     ), redirect_stderr(devnull):

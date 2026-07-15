@@ -4,8 +4,12 @@ import SwiftUI
 /// Reachable from Pulse (mission banner) and Settings.
 struct MissionView: View {
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var messageService: MessageService
+    @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var isDiscovering = false
     @State private var showContextEditor = false
+    @State private var chatTarget: ChatSheetTarget?
+    @State private var chatError: String?
 
     private var profile: HumanProfile { missionStore.mission.profile }
 
@@ -40,6 +44,42 @@ struct MissionView: View {
                 missionStore.updateProfile(updated)
             }
         }
+        .sheet(item: $chatTarget) { target in
+            commitmentChatSheet(for: target.context)
+        }
+        .alert("Couldn't open chat", isPresented: Binding(
+            get: { chatError != nil },
+            set: { if !$0 { chatError = nil } }
+        )) {
+            Button("OK", role: .cancel) { chatError = nil }
+        } message: {
+            Text(chatError ?? "")
+        }
+    }
+
+    private func commitmentChatSheet(for context: ConversationContext) -> some View {
+        let conversation = messageService.findOrCreateConversation(for: context)
+        return NavigationStack {
+            ChatView(conversation: conversation, usesPageChrome: false)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { chatTarget = nil }
+                    }
+                }
+        }
+        .presentationDetents([.height(380), .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func openCommitmentChat(for target: LifeMissionTarget) {
+        guard connectionManager.connectionState == .connected else {
+            chatError = "Pair with your Centurion in You first, then chat about this commitment."
+            return
+        }
+        Haptics.lightTap()
+        chatTarget = ChatSheetTarget(
+            context: .commitment(id: target.id, title: target.title)
+        )
     }
 
     // MARK: - Hero
@@ -124,7 +164,7 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Active Commitments", icon: "target")
 
-            Text("Living commitments your Centurion helps you fulfill. Select the ones to work on — they appear in Pulse.")
+            Text("Living commitments your Centurion helps you fulfill. Turn on the ones to prioritize on Home, or tap the chat bubble to discuss and refine them.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
@@ -136,13 +176,14 @@ struct MissionView: View {
                     LifeMissionTargetRow(
                         target: target,
                         isSelected: missionStore.isTargetActive(target.id),
-                        onToggle: { missionStore.toggleActiveTarget(target.id) }
+                        onToggle: { missionStore.toggleActiveTarget(target.id) },
+                        onChat: { openCommitmentChat(for: target) }
                     )
                 }
             }
 
             if !missionStore.activeTargets.isEmpty {
-                Text("\(missionStore.activeTargets.count) commitment\(missionStore.activeTargets.count == 1 ? "" : "s") active in Pulse")
+                Text("\(missionStore.activeTargets.count) commitment\(missionStore.activeTargets.count == 1 ? "" : "s") active on Home")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent().opacity(0.8))
                     .italic()
@@ -253,35 +294,51 @@ struct LifeMissionTargetRow: View {
     let target: LifeMissionTarget
     let isSelected: Bool
     let onToggle: () -> Void
+    var onChat: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: Spacing.md) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
+        HStack(spacing: Spacing.md) {
+            Button(action: onToggle) {
+                HStack(spacing: Spacing.md) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(isSelected ? ColorTheme.accent() : ColorTheme.mutedText())
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(target.title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(ColorTheme.primaryText())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(target.title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(ColorTheme.primaryText())
 
-                    Text(target.description)
-                        .font(.system(size: 13))
-                        .foregroundColor(ColorTheme.mutedText())
-                        .lineLimit(2)
+                        Text(target.description)
+                            .font(.system(size: 13))
+                            .foregroundColor(ColorTheme.mutedText())
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-
-                Spacer()
+                .contentShape(Rectangle())
             }
-            .padding()
-            .background(isSelected ? ColorTheme.accent().opacity(0.06) : Color.clear)
-            .centurionCard(elevated: isSelected)
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .stroke(isSelected ? ColorTheme.accent().opacity(0.3) : Color.clear, lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            if let onChat {
+                Button(action: onChat) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(ColorTheme.accent())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Chat about \(target.title)")
+            }
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(isSelected ? ColorTheme.accent().opacity(0.06) : Color.clear)
+        .centurionCard(elevated: isSelected)
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                .stroke(isSelected ? ColorTheme.accent().opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }

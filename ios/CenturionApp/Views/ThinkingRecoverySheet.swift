@@ -56,7 +56,9 @@ struct ThinkingRecoverySheet: View {
                     .padding(.horizontal, Spacing.md)
                     .accessibilityLabel("Get Help")
 
-                    Text("API keys and deeper changes are made on your Centurion computer, not on this iPhone.")
+                    HelpCenterLink(url: CenturionHelp.thinkingService)
+
+                    Text("API keys and deeper changes are made on your Centurion brain, not on this iPhone.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)

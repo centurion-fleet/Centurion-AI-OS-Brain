@@ -55,6 +55,7 @@ struct CenturionApp: App {
                 if state == .connected {
                     if !clearedDemoForConnection {
                         services.messageService.clearDemoData()
+                        ConversationStore.shared.restore(into: services.messageService)
                         clearedDemoForConnection = true
                     }
                     Task {

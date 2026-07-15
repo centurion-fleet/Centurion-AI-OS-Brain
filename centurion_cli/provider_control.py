@@ -647,3 +647,189 @@ def record_successful_turn(
             model=status.model,
             base_url=status.base_url,
         )
+
+
+# ---------------------------------------------------------------------------
+# Remote catalog (iPhone) — direct APIs only, no OpenRouter
+# ---------------------------------------------------------------------------
+
+
+def _current_connector_id() -> str | None:
+    from centurion_cli.remote_model_catalog import iter_catalog
+
+    (
+        current_provider,
+        current_model,
+        _current_base_url,
+        _current_api_key,
+        _user_providers,
+        _custom_providers,
+    ) = _load_switch_context()
+    provider = (current_provider or "").strip().lower()
+    model = (current_model or "").strip().lower()
+    for entry in iter_catalog():
+        if entry.category != "text":
+            continue
+        if entry.provider.lower() == provider and entry.model.lower() == model:
+            return entry.id
+    return None
+
+
+def list_remote_options(*, probe: bool = False) -> dict[str, Any]:
+    from centurion_cli.remote_model_catalog import (
+        build_remote_option_row,
+        is_openrouter_blocked,
+        iter_catalog,
+    )
+
+    active_id = _current_connector_id()
+    text_models: list[dict[str, Any]] = []
+    creative_models: list[dict[str, Any]] = []
+
+    for entry in iter_catalog():
+        if is_openrouter_blocked(entry.provider):
+            continue
+        healthy: bool | None = None
+        if probe and entry.category == "text" and _key_configured(entry.key_env):
+            ok, _message, _latency = probe_provider(
+                provider=entry.provider,
+                model=entry.model,
+                base_url=entry.base_url,
+            )
+            healthy = ok
+        row = build_remote_option_row(
+            entry,
+            active=(entry.id == active_id),
+            healthy=healthy,
+        )
+        if entry.category == "creative":
+            creative_models.append(row)
+        else:
+            text_models.append(row)
+
+    return {
+        "text_models": text_models,
+        "creative_models": creative_models,
+        "active_connector_id": active_id,
+        "routing_mode": get_routing_mode(),
+    }
+
+
+def _key_configured(key_env: str) -> bool:
+    return bool((os.environ.get(key_env) or "").strip())
+
+
+def apply_remote_switch(connector_id: str, *, probe: bool = True) -> ApplyResult:
+    from centurion_cli.remote_model_catalog import get_connector, is_openrouter_blocked
+
+    connector = get_connector(connector_id)
+    if connector is None:
+        return ApplyResult(
+            ok=False,
+            message="Unknown thinking service.",
+            code=LLM_CONFIG_INVALID,
+        )
+    if is_openrouter_blocked(connector.provider):
+        return ApplyResult(
+            ok=False,
+            message="OpenRouter is not available from Centurion Remote.",
+            code=LLM_CONFIG_INVALID,
+        )
+    if connector.category == "creative":
+        return _apply_creative_connector(connector)
+    return apply_switch(connector.provider, connector.model, probe=probe)
+
+
+def _apply_creative_connector(connector) -> ApplyResult:
+    from centurion_cli.config import load_config, save_config
+
+    cfg = load_config()
+    kind = connector.creative_kind
+    if kind == "image_gen":
+        section = cfg.setdefault("image_gen", {})
+        if not isinstance(section, dict):
+            section = {}
+            cfg["image_gen"] = section
+        section["provider"] = connector.provider
+        section["model"] = connector.model
+        provider_section = section.setdefault(connector.provider, {})
+        if isinstance(provider_section, dict):
+            provider_section["model"] = connector.model
+    elif kind == "video_gen":
+        section = cfg.setdefault("video_gen", {})
+        if not isinstance(section, dict):
+            section = {}
+            cfg["video_gen"] = section
+        section["provider"] = connector.provider
+        section["model"] = connector.model
+        provider_section = section.setdefault(connector.provider, {})
+        if isinstance(provider_section, dict):
+            provider_section["model"] = connector.model
+    elif kind == "tts":
+        section = cfg.setdefault("tts", {})
+        if not isinstance(section, dict):
+            section = {}
+            cfg["tts"] = section
+        section["provider"] = connector.provider
+        provider_section = section.setdefault(connector.provider, {})
+        if isinstance(provider_section, dict):
+            provider_section["model_id"] = connector.model
+    else:
+        return ApplyResult(
+            ok=False,
+            message="This creative connector is not supported yet.",
+            code=LLM_CONFIG_INVALID,
+        )
+
+    save_config(cfg)
+    return ApplyResult(
+        ok=True,
+        provider=connector.provider,
+        model=connector.model,
+        message=f"Creative default set to {connector.display_name}.",
+    )
+
+
+def save_remote_api_key(connector_id: str, key: str) -> dict[str, Any]:
+    from centurion_cli.config import save_env_value
+    from centurion_cli.remote_model_catalog import get_connector
+
+    connector = get_connector(connector_id)
+    if connector is None:
+        return {"ok": False, "message": "Unknown thinking service."}
+    value = (key or "").strip()
+    if not value:
+        return {"ok": False, "message": "API key is required."}
+    save_env_value(connector.key_env, value)
+    os.environ[connector.key_env] = value
+    return {
+        "ok": True,
+        "connector_id": connector.id,
+        "configured": True,
+        "message": f"Saved key for {connector.display_name} on your Centurion.",
+    }
+
+
+def get_routing_mode() -> str:
+    from centurion_cli.config import load_config
+
+    cfg = load_config()
+    remote_cfg = cfg.get("remote") if isinstance(cfg.get("remote"), dict) else {}
+    mode = str(remote_cfg.get("routing_mode") or "manual").strip().lower()
+    return mode if mode in {"manual", "phoenix"} else "manual"
+
+
+def set_routing_mode(mode: str) -> dict[str, Any]:
+    from centurion_cli.config import load_config, save_config
+
+    normalized = (mode or "manual").strip().lower()
+    if normalized not in {"manual", "phoenix"}:
+        return {"ok": False, "message": "Routing mode must be manual or phoenix."}
+    cfg = load_config()
+    remote_cfg = cfg.setdefault("remote", {})
+    if not isinstance(remote_cfg, dict):
+        remote_cfg = {}
+        cfg["remote"] = remote_cfg
+    remote_cfg["routing_mode"] = normalized
+    save_config(cfg)
+    return {"ok": True, "routing_mode": normalized}

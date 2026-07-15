@@ -22,6 +22,7 @@ pub struct BridgeChatResult {
     pub text: String,
     pub recovered: bool,
     pub recovery_message: Option<String>,
+    pub routed_display_name: Option<String>,
     pub code: Option<String>,
 }
 
@@ -98,6 +99,14 @@ struct BridgeResponse {
     thinking_health: Option<String>,
     #[serde(default)]
     expires_at: Option<String>,
+    #[serde(default)]
+    catalog: Option<Value>,
+    #[serde(default)]
+    bundle: Option<Value>,
+    #[serde(default)]
+    routing_mode: Option<String>,
+    #[serde(default)]
+    routed_display_name: Option<String>,
 }
 
 #[async_trait]
@@ -117,6 +126,7 @@ impl AgentBridge for PythonBridge {
                 text: response.text,
                 recovered: response.recovered.unwrap_or(false),
                 recovery_message: response.recovery_message,
+                routed_display_name: response.routed_display_name,
                 code: response.code,
             });
         }
@@ -169,6 +179,15 @@ impl AgentBridge for PythonBridge {
             }
             if let Some(expires_at) = &response.expires_at {
                 value["expires_at"] = Value::String(expires_at.clone());
+            }
+            if let Some(catalog) = response.catalog {
+                value["catalog"] = catalog;
+            }
+            if let Some(bundle) = response.bundle {
+                value["bundle"] = bundle;
+            }
+            if let Some(routing_mode) = &response.routing_mode {
+                value["routing_mode"] = Value::String(routing_mode.clone());
             }
             return Ok(value);
         }
@@ -266,6 +285,7 @@ impl AgentBridge for EchoBridge {
             text: format!("[Development echo] {text}"),
             recovered: false,
             recovery_message: None,
+            routed_display_name: None,
             code: None,
         })
     }

@@ -129,6 +129,7 @@ async fn handle_connection(
                             text: result.text,
                             recovered: result.recovered.then_some(true),
                             recovery_message: result.recovery_message,
+                            routed_display_name: result.routed_display_name,
                         }
                     }
                     Err(error) => bridge_error_response(Some(id), error),
@@ -411,6 +412,152 @@ async fn handle_connection(
                         ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
                         snapshot: payload
                             .get("snapshot")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::RemoteModelCatalog { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "remote_model_catalog", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::RemoteModelCatalogResponse {
+                        id,
+                        catalog: payload
+                            .get("catalog")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::RemoteModelApply { id, connector_id } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "remote_model_apply",
+                        serde_json::json!({ "connector_id": connector_id }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::RemoteModelApplyResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        result: payload
+                            .get("result")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        routing_mode: payload
+                            .get("routing_mode")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::RemoteModelSaveKey {
+                id,
+                connector_id,
+                key,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "remote_model_save_key",
+                        serde_json::json!({ "connector_id": connector_id, "key": key }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::RemoteModelSaveKeyResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        result: payload
+                            .get("result")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::RemoteRoutingMode { id, mode } => {
+                let body = if let Some(mode) = mode {
+                    serde_json::json!({ "mode": mode })
+                } else {
+                    serde_json::json!({})
+                };
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "remote_routing_mode", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::RemoteRoutingModeResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+                        routing_mode: payload
+                            .get("routing_mode")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("manual")
+                            .to_owned(),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::TelegramImportBundle {
+                id,
+                session_id,
+                dry_run,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "telegram_import_bundle",
+                        serde_json::json!({
+                            "session_id": session_id,
+                            "dry_run": dry_run,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::TelegramImportBundleResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        bundle: payload
+                            .get("bundle")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::TelegramImportPreview { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "telegram_import_preview", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::TelegramImportPreviewResponse {
+                        id,
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        bundle: payload
+                            .get("bundle")
                             .cloned()
                             .unwrap_or_else(|| serde_json::json!({})),
                         message: payload

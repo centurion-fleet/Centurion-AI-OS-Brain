@@ -39,6 +39,13 @@ final class MessageService: ObservableObject {
         currentConversation = nil
     }
 
+    /// Replace in-memory state with an imported Telegram thread.
+    func replaceImportedConversation(_ conversation: Conversation, messages: [Message]) {
+        conversations = [conversation]
+        allMessages = messages
+        currentConversation = conversation
+    }
+
     /// Call after the view has appeared to seed demo conversations when offline.
     func seedInitialData() {
         guard dataMode.showsDemoContent, conversations.isEmpty else { return }
@@ -46,7 +53,11 @@ final class MessageService: ObservableObject {
     }
 
     /// Send a message in a conversation context. Returns the conversation used.
-    func sendMessage(_ text: String, in context: ConversationContext) async throws -> Conversation {
+    func sendMessage(
+        _ text: String,
+        in context: ConversationContext,
+        missionStore: MissionStore? = nil
+    ) async throws -> Conversation {
         guard connectionManager.connectionState == .connected else {
             throw MessageError.notConnected
         }
@@ -60,15 +71,45 @@ final class MessageService: ObservableObject {
         )
         appendMessage(userMessage)
 
-        let response = try await connectionManager.sendMessage(text)
+        let outbound: String
+        if case .commitment(let id, _) = context,
+           let missionStore,
+           let commitment = missionStore.commitment(with: id) {
+            outbound = MissionCommitmentChat.frameOutbound(
+                userText: text,
+                commitment: commitment,
+                mission: missionStore.mission
+            )
+        } else {
+            outbound = text
+        }
+
+        let rawResponse = try await connectionManager.sendMessage(outbound)
+        let displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+
+        if let missionStore,
+           let payload = MissionCommitmentChat.parseUpdate(from: rawResponse) {
+            missionStore.applyCommitmentUpdate(payload)
+            syncConversationTitle(for: conversation.id, missionStore: missionStore)
+        }
+
         appendMessage(
             Message(
                 conversationId: conversation.id,
-                content: response,
+                content: displayResponse.isEmpty ? rawResponse : displayResponse,
                 role: .centurion
             )
         )
         return conversation
+    }
+
+    private func syncConversationTitle(for conversationID: UUID, missionStore: MissionStore) {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }),
+              case .commitment(let id, _) = conversations[index].context,
+              let commitment = missionStore.commitment(with: id) else {
+            return
+        }
+        conversations[index].context = .commitment(id: id, title: commitment.title)
     }
 
     /// Find a conversation by its context, or create a new one.
@@ -119,6 +160,8 @@ final class MessageService: ObservableObject {
                 return "**\(name)** progress: \(Int.random(in: 2..<5)) of \(Int.random(in: 4..<8)) tasks complete. There \(Bool.random() ? "is a blocked item" : "are no blockers") I'd like to discuss."
             case .task(_, let name, _, _):
                 return "On **\(name)**: \(Bool.random() ? "I'm waiting on stakeholder feedback before I can proceed." : "Making good progress. Should have an update by end of day.")"
+            case .commitment(_, let title):
+                return "Let's look at **\(title)** together. Tell me what feels unclear or what you'd like to change."
             case .standalone:
                 return "Good question. Let me check the current state of things and get back to you."
             }
@@ -137,6 +180,8 @@ final class MessageService: ObservableObject {
             return "Thanks for flagging this on **\(name)** (under \(program)). I'll update the task board and keep you posted on any changes."
         case .task(_, let name, _, _):
             return "Noted on **\(name)**. I'll adjust the approach. Let me know if you want me to escalate any blockers."
+        case .commitment(_, let title):
+            return "I've noted your thoughts on the commitment **\(title)**. Ask me to rename or refine it whenever you're ready."
         case .standalone:
             return "Got it. I'll think about this and follow up. Is there anything else on your mind?"
         }

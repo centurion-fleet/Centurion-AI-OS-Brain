@@ -24,6 +24,8 @@ pub enum RemoteMessage {
         recovered: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         recovery_message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        routed_display_name: Option<String>,
     },
     ProviderStatus {
         id: Uuid,
@@ -141,6 +143,70 @@ pub enum RemoteMessage {
         id: Uuid,
         ok: bool,
         snapshot: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    RemoteModelCatalog {
+        id: Uuid,
+    },
+    RemoteModelCatalogResponse {
+        id: Uuid,
+        catalog: serde_json::Value,
+    },
+    RemoteModelApply {
+        id: Uuid,
+        connector_id: String,
+    },
+    RemoteModelApplyResponse {
+        id: Uuid,
+        ok: bool,
+        result: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        routing_mode: Option<String>,
+    },
+    RemoteModelSaveKey {
+        id: Uuid,
+        connector_id: String,
+        key: String,
+    },
+    RemoteModelSaveKeyResponse {
+        id: Uuid,
+        ok: bool,
+        result: serde_json::Value,
+    },
+    RemoteRoutingMode {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<String>,
+    },
+    RemoteRoutingModeResponse {
+        id: Uuid,
+        ok: bool,
+        routing_mode: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    TelegramImportBundle {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dry_run: Option<bool>,
+    },
+    TelegramImportBundleResponse {
+        id: Uuid,
+        ok: bool,
+        bundle: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    TelegramImportPreview {
+        id: Uuid,
+    },
+    TelegramImportPreviewResponse {
+        id: Uuid,
+        ok: bool,
+        bundle: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },

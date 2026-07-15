@@ -12749,6 +12749,20 @@ Examples:
         logging.getLogger(__name__).debug("curator CLI wiring failed: %s", _exc)
 
     # =========================================================================
+    # telegram command — bot DM export for Centurion Remote
+    # =========================================================================
+    telegram_parser = subparsers.add_parser(
+        "telegram",
+        help="Telegram utilities — import bot DM history for Centurion Remote",
+    )
+    try:
+        from centurion_cli.telegram import register_cli as _register_telegram_cli
+
+        _register_telegram_cli(telegram_parser)
+    except Exception as _exc:
+        logging.getLogger(__name__).debug("telegram CLI wiring failed: %s", _exc)
+
+    # =========================================================================
     # memory command
     # =========================================================================
     memory_parser = subparsers.add_parser(

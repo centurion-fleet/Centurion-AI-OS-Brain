@@ -88,13 +88,14 @@ struct ConnectionView: View {
         CenturionStatusCard(
             title: "Thinking service",
             icon: "brain.head.profile",
-            headline: connectionManager.llmHealth.label,
-            detail: thinkingServiceDetail,
+            headline: connectionManager.thinkingServiceHeadline,
+            detail: connectionManager.thinkingServiceSubtitle,
             isPositive: !connectionManager.llmHealth.needsAttention,
-            accessibilityLabel: "Thinking service, \(connectionManager.llmHealth.label). \(thinkingServiceDetail)"
+            accessibilityLabel: "Thinking service, \(connectionManager.thinkingServiceHeadline). \(connectionManager.thinkingServiceSubtitle)"
         )
         .task {
             await connectionManager.refreshThinkingStatus()
+            await connectionManager.refreshRoutingMode()
         }
     }
 
@@ -122,13 +123,16 @@ struct ConnectionView: View {
     }
 
     private var supportLinks: some View {
-        HStack(spacing: Spacing.lg) {
-            Button { showGetHelp = true } label: {
-                Text("Get Help")
+        VStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.lg) {
+                Button { showGetHelp = true } label: {
+                    Text("Get Help")
+                }
+                .buttonStyle(CenturionGhostButtonStyle())
+                .accessibilityLabel("Get Help")
+                AdrianLink(showAdrian: $showAdrian)
             }
-            .buttonStyle(CenturionGhostButtonStyle())
-            .accessibilityLabel("Get Help")
-            AdrianLink(showAdrian: $showAdrian)
+            HelpCenterLink()
         }
         .frame(maxWidth: .infinity)
     }
@@ -283,7 +287,11 @@ struct DeviceLinkSection: View {
 
 struct ThinkingServiceSection: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var messageService: MessageService
     @Binding var showRecoverySheet: Bool
+    @State private var showModelSwitcher = false
+    @State private var showTelegramImport = false
+    @AppStorage("centurion.telegramImport.completed") private var telegramImportCompleted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -295,13 +303,45 @@ struct ThinkingServiceSection: View {
                         CenturionStatusCard(
                             title: "Thinking service",
                             icon: "brain.head.profile",
-                            headline: connectionManager.llmHealth.label,
-                            detail: thinkingServiceDetail,
+                            headline: connectionManager.thinkingServiceHeadline,
+                            detail: connectionManager.thinkingServiceSubtitle,
                             isPositive: !connectionManager.llmHealth.needsAttention,
-                            accessibilityLabel: "Thinking service, \(connectionManager.llmHealth.label). \(thinkingServiceDetail)"
+                            accessibilityLabel: "Thinking service, \(connectionManager.thinkingServiceHeadline). \(connectionManager.thinkingServiceSubtitle)"
                         )
                         .task(id: connectionManager.connectionState) {
                             await connectionManager.refreshThinkingStatus()
+                            await connectionManager.refreshRoutingMode()
+                            _ = await connectionManager.fetchRemoteModelCatalog()
+                        }
+
+                        if connectionManager.routingMode == "phoenix" {
+                            Text("Auto-select is on — your Centurion picks an LLM from your message.")
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if let routed = connectionManager.lastRoutedDisplayName {
+                            Text("Last routed to \(routed)")
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.accent())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        Button {
+                            Haptics.lightTap()
+                            showModelSwitcher = true
+                        } label: {
+                            Text("Choose Thinking Service")
+                        }
+                        .buttonStyle(CenturionSecondaryButtonStyle())
+
+                        if connectionManager.connectionState == .connected && !telegramImportCompleted {
+                            Button {
+                                showTelegramImport = true
+                            } label: {
+                                Text("Import Telegram bot chat")
+                            }
+                            .buttonStyle(CenturionSecondaryButtonStyle())
                         }
 
                         if connectionManager.llmHealth.needsAttention {
@@ -322,10 +362,21 @@ struct ThinkingServiceSection: View {
                 }
             }
 
-            Text("Change on your computer")
+            Text("API keys are saved on your Centurion, not on this iPhone.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
+        }
+        .sheet(isPresented: $showModelSwitcher) {
+            NavigationStack {
+                RemoteModelSwitcherView()
+                    .environmentObject(connectionManager)
+            }
+        }
+        .sheet(isPresented: $showTelegramImport) {
+            TelegramImportWizardView()
+                .environmentObject(connectionManager)
+                .environmentObject(messageService)
         }
     }
 
@@ -358,14 +409,23 @@ struct ConnectionPairingSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if connectionManager.connectionState == .connected {
+                switch connectionManager.connectionState {
+                case .connected:
                     connectedState
-                } else if case .awaitingApproval(let message) = connectionManager.connectionState {
+                case .awaitingApproval(let message):
                     awaitingApprovalState(message: message)
-                } else if connectionManager.discoveredDevices.isEmpty {
+                case .connecting:
+                    connectingState
+                case .error(let message):
+                    errorState(message: message)
+                case .discovering where connectionManager.discoveredDevices.isEmpty:
                     searchingState
-                } else {
-                    deviceList
+                default:
+                    if connectionManager.discoveredDevices.isEmpty {
+                        searchingState
+                    } else {
+                        deviceList
+                    }
                 }
             }
             .background(ColorTheme.background())
@@ -382,7 +442,46 @@ struct ConnectionPairingSheet: View {
                     connectionManager.startDiscovery()
                 }
             }
+            .onChange(of: connectionManager.connectionState) { _, newState in
+                if newState == .connected {
+                    dismiss()
+                }
+            }
         }
+    }
+
+    private var connectingState: some View {
+        VStack(spacing: Spacing.lg) {
+            LoadingState(
+                message: connectionManager.activeConnectionTarget.map {
+                    "Linking to \($0)…"
+                } ?? "Setting up your private connection…"
+            )
+            Text("Keep this screen open. Your Centurion may ask you to approve this iPhone.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .padding()
+    }
+
+    private func errorState(message: String) -> some View {
+        VStack(spacing: Spacing.lg) {
+            ErrorState(
+                title: "Couldn't link",
+                message: message,
+                retryTitle: "Try again",
+                onRetry: { connectionManager.retryConnection() }
+            )
+            if !connectionManager.discoveredDevices.isEmpty {
+                Button("Back to device list") {
+                    connectionManager.startDiscovery()
+                }
+                .buttonStyle(CenturionGhostButtonStyle())
+            }
+        }
+        .padding()
     }
 
     private var connectedState: some View {
@@ -399,14 +498,35 @@ struct ConnectionPairingSheet: View {
 
     private func awaitingApprovalState(message: String) -> some View {
         VStack(spacing: Spacing.lg) {
-            SheetHeader(title: "Approve on your Centurion", subtitle: message)
+            SheetHeader(
+                title: "Approve on your Centurion",
+                subtitle: "Your iPhone found your Centurion, but it needs your OK before linking."
+            )
             Image(systemName: "hourglass.circle.fill")
                 .font(.system(size: 48))
                 .foregroundColor(ColorTheme.accent())
+            AtmosphericSurface {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text("On your Mac, approve this iPhone in Centurion, then tap Try Again. While testing in Xcode, you can start centurion-remote with --auto-approve.")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineSpacing(3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Button("Try Again") {
                 connectionManager.retryConnection()
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
+            NavigationLink {
+                KeyExportView()
+            } label: {
+                Text("Show iPhone security code")
+            }
+            .buttonStyle(CenturionGhostButtonStyle())
         }
         .padding()
     }
@@ -425,6 +545,12 @@ struct ConnectionPairingSheet: View {
 
     private var deviceList: some View {
         List {
+            Section {
+                Text("Tap your Centurion below. Both devices must be on the same Wi‑Fi, and Local Network access must be enabled for this app in iPhone Settings.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .listRowBackground(Color.clear)
+            }
             ForEach(connectionManager.discoveredDevices) { device in
                 Button {
                     Haptics.lightTap()
@@ -443,6 +569,8 @@ struct ConnectionPairingSheet: View {
                         }
                     }
                 }
+                .buttonStyle(.plain)
+                .disabled(connectionManager.connectionState == .connecting)
             }
         }
         .scrollContentBackground(.hidden)

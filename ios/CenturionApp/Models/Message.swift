@@ -9,14 +9,30 @@ struct Message: Identifiable, Codable, Equatable {
     let content: String
     let role: MessageRole
     let timestamp: Date
+    let attachments: [MessageAttachment]
 
-    init(id: UUID = UUID(), conversationId: UUID, content: String, role: MessageRole, timestamp: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        conversationId: UUID,
+        content: String,
+        role: MessageRole,
+        timestamp: Date = Date(),
+        attachments: [MessageAttachment] = []
+    ) {
         self.id = id
         self.conversationId = conversationId
         self.content = content
         self.role = role
         self.timestamp = timestamp
+        self.attachments = attachments
     }
+}
+
+struct MessageAttachment: Identifiable, Codable, Equatable {
+    let id: String
+    let filename: String
+    let localPath: String
+    let missing: Bool
 }
 
 enum MessageRole: String, Codable {

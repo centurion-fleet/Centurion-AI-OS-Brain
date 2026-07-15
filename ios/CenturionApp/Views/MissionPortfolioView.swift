@@ -260,15 +260,27 @@ struct MissionPortfolioView: View {
 
     private var activeTargetsStrip: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text("ACTIVE TARGETS")
+            Text("ACTIVE COMMITMENTS")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(ColorTheme.mutedText())
                 .tracking(2)
 
+            Text("Priorities you turned on in Mission. Working on now below is what your Centurion is executing.")
+                .font(.caption2)
+                .foregroundColor(ColorTheme.mutedText())
+                .lineSpacing(3)
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(missionStore.activeTargets) { target in
-                        Text(target.title)
+                        Button {
+                            openChat(context: .commitment(id: target.id, title: target.title))
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(target.title)
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(ColorTheme.primaryText())
                             .padding(.horizontal, 10)
@@ -279,6 +291,9 @@ struct MissionPortfolioView: View {
                                 Capsule()
                                     .stroke(ColorTheme.accent().opacity(0.25), lineWidth: 0.5)
                             )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Chat about \(target.title)")
                     }
                 }
             }
