@@ -42,8 +42,30 @@ final class MessageService: ObservableObject {
     /// Replace in-memory state with an imported Telegram thread.
     func replaceImportedConversation(_ conversation: Conversation, messages: [Message]) {
         conversations = [conversation]
-        allMessages = messages
+        allMessages = messages.sorted { $0.timestamp < $1.timestamp }
         currentConversation = conversation
+        persistIfLive()
+    }
+
+    /// Restore a full multi-conversation snapshot (live Crypto Chat + imports).
+    func applySnapshot(conversations: [Conversation], messages: [Message]) {
+        self.conversations = conversations.sorted { $0.lastActive > $1.lastActive }
+        self.allMessages = messages.sorted { $0.timestamp < $1.timestamp }
+        self.currentConversation = self.conversations.first
+    }
+
+    /// Seed a one-time context note when opening Discuss from Home Pulse.
+    func seedDiscussContext(title: String, detail: String) -> Conversation {
+        let conversation = findOrCreateConversation(for: .standalone(title: title))
+        let existing = messages(for: conversation.id)
+        guard existing.isEmpty else { return conversation }
+        let note = Message(
+            conversationId: conversation.id,
+            content: "Context for this Crypto Chat:\n\(detail)",
+            role: .system
+        )
+        appendMessage(note)
+        return conversation
     }
 
     /// Call after the view has appeared to seed demo conversations when offline.
@@ -71,18 +93,23 @@ final class MessageService: ObservableObject {
         )
         appendMessage(userMessage)
 
-        let outbound: String
+        let outboundBody: String
         if case .commitment(let id, _) = context,
            let missionStore,
            let commitment = missionStore.commitment(with: id) {
-            outbound = MissionCommitmentChat.frameOutbound(
+            outboundBody = MissionCommitmentChat.frameOutbound(
                 userText: text,
                 commitment: commitment,
                 mission: missionStore.mission
             )
         } else {
-            outbound = text
+            outboundBody = text
         }
+
+        let outbound = frameWithConversationHistory(
+            latestUserText: outboundBody,
+            conversationID: conversation.id
+        )
 
         let rawResponse = try await connectionManager.sendMessage(outbound)
         let displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
@@ -101,6 +128,35 @@ final class MessageService: ObservableObject {
             )
         )
         return conversation
+    }
+
+    /// Include recent local Crypto Chat turns so oneshot brain sessions keep continuity.
+    private func frameWithConversationHistory(
+        latestUserText: String,
+        conversationID: UUID
+    ) -> String {
+        // Newest message is the user turn we just appended — history is everything before it.
+        let prior = messages(for: conversationID).dropLast().suffix(10)
+        guard !prior.isEmpty else { return latestUserText }
+
+        var lines: [String] = [
+            "Earlier turns in this Crypto Chat (for context only):",
+        ]
+        for message in prior where message.role != .system {
+            let speaker: String
+            switch message.role {
+            case .user: speaker = "User"
+            case .centurion: speaker = "Centurion"
+            case .system: continue
+            }
+            lines.append("\(speaker): \(message.content)")
+        }
+        lines.append("")
+        lines.append("Latest user message:")
+        lines.append(latestUserText)
+        lines.append("")
+        lines.append("Reply as Centurion to the latest user message.")
+        return lines.joined(separator: "\n")
     }
 
     private func syncConversationTitle(for conversationID: UUID, missionStore: MissionStore) {
@@ -145,6 +201,15 @@ final class MessageService: ObservableObject {
                 conversations.insert(conv, at: 0)
             }
         }
+        persistIfLive()
+    }
+
+    private func persistIfLive() {
+        guard connectionManager.connectionState == .connected else { return }
+        ConversationStore.shared.save(
+            conversations: conversations,
+            messages: allMessages
+        )
     }
 
     /// Generate a context-aware Centurion response for preview

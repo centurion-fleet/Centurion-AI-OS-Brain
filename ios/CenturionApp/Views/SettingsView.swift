@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showGetHelp = false
     @State private var showAdrian = false
     @State private var showCollaborations = false
+    @State private var showSwarmConnect = false
     @State private var selectedCollaboration: SwarmSummary?
     @State private var showPrivacyTrust = false
     @State private var showPairingSheet = false
@@ -98,6 +99,11 @@ struct SettingsView: View {
             }
             .environmentObject(swarmStore)
         }
+        .sheet(isPresented: $showSwarmConnect) {
+            SwarmConnectSheet()
+                .environmentObject(connectionManager)
+                .environmentObject(swarmStore)
+        }
         .sheet(item: $selectedCollaboration) { swarm in
             SwarmDetailSheet(swarm: swarm)
                 .environmentObject(swarmStore)
@@ -173,6 +179,19 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, Spacing.xs)
                 .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button {
+                showSwarmConnect = true
+            } label: {
+                CenturionListRow(
+                    icon: "person.badge.plus",
+                    title: "Connect another Centurion",
+                    subtitle: "Invite a friend or join a shared collaboration"
+                )
             }
             .buttonStyle(.plain)
 

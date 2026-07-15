@@ -78,11 +78,12 @@ struct MissionPortfolioView: View {
         let decisions = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
         let thoughts = Date(timeIntervalSinceReferenceDate: lastSeenThoughts)
         return [
-            .live: swarmStore.heroSwarms.filter { $0.pulse == .active }.isEmpty ? 0 : 1,
+            .live: (swarmStore.heroSwarms.contains {
+                $0.pulse == .active || $0.pulse == .attention || $0.pulse == .waiting || $0.pulse == .blocked
+            } || liveActivity != nil) ? 1 : 0,
             .wins: completedLoops.filter { $0.completedAt > wins }.count,
             .outputs: self.outputs.filter { $0.createdAt > outputs }.count,
-            .decisions: self.decisions.filter { $0.createdAt > decisions }.count
-                + swarmStore.signalsRequiringAttention.count,
+            .decisions: self.decisions.filter { $0.createdAt > decisions }.count,
             .pulse: self.thoughts.filter { $0.timestamp > thoughts }.count,
         ]
     }
@@ -135,13 +136,25 @@ struct MissionPortfolioView: View {
             }
         }
         .task {
-            guard !isDataLoaded else { return }
-            liveActivity = LiveActivity.preview()
-            completedLoops = CompletedLoop.preview()
-            decisions = DecisionItem.preview()
-            outputs = CenturionOutput.preview()
-            thoughts = CenturionThought.preview()
-            isDataLoaded = true
+            await reloadPulseFeed()
+        }
+        .onChange(of: connectionManager.connectionState) { _, _ in
+            Task { await reloadPulseFeed(forceRefresh: true) }
+        }
+        .onChange(of: swarmStore.activities.count) { _, _ in
+            if connectionManager.connectionState == .connected {
+                applyPulseFromSwarmStore()
+            }
+        }
+        .onChange(of: swarmStore.outcomes.count) { _, _ in
+            if connectionManager.connectionState == .connected {
+                applyPulseFromSwarmStore()
+            }
+        }
+        .onChange(of: swarmStore.signals.count) { _, _ in
+            if connectionManager.connectionState == .connected {
+                applyPulseFromSwarmStore()
+            }
         }
         .onAppear {
             withAnimation(Motion.appear.delay(0.1)) {
@@ -153,7 +166,12 @@ struct MissionPortfolioView: View {
         }
         .sheet(item: $selectedSwarm) { swarm in
             SwarmDetailSheet(swarm: swarm) { discussed in
-                openChat(context: .standalone(title: discussed.displayName))
+                openDiscuss(
+                    title: discussed.displayName,
+                    detail: discussed.objective.isEmpty
+                        ? "Swarm “\(discussed.displayName)”."
+                        : discussed.objective
+                )
             }
             .environmentObject(swarmStore)
         }
@@ -193,9 +211,31 @@ struct MissionPortfolioView: View {
 
                 switch selectedCategory {
                 case .live:
-                    liveActivitySection
+                    if liveActivity != nil {
+                        liveActivitySection
+                    } else {
+                        EmptyState(
+                            icon: "bolt.circle",
+                            title: connectionManager.connectionState == .connected
+                                ? "Nothing running right now"
+                                : "Working on now",
+                            message: connectionManager.connectionState == .connected
+                                ? "When your Centurion is mid-loop, it shows up here."
+                                : "Link your Centurion in You to see live work."
+                        )
+                    }
                 case .wins:
-                    completedLoopsSection
+                    if completedLoops.isEmpty {
+                        EmptyState(
+                            icon: "trophy",
+                            title: "No finished work yet",
+                            message: connectionManager.connectionState == .connected
+                                ? "Completed outcomes from your Centurion will appear here."
+                                : "Link your Centurion to see finished wins."
+                        )
+                    } else {
+                        completedLoopsSection
+                    }
                 case .outputs:
                     if !outputs.isEmpty {
                         outputsSection
@@ -203,7 +243,9 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "doc.richtext",
                             title: "No outputs yet",
-                            message: "Documents the Centurion creates will appear here"
+                            message: connectionManager.connectionState == .connected
+                                ? "Documents and results your Centurion creates will appear here."
+                                : "Link your Centurion to see documents it creates."
                         )
                     }
                 case .decisions:
@@ -213,11 +255,23 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "checkmark.circle",
                             title: "All clear",
-                            message: "Nothing needs your attention right now"
+                            message: connectionManager.connectionState == .connected
+                                ? "Nothing needs your choice right now."
+                                : "Link your Centurion to see decisions that need you."
                         )
                     }
                 case .pulse:
-                    thoughtsSection
+                    if thoughts.isEmpty {
+                        EmptyState(
+                            icon: "waveform.path.ecg",
+                            title: "No updates yet",
+                            message: connectionManager.connectionState == .connected
+                                ? "Activity from your Centurion streams in here."
+                                : "Link your Centurion to see its update stream."
+                        )
+                    } else {
+                        thoughtsSection
+                    }
                 }
             }
             .frame(maxWidth: 428)
@@ -245,6 +299,44 @@ struct MissionPortfolioView: View {
     private func openChat(context: ConversationContext) {
         Haptics.lightTap()
         chatTarget = ChatSheetTarget(context: context)
+    }
+
+    /// Opens Crypto Chat about a Pulse item and seeds a one-time context note.
+    private func openDiscuss(title: String, detail: String) {
+        Haptics.lightTap()
+        let conversation = messageService.seedDiscussContext(title: title, detail: detail)
+        chatTarget = ChatSheetTarget(context: conversation.context)
+    }
+
+    private func reloadPulseFeed(forceRefresh: Bool = false) async {
+        if connectionManager.connectionState == .connected {
+            if forceRefresh || !isDataLoaded {
+                await swarmStore.refresh(from: connectionManager)
+            }
+            applyPulseFromSwarmStore()
+        } else if dataMode.showsDemoContent {
+            liveActivity = LiveActivity.preview()
+            completedLoops = CompletedLoop.preview()
+            decisions = DecisionItem.preview()
+            outputs = CenturionOutput.preview()
+            thoughts = CenturionThought.preview()
+        } else {
+            liveActivity = nil
+            completedLoops = []
+            decisions = []
+            outputs = []
+            thoughts = []
+        }
+        isDataLoaded = true
+    }
+
+    private func applyPulseFromSwarmStore() {
+        let feed = PulseFeedMapper.map(from: swarmStore)
+        liveActivity = feed.liveActivity
+        completedLoops = feed.wins
+        outputs = feed.outputs
+        decisions = feed.decisions
+        thoughts = feed.thoughts
     }
 
     // MARK: - Mission Banner
@@ -436,7 +528,10 @@ struct MissionPortfolioView: View {
                     HStack {
                         Spacer()
                         Button(action: {
-                            openChat(context: .standalone(title: activity.summary))
+                            openDiscuss(
+                                title: activity.summary,
+                                detail: "\(activity.summary)\n\n\(activity.detail)"
+                            )
                         }) {
                             Label("Ask about this", systemImage: "bubble.left.and.bubble.right")
                                 .font(.caption.weight(.medium))
@@ -608,7 +703,10 @@ struct MissionPortfolioView: View {
             HStack {
                 Spacer()
                 Button(action: {
-                    openChat(context: .standalone(title: "Win: \\(loop.summary)"))
+                    openDiscuss(
+                        title: "Win: \(loop.summary)",
+                        detail: "\(loop.summary)\n\n\(loop.detail)\n\nResult: \(loop.result)\nImpact: \(loop.impact)"
+                    )
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -660,23 +758,6 @@ struct MissionPortfolioView: View {
                     }
                 }
                 .padding(.leading, 4)
-            }
-
-            // Share this win
-            HStack {
-                Spacer()
-                Button(action: {
-                    openChat(context: .standalone(title: "Win: \(loop.summary)"))
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 10))
-                        Text("Discuss this win")
-                            .font(.system(size: 10))
-                    }
-                    .foregroundColor(ColorTheme.accent())
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding()
@@ -786,7 +867,10 @@ struct MissionPortfolioView: View {
             HStack {
                 Spacer()
                 Button(action: {
-                    openChat(context: .standalone(title: "Output: \(output.title)"))
+                    openDiscuss(
+                        title: "Output: \(output.title)",
+                        detail: "\(output.title)\n\n\(output.summary)"
+                    )
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -862,7 +946,10 @@ struct MissionPortfolioView: View {
                 }
                 Spacer()
                 Button(action: {
-                    openChat(context: .standalone(title: "Decision: \(decision.title)"))
+                    openDiscuss(
+                        title: "Decision: \(decision.title)",
+                        detail: "\(decision.title)\n\n\(decision.context)"
+                    )
                 }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 11))
@@ -889,7 +976,10 @@ struct MissionPortfolioView: View {
                 ForEach(decision.options) { option in
                     Button(action: {
                         Haptics.mediumTap()
-                        openChat(context: .standalone(title: "Decision: \(decision.title) — \(option.label)"))
+                        openDiscuss(
+                            title: "Decision: \(decision.title) — \(option.label)",
+                            detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
+                        )
                     }) {
                         HStack {
                             Text(option.label)
@@ -951,7 +1041,10 @@ struct MissionPortfolioView: View {
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 Button(action: {
-                    openChat(context: .standalone(title: "Centurion Remote"))
+                    openDiscuss(
+                        title: "Centurion Remote",
+                        detail: "General updates stream from your Centurion."
+                    )
                 }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 12, weight: .regular))
@@ -988,9 +1081,10 @@ struct MissionPortfolioView: View {
 
                     // Discuss this thought
                     Button(action: {
-                        openChat(context: .standalone(
-                            title: "\(thought.type.rawValue): \(String(thought.text.prefix(60)))..."
-                        ))
+                        openDiscuss(
+                            title: "\(thought.type.rawValue): \(String(thought.text.prefix(60)))",
+                            detail: thought.text
+                        )
                     }) {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.system(size: 10))

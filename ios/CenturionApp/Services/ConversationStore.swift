@@ -122,13 +122,9 @@ final class ConversationStore: ObservableObject {
                 attachments: $0.attachments
             )
         }
-        messageService.replaceImportedConversation(snapshot.conversations[0], messages: messages)
-        if snapshot.conversations.count > 1 {
-            for conversation in snapshot.conversations.dropFirst() {
-                if !messageService.conversations.contains(where: { $0.id == conversation.id }) {
-                    messageService.conversations.append(conversation)
-                }
-            }
-        }
+        messageService.applySnapshot(
+            conversations: snapshot.conversations,
+            messages: messages
+        )
     }
 }

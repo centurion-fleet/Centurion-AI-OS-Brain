@@ -14,6 +14,7 @@
 		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
 		20A0AA4DC14602E1E56E64AE /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB67ACC37C89A1626725E6 /* AdrianView.swift */; };
 		25AE7A4F341CEECABA750074 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE860688EDBD16296174C4F9 /* AppServices.swift */; };
+		25FF2605824E4261873AA1E7 /* PulseFeedMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */; };
 		2F7E908E2D04623D008C6AD2 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2351CEAF04740FE74B5907 /* ConversationStore.swift */; };
 		2F889D54B96241760B114440 /* AppDataMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */; };
 		304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B87F6A70291CA9DF47F42EF /* MissionStore.swift */; };
@@ -61,6 +62,7 @@
 		D514204DF4E162E34C6756F1 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2816DC1C66616790651EBA30 /* Message.swift */; };
 		D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */; };
 		D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */; };
+		D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */; };
 		E04CC701C6B56F3DF9ACBA7C /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */; };
 		E5216EB9A8759B83932AB1A8 /* SwarmOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */; };
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
@@ -75,6 +77,7 @@
 		15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1608B826ED73D403B7D6D39D /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
 		19D098FD991C91178ACF8C94 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseFeedMapper.swift; sourceTree = "<group>"; };
 		1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CenturionApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FE7DA4FA608AA25FCAE719E /* MissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionView.swift; sourceTree = "<group>"; };
 		2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionCommitmentChat.swift; sourceTree = "<group>"; };
@@ -104,6 +107,7 @@
 		807258BF5E1D7EADE682EECA /* SwarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmStore.swift; sourceTree = "<group>"; };
 		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		88202317CAFA2493C7E033D6 /* AdrianService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianService.swift; sourceTree = "<group>"; };
+		8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmConnectSheet.swift; sourceTree = "<group>"; };
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
@@ -167,6 +171,7 @@
 				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
 				B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */,
 				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
+				8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */,
 				A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */,
 				663E28A68E7209F4A6E298E5 /* SwarmFormationViews.swift */,
 				FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */,
@@ -226,6 +231,7 @@
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
+				1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */,
 				807258BF5E1D7EADE682EECA /* SwarmStore.swift */,
 			);
 			path = Services;
@@ -371,6 +377,7 @@
 				304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */,
 				41C67F5E153C660BF68F7AA8 /* MissionView.swift in Sources */,
 				37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */,
+				25FF2605824E4261873AA1E7 /* PulseFeedMapper.swift in Sources */,
 				071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */,
 				FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */,
 				F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */,
@@ -380,6 +387,7 @@
 				CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */,
 				D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */,
 				BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */,
+				D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */,
 				BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */,
 				60B05791E2B14933DC2F0A7E /* SwarmFormationViews.swift in Sources */,
 				CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */,

@@ -345,6 +345,74 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::SwarmConnect {
+                id,
+                token,
+                install_id,
+                project_id,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_connect",
+                        serde_json::json!({
+                            "token": token,
+                            "install_id": install_id,
+                            "project_id": project_id,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmConnectResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SwarmInvite {
+                id,
+                invited_customer_id,
+                project_id,
+                role,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_invite",
+                        serde_json::json!({
+                            "invited_customer_id": invited_customer_id,
+                            "project_id": project_id,
+                            "role": role,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmInviteResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::BeneficiarySnapshot { id } => {
                 match state
                     .bridge

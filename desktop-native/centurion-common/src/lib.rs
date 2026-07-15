@@ -114,6 +114,36 @@ pub enum RemoteMessage {
         id: Uuid,
         snapshot: serde_json::Value,
     },
+    SwarmConnect {
+        id: Uuid,
+        token: String,
+        install_id: String,
+        project_id: String,
+    },
+    SwarmConnectResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+    },
+    SwarmInvite {
+        id: Uuid,
+        invited_customer_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+    },
+    SwarmInviteResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+    },
     BeneficiarySnapshot {
         id: Uuid,
     },

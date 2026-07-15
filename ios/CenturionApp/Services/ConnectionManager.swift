@@ -540,6 +540,47 @@ final class ConnectionManager: ObservableObject {
         return payload["snapshot"] as? [String: Any] ?? [:]
     }
 
+    /// Join a friend collaboration on this Centurion (Mission Control credentials).
+    @discardableResult
+    func connectSwarm(
+        token: String,
+        installId: String,
+        projectId: String
+    ) async throws -> String {
+        let payload = try await invokeRemote(
+            action: "swarm_connect",
+            extra: [
+                "token": token,
+                "install_id": installId,
+                "project_id": projectId,
+            ]
+        )
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not connect collaboration."
+            )
+        }
+        return payload["message"] as? String
+            ?? "Mission Control connected."
+    }
+
+    /// Invite another Centurion owner onto the current swarm project.
+    @discardableResult
+    func inviteSwarmFriend(customerId: String, projectId: String? = nil) async throws -> String {
+        var extra: [String: Any] = ["invited_customer_id": customerId]
+        if let projectId, !projectId.isEmpty {
+            extra["project_id"] = projectId
+        }
+        let payload = try await invokeRemote(action: "swarm_invite", extra: extra)
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not send invite."
+            )
+        }
+        return payload["message"] as? String
+            ?? "Invite sent."
+    }
+
     func fetchBeneficiarySnapshot() async throws -> [String: Any] {
         let payload = try await invokeRemote(action: "beneficiary_snapshot")
         return payload["snapshot"] as? [String: Any] ?? [:]
@@ -725,6 +766,8 @@ final class ConnectionManager: ObservableObject {
             "support_bundle_response": "support_bundle",
             "support_auto_fix_response": "support_auto_fix",
             "swarm_snapshot_response": "swarm_snapshot",
+            "swarm_connect_response": "swarm_connect",
+            "swarm_invite_response": "swarm_invite",
             "beneficiary_snapshot_response": "beneficiary_snapshot",
             "beneficiary_set_family_member_response": "beneficiary_set_family_member",
             "beneficiary_submit_colleague_response": "beneficiary_submit_colleague",

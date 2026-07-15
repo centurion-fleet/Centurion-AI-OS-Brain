@@ -83,7 +83,34 @@ struct ChatView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if let conversation = selectedConversation {
+            if selectedConversation == nil {
+                allChatHeader
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: Spacing.sm) {
+                            let msgs = messageService.allMessages
+                            if msgs.isEmpty {
+                                emptyState
+                                    .padding(.top, Spacing.xl)
+                            } else {
+                                ForEach(msgs) { message in
+                                    messageRow(message, showContext: true)
+                                        .id(message.id)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.vertical, Spacing.sm)
+                    }
+                    .onChange(of: messageService.allMessages.count) { _, _ in
+                        scrollToLastInStream(proxy)
+                    }
+                    .onAppear {
+                        scrollToLastInStream(proxy)
+                    }
+                }
+            } else if let conversation = selectedConversation {
                 contextHeader(conversation: conversation)
 
                 ScrollViewReader { proxy in
@@ -110,8 +137,6 @@ struct ChatView: View {
                         scrollToLast(proxy, conversation: conversation)
                     }
                 }
-            } else {
-                emptyState
             }
 
             inputBar
@@ -156,6 +181,14 @@ struct ChatView: View {
                         .padding(.vertical, 2)
                         .background(ColorTheme.accent().opacity(0.1))
                         .clipShape(Capsule())
+                } else {
+                    Text("All Chat")
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(ColorTheme.accent().opacity(0.1))
+                        .clipShape(Capsule())
                 }
 
                 Spacer()
@@ -181,6 +214,9 @@ struct ChatView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    traySectionHeader("Stream", icon: "bubble.left.and.bubble.right")
+                    allChatTrayRow()
+
                     // Mission conversations
                     let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
                     if !missionConvs.isEmpty {
@@ -204,7 +240,7 @@ struct ChatView: View {
                             Image(systemName: "message.fill")
                                 .font(.system(size: 20))
                                 .foregroundColor(ColorTheme.mutedText())
-                            Text("No conversations yet")
+                            Text("No conversations yet — start Crypto Chat below")
                                 .font(.subheadline)
                                 .foregroundColor(ColorTheme.mutedText())
                         }
@@ -234,6 +270,60 @@ struct ChatView: View {
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.sm)
         .padding(.bottom, Spacing.xxs)
+    }
+
+    private func allChatTrayRow() -> some View {
+        Button(action: {
+            Haptics.mediumTap()
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                selectedConversation = nil
+                showTray = false
+            }
+        }) {
+            HStack(spacing: Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(ColorTheme.accent().opacity(0.12))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(ColorTheme.accent())
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("All Chat")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text("Unified Crypto Chat stream with context badges")
+                        .font(.system(size: 11))
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
+            .background(selectedConversation == nil ? ColorTheme.accent().opacity(0.06) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var allChatHeader: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "lock.shield.fill")
+                .font(.caption)
+                .foregroundColor(ColorTheme.success())
+            Text("Crypto Chat · All messages")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .background(ColorTheme.success().opacity(0.05))
     }
 
     private func trayRow(_ conversation: Conversation) -> some View {
@@ -371,9 +461,11 @@ struct ChatView: View {
         VStack {
             Spacer()
             EmptyState(
-                icon: "message.fill",
-                title: "Your conversations",
-                message: "All messages from your Centurion appear here. Tap Conversations above to open a thread."
+                icon: "lock.shield",
+                title: "Crypto Chat",
+                message: connectionManager.connectionState == .connected
+                    ? "Your unified stream starts here. Context badges show which mission thread each message belongs to."
+                    : "Link your Centurion in You to start Crypto Chat — a private encrypted conversation public AIs do not offer."
             )
             Spacer()
         }
@@ -501,12 +593,17 @@ struct ChatView: View {
 
         // Select the conversation before the async send so the user's message
         // stays visible while waiting for the Centurion response.
+        let stayOnAllChat = selectedConversation == nil
         let context: ConversationContext
         if let selected = selectedConversation {
             context = selected.context
         } else {
             context = ConversationContext.standalone(title: "Quick Chat")
-            selectedConversation = messageService.findOrCreateConversation(for: context)
+            if !stayOnAllChat {
+                selectedConversation = messageService.findOrCreateConversation(for: context)
+            } else {
+                _ = messageService.findOrCreateConversation(for: context)
+            }
         }
 
         Task {
@@ -516,7 +613,9 @@ struct ChatView: View {
                     in: context,
                     missionStore: missionStore
                 )
-                selectedConversation = conversation
+                if !stayOnAllChat {
+                    selectedConversation = conversation
+                }
                 withAnimation(Motion.standard) {
                     showTray = false
                 }
@@ -537,10 +636,35 @@ struct ChatView: View {
         }
     }
 
+    private func scrollToLastInStream(_ proxy: ScrollViewProxy) {
+        if let last = messageService.allMessages.last {
+            withAnimation(Motion.heavy) {
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+        }
+    }
+
     // MARK: - Message Row
 
     private func messageRow(_ message: Message, showContext: Bool) -> some View {
-        HStack(alignment: .bottom, spacing: Spacing.xs) {
+        let conversation = messageService.conversations.first(where: { $0.id == message.conversationId })
+        let badge = conversation?.missionBadge
+
+        if message.role == .system {
+            return AnyView(
+                Text(message.content)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Spacing.sm)
+                    .padding(.vertical, Spacing.xs)
+                    .background(ColorTheme.mutedText().opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            )
+        }
+
+        return AnyView(HStack(alignment: .bottom, spacing: Spacing.xs) {
         if message.role == .user { Spacer(minLength: 48) }
 
         if message.role == .centurion {
@@ -556,6 +680,14 @@ struct ChatView: View {
         }
 
         VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
+            if showContext, let badge {
+                Text(badge.name)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(badge.color)
+                    .padding(.horizontal, 4)
+                    .lineLimit(1)
+            }
+
             if message.role == .centurion {
                 Text("Centurion")
                     .font(.system(size: 11, weight: .semibold))
@@ -601,9 +733,8 @@ struct ChatView: View {
             }
             .padding(.bottom, 4)
         }
+    })
     }
-}
-
 }
 
 // MARK: - Bubble Shape
