@@ -703,35 +703,6 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    func previewTelegramImport() async throws -> TelegramImportBundle {
-        let payload = try await invokeRemote(
-            action: "telegram_import_preview",
-            timeoutSeconds: 90
-        )
-        return try decodeTelegramBundle(from: payload["bundle"])
-    }
-
-    func importTelegramBundle(sessionId: String? = nil) async throws -> TelegramImportBundle {
-        var extra: [String: Any] = [:]
-        if let sessionId {
-            extra["session_id"] = sessionId
-        }
-        let payload = try await invokeRemote(
-            action: "telegram_import_bundle",
-            extra: extra,
-            timeoutSeconds: 120
-        )
-        return try decodeTelegramBundle(from: payload["bundle"])
-    }
-
-    private func decodeTelegramBundle(from value: Any?) throws -> TelegramImportBundle {
-        guard let bundleDict = value as? [String: Any] else {
-            throw ConnectionError.invalidResponse
-        }
-        let data = try JSONSerialization.data(withJSONObject: bundleDict)
-        return try JSONDecoder().decode(TelegramImportBundle.self, from: data)
-    }
-
     private func invokeRemote(
         action: String,
         extra: [String: Any] = [:],
@@ -786,8 +757,6 @@ final class ConnectionManager: ObservableObject {
             "remote_model_apply_response": "remote_model_apply",
             "remote_model_save_key_response": "remote_model_save_key",
             "remote_routing_mode_response": "remote_routing_mode",
-            "telegram_import_bundle_response": "telegram_import_bundle",
-            "telegram_import_preview_response": "telegram_import_preview",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {

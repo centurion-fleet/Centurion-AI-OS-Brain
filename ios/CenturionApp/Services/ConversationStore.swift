@@ -1,6 +1,6 @@
 import Foundation
 
-/// Persists imported conversations and messages in the app sandbox.
+/// Persists live Crypto Chat conversations and messages in the app sandbox.
 @MainActor
 final class ConversationStore: ObservableObject {
     static let shared = ConversationStore()
@@ -19,16 +19,6 @@ final class ConversationStore: ObservableObject {
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         return dir.appendingPathComponent("conversations.json")
-    }
-
-    private var attachmentsRoot: URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        let dir = base.appendingPathComponent("CenturionRemote/attachments", isDirectory: true)
-        if !fileManager.fileExists(atPath: dir.path) {
-            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
-        return dir
     }
 
     struct Snapshot: Codable {
@@ -67,65 +57,6 @@ final class ConversationStore: ObservableObject {
         guard let data = try? encoder.encode(snapshot) else { return }
         try? data.write(to: storageURL, options: .atomic)
         hasPersistedData = !conversations.isEmpty
-    }
-
-    func importTelegramBundle(
-        _ bundle: TelegramImportBundle,
-        into messageService: MessageService
-    ) {
-        guard bundle.ok else { return }
-        let title = bundle.conversation?.title ?? "Telegram history"
-        let context = ConversationContext.standalone(title: title)
-        let conversation = Conversation(id: UUID(), context: context, lastActive: Date())
-        let sessionRoot = attachmentsRoot.appendingPathComponent(
-            bundle.sessionId ?? conversation.id.uuidString,
-            isDirectory: true
-        )
-        try? fileManager.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
-
-        var importedMessages: [Message] = []
-        for item in bundle.messages {
-            let role: MessageRole = item.role == "user" ? .user : .centurion
-            let timestamp: Date
-            if let stamp = item.timestamp {
-                timestamp = Date(timeIntervalSince1970: stamp)
-            } else {
-                timestamp = Date()
-            }
-            let attachments = item.attachments.map { file -> MessageAttachment in
-                let dest = sessionRoot.appendingPathComponent(file.filename)
-                var missing = file.missing ?? true
-                if let encoded = file.contentBase64, !encoded.isEmpty,
-                   let data = Data(base64Encoded: encoded) {
-                    do {
-                        try data.write(to: dest, options: .atomic)
-                        missing = false
-                    } catch {
-                        missing = true
-                    }
-                } else if !fileManager.fileExists(atPath: dest.path) {
-                    missing = true
-                }
-                return MessageAttachment(
-                    id: file.id,
-                    filename: file.filename,
-                    localPath: dest.path,
-                    missing: missing
-                )
-            }
-            importedMessages.append(
-                Message(
-                    conversationId: conversation.id,
-                    content: item.content,
-                    role: role,
-                    timestamp: timestamp,
-                    attachments: attachments
-                )
-            )
-        }
-
-        messageService.mergeImportedConversation(conversation, messages: importedMessages)
-        save(conversations: messageService.conversations, messages: messageService.allMessages)
     }
 
     func restore(into messageService: MessageService) {

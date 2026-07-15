@@ -1,4 +1,9 @@
-"""Extract a single Centurion Telegram bot DM for Centurion Remote import."""
+"""Extract a single Centurion Telegram bot DM for one-time host-side transition.
+
+Early Centurions that started on the Telegram bot can bring that DM history
+onto the Linux brain via Settings (or ``centurion telegram import``). This is
+not a CenturionAI Remote product feature.
+"""
 
 from __future__ import annotations
 

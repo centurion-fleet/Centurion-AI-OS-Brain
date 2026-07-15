@@ -306,11 +306,8 @@ struct DeviceLinkSection: View {
 
 struct ThinkingServiceSection: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
-    @EnvironmentObject private var messageService: MessageService
     @Binding var showRecoverySheet: Bool
     @State private var showModelSwitcher = false
-    @State private var showTelegramImport = false
-    @AppStorage("centurion.telegramImport.completed") private var telegramImportCompleted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -354,17 +351,6 @@ struct ThinkingServiceSection: View {
                         }
                         .buttonStyle(CenturionSecondaryButtonStyle())
 
-                        if connectionManager.connectionState == .connected {
-                            Button {
-                                showTelegramImport = true
-                            } label: {
-                                Text(telegramImportCompleted
-                                    ? "Re-import Telegram bot chat"
-                                    : "Import Telegram bot chat")
-                            }
-                            .buttonStyle(CenturionSecondaryButtonStyle())
-                        }
-
                         if connectionManager.llmHealth.needsAttention {
                             Button {
                                 Haptics.lightTap()
@@ -393,11 +379,6 @@ struct ThinkingServiceSection: View {
                 RemoteModelSwitcherView()
                     .environmentObject(connectionManager)
             }
-        }
-        .sheet(isPresented: $showTelegramImport) {
-            TelegramImportWizardView()
-                .environmentObject(connectionManager)
-                .environmentObject(messageService)
         }
     }
 

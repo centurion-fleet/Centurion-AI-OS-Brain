@@ -300,6 +300,26 @@ mod linux {
 
         settings.append(
             &gtk::Label::builder()
+                .label("Transition")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(12)
+                .build(),
+        );
+        let telegram_history_row = adw::ActionRow::builder()
+            .title("Bring over Telegram history")
+            .subtitle(
+                "One-time for the early Centurions that started on the Telegram bot — keeps history on this brain.",
+            )
+            .icon_name("mail-send-receive-symbolic")
+            .build();
+        let telegram_bring_button = gtk::Button::with_label("Bring over");
+        telegram_bring_button.set_valign(gtk::Align::Center);
+        telegram_history_row.add_suffix(&telegram_bring_button);
+        settings_list.append(&telegram_history_row);
+
+        settings.append(
+            &gtk::Label::builder()
                 .label("Support Tools")
                 .css_classes(["title-4"])
                 .xalign(0.0)
@@ -451,6 +471,11 @@ mod linux {
         lookup_button.connect_clicked({
             let window = window.clone();
             move |_| show_support_lookup_dialog(&window)
+        });
+        telegram_bring_button.connect_clicked({
+            let window = window.clone();
+            let telegram_history_row = telegram_history_row.clone();
+            move |_| show_telegram_history_dialog(&window, &telegram_history_row)
         });
         let open_adrian = {
             let window = window.clone();
@@ -718,6 +743,131 @@ mod linux {
             .ok()
             .filter(|output| output.status.success())?;
         serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_telegram_summary(args: &[&str]) -> Option<serde_json::Value> {
+        let mut command_args = vec!["telegram", "import"];
+        command_args.extend_from_slice(args);
+        command_args.push("--json");
+        let output = Command::new(centurion_binary())
+            .args(command_args)
+            .output()
+            .ok()?;
+        // Parse JSON even when exit status is non-zero (no Telegram history found).
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn show_telegram_history_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
+        let preview = run_telegram_summary(&["--dry-run"]);
+        let (heading, body, can_bring) = match preview.as_ref() {
+            Some(value) if value.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                let messages = value
+                    .get("message_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let files = value
+                    .get("file_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let missing = value
+                    .get("missing_file_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                (
+                    "Bring over Telegram history".to_owned(),
+                    format!(
+                        "Found a Telegram bot conversation on this Centurion:\n\n\
+                         {messages} messages · {files} files\
+                         {}\n\n\
+                         This is a one-time transition for early Centurions. \
+                         History is saved on this brain — not sent through CenturionAI Remote.",
+                        if missing > 0 {
+                            format!(" ({missing} attachments missing)")
+                        } else {
+                            String::new()
+                        }
+                    ),
+                    true,
+                )
+            }
+            Some(value) => (
+                "No Telegram history found".to_owned(),
+                value
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("No Telegram bot DM session was found on this Centurion.")
+                    .to_owned(),
+                false,
+            ),
+            None => (
+                "Could not check Telegram history".to_owned(),
+                "Run `centurion telegram import --dry-run` on this computer if you need more detail."
+                    .to_owned(),
+                false,
+            ),
+        };
+
+        let dialog = adw::MessageDialog::builder()
+            .heading(&heading)
+            .body(&body)
+            .close_response("cancel")
+            .build();
+        dialog.add_response("cancel", if can_bring { "Cancel" } else { "OK" });
+        if can_bring {
+            dialog.add_response("bring", "Bring over");
+            dialog.set_response_appearance("bring", adw::ResponseAppearance::Suggested);
+            dialog.set_default_response(Some("bring"));
+        } else {
+            dialog.set_default_response(Some("cancel"));
+        }
+        dialog.set_transient_for(Some(parent));
+        let row = row.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response == "bring" {
+                if let Some(result) = run_telegram_summary(&[]) {
+                    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let messages = result
+                        .get("message_count")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let path = result
+                        .get("manifest_path")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| result.get("bundle_path").and_then(|v| v.as_str()))
+                        .unwrap_or("");
+                    if ok {
+                        row.set_subtitle(&format!(
+                            "Brought over {messages} messages — saved on this Centurion."
+                        ));
+                        let done = adw::MessageDialog::builder()
+                            .heading("Telegram history saved")
+                            .body(if path.is_empty() {
+                                format!("Brought over {messages} messages onto this Centurion.")
+                            } else {
+                                format!(
+                                    "Brought over {messages} messages onto this Centurion.\n\nSaved at:\n{path}"
+                                )
+                            })
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.set_transient_for(dialog.transient_for().as_ref());
+                        done.present();
+                    } else {
+                        let message = result
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Bring-over failed.");
+                        row.set_subtitle(message);
+                    }
+                } else {
+                    row.set_subtitle("Could not bring over Telegram history.");
+                }
+            }
+            dialog.close();
+        });
+        dialog.present();
     }
 
     fn refresh_thinking_status(detail: &gtk::Label, settings_row: &adw::ActionRow) {
