@@ -24,8 +24,8 @@ import {
   Target,
   X,
 } from 'lucide-react'
-import { Badge } from '@centurion-fleet/ui/ui/components/badge'
-import { Button } from '@centurion-fleet/ui/ui/components/button'
+import { Badge } from '@nous-research/ui/ui/components/badge'
+import { Button } from '@nous-research/ui/ui/components/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn, isoTimeAgo } from '@/lib/utils'

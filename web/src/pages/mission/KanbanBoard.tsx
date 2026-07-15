@@ -5,8 +5,8 @@
 
 import { useState, useCallback } from "react";
 import { Circle, CheckCircle2, Clock, AlertCircle, Plus, X } from "lucide-react";
-import { Badge } from "@centurion-fleet/ui/ui/components/badge";
-import { Button } from "@centurion-fleet/ui/ui/components/button";
+import { Badge } from "@nous-research/ui/ui/components/badge";
+import { Button } from "@nous-research/ui/ui/components/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useMission } from "./context";

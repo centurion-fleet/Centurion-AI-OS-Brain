@@ -12,9 +12,9 @@ import {
   X,
   Sparkles,
 } from "lucide-react";
-import { Badge } from "@centurion-fleet/ui/ui/components/badge";
-import { Button } from "@centurion-fleet/ui/ui/components/button";
-import { Spinner } from "@centurion-fleet/ui/ui/components/spinner";
+import { Badge } from "@nous-research/ui/ui/components/badge";
+import { Button } from "@nous-research/ui/ui/components/button";
+import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { H2 } from "@/components/NouiTypography";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
