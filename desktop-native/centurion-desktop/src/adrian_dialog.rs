@@ -252,7 +252,7 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
             let refresh_chips = refresh_chips.clone();
             let set_error = set_error.clone();
             let set_sending = set_sending.clone();
-            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx, rx) = std::sync::mpsc::channel::<Result<adrian::ChatResult, String>>();
             glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
                 match rx.try_recv() {
                     Ok(result) => {

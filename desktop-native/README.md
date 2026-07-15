@@ -86,7 +86,7 @@ The installer enables the user service and opens mDNS plus TCP 9119 in
 firewalld's trusted zone. Provisioning must assign only the Centurion LAN
 interface to that zone.
 
-### Tomorrow smoke checklist (Ships_AI Fedora + TestFlight iPhone)
+### Same-day smoke checklist (Ships_AI Fedora + TestFlight iPhone)
 
 1. On Fedora: `git pull` on this tree, then
    `desktop-native/scripts/install-user.sh` (or `provision-centurion.sh`).
