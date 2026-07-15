@@ -120,9 +120,7 @@ mod tests {
     async fn register_touch_unregister_round_trip() {
         let registry = SessionRegistry::new();
         let peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 42);
-        let id = registry
-            .register("fingerprint".to_owned(), peer)
-            .await;
+        let id = registry.register("fingerprint".to_owned(), peer).await;
         assert!(registry.is_connected("fingerprint").await);
         registry.touch(id).await;
         registry.unregister(id).await;
@@ -133,12 +131,8 @@ mod tests {
     async fn reconnect_replaces_existing_session() {
         let registry = SessionRegistry::new();
         let peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 42);
-        let first = registry
-            .register("fingerprint".to_owned(), peer)
-            .await;
-        let second = registry
-            .register("fingerprint".to_owned(), peer)
-            .await;
+        let first = registry.register("fingerprint".to_owned(), peer).await;
+        let second = registry.register("fingerprint".to_owned(), peer).await;
         assert_ne!(first, second);
         assert_eq!(registry.list().await.len(), 1);
     }

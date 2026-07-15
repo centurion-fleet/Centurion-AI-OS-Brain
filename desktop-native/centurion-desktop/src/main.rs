@@ -6,7 +6,7 @@ mod adrian_dialog;
 #[cfg(target_os = "linux")]
 mod linux {
     use crate::adrian::AdrianChatContext;
-    use crate::adrian_dialog::{show_adrian_dialog, AdrianDialogHooks};
+    use crate::adrian_dialog::{AdrianDialogHooks, show_adrian_dialog};
     use adw::prelude::*;
     use gtk4 as gtk;
     use libadwaita as adw;
@@ -124,8 +124,8 @@ mod linux {
         let bytes = glib::Bytes::from_static(include_bytes!(
             "../../resources/icons/hicolor/256x256/apps/com.centurion.desktop.png"
         ));
-        let texture = gtk::gdk::Texture::from_bytes(&bytes)
-            .expect("Centurion app icon should load");
+        let texture =
+            gtk::gdk::Texture::from_bytes(&bytes).expect("Centurion app icon should load");
         let image = gtk::Image::from_paintable(Some(&texture));
         image.set_pixel_size(size);
         image
@@ -514,8 +514,8 @@ mod linux {
 
     fn build_chat_page() -> gtk::Box {
         use gio::prelude::*;
-        use vte4::prelude::TerminalExtManual;
         use vte4::TerminalExt;
+        use vte4::prelude::TerminalExtManual;
 
         let container = gtk::Box::new(gtk::Orientation::Vertical, 12);
         container.set_margin_top(16);
@@ -629,7 +629,10 @@ mod linux {
         for device in pending {
             let row = adw::ActionRow::builder()
                 .title(&device.name)
-                .subtitle(format!("Waiting for your approval · {}", device.fingerprint))
+                .subtitle(format!(
+                    "Waiting for your approval · {}",
+                    device.fingerprint
+                ))
                 .icon_name("phone-symbolic")
                 .build();
             let approve = gtk::Button::with_label("Approve");
@@ -922,7 +925,10 @@ mod linux {
             })
             .collect();
         if labels.is_empty() {
-            row.set_subtitle(format!("{} backup thinking service(s) configured.", backups.len()));
+            row.set_subtitle(format!(
+                "{} backup thinking service(s) configured.",
+                backups.len()
+            ));
         } else {
             row.set_subtitle(labels.join(" · "));
         }
@@ -943,27 +949,15 @@ mod linux {
         dialog.add_response("apply", "Validate and apply");
         dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
 
-        let provider_entry = gtk::Entry::builder()
-            .placeholder_text("openrouter")
-            .build();
+        let provider_entry = gtk::Entry::builder().placeholder_text("openrouter").build();
         let model_entry = gtk::Entry::builder()
             .placeholder_text("anthropic/claude-sonnet-4")
             .build();
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        extra.append(
-            &gtk::Label::builder()
-                .label("Provider")
-                .xalign(0.0)
-                .build(),
-        );
+        extra.append(&gtk::Label::builder().label("Provider").xalign(0.0).build());
         extra.append(&provider_entry);
-        extra.append(
-            &gtk::Label::builder()
-                .label("Model")
-                .xalign(0.0)
-                .build(),
-        );
+        extra.append(&gtk::Label::builder().label("Model").xalign(0.0).build());
         extra.append(&model_entry);
         dialog.set_extra_child(Some(&extra));
         dialog.set_transient_for(Some(parent));
@@ -983,9 +977,7 @@ mod linux {
                 dialog.close();
                 return;
             }
-            if let Some(response) =
-                run_provider_command(&["set", &provider, &model, "--json"])
-            {
+            if let Some(response) = run_provider_command(&["set", &provider, &model, "--json"]) {
                 let message = response
                     .result
                     .and_then(|value| {
@@ -1009,14 +1001,12 @@ mod linux {
             response
                 .message
                 .or_else(|| {
-                    response
-                        .result
-                        .and_then(|value| {
-                            value
-                                .get("summary")
-                                .and_then(|m| m.as_str())
-                                .map(str::to_owned)
-                        })
+                    response.result.and_then(|value| {
+                        value
+                            .get("summary")
+                            .and_then(|m| m.as_str())
+                            .map(str::to_owned)
+                    })
                 })
                 .unwrap_or_else(|| "Health check completed.".to_owned())
         } else {
@@ -1075,9 +1065,7 @@ mod linux {
             .build();
         dialog.add_response("cancel", "Cancel");
         dialog.add_response("lookup", "Look Up");
-        let code_entry = gtk::Entry::builder()
-            .placeholder_text("ABC-123")
-            .build();
+        let code_entry = gtk::Entry::builder().placeholder_text("ABC-123").build();
         dialog.set_extra_child(Some(&code_entry));
         dialog.set_transient_for(Some(parent));
         dialog.present();
@@ -1088,33 +1076,32 @@ mod linux {
                 return;
             }
             let code = code_entry.text().to_string();
-            let result_dialog = if let Some(cli_response) =
-                run_support_command(&["show", &code, "--json"])
-            {
-                let body = cli_response
-                    .message
-                    .filter(|text| !text.trim().is_empty())
-                    .or_else(|| {
-                        cli_response.result.and_then(|bundle| {
-                            bundle
-                                .get("summary_plain")
-                                .and_then(|s| s.as_str())
-                                .map(str::to_owned)
+            let result_dialog =
+                if let Some(cli_response) = run_support_command(&["show", &code, "--json"]) {
+                    let body = cli_response
+                        .message
+                        .filter(|text| !text.trim().is_empty())
+                        .or_else(|| {
+                            cli_response.result.and_then(|bundle| {
+                                bundle
+                                    .get("summary_plain")
+                                    .and_then(|s| s.as_str())
+                                    .map(str::to_owned)
+                            })
                         })
-                    })
-                    .unwrap_or_else(|| "Support bundle found.".to_owned());
-                adw::MessageDialog::builder()
-                    .heading(&format!("Support Code {code}"))
-                    .body(&body)
-                    .close_response("ok")
-                    .build()
-            } else {
-                adw::MessageDialog::builder()
-                    .heading("Support Code Not Found")
-                    .body("That code is missing or has expired.")
-                    .close_response("ok")
-                    .build()
-            };
+                        .unwrap_or_else(|| "Support bundle found.".to_owned());
+                    adw::MessageDialog::builder()
+                        .heading(&format!("Support Code {code}"))
+                        .body(&body)
+                        .close_response("ok")
+                        .build()
+                } else {
+                    adw::MessageDialog::builder()
+                        .heading("Support Code Not Found")
+                        .body("That code is missing or has expired.")
+                        .close_response("ok")
+                        .build()
+                };
             result_dialog.add_response("ok", "OK");
             result_dialog.set_transient_for(dialog.transient_for().as_ref());
             result_dialog.present();
@@ -1165,29 +1152,27 @@ mod linux {
         let thinking_settings_row = thinking_settings_row.clone();
         let hooks = AdrianDialogHooks {
             build_context: Rc::new(build_adrian_context),
-            on_action: Rc::new(move |action_id: &str| {
-                match action_id {
-                    "open_connect" => stack.set_visible_child_name("home"),
-                    "open_get_help" => show_support_health_dialog(&window),
-                    "try_auto_fix" => {
-                        if let Some(response) = run_provider_command(&["restore", "--json"]) {
-                            let message = response
-                                .message
-                                .or_else(|| {
-                                    response.result.and_then(|value| {
-                                        value
-                                            .get("message")
-                                            .and_then(|m| m.as_str())
-                                            .map(str::to_owned)
-                                    })
+            on_action: Rc::new(move |action_id: &str| match action_id {
+                "open_connect" => stack.set_visible_child_name("home"),
+                "open_get_help" => show_support_health_dialog(&window),
+                "try_auto_fix" => {
+                    if let Some(response) = run_provider_command(&["restore", "--json"]) {
+                        let message = response
+                            .message
+                            .or_else(|| {
+                                response.result.and_then(|value| {
+                                    value
+                                        .get("message")
+                                        .and_then(|m| m.as_str())
+                                        .map(str::to_owned)
                                 })
-                                .unwrap_or_else(|| "Restore finished.".to_owned());
-                            thinking_settings_row.set_subtitle(&message);
-                        }
+                            })
+                            .unwrap_or_else(|| "Restore finished.".to_owned());
+                        thinking_settings_row.set_subtitle(&message);
                     }
-                    "open_mission" => stack.set_visible_child_name("chat"),
-                    _ => {}
                 }
+                "open_mission" => stack.set_visible_child_name("chat"),
+                _ => {}
             }),
         };
         show_adrian_dialog(&window, hooks);

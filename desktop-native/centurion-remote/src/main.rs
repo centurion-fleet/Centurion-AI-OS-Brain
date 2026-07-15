@@ -97,8 +97,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let live = admin::query_sessions(&admin::default_socket_path()?)
                     .await
                     .unwrap_or_default();
-                let connected: std::collections::HashSet<&str> =
-                    live.iter().map(|session| session.fingerprint.as_str()).collect();
+                let connected: std::collections::HashSet<&str> = live
+                    .iter()
+                    .map(|session| session.fingerprint.as_str())
+                    .collect();
                 for device in registry.pending_devices() {
                     println!(
                         "PENDING   {}  {}  last seen {}",
@@ -130,10 +132,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 for session in sessions {
                     println!(
                         "CONNECTED {}  {}  peer {}  last activity {}",
-                        session.fingerprint,
-                        session.id,
-                        session.peer,
-                        session.last_activity_at
+                        session.fingerprint, session.id, session.peer, session.last_activity_at
                     );
                 }
             }

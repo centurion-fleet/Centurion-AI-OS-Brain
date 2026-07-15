@@ -67,7 +67,7 @@ _CENTURION_MODEL_WARNING = (
 # Negative examples it must NOT match:
 #   centurion-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
 _NOUS_CENTURION_NON_AGENTIC_RE = re.compile(
-    r"(?:^|[/:])centurion[-_ ]?[34](?:[-_.:]|$)",
+    r"(?:^|[/:])(?:centurion|hermes)[-_ ]?[34](?:[-_.:]|$)",
     re.IGNORECASE,
 )
 
@@ -1287,7 +1287,7 @@ def list_authenticated_providers(
         # Check if credentials exist
         has_creds = False
         if overlay.auth_type == "aws_sdk":
-            has_creds = _has_aws_sdk_creds_for_listing(catalog_slug)
+            has_creds = _has_aws_sdk_creds_for_listing(centurion_slug)
         elif overlay.extra_env_vars:
             has_creds = any(os.environ.get(ev) for ev in overlay.extra_env_vars)
         # Also check api_key_env_vars from PROVIDER_REGISTRY for api_key auth_type
@@ -1318,7 +1318,7 @@ def list_authenticated_providers(
         if not has_creds:
             try:
                 from agent.credential_pool import load_pool
-                pool = load_pool(catalog_slug)
+                pool = load_pool(centurion_slug)
                 if pool.has_credentials():
                     has_creds = True
             except Exception as exc:
@@ -1338,7 +1338,7 @@ def list_authenticated_providers(
                 )
                 centurion_creds = read_centurion_oauth_credentials()
                 cc_creds = read_claude_code_credentials()
-                if (oauth_creds and centurion_creds.get("accessToken")) or \
+                if (centurion_creds and centurion_creds.get("accessToken")) or \
                    (cc_creds and cc_creds.get("accessToken")):
                     has_creds = True
             except Exception as exc:
@@ -1354,28 +1354,28 @@ def list_authenticated_providers(
             # catalog. ``provider_model_ids()`` falls back to the curated
             # list when the live endpoint is unreachable, so this is safe
             # for unauthenticated and offline cases too.
-            model_ids = provider_model_ids(catalog_slug)
+            model_ids = provider_model_ids(centurion_slug)
         # For aws_sdk providers (bedrock), use live discovery so the list
         # reflects the active region (eu.*, ap.*) not the static us.* list.
         elif overlay.auth_type == "aws_sdk":
             try:
                 from agent.bedrock_adapter import bedrock_model_ids_or_none
                 _ids = bedrock_model_ids_or_none()
-                model_ids = _ids if _ids is not None else (curated.get(catalog_slug, []) or curated.get(pid, []))
+                model_ids = _ids if _ids is not None else (curated.get(centurion_slug, []) or curated.get(pid, []))
             except Exception:
-                model_ids = curated.get(catalog_slug, []) or curated.get(pid, [])
+                model_ids = curated.get(centurion_slug, []) or curated.get(pid, [])
         else:
             # Use curated list — look up by Centurion slug, fall back to overlay key
-            model_ids = curated.get(catalog_slug, []) or curated.get(pid, [])
+            model_ids = curated.get(centurion_slug, []) or curated.get(pid, [])
             # Merge with models.dev for preferred providers (same rationale as above).
             if centurion_slug in _MODELS_DEV_PREFERRED:
-                model_ids = _merge_with_models_dev(catalog_slug, model_ids)
+                model_ids = _merge_with_models_dev(centurion_slug, model_ids)
         total = len(model_ids)
         top = model_ids[:max_models]
 
         results.append({
             "slug": centurion_slug,
-            "name": get_label(catalog_slug),
+            "name": get_label(centurion_slug),
             "is_current": centurion_slug == current_provider or pid == current_provider,
             "is_user_defined": False,
             "models": top,
@@ -1383,8 +1383,8 @@ def list_authenticated_providers(
             "source": "centurion",
         })
         seen_slugs.add(pid.lower())
-        seen_slugs.add(catalog_slug.lower())
-        _record_builtin_endpoint(catalog_slug)
+        seen_slugs.add(centurion_slug.lower())
+        _record_builtin_endpoint(centurion_slug)
 
     # --- 2b. Cross-check canonical provider list ---
     # Catches providers that are in CANONICAL_PROVIDERS but weren't found

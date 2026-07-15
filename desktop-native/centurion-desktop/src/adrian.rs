@@ -236,9 +236,7 @@ pub fn send_chat(
 fn format_network_error(error: &ureq::Error) -> String {
     match error {
         ureq::Error::Status(code, response) => {
-            let detail = response
-                .into_string()
-                .unwrap_or_default();
+            let detail = response.into_string().unwrap_or_default();
             if detail.is_empty() {
                 format!("Couldn't reach Adrian (HTTP {code}). Check your internet connection.")
             } else {

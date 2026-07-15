@@ -76,10 +76,7 @@ async fn handle_connection(
 
     state.registry.lock().await.touch(&fingerprint)?;
     write_message(&mut stream, &session, &RemoteMessage::Ready).await?;
-    let session_id = state
-        .sessions
-        .register(fingerprint.clone(), peer)
-        .await;
+    let session_id = state.sessions.register(fingerprint.clone(), peer).await;
     let _session_guard = SessionGuard::new(state.sessions.clone(), session_id);
     info!(%peer, %fingerprint, "iPhone connected");
 
@@ -167,7 +164,11 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
-            RemoteMessage::ProviderValidate { id, provider, model } => {
+            RemoteMessage::ProviderValidate {
+                id,
+                provider,
+                model,
+            } => {
                 match state
                     .bridge
                     .invoke(
@@ -188,7 +189,11 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
-            RemoteMessage::ProviderApply { id, provider, model } => {
+            RemoteMessage::ProviderApply {
+                id,
+                provider,
+                model,
+            } => {
                 match state
                     .bridge
                     .invoke(
@@ -366,10 +371,7 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SwarmConnectResponse {
                         id,
-                        ok: payload
-                            .get("ok")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true),
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
                         message: payload
                             .get("message")
                             .and_then(|v| v.as_str())
@@ -400,10 +402,7 @@ async fn handle_connection(
                 {
                     Ok(payload) => RemoteMessage::SwarmInviteResponse {
                         id,
-                        ok: payload
-                            .get("ok")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true),
+                        ok: payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
                         message: payload
                             .get("message")
                             .and_then(|v| v.as_str())
@@ -416,7 +415,11 @@ async fn handle_connection(
             RemoteMessage::BeneficiarySnapshot { id } => {
                 match state
                     .bridge
-                    .invoke(&id.to_string(), "beneficiary_snapshot", serde_json::json!({}))
+                    .invoke(
+                        &id.to_string(),
+                        "beneficiary_snapshot",
+                        serde_json::json!({}),
+                    )
                     .await
                 {
                     Ok(payload) => RemoteMessage::BeneficiarySnapshotResponse {
@@ -493,7 +496,11 @@ async fn handle_connection(
             RemoteMessage::RemoteModelCatalog { id } => {
                 match state
                     .bridge
-                    .invoke(&id.to_string(), "remote_model_catalog", serde_json::json!({}))
+                    .invoke(
+                        &id.to_string(),
+                        "remote_model_catalog",
+                        serde_json::json!({}),
+                    )
                     .await
                 {
                     Ok(payload) => RemoteMessage::RemoteModelCatalogResponse {
@@ -618,7 +625,11 @@ async fn handle_connection(
             RemoteMessage::TelegramImportPreview { id } => {
                 match state
                     .bridge
-                    .invoke(&id.to_string(), "telegram_import_preview", serde_json::json!({}))
+                    .invoke(
+                        &id.to_string(),
+                        "telegram_import_preview",
+                        serde_json::json!({}),
+                    )
                     .await
                 {
                     Ok(payload) => RemoteMessage::TelegramImportPreviewResponse {
@@ -651,10 +662,7 @@ async fn handle_connection(
     }
 }
 
-async fn send_revoked(
-    stream: &mut TcpStream,
-    session: &ServerSession,
-) -> Result<(), SessionError> {
+async fn send_revoked(stream: &mut TcpStream, session: &ServerSession) -> Result<(), SessionError> {
     let message = RemoteMessage::Error {
         id: None,
         code: "DEVICE_REVOKED".to_owned(),

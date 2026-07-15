@@ -143,11 +143,8 @@ fn read_provider_status_json() -> serde_json::Value {
         .args(["provider", "status", "--json"])
         .output();
     match output {
-        Ok(output) if output.status.success() => {
-            serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
-                serde_json::json!({ "ok": false, "error": error.to_string() })
-            })
-        }
+        Ok(output) if output.status.success() => serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| serde_json::json!({ "ok": false, "error": error.to_string() })),
         Ok(output) => serde_json::json!({
             "ok": false,
             "error": String::from_utf8_lossy(&output.stderr).to_string(),
@@ -178,9 +175,7 @@ mod tests {
         let path = PathBuf::from(format!("/tmp/c-admin-{}.sock", Uuid::new_v4()));
         let sessions = SessionRegistry::new();
         let peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 42);
-        sessions
-            .register("fingerprint".to_owned(), peer)
-            .await;
+        sessions.register("fingerprint".to_owned(), peer).await;
 
         let state = AdminState {
             sessions: sessions.clone(),

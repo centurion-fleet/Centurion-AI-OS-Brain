@@ -14,7 +14,12 @@ const BRIDGE_TIMEOUT: Duration = Duration::from_secs(180);
 #[async_trait]
 pub trait AgentBridge: Send + Sync {
     async fn chat(&self, request_id: &str, text: &str) -> Result<BridgeChatResult, BridgeError>;
-    async fn invoke(&self, request_id: &str, action: &str, payload: Value) -> Result<Value, BridgeError>;
+    async fn invoke(
+        &self,
+        request_id: &str,
+        action: &str,
+        payload: Value,
+    ) -> Result<Value, BridgeError>;
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +44,11 @@ pub enum BridgeError {
     #[error("the Centurion core returned invalid JSON: {0}")]
     InvalidResponse(#[source] serde_json::Error),
     #[error("{message}")]
-    Agent { message: String, code: Option<String>, retryable: bool },
+    Agent {
+        message: String,
+        code: Option<String>,
+        retryable: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +147,12 @@ impl AgentBridge for PythonBridge {
         })
     }
 
-    async fn invoke(&self, request_id: &str, action: &str, payload: Value) -> Result<Value, BridgeError> {
+    async fn invoke(
+        &self,
+        request_id: &str,
+        action: &str,
+        payload: Value,
+    ) -> Result<Value, BridgeError> {
         let response = self
             .run_bridge(BridgeRequest {
                 id: request_id,
@@ -218,7 +232,8 @@ impl PythonBridge {
 
         let mut child = command.spawn().map_err(BridgeError::Spawn)?;
 
-        let mut body = serde_json::to_value(&request).expect("bridge request is always serializable");
+        let mut body =
+            serde_json::to_value(&request).expect("bridge request is always serializable");
         if let Value::Object(map) = &mut body {
             if let Some(extra) = map.remove("extra") {
                 if let Value::Object(extra_map) = extra {
@@ -228,7 +243,8 @@ impl PythonBridge {
                 }
             }
         }
-        let request_bytes = serde_json::to_vec(&body).expect("bridge request is always serializable");
+        let request_bytes =
+            serde_json::to_vec(&body).expect("bridge request is always serializable");
 
         let mut stdin = child.stdin.take().expect("piped stdin was requested");
         stdin
@@ -290,7 +306,12 @@ impl AgentBridge for EchoBridge {
         })
     }
 
-    async fn invoke(&self, request_id: &str, action: &str, _payload: Value) -> Result<Value, BridgeError> {
+    async fn invoke(
+        &self,
+        request_id: &str,
+        action: &str,
+        _payload: Value,
+    ) -> Result<Value, BridgeError> {
         Ok(serde_json::json!({
             "ok": true,
             "status": {

@@ -61,7 +61,7 @@ Centurion has no backdoors, no admin access, no ability to read your conversatio
 
 Buy a Personal Centurion once and receive free lifetime updates for both the Linux brain and this iPhone Remote. No monthly fees for the Centurion platform — unlike public AI subscriptions. Owners are invited to the weekly Sunday night AI Owners training session.
 
-**A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit personal-centurion.com to learn more.
+**A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit personalcenturion.com to learn more.
 
 ## Keywords
 Crypto Chat, encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
@@ -70,10 +70,10 @@ Crypto Chat, encrypted messenger, privacy, bonjour, local network, zero server, 
 https://help.personal-centurion.com
 
 ## Marketing URL
-https://centurionfleet.com
+https://personalcenturion.com
 
 ## Privacy Policy URL
-https://centurionfleet.com/privacy
+https://personalcenturion.com/privacy
 
 ## Promotional Text
 The communication interface to your Personal-Centurion. Crypto Chat — private encrypted conversation public AIs do not offer. No servers. No metadata.

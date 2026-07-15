@@ -139,9 +139,8 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
                 message_list.append(&message_row(message));
             }
             if let Some(last) = message_list.last_child() {
-                message_list.select_row(
-                    last.downcast_ref::<gtk::ListBoxRow>().expect("message row"),
-                );
+                message_list
+                    .select_row(last.downcast_ref::<gtk::ListBoxRow>().expect("message row"));
             }
         }
     });
