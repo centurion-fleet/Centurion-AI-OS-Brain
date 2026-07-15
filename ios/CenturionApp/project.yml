@@ -35,7 +35,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         MARKETING_VERSION: "5.0.0"
-        CURRENT_PROJECT_VERSION: "7"
+        CURRENT_PROJECT_VERSION: "8"
     info:
       path: Info.plist
       properties:
