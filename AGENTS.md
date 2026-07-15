@@ -1126,16 +1126,21 @@ them into invariants before re-requesting review.
 
 ## Version Lockstep Policy
 
-Centurion AI OS, the **Centurion Desktop App** (Tauri, `desktop/`), and the **CenturionAI Remote** (iPhone, `ios/CenturionApp/`) are **versioned in lockstep**. All three products share the same version number and are released together.
+Centurion AI OS, the **Centurion Desktop App** (`desktop/` Tauri and `desktop-native/`), the **CenturionAI Remote** (iPhone, `ios/CenturionApp/`), the **sales website**, and the **Help center** are **versioned in lockstep** as **Centurion v5**. All customer-facing products share the same **5.x.y** and are released together.
 
 | Product | Location | Version Source |
 |---------|----------|---------------|
 | Centurion AI OS | `centurion_cli/__init__.py` | `__version__` |
 | Centurion AI OS | `pyproject.toml` | `project.version` |
-| Desktop App | `desktop/src-tauri/Cargo.toml` | `package.version` |
-| iPhone App | `ios/CenturionApp/CenturionApp/Info.plist` | `CFBundleShortVersionString` |
+| Desktop (native) | `desktop-native/Cargo.toml` | `workspace.package.version` |
+| Desktop (Tauri) | `desktop/src-tauri/Cargo.toml` | `package.version` |
+| iPhone App | `ios/CenturionApp/project.yml` → `MARKETING_VERSION` / Info.plist | `CFBundleShortVersionString` |
+| Sales website | `-personal-centurion-website-v5` `package.json` + `SITE_VERSION` | `5.x.y` |
+| Help center | `personal-centurion-help-center` `package.json` + `SITE_VERSION` | `5.x.y` |
 
 **Rules:**
 1. No product is bumped independently — the OS version is the source of truth.
-2. Before any release tag is created, ALL three version sources must match.
-3. The next major release is **Centurion v3 — Mission Horizon** (v3.0.0), jumping from the current 0.x series.
+2. Before any release tag is created, ALL version sources above must match **5.x.y**.
+3. Customer-facing copy says **Centurion v5** (optionally “— Mission Horizon” as a subtitle only). Do not ship “v3”, “OS v4”, or mismatched majors in UI, App Store, Counsel, or Support.
+4. Internal GitHub repo names may lag digits; **never** echo those digits in user-visible product versioning.
+

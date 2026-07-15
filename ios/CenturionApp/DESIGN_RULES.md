@@ -26,7 +26,7 @@ Every screen must consciously serve at least one category. Ship nothing that onl
 | **Innovation** | Novel, native use of Apple tech that defines the genre | Private LAN pairing, encrypted companion link, mission-centered AI — innovation serves trust, not spectacle |
 | **Interaction** | Intuitive, effortless, platform-native | One obvious next step per screen; standard iOS patterns; 44pt targets; predictable navigation |
 | **Social Impact** | Meaningful improvement to people's lives | Personal mission, agency, dignity — "you are in charge of your destiny" |
-| **Visuals and Graphics** | Stunning, cohesive, skillfully drawn, animated with purpose | Frank Lloyd Wright warmth: amber/teal, serif editorial, restrained motion |
+| **Visuals and Graphics** | Stunning, cohesive, skillfully drawn, animated with purpose | Centurion v5: cream canvas, near-ink text, cool interactive blue for chrome; serif editorial; restrained motion (see `design-tokens/tokens.json`) |
 
 ---
 
@@ -217,7 +217,8 @@ Before any release:
 
 ### Adrian (cloud-backed) — locked
 
-- **Adrian** is Adrian online — Centurion's creator, cloud-hosted at `adrian.centurion.ai`; no customer API keys.
+- **Single source of truth:** support content lives only in the **personal-centurion-help-center** repo (`content/`). Web Ask Adrian (`/api/ask`) and iPhone Talk to Adrian (`/api/v1/chat`) both retrieve from those articles. Do not duplicate procedures in iOS strings or `centurion_cli/adrian/knowledge.md` for customer-facing guidance.
+- **Adrian** is Adrian online — Centurion's creator, hosted at [help.personal-centurion.com](https://help.personal-centurion.com); no customer API keys.
 - **Placement:** **You** → Support only (`Talk to Adrian` beside Get Help). No global floating control on other tabs.
 - **Passion:** help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
 - **Evolving mission:** missions change over time; never treat mission as a one-time checkbox.

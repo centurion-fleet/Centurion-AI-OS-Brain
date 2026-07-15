@@ -1,22 +1,29 @@
-@define-color centurion_amber #b87a36;
-@define-color centurion_amber_soft #d7a868;
-@define-color centurion_ink #241d16;
+/* Centurion v5 desktop chrome — mapped from design-tokens/tokens.json */
+@define-color centurion_canvas #fafaf9;
+@define-color centurion_ink #1a1612;
+@define-color centurion_border #dad7d0;
+@define-color centurion_muted #5e534a;
+@define-color centurion_interactive #2563eb;
+@define-color centurion_interactive_soft #60a5fa;
+@define-color centurion_warm #b87a36;
+@define-color centurion_warm_soft #d7a868;
 
 window {
-  background: linear-gradient(145deg, alpha(@centurion_amber, 0.08), transparent 42%);
+  background: linear-gradient(145deg, alpha(@centurion_ink, 0.03), transparent 42%),
+              @centurion_canvas;
 }
 
 .centurion-card {
   min-height: 360px;
   padding: 48px;
-  border-radius: 28px;
-  background: alpha(@window_bg_color, 0.94);
-  border: 1px solid alpha(@centurion_amber_soft, 0.28);
-  box-shadow: 0 18px 50px alpha(@centurion_ink, 0.12);
+  border-radius: 8px;
+  background: alpha(@window_bg_color, 0.96);
+  border: 1px solid @centurion_border;
+  box-shadow: 0 18px 50px alpha(@centurion_ink, 0.08);
 }
 
 .centurion-card image {
-  color: @centurion_amber;
+  color: @centurion_interactive;
   -gtk-icon-size: 56px;
 }
 
@@ -24,38 +31,38 @@ window {
   font-family: "Cantarell", sans-serif;
   font-size: 32px;
   font-weight: 650;
-  color: @window_fg_color;
+  color: @centurion_ink;
 }
 
 button.suggested-action {
-  background: @centurion_amber;
-  color: white;
-  border-radius: 14px;
+  background: @centurion_ink;
+  color: @centurion_canvas;
+  border-radius: 8px;
   font-weight: 600;
 }
 
 button.link {
-  color: @centurion_amber;
+  color: @centurion_interactive;
   font-weight: 600;
 }
 
 .centurion-adrian-user {
   padding: 10px 14px;
-  border-radius: 16px;
-  background: alpha(@centurion_amber, 0.14);
+  border-radius: 12px;
+  background: alpha(@centurion_interactive, 0.10);
 }
 
 .centurion-adrian-bot {
   padding: 10px 14px;
-  border-radius: 16px;
-  background: alpha(@window_fg_color, 0.06);
+  border-radius: 12px;
+  background: alpha(@centurion_ink, 0.05);
 }
 
 button.pill {
   border-radius: 999px;
   padding: 6px 14px;
-  background: alpha(@centurion_amber, 0.12);
-  color: @centurion_amber;
+  background: alpha(@centurion_interactive, 0.10);
+  color: @centurion_interactive;
   font-weight: 600;
 }
 
