@@ -47,6 +47,17 @@ final class MessageService: ObservableObject {
         persistIfLive()
     }
 
+    /// Merge an imported Telegram thread without wiping existing Crypto Chat history.
+    func mergeImportedConversation(_ conversation: Conversation, messages: [Message]) {
+        conversations.removeAll { $0.id == conversation.id }
+        conversations.insert(conversation, at: 0)
+        allMessages.removeAll { $0.conversationId == conversation.id }
+        allMessages.append(contentsOf: messages)
+        allMessages.sort { $0.timestamp < $1.timestamp }
+        currentConversation = conversation
+        persistIfLive()
+    }
+
     /// Restore a full multi-conversation snapshot (live Crypto Chat + imports).
     func applySnapshot(conversations: [Conversation], messages: [Message]) {
         self.conversations = conversations.sorted { $0.lastActive > $1.lastActive }

@@ -77,6 +77,11 @@ final class ConversationStore: ObservableObject {
         let title = bundle.conversation?.title ?? "Telegram history"
         let context = ConversationContext.standalone(title: title)
         let conversation = Conversation(id: UUID(), context: context, lastActive: Date())
+        let sessionRoot = attachmentsRoot.appendingPathComponent(
+            bundle.sessionId ?? conversation.id.uuidString,
+            isDirectory: true
+        )
+        try? fileManager.createDirectory(at: sessionRoot, withIntermediateDirectories: true)
 
         var importedMessages: [Message] = []
         for item in bundle.messages {
@@ -87,12 +92,25 @@ final class ConversationStore: ObservableObject {
             } else {
                 timestamp = Date()
             }
-            let attachments = item.attachments.map { file in
-                MessageAttachment(
+            let attachments = item.attachments.map { file -> MessageAttachment in
+                let dest = sessionRoot.appendingPathComponent(file.filename)
+                var missing = file.missing ?? true
+                if let encoded = file.contentBase64, !encoded.isEmpty,
+                   let data = Data(base64Encoded: encoded) {
+                    do {
+                        try data.write(to: dest, options: .atomic)
+                        missing = false
+                    } catch {
+                        missing = true
+                    }
+                } else if !fileManager.fileExists(atPath: dest.path) {
+                    missing = true
+                }
+                return MessageAttachment(
                     id: file.id,
                     filename: file.filename,
-                    localPath: attachmentsRoot.appendingPathComponent(file.filename).path,
-                    missing: file.missing ?? false
+                    localPath: dest.path,
+                    missing: missing
                 )
             }
             importedMessages.append(
@@ -106,7 +124,7 @@ final class ConversationStore: ObservableObject {
             )
         }
 
-        messageService.replaceImportedConversation(conversation, messages: importedMessages)
+        messageService.mergeImportedConversation(conversation, messages: importedMessages)
         save(conversations: messageService.conversations, messages: messageService.allMessages)
     }
 

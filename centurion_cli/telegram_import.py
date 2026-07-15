@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -67,9 +68,13 @@ def _resolve_telegram_ids() -> tuple[str, str]:
     return chat_id, user_id
 
 
+def _session_db() -> SessionDB:
+    return SessionDB(db_path=get_centurion_home() / "state.db")
+
+
 def find_telegram_dm_candidates(*, limit: int = 10) -> list[dict[str, Any]]:
     """Return candidate Telegram DM sessions ordered by recent activity."""
-    db = SessionDB()
+    db = _session_db()
     chat_id, user_id = _resolve_telegram_ids()
     candidates: list[dict[str, Any]] = []
 
@@ -204,13 +209,14 @@ def build_import_bundle(
     *,
     session_id: str | None = None,
     dry_run: bool = False,
+    inline_attachment_limit_bytes: int = 1_500_000,
 ) -> dict[str, Any]:
     """Build (and optionally materialize) a Telegram bot DM import bundle."""
     candidates = find_telegram_dm_candidates()
     if session_id:
         chosen = next((row for row in candidates if str(row.get("id")) == session_id), None)
         if chosen is None:
-            db = SessionDB()
+            db = _session_db()
             session = db.get_session(session_id)
             if session and session.get("source") == "telegram":
                 chosen = session
@@ -218,21 +224,19 @@ def build_import_bundle(
         chosen = pick_primary_session(candidates)
 
     if not chosen:
-        return {
-            "ok": False,
-            "message": "No Telegram bot DM session was found on this Centurion.",
-            "candidates": [],
-        }
+        return _empty_failure_bundle(
+            "No Telegram bot DM session was found on this Centurion.",
+            candidates=[],
+        )
 
     session_id = str(chosen.get("id") or "")
-    db = SessionDB()
+    db = _session_db()
     exported = db.export_session(session_id)
     if not exported:
-        return {
-            "ok": False,
-            "message": "Could not export the Telegram session.",
-            "candidates": candidates,
-        }
+        return _empty_failure_bundle(
+            "Could not export the Telegram session.",
+            candidates=candidates,
+        )
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     bundle_dir = _imports_root() / f"telegram-bot-{timestamp}"
@@ -272,6 +276,12 @@ def build_import_bundle(
                 try:
                     shutil.copy2(source, files_dir / file_id)
                     entry["missing"] = False
+                    size = source.stat().st_size
+                    if 0 < size <= inline_attachment_limit_bytes:
+                        entry["content_base64"] = base64.b64encode(source.read_bytes()).decode(
+                            "ascii"
+                        )
+                        entry["size_bytes"] = size
                 except OSError as exc:
                     logger.debug("Could not copy %s: %s", source, exc)
                     entry["missing"] = True
@@ -292,6 +302,7 @@ def build_import_bundle(
 
     bundle = {
         "ok": True,
+        "message": None,
         "conversation": {
             "title": "Telegram with Centurion",
             "context": "standalone",
@@ -320,10 +331,53 @@ def build_import_bundle(
     if not dry_run:
         bundle_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = bundle_dir / "bundle.json"
-        manifest_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+        # Persist without inlined bytes to keep manifests small on disk.
+        disk_bundle = dict(bundle)
+        disk_files = []
+        for item in disk_bundle.get("files") or []:
+            slim = {k: v for k, v in item.items() if k != "content_base64"}
+            disk_files.append(slim)
+        disk_bundle["files"] = disk_files
+        disk_msgs = []
+        for msg in disk_bundle.get("messages") or []:
+            slim_atts = [
+                {k: v for k, v in att.items() if k != "content_base64"}
+                for att in (msg.get("attachments") or [])
+            ]
+            disk_msgs.append({**msg, "attachments": slim_atts})
+        disk_bundle["messages"] = disk_msgs
+        manifest_path.write_text(json.dumps(disk_bundle, indent=2) + "\n", encoding="utf-8")
         bundle["manifest_path"] = str(manifest_path)
 
     return bundle
+
+
+def _empty_failure_bundle(message: str, *, candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Always emit a decode-complete shape for iOS Codable."""
+    return {
+        "ok": False,
+        "message": message,
+        "conversation": None,
+        "session_id": None,
+        "session_key": "",
+        "message_count": 0,
+        "file_count": 0,
+        "missing_file_count": 0,
+        "date_range": {"start": None, "end": None},
+        "messages": [],
+        "files": [],
+        "candidates": [
+            {
+                "session_id": str(row.get("id") or ""),
+                "preview": row.get("preview", ""),
+                "message_count": int(row.get("message_count") or 0),
+                "last_active": row.get("last_active"),
+                "session_key": row.get("session_key", ""),
+            }
+            for row in candidates
+        ],
+        "bundle_path": "",
+    }
 
 
 def _date_range(messages: list[dict[str, Any]]) -> dict[str, Any]:

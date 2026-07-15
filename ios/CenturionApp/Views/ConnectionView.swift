@@ -354,11 +354,13 @@ struct ThinkingServiceSection: View {
                         }
                         .buttonStyle(CenturionSecondaryButtonStyle())
 
-                        if connectionManager.connectionState == .connected && !telegramImportCompleted {
+                        if connectionManager.connectionState == .connected {
                             Button {
                                 showTelegramImport = true
                             } label: {
-                                Text("Import Telegram bot chat")
+                                Text(telegramImportCompleted
+                                    ? "Re-import Telegram bot chat"
+                                    : "Import Telegram bot chat")
                             }
                             .buttonStyle(CenturionSecondaryButtonStyle())
                         }

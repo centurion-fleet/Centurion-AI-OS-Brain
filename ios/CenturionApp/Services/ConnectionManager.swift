@@ -704,7 +704,10 @@ final class ConnectionManager: ObservableObject {
     }
 
     func previewTelegramImport() async throws -> TelegramImportBundle {
-        let payload = try await invokeRemote(action: "telegram_import_preview")
+        let payload = try await invokeRemote(
+            action: "telegram_import_preview",
+            timeoutSeconds: 90
+        )
         return try decodeTelegramBundle(from: payload["bundle"])
     }
 
@@ -713,7 +716,11 @@ final class ConnectionManager: ObservableObject {
         if let sessionId {
             extra["session_id"] = sessionId
         }
-        let payload = try await invokeRemote(action: "telegram_import_bundle", extra: extra)
+        let payload = try await invokeRemote(
+            action: "telegram_import_bundle",
+            extra: extra,
+            timeoutSeconds: 120
+        )
         return try decodeTelegramBundle(from: payload["bundle"])
     }
 
@@ -725,7 +732,11 @@ final class ConnectionManager: ObservableObject {
         return try JSONDecoder().decode(TelegramImportBundle.self, from: data)
     }
 
-    private func invokeRemote(action: String, extra: [String: Any] = [:]) async throws -> [String: Any] {
+    private func invokeRemote(
+        action: String,
+        extra: [String: Any] = [:],
+        timeoutSeconds: UInt64 = 30
+    ) async throws -> [String: Any] {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
             throw ConnectionError.notConnected
@@ -741,7 +752,7 @@ final class ConnectionManager: ObservableObject {
         }
         let plaintext = try JSONSerialization.data(withJSONObject: body)
 
-        let responseData = try await withTimeout(seconds: 30) {
+        let responseData = try await withTimeout(seconds: timeoutSeconds) {
             try await self.remoteIO.exchange(
                 connection: connection,
                 secureChannel: self.secureChannel,

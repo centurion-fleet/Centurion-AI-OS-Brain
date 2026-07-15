@@ -244,7 +244,7 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
     }
 }
 
-struct TelegramImportBundle: Codable, Equatable {
+struct TelegramImportBundle: Decodable, Equatable {
     let ok: Bool
     let conversation: TelegramImportConversation?
     let sessionId: String?
@@ -270,6 +270,21 @@ struct TelegramImportBundle: Codable, Equatable {
         case candidates
         case message
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? false
+        conversation = try container.decodeIfPresent(TelegramImportConversation.self, forKey: .conversation)
+        sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
+        messageCount = try container.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
+        fileCount = try container.decodeIfPresent(Int.self, forKey: .fileCount) ?? 0
+        missingFileCount = try container.decodeIfPresent(Int.self, forKey: .missingFileCount) ?? 0
+        dateRange = try container.decodeIfPresent(TelegramImportDateRange.self, forKey: .dateRange)
+        messages = try container.decodeIfPresent([TelegramImportMessage].self, forKey: .messages) ?? []
+        files = try container.decodeIfPresent([TelegramImportFile].self, forKey: .files) ?? []
+        candidates = try container.decodeIfPresent([TelegramImportCandidate].self, forKey: .candidates) ?? []
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+    }
 }
 
 struct TelegramImportConversation: Codable, Equatable {
@@ -282,18 +297,54 @@ struct TelegramImportDateRange: Codable, Equatable {
     let end: Double?
 }
 
-struct TelegramImportMessage: Codable, Equatable {
+struct TelegramImportMessage: Decodable, Equatable {
     let role: String
     let content: String
     let timestamp: Double?
     let attachments: [TelegramImportFile]
+
+    enum CodingKeys: String, CodingKey {
+        case role
+        case content
+        case timestamp
+        case attachments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        role = try container.decode(String.self, forKey: .role)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        timestamp = try container.decodeIfPresent(Double.self, forKey: .timestamp)
+        attachments = try container.decodeIfPresent([TelegramImportFile].self, forKey: .attachments) ?? []
+    }
 }
 
-struct TelegramImportFile: Codable, Equatable, Identifiable {
+struct TelegramImportFile: Decodable, Equatable, Identifiable {
     let id: String
     let filename: String
     let path: String
     let missing: Bool?
+    let contentBase64: String?
+    let sizeBytes: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case filename
+        case path
+        case missing
+        case contentBase64 = "content_base64"
+        case sizeBytes = "size_bytes"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        filename = try container.decode(String.self, forKey: .filename)
+        path = try container.decodeIfPresent(String.self, forKey: .path) ?? ""
+        missing = try container.decodeIfPresent(Bool.self, forKey: .missing)
+        contentBase64 = try container.decodeIfPresent(String.self, forKey: .contentBase64)
+        sizeBytes = try container.decodeIfPresent(Int.self, forKey: .sizeBytes)
+    }
 }
 
 struct TelegramImportCandidate: Codable, Equatable, Identifiable {
