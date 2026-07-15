@@ -925,12 +925,14 @@ mod linux {
             })
             .collect();
         if labels.is_empty() {
-            row.set_subtitle(format!(
+            let subtitle = format!(
                 "{} backup thinking service(s) configured.",
                 backups.len()
-            ));
+            );
+            row.set_subtitle(&subtitle);
         } else {
-            row.set_subtitle(labels.join(" · "));
+            let subtitle = labels.join(" · ");
+            row.set_subtitle(&subtitle);
         }
     }
 
@@ -1149,6 +1151,7 @@ mod linux {
     ) {
         let stack = stack.clone();
         let window = window.clone();
+        let dialog_window = window.clone();
         let thinking_settings_row = thinking_settings_row.clone();
         let hooks = AdrianDialogHooks {
             build_context: Rc::new(build_adrian_context),
@@ -1175,7 +1178,7 @@ mod linux {
                 _ => {}
             }),
         };
-        show_adrian_dialog(&window, hooks);
+        show_adrian_dialog(&dialog_window, hooks);
     }
 }
 

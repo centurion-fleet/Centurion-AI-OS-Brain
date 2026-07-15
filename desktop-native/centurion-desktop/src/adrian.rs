@@ -85,6 +85,7 @@ pub struct ChatResult {
 pub fn base_url() -> String {
     std::env::var("CENTURION_ADRIAN_BASE_URL")
         .or_else(|_| std::env::var("CENTURION_HERALD_BASE_URL"))
+        .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_owned())
 }
@@ -235,13 +236,8 @@ pub fn send_chat(
 
 fn format_network_error(error: &ureq::Error) -> String {
     match error {
-        ureq::Error::Status(code, response) => {
-            let detail = response.into_string().unwrap_or_default();
-            if detail.is_empty() {
-                format!("Couldn't reach Adrian (HTTP {code}). Check your internet connection.")
-            } else {
-                format!("Couldn't reach Adrian (HTTP {code}): {detail}")
-            }
+        ureq::Error::Status(code, _) => {
+            format!("Couldn't reach Adrian (HTTP {code}). Check your internet connection.")
         }
         _ => "Couldn't reach Adrian. Check your internet connection and try again.".to_owned(),
     }

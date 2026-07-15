@@ -73,7 +73,6 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
     chips_box.set_margin_start(12);
     chips_box.set_margin_end(12);
     chips_box.set_margin_bottom(4);
-    chips_box.set_wrap(true);
     chips_box.set_homogeneous(false);
 
     let error_label = gtk::Label::builder()
@@ -122,7 +121,9 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
     let close_button = gtk::Button::from_icon_name("window-close-symbolic");
     close_button.set_tooltip_text(Some("Close"));
     let dialog_for_close = dialog.clone();
-    close_button.connect_clicked(move |_| dialog_for_close.close());
+    close_button.connect_clicked(move |_| {
+        dialog_for_close.close();
+    });
     header.pack_end(&close_button);
     toolbar.add_top_bar(&header);
     toolbar.set_content(Some(&stack));
@@ -139,8 +140,9 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
                 message_list.append(&message_row(message));
             }
             if let Some(last) = message_list.last_child() {
-                message_list
-                    .select_row(last.downcast_ref::<gtk::ListBoxRow>().expect("message row"));
+                message_list.select_row(Some(
+                    last.downcast_ref::<gtk::ListBoxRow>().expect("message row"),
+                ));
             }
         }
     });
@@ -274,7 +276,7 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
                         }
                         Err(error) => set_error(Some(error)),
                     }
-                    glib::ControlFlow::Remove
+                    glib::ControlFlow::Break
                 });
             });
         }
