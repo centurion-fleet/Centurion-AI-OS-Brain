@@ -181,7 +181,7 @@ def add_parser(subparsers) -> None:
     )
     link.add_argument("--token", help="ctk_inst_* instance token")
     link.add_argument("--primary-token", dest="primary_token", help="ctk_primary_* token (default: auto-detected from auth.json)")
-    link.add_argument("--portal-url", dest="portal_url", help="Portal API base URL (default: personal-centurion.com)")
+    link.add_argument("--portal-url", dest="portal_url", help="Portal API base URL (default: personalcenturion.com)")
     link.set_defaults(func=swarm_command)
 
     connect = swarm_sub.add_parser(

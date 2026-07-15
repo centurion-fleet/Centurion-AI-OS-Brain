@@ -9,7 +9,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-DEFAULT_PORTAL_API = "https://www.personal-centurion.com"
+DEFAULT_PORTAL_API = "https://personalcenturion.com"
 
 
 class SwarmMcClient:

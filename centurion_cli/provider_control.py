@@ -636,17 +636,25 @@ def record_successful_turn(
     model: str | None = None,
     base_url: str = "",
 ) -> None:
-    """Persist LKG after a successful chat turn (best-effort)."""
-    if provider and model:
-        save_last_known_good(provider=provider, model=model, base_url=base_url)
-        return
-    status = get_status(probe=False)
-    if status.provider and status.model:
-        save_last_known_good(
-            provider=status.provider,
-            model=status.model,
-            base_url=status.base_url,
-        )
+    """Persist LKG after a successful chat turn (best-effort).
+
+    Must never raise — a turn that already produced a response should not be
+    turned into an error just because this bookkeeping step failed (e.g. no
+    provider auto-detects cleanly in a fresh/minimal environment).
+    """
+    try:
+        if provider and model:
+            save_last_known_good(provider=provider, model=model, base_url=base_url)
+            return
+        status = get_status(probe=False)
+        if status.provider and status.model:
+            save_last_known_good(
+                provider=status.provider,
+                model=status.model,
+                base_url=status.base_url,
+            )
+    except Exception as exc:
+        logger.debug("record_successful_turn failed (best-effort, ignored): %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -657,14 +665,20 @@ def record_successful_turn(
 def _current_connector_id() -> str | None:
     from centurion_cli.remote_model_catalog import iter_catalog
 
-    (
-        current_provider,
-        current_model,
-        _current_base_url,
-        _current_api_key,
-        _user_providers,
-        _custom_providers,
-    ) = _load_switch_context()
+    try:
+        (
+            current_provider,
+            current_model,
+            _current_base_url,
+            _current_api_key,
+            _user_providers,
+            _custom_providers,
+        ) = _load_switch_context()
+    except Exception as exc:
+        # No provider configured/auto-detected yet — the catalog should still
+        # list every connector, just with none marked as "active".
+        logger.debug("_current_connector_id: could not resolve active provider: %s", exc)
+        return None
     provider = (current_provider or "").strip().lower()
     model = (current_model or "").strip().lower()
     for entry in iter_catalog():

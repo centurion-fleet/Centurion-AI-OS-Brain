@@ -19,6 +19,21 @@ def _maybe_keep_current_tts(question, choices):
     return len(choices) - 1
 
 
+def _maybe_bring_your_own_provider(question, choices):
+    """Answer the "How would you like to connect?" subscription gate.
+
+    Selects "Use my own model provider (bring your own API key)" so tests
+    that mock ``select_provider_and_model`` fall through to that mock
+    instead of hitting the real Subscribe/paste-a-key stdin prompts.
+    """
+    if question != "How would you like to connect?":
+        return None
+    for idx, choice in enumerate(choices):
+        if choice.startswith("Use my own model provider"):
+            return idx
+    return len(choices) - 1
+
+
 def _clear_provider_env(monkeypatch):
     for key in (
         "CENTURION_INFERENCE_PROVIDER",
@@ -38,10 +53,16 @@ def _clear_provider_env(monkeypatch):
 
 
 def _stub_tts(monkeypatch):
-    monkeypatch.setattr("centurion_cli.setup.prompt_choice", lambda q, c, d=0: (
-        _maybe_keep_current_tts(q, c) if _maybe_keep_current_tts(q, c) is not None
-        else d
-    ))
+    def _prompt_choice(question, choices, default=0):
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
+        tts_idx = _maybe_keep_current_tts(question, choices)
+        if tts_idx is not None:
+            return tts_idx
+        return default
+
+    monkeypatch.setattr("centurion_cli.setup.prompt_choice", _prompt_choice)
     monkeypatch.setattr("centurion_cli.setup.prompt_yes_no", lambda *a, **kw: False)
 
 
@@ -77,6 +98,7 @@ def test_setup_model_provider_preserves_auxiliary_choices_written_by_picker(tmp_
     """Aux choices made inside centurion setup must survive the wizard's final save."""
     monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
     _clear_provider_env(monkeypatch)
+    _stub_tts(monkeypatch)
 
     config = load_config()
     assert config["auxiliary"]["compression"]["provider"] == "auto"
@@ -170,6 +192,9 @@ def test_setup_same_provider_rotation_strategy_saved_for_multi_credential_pool(t
     def fake_prompt_choice(question, choices, default=0):
         if "rotation strategy" in question:
             return 1  # round robin
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
         tts_idx = _maybe_keep_current_tts(question, choices)
         if tts_idx is not None:
             return tts_idx
@@ -235,6 +260,9 @@ def test_setup_same_provider_fallback_can_add_another_credential(tmp_path, monke
     def fake_prompt_choice(question, choices, default=0):
         if question == "Select same-provider rotation strategy:":
             return 0
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
         tts_idx = _maybe_keep_current_tts(question, choices)
         if tts_idx is not None:
             return tts_idx
@@ -324,6 +352,9 @@ def test_setup_pool_step_shows_manual_vs_auto_detected_counts(tmp_path, monkeypa
     def fake_prompt_choice(question, choices, default=0):
         if "rotation strategy" in question:
             return 0
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
         tts_idx = _maybe_keep_current_tts(question, choices)
         if tts_idx is not None:
             return tts_idx
@@ -350,6 +381,9 @@ def test_setup_copilot_acp_skips_same_provider_pool_step(tmp_path, monkeypatch):
     config = load_config()
 
     def fake_prompt_choice(question, choices, default=0):
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
         if question == "Select your inference provider:":
             return 15  # GitHub Copilot ACP
         if question == "Select default model:":

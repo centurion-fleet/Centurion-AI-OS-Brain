@@ -24,6 +24,12 @@ Open **Settings** → **Support Tools**:
 - **Generate Support Bundle** — creates the same support code format
 - **Look Up Support Code** — opens the saved structured bundle for support staff
 
+### Transition (early Centurions only)
+
+If you started with the Telegram bot before Crypto Chat, open **Settings** → **Transition** → **Bring over Telegram history**. This is a one-time host-side step for the first customers — it is not part of CenturionAI Remote on iPhone.
+
+CLI equivalent: `centurion telegram import` (add `--dry-run` to preview).
+
 ## Support code lifetime
 
 Support codes expire after 24 hours and are stored under `state/support_bundles/` in your Centurion home directory.

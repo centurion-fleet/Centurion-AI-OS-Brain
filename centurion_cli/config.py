@@ -1720,14 +1720,14 @@ DEFAULT_CONFIG = {
         "force_ipv4": False,
     },
 
-    # Centurion subscription billing (portal.personal-centurion.com + Lago).
+    # Centurion subscription billing (personalcenturion.com + Lago).
     # When false (default), Nous/Centurion Portal OAuth is hidden and users
     # configure bring-your-own-key providers via centurion setup / model.
     "billing": {
         "enabled": True,
-        "portal_url": "https://www.personal-centurion.com",
+        "portal_url": "https://personalcenturion.com",
         "inference_url": "https://openrouter.ai/api/v1",
-        "fleet_api_url": "https://www.personal-centurion.com/api/v1",
+        "fleet_api_url": "https://personalcenturion.com/api/v1",
     },
 
     # Gateway settings — control how messaging platforms (Telegram, Discord,

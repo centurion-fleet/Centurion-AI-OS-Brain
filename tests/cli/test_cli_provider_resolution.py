@@ -273,6 +273,7 @@ def test_codex_provider_replaces_incompatible_default_model(monkeypatch):
 def test_model_flow_nous_prints_subscription_guidance_without_mutating_explicit_tts(monkeypatch, capsys):
     monkeypatch.setattr("centurion_cli.nous_subscription.managed_nous_tools_enabled", lambda: True)
     config = {
+        "billing": {"enabled": True},
         "model": {"provider": "nous", "default": "claude-opus-4-6"},
         "tts": {"provider": "elevenlabs"},
         "browser": {"cloud_provider": "browser-use"},
@@ -308,6 +309,7 @@ def test_model_flow_nous_prints_subscription_guidance_without_mutating_explicit_
 def test_model_flow_nous_offers_tool_gateway_prompt_when_unconfigured(monkeypatch, capsys):
     monkeypatch.setattr("centurion_cli.nous_subscription.managed_nous_tools_enabled", lambda: True)
     config = {
+        "billing": {"enabled": True},
         "model": {"provider": "nous", "default": "claude-opus-4-6"},
         "tts": {"provider": "edge"},
     }
@@ -607,14 +609,21 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
     monkeypatch.setattr(centurion_main, "_require_tty", lambda *a: None)
     monkeypatch.setattr(
         "centurion_cli.config.load_config",
-        lambda: {"model": {"default": "gpt-5", "provider": "nous"}},
+        lambda: {
+            "billing": {"enabled": True},
+            "model": {"default": "gpt-5", "provider": "nous"},
+        },
     )
     monkeypatch.setattr("centurion_cli.config.save_config", lambda cfg: None)
     monkeypatch.setattr("centurion_cli.config.get_env_value", lambda key: "")
     monkeypatch.setattr("centurion_cli.config.save_env_value", lambda key, value: None)
     monkeypatch.setattr("centurion_cli.auth.resolve_provider", lambda requested, **kwargs: "nous")
     monkeypatch.setattr("centurion_cli.auth.get_provider_auth_state", lambda provider_id: None)
-    monkeypatch.setattr(centurion_main, "_prompt_provider_choice", lambda choices, **kwargs: 0)
+    monkeypatch.setattr(
+        centurion_main,
+        "_prompt_provider_choice",
+        lambda choices, **kwargs: kwargs.get("default", 0),
+    )
 
     captured = {}
 

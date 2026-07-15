@@ -51,13 +51,6 @@ logger = logging.getLogger(__name__)
 API_MODEL = "gpt-image-2"
 
 _MODELS: Dict[str, Dict[str, Any]] = {
-    "dall-e-3": {
-        "display": "DALL-E 3",
-        "speed": "~20s",
-        "strengths": "High-quality illustrative images",
-        "quality": "standard",
-        "api_model": "dall-e-3",
-    },
     "gpt-image-2-low": {
         "display": "GPT Image 2 (Low)",
         "speed": "~15s",
@@ -219,18 +212,16 @@ class OpenAIImageGenProvider(ImageGenProvider):
 
         tier_id, meta = _resolve_model()
         size = _SIZES.get(aspect, _SIZES["square"])
-        api_model = str(meta.get("api_model") or API_MODEL)
 
         # gpt-image-2 returns b64_json unconditionally and REJECTS
         # ``response_format`` as an unknown parameter. Don't send it.
         payload: Dict[str, Any] = {
-            "model": api_model,
+            "model": API_MODEL,
             "prompt": prompt,
             "size": size,
             "n": 1,
+            "quality": meta["quality"],
         }
-        if api_model == API_MODEL:
-            payload["quality"] = meta["quality"]
 
         try:
             client = openai.OpenAI()

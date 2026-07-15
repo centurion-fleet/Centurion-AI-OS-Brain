@@ -34,11 +34,7 @@ from centurion_cli.provider_control import (
     set_routing_mode,
     validate_switch,
 )
-from centurion_cli.support_control import (
-    auto_fix_thinking,
-    collect_health_snapshot,
-    create_support_bundle,
-)
+from centurion_cli import support_control
 
 
 def handle_request(
@@ -259,7 +255,7 @@ def _handle_provider_restore(request_id: str) -> dict[str, Any]:
 
 def _handle_health_check(request_id: str) -> dict[str, Any]:
     try:
-        snapshot = collect_health_snapshot(probe=True)
+        snapshot = support_control.collect_health_snapshot(probe=True)
         return {
             "id": request_id,
             "ok": True,
@@ -274,7 +270,7 @@ def _handle_health_check(request_id: str) -> dict[str, Any]:
 
 def _handle_support_bundle(request_id: str) -> dict[str, Any]:
     try:
-        result = create_support_bundle(probe=True)
+        result = support_control.create_support_bundle(probe=True)
         payload = {
             "id": request_id,
             "ok": result.ok,
@@ -294,7 +290,7 @@ def _handle_support_bundle(request_id: str) -> dict[str, Any]:
 
 def _handle_support_auto_fix(request_id: str) -> dict[str, Any]:
     try:
-        result = auto_fix_thinking(probe=True)
+        result = support_control.auto_fix_thinking(probe=True)
         return {
             "id": request_id,
             "ok": result.ok,

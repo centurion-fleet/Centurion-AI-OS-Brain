@@ -537,7 +537,7 @@ class TestMigrate:
                 },
             }
         }
-        report = migrate(codex_plugin_cfg, codex_home=tmp_path, expose_centurion_tools=False)
+        report = migrate(centurion_cfg, codex_home=tmp_path, expose_centurion_tools=False)
         assert report.written
         text = (tmp_path / "config.toml").read_text()
         assert "[mcp_servers.filesystem]" in text

@@ -366,6 +366,10 @@ _CATEGORY_MERGE: Dict[str, str] = {
     # with the other messaging-platform config (discord) so it isn't an
     # orphan tab of one field.
     "telegram": "discord",
+    # Only `remote.routing_mode` currently lives under remote — fold it in
+    # with the other misc agent-behavior settings so it isn't an orphan
+    # tab of one field.
+    "remote": "agent",
 }
 
 # Display order for tabs — unlisted categories sort alphabetically after these.

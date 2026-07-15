@@ -18,16 +18,16 @@ from centurion_cli.cloud_client import (
 def test_get_fleet_api_base_from_config():
     cfg = {
         "billing": {
-            "portal_url": "https://www.personal-centurion.com",
-            "fleet_api_url": "https://www.personal-centurion.com/api/v1",
+            "portal_url": "https://personalcenturion.com",
+            "fleet_api_url": "https://personalcenturion.com/api/v1",
         }
     }
-    assert get_fleet_api_base(cfg) == "https://www.personal-centurion.com/api/v1"
+    assert get_fleet_api_base(cfg) == "https://personalcenturion.com/api/v1"
 
 
 def test_get_fleet_api_base_derives_from_portal():
-    cfg = {"billing": {"portal_url": "https://www.personal-centurion.com"}}
-    assert get_fleet_api_base(cfg) == "https://www.personal-centurion.com/api/v1"
+    cfg = {"billing": {"portal_url": "https://personalcenturion.com"}}
+    assert get_fleet_api_base(cfg) == "https://personalcenturion.com/api/v1"
 
 
 @patch("centurion_cli.cloud_client.urlopen")

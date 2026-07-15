@@ -19,6 +19,21 @@ def _maybe_keep_current_tts(question, choices):
     return len(choices) - 1
 
 
+def _maybe_bring_your_own_provider(question, choices):
+    """Answer the "How would you like to connect?" subscription gate.
+
+    Selects "Use my own model provider (bring your own API key)" so tests
+    that mock ``select_provider_and_model`` fall through to that mock
+    instead of hitting the real Subscribe/paste-a-key stdin prompts.
+    """
+    if question != "How would you like to connect?":
+        return None
+    for idx, choice in enumerate(choices):
+        if choice.startswith("Use my own model provider"):
+            return idx
+    return len(choices) - 1
+
+
 def _clear_provider_env(monkeypatch):
     for key in (
         "NOUS_API_KEY",
@@ -42,11 +57,17 @@ def _clear_vercel_env(monkeypatch):
 
 
 def _stub_tts(monkeypatch):
-    """Stub out TTS prompts so setup_model_provider doesn't block."""
-    monkeypatch.setattr("centurion_cli.setup.prompt_choice", lambda q, c, d=0: (
-        _maybe_keep_current_tts(q, c) if _maybe_keep_current_tts(q, c) is not None
-        else d
-    ))
+    """Stub out TTS/connect-gate prompts so setup_model_provider doesn't block."""
+    def _prompt_choice(question, choices, default=0):
+        connect_idx = _maybe_bring_your_own_provider(question, choices)
+        if connect_idx is not None:
+            return connect_idx
+        tts_idx = _maybe_keep_current_tts(question, choices)
+        if tts_idx is not None:
+            return tts_idx
+        return default
+
+    monkeypatch.setattr("centurion_cli.setup.prompt_choice", _prompt_choice)
     monkeypatch.setattr("centurion_cli.setup.prompt_yes_no", lambda *a, **kw: False)
 
 

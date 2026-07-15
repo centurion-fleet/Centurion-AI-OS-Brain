@@ -99,7 +99,7 @@ def get_fleet_api_base(config: Optional[Dict[str, Any]] = None) -> str:
         return fleet_url
     if fleet_url:
         return f"{fleet_url}/api/v1"
-    return "https://www.personal-centurion.com/api/v1"
+    return "https://personalcenturion.com/api/v1"
 
 
 def _post_json(url: str, payload: Dict[str, Any], timeout: float = 15.0) -> Dict[str, Any]:
@@ -234,7 +234,7 @@ def check_subscription_on_startup(config: Optional[Dict[str, Any]] = None) -> No
         return
 
     billing = config.get("billing") if isinstance(config.get("billing"), dict) else {}
-    portal = billing.get("portal_url") or "https://www.personal-centurion.com"
+    portal = billing.get("portal_url") or "https://personalcenturion.com"
     msg = result.error or "subscription inactive"
     logger.warning(
         "Centurion subscription validation failed (%s). Manage billing at %s/account/billing",

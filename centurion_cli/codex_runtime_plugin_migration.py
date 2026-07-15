@@ -132,14 +132,14 @@ def _translate_one_server(
 
     codex_entry is a dict ready for TOML serialization, or None when the
     server can't be translated (e.g. neither command nor url present)."""
-    if not isinstance(codex_plugin_cfg, dict):
+    if not isinstance(centurion_cfg, dict):
         return None, []
 
     skipped: list[str] = []
     out: dict[str, Any] = {}
 
-    has_command = bool(codex_plugin_cfg.get("command"))
-    has_url = bool(codex_plugin_cfg.get("url"))
+    has_command = bool(centurion_cfg.get("command"))
+    has_url = bool(centurion_cfg.get("url"))
 
     if has_command and has_url:
         skipped.append("url (both command and url set; preferring stdio)")
@@ -147,7 +147,7 @@ def _translate_one_server(
 
     if has_command:
         # Stdio transport
-        out["command"] = str(codex_plugin_cfg["command"])
+        out["command"] = str(centurion_cfg["command"])
         args = centurion_cfg.get("args") or []
         if args:
             out["args"] = [str(a) for a in args]
@@ -160,7 +160,7 @@ def _translate_one_server(
             out["cwd"] = str(cwd)
     elif has_url:
         # streamable_http transport (codex covers both http and SSE here)
-        out["url"] = str(codex_plugin_cfg["url"])
+        out["url"] = str(centurion_cfg["url"])
         headers = centurion_cfg.get("headers") or {}
         if headers:
             out["http_headers"] = {str(k): str(v) for k, v in headers.items()}
@@ -173,12 +173,12 @@ def _translate_one_server(
     # Timeouts
     if "timeout" in centurion_cfg:
         try:
-            out["tool_timeout_sec"] = float(codex_plugin_cfg["timeout"])
+            out["tool_timeout_sec"] = float(centurion_cfg["timeout"])
         except (TypeError, ValueError):
             skipped.append("timeout (not numeric)")
     if "connect_timeout" in centurion_cfg:
         try:
-            out["startup_timeout_sec"] = float(codex_plugin_cfg["connect_timeout"])
+            out["startup_timeout_sec"] = float(centurion_cfg["connect_timeout"])
         except (TypeError, ValueError):
             skipped.append("connect_timeout (not numeric)")
 

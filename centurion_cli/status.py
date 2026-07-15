@@ -198,7 +198,7 @@ def show_status(args):
     nous_error = nous_status.get("error")
     nous_label = "logged in" if nous_logged_in else "not logged in (run: centurion auth add nous --type oauth)"
     print(
-        f"  {'Centurion Portal':<12}  {check_mark(nous_logged_in)} "
+        f"  {'Centurion Portal':<18} {check_mark(nous_logged_in)} "
         f"{nous_label}"
     )
     portal_url = nous_status.get("portal_base_url") or "(unknown)"

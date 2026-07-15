@@ -4,10 +4,17 @@ from centurion_cli.remote_bridge import handle_request
 def test_remote_bridge_rejects_empty_message():
     result = handle_request({"id": "request-1", "text": "   "}, run_agent=lambda _: "")
 
+    # The multiplexed action protocol (added alongside provider/support/remote
+    # model catalog actions) stamps every response with its "action" plus a
+    # structured error code/message/retryable triple — not just a bare error.
     assert result == {
         "id": "request-1",
         "ok": False,
+        "action": "chat",
+        "code": "INVALID_REQUEST",
         "error": "Message text is required.",
+        "message": "Message text is required.",
+        "retryable": False,
     }
 
 
@@ -20,6 +27,7 @@ def test_remote_bridge_returns_agent_response():
     assert result == {
         "id": "request-2",
         "ok": True,
+        "action": "chat",
         "text": "Reply to: Hello",
     }
 

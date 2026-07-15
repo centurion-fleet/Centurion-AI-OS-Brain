@@ -1596,7 +1596,7 @@ class Migrator:
         for oc_key, centurion_key in env_key_mapping.items():
             val = openclaw_env.get(oc_key, "").strip()
             if val and centurion_key not in secret_additions:
-                secret_additions[config_key] = val
+                secret_additions[centurion_key] = val
 
         # Check the openclaw.json "env" sub-object — some OpenClaw setups
         # store API keys here instead of in a separate .env file.
@@ -1611,7 +1611,7 @@ class Migrator:
                 for oc_key, centurion_key in env_key_mapping.items():
                     val = src.get(oc_key)
                     if isinstance(val, str) and val.strip() and centurion_key not in secret_additions:
-                        secret_additions[config_key] = val.strip()
+                        secret_additions[centurion_key] = val.strip()
 
         # Check per-agent auth-profiles.json for additional credentials
         auth_profiles_path = self.source_root / "agents" / "main" / "agent" / "auth-profiles.json"

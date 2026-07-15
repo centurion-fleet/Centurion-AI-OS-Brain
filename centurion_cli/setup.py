@@ -798,7 +798,7 @@ def _setup_centurion_subscription_path(config: dict) -> bool:
     )
 
     billing = config.get("billing") if isinstance(config.get("billing"), dict) else {}
-    portal_url = str(billing.get("portal_url") or "https://www.personal-centurion.com").rstrip("/")
+    portal_url = str(billing.get("portal_url") or "https://personalcenturion.com").rstrip("/")
     subscribe_url = f"{portal_url}/subscribe"
 
     print_header("Centurion Subscription")

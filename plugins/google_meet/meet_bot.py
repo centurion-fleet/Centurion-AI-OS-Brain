@@ -808,7 +808,10 @@ def _looks_like_human_speaker(speaker: str, bot_guest_name: str) -> bool:
     if not speaker or not speaker.strip():
         return False
     spk = speaker.strip().lower()
-    if spk in {"unknown", "you", bot_guest_name.strip().lower()}:
+    bot = bot_guest_name.strip().lower()
+    # Reject blank/unknown Meet placeholders and the bot's own identity
+    # aliases (display name plus common rebrand leftovers like "centurion agent").
+    if spk in {"unknown", "you", bot, "centurion agent", "centurion ai os"}:
         return False
     return True
 

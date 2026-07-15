@@ -44,7 +44,7 @@ def test_scutum_flow_validate_then_checkin(mock_urlopen, tmp_path, monkeypatch):
     cfg = {
         "billing": {
             "enabled": True,
-            "fleet_api_url": "https://www.personal-centurion.com/api/v1",
+            "fleet_api_url": "https://personalcenturion.com/api/v1",
         },
         "model": {"provider": "openrouter"},
     }
