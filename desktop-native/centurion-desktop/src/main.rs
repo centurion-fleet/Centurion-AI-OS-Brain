@@ -925,10 +925,7 @@ mod linux {
             })
             .collect();
         if labels.is_empty() {
-            let subtitle = format!(
-                "{} backup thinking service(s) configured.",
-                backups.len()
-            );
+            let subtitle = format!("{} backup thinking service(s) configured.", backups.len());
             row.set_subtitle(&subtitle);
         } else {
             let subtitle = labels.join(" · ");
