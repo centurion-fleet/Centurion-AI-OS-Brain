@@ -62,8 +62,20 @@ jobs:
             -A dead_code \
             -A unused_imports
 
+      - name: Install Python test environment
+        run: |
+          dnf install -y python3 python3-pip python3-devel openssl-devel libffi-devel curl
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv python install 3.11
+          uv venv .venv --python 3.11
+          # Remote bridge tests only need the editable package + pytest toolchain.
+          uv pip install -e ".[dev]"
+
       - name: Run Python remote bridge tests
-        run: scripts/run_tests.sh tests/centurion_cli/test_remote_bridge.py
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          scripts/run_tests.sh tests/centurion_cli/test_remote_bridge.py
 
       - name: Run loopback smoke script
         run: desktop-native/scripts/e2e-smoke.sh
