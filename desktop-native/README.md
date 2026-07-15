@@ -86,6 +86,22 @@ The installer enables the user service and opens mDNS plus TCP 9119 in
 firewalld's trusted zone. Provisioning must assign only the Centurion LAN
 interface to that zone.
 
+### Tomorrow smoke checklist (Ships_AI Fedora + TestFlight iPhone)
+
+1. On Fedora: `git pull` on this tree, then
+   `desktop-native/scripts/install-user.sh` (or `provision-centurion.sh`).
+2. Confirm `systemctl --user status centurion-remote` is active and Bonjour
+   advertises the host.
+3. On iPhone (TestFlight build): same Wi‑Fi, Connect → pair → approve on GTK
+   Devices.
+4. Crypto Chat: send one message and confirm a real model reply.
+5. Pulse: confirm live feed updates (not sample/static activity).
+6. Swarm: connect and confirm status reflects the host session.
+7. Get Help: generate a support code on phone; look it up under GTK
+   Settings → Support Tools.
+8. Early Centurions only: GTK Settings → Transition → Bring over Telegram
+   history (not on iPhone).
+
 ## Security notes
 
 - Approved device and server identity data are profile-scoped under
