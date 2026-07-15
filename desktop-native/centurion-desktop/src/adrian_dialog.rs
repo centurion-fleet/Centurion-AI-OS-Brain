@@ -252,32 +252,34 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
             let refresh_chips = refresh_chips.clone();
             let set_error = set_error.clone();
             let set_sending = set_sending.clone();
+            let (tx, rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
+            rx.attach(None, move |result: Result<adrian::ChatResult, String>| {
+                set_sending(false);
+                match result {
+                    Ok(response) if response.ok => {
+                        messages.borrow_mut().push(AdrianMessage {
+                            role: AdrianRole::Adrian,
+                            content: response.reply,
+                        });
+                        *suggested.borrow_mut() = response.suggested_actions;
+                        refresh_messages();
+                        refresh_chips();
+                    }
+                    Ok(response) => {
+                        let message = if response.message.is_empty() {
+                            "Adrian couldn't respond right now.".to_owned()
+                        } else {
+                            response.message
+                        };
+                        set_error(Some(message));
+                    }
+                    Err(error) => set_error(Some(error)),
+                }
+                glib::ControlFlow::Break
+            });
             std::thread::spawn(move || {
                 let result = adrian::send_chat(&history, &text, &context);
-                glib::idle_add_local(move || {
-                    set_sending(false);
-                    match result {
-                        Ok(response) if response.ok => {
-                            messages.borrow_mut().push(AdrianMessage {
-                                role: AdrianRole::Adrian,
-                                content: response.reply,
-                            });
-                            *suggested.borrow_mut() = response.suggested_actions;
-                            refresh_messages();
-                            refresh_chips();
-                        }
-                        Ok(response) => {
-                            let message = if response.message.is_empty() {
-                                "Adrian couldn't respond right now.".to_owned()
-                            } else {
-                                response.message
-                            };
-                            set_error(Some(message));
-                        }
-                        Err(error) => set_error(Some(error)),
-                    }
-                    glib::ControlFlow::Break
-                });
+                let _ = tx.send(result);
             });
         }
     });
