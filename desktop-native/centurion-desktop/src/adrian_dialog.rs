@@ -252,30 +252,42 @@ pub fn show_adrian_dialog(parent: &adw::ApplicationWindow, hooks: AdrianDialogHo
             let refresh_chips = refresh_chips.clone();
             let set_error = set_error.clone();
             let set_sending = set_sending.clone();
-            let (tx, rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
-            rx.attach(None, move |result: Result<adrian::ChatResult, String>| {
-                set_sending(false);
-                match result {
-                    Ok(response) if response.ok => {
-                        messages.borrow_mut().push(AdrianMessage {
-                            role: AdrianRole::Adrian,
-                            content: response.reply,
-                        });
-                        *suggested.borrow_mut() = response.suggested_actions;
-                        refresh_messages();
-                        refresh_chips();
+            let (tx, rx) = std::sync::mpsc::channel();
+            glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+                match rx.try_recv() {
+                    Ok(result) => {
+                        set_sending(false);
+                        match result {
+                            Ok(response) if response.ok => {
+                                messages.borrow_mut().push(AdrianMessage {
+                                    role: AdrianRole::Adrian,
+                                    content: response.reply,
+                                });
+                                *suggested.borrow_mut() = response.suggested_actions;
+                                refresh_messages();
+                                refresh_chips();
+                            }
+                            Ok(response) => {
+                                let message = if response.message.is_empty() {
+                                    "Adrian couldn't respond right now.".to_owned()
+                                } else {
+                                    response.message
+                                };
+                                set_error(Some(message));
+                            }
+                            Err(error) => set_error(Some(error)),
+                        }
+                        glib::ControlFlow::Break
                     }
-                    Ok(response) => {
-                        let message = if response.message.is_empty() {
-                            "Adrian couldn't respond right now.".to_owned()
-                        } else {
-                            response.message
-                        };
-                        set_error(Some(message));
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        set_sending(false);
+                        set_error(Some(
+                            "Adrian connection dropped before a reply arrived.".to_owned(),
+                        ));
+                        glib::ControlFlow::Break
                     }
-                    Err(error) => set_error(Some(error)),
                 }
-                glib::ControlFlow::Break
             });
             std::thread::spawn(move || {
                 let result = adrian::send_chat(&history, &text, &context);
