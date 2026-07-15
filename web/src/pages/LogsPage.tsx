@@ -165,7 +165,7 @@ export default function LogsPage() {
           <Segmented
             className={segmentedClass}
             value={file}
-            onChange={setFile}
+            onChange={(value) => setFile(value as typeof file)}
             options={toSegmentOptions(FILES)}
           />
         </FilterGroup>
@@ -174,7 +174,7 @@ export default function LogsPage() {
           <Segmented
             className={segmentedClass}
             value={level}
-            onChange={setLevel}
+            onChange={(value) => setLevel(value as typeof level)}
             options={toSegmentOptions(LEVELS)}
           />
         </FilterGroup>
@@ -183,7 +183,7 @@ export default function LogsPage() {
           <Segmented
             className={segmentedClass}
             value={component}
-            onChange={setComponent}
+            onChange={(value) => setComponent(value as typeof component)}
             options={toSegmentOptions(COMPONENTS)}
           />
         </FilterGroup>

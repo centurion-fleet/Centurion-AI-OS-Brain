@@ -90,6 +90,9 @@ async fn encrypted_chat_round_trip_over_tcp() {
         RemoteMessage::ChatResponse {
             id: request_id,
             text: "[Development echo] Hello".to_owned(),
+            recovered: None,
+            recovery_message: None,
+            routed_display_name: None,
         }
     );
 
@@ -232,6 +235,9 @@ async fn smoke_bind_echo_round_trip() {
         RemoteMessage::ChatResponse {
             id: request_id,
             text: "[Development echo] Smoke".to_owned(),
+            recovered: None,
+            recovery_message: None,
+            routed_display_name: None,
         }
     );
 }

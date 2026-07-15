@@ -230,6 +230,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
   const deleteProject = useCallback((id: string) => {
     setData((prev) => ({
+      ...prev,
       projects: prev.projects.filter((p) => p.id !== id),
       targets: prev.targets.filter((t) => t.projectId !== id),
       tasks: prev.tasks.filter((t) => t.projectId !== id),

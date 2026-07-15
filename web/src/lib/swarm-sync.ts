@@ -32,8 +32,10 @@ export async function fetchSwarmSync(since?: string): Promise<SwarmSyncResponse>
   return fetchJSON<SwarmSyncResponse>(`/api/swarm/sync${qs}`)
 }
 
-function str(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
+function str(value: unknown, fallback: unknown = ''): string {
+  if (typeof value === 'string') return value
+  if (typeof fallback === 'string') return fallback
+  return ''
 }
 
 function num(value: unknown, fallback = 0): number {

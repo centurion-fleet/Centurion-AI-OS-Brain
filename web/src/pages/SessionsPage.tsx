@@ -775,7 +775,7 @@ export default function SessionsPage() {
                 className="w-fit shrink-0"
                 size="md"
                 value={view}
-                onChange={setView}
+                onChange={(value) => setView(value as typeof view)}
                 options={[
                   { value: "overview", label: t.sessions.overview },
                   { value: "list", label: t.sessions.title },
