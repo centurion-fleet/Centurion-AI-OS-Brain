@@ -68,13 +68,13 @@ struct SecurityHubView: View {
                 .frame(height: 96)
 
                 Text(isConnected
-                     ? "Your connection is private"
+                     ? "Crypto Chat is on"
                      : "Private by design — even before you connect")
                     .font(Typography.screenTitle)
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
 
-                Text("Your Centurion lives on your computer and talks to this iPhone on your network. That is fundamentally different from handing your work to a public AI cloud.")
+                Text("Crypto Chat is your private encrypted conversation with your Centurion — on your network, not a public AI cloud. Public chatbots have nothing like it.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
@@ -108,9 +108,14 @@ struct SecurityHubView: View {
                     detail: "Your companion lives on your computer — not a shared public service that trains on strangers' chats."
                 )
                 CenturionReassuranceRow(
+                    icon: "lock.shield.fill",
+                    title: "Crypto Chat",
+                    detail: "End-to-end encrypted talk with your Centurion on your network — something public AIs simply do not offer."
+                )
+                CenturionReassuranceRow(
                     icon: "house.fill",
                     title: "Stays on your network",
-                    detail: "This iPhone links over your private network. No cloud account required to talk with your Centurion."
+                    detail: "This iPhone links over your private network. No cloud account required for Crypto Chat."
                 )
                 CenturionReassuranceRow(
                     icon: "person.fill.checkmark",
@@ -135,7 +140,7 @@ struct SecurityHubView: View {
 
                 rebukeCard(
                     claim: "\"That's too much of a security risk.\"",
-                    answer: "Typical cloud AI sends your words to a company's servers. Centurion runs on your computer and talks to your iPhone on your network — encrypted, with no phone number and no public cloud account for the private link."
+                    answer: "Typical cloud AI sends your words to a company's servers. Centurion runs on your computer and talks to your iPhone through Crypto Chat — encrypted on your network, with no phone number and no public cloud account."
                 )
                 rebukeCard(
                     claim: "\"It's unsafe — anyone could read it.\"",

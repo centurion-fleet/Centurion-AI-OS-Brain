@@ -4,10 +4,12 @@ import SwiftUI
 struct CenturionApp: App {
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @AppStorage("centurion.hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSplash = true
     @State private var showOnboarding = false
     @State private var services = AppServices()
     @State private var clearedDemoForConnection = false
+    @State private var didAttemptAutoReconnect = false
 
     var body: some Scene {
         WindowGroup {
@@ -32,6 +34,7 @@ struct CenturionApp: App {
                             showSplash = false
                             showOnboarding = !hasCompletedOnboarding
                         }
+                        attemptAutoReconnectIfNeeded()
                     }
                     .transition(.opacity)
                     .zIndex(2)
@@ -42,6 +45,7 @@ struct CenturionApp: App {
                         withAnimation(.easeOut(duration: 0.25)) {
                             showOnboarding = false
                         }
+                        attemptAutoReconnectIfNeeded()
                     }
                     .environmentObject(services.connectionManager)
                     .environmentObject(services.missionStore)
@@ -50,6 +54,11 @@ struct CenturionApp: App {
                 }
             }
             .preferredColorScheme(appearanceMode.colorScheme)
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    attemptAutoReconnectIfNeeded(force: true)
+                }
+            }
             .onReceive(services.connectionManager.$connectionState) { state in
                 services.dataMode.update(connectionState: state)
                 if state == .connected {
@@ -67,6 +76,13 @@ struct CenturionApp: App {
                 }
             }
         }
+    }
+
+    private func attemptAutoReconnectIfNeeded(force: Bool = false) {
+        guard !showSplash else { return }
+        if !force && didAttemptAutoReconnect { return }
+        didAttemptAutoReconnect = true
+        services.connectionManager.attemptAutoReconnect()
     }
 }
 

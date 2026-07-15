@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Connection Hub — device link and thinking service as separate, calm status cards.
 struct ConnectionView: View {
@@ -74,14 +75,19 @@ struct ConnectionView: View {
     }
 
     private var deviceLinkCard: some View {
-        CenturionStatusCard(
-            title: "Device link",
-            icon: "antenna.radiowaves.left.and.right",
-            headline: deviceLinkHeadline,
-            detail: deviceLinkDetail,
-            isPositive: connectionManager.connectionState == .connected,
-            accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
-        )
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            CenturionStatusCard(
+                title: "Device link",
+                icon: "antenna.radiowaves.left.and.right",
+                headline: deviceLinkHeadline,
+                detail: deviceLinkDetail,
+                isPositive: connectionManager.connectionState == .connected,
+                accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
+            )
+            if connectionManager.connectionState == .connected {
+                EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
+            }
+        }
     }
 
     private var thinkingServiceCard: some View {
@@ -141,7 +147,7 @@ struct ConnectionView: View {
         AtmosphericSurface {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 CenturionSectionHeader(title: "Your Privacy", icon: "lock.shield")
-                Text("Your Centurion runs on your network. Conversations stay between you and your Centurion — not on a public cloud.")
+                Text("Crypto Chat keeps conversations between you and your Centurion on your network — encrypted end to end. Public AIs have no equivalent.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)
@@ -163,15 +169,19 @@ struct ConnectionView: View {
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
-                return "Securely linked to \(device.name)"
+                return connectionManager.isChannelEncrypted
+                    ? "Crypto Chat on — linked to \(device.name)"
+                    : "Linked to \(device.name)"
             }
-            return "Securely linked to your Centurion"
+            return connectionManager.isChannelEncrypted
+                ? "Crypto Chat on — linked to your Centurion"
+                : "Linked to your Centurion"
         case .discovering:
             return "Looking for your Centurion on your network"
         case .connecting:
-            return "Setting up your private connection…"
+            return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link your iPhone to your Centurion to get started"
+            return "Link your iPhone to turn on Crypto Chat"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -220,6 +230,11 @@ struct DeviceLinkSection: View {
                         accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
                     )
 
+                    if connectionManager.connectionState == .connected {
+                        EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     if connectionManager.connectionState != .connected {
                         Button {
                             Haptics.lightTap()
@@ -243,7 +258,7 @@ struct DeviceLinkSection: View {
                         .buttonStyle(.plain)
                     }
 
-                    Text("Your iPhone and Centurion should be on the same Wi‑Fi.")
+                    Text("Your iPhone and Centurion should be on the same Wi‑Fi (or reachable via Tailscale).")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -266,15 +281,19 @@ struct DeviceLinkSection: View {
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
-                return "Securely linked to \(device.name)"
+                return connectionManager.isChannelEncrypted
+                    ? "Crypto Chat on — linked to \(device.name)"
+                    : "Linked to \(device.name)"
             }
-            return "Securely linked to your Centurion"
+            return connectionManager.isChannelEncrypted
+                ? "Crypto Chat on — linked to your Centurion"
+                : "Linked to your Centurion"
         case .discovering:
             return "Looking for your Centurion on your network"
         case .connecting:
-            return "Setting up your private connection…"
+            return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link your iPhone to your Centurion to get started"
+            return "Link your iPhone to turn on Crypto Chat"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -405,6 +424,9 @@ struct ThinkingServiceSection: View {
 struct ConnectionPairingSheet: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @Environment(\.dismiss) private var dismiss
+    @State private var showManualEntry = false
+    @State private var manualHost = ""
+    @State private var manualPort = "9119"
 
     var body: some View {
         NavigationStack {
@@ -455,7 +477,7 @@ struct ConnectionPairingSheet: View {
             LoadingState(
                 message: connectionManager.activeConnectionTarget.map {
                     "Linking to \($0)…"
-                } ?? "Setting up your private connection…"
+                } ?? "Setting up Crypto Chat…"
             )
             Text("Keep this screen open. Your Centurion may ask you to approve this iPhone.")
                 .font(.caption)
@@ -490,6 +512,7 @@ struct ConnectionPairingSheet: View {
                 title: "Linked to your Centurion",
                 message: connectionManager.connectedDevice?.name
             )
+            EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
             Button("Done") { dismiss() }
                 .buttonStyle(CenturionPrimaryButtonStyle())
         }
@@ -500,7 +523,7 @@ struct ConnectionPairingSheet: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Approve on your Centurion",
-                subtitle: "Your iPhone found your Centurion, but it needs your OK before linking."
+                subtitle: "Your iPhone found your Centurion. Approve it once on the computer, then this screen will finish linking automatically."
             )
             Image(systemName: "hourglass.circle.fill")
                 .font(.system(size: 48))
@@ -510,14 +533,29 @@ struct ConnectionPairingSheet: View {
                     Text(message)
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.primaryText())
-                    Text("On your Mac, approve this iPhone in Centurion, then tap Try Again. While testing in Xcode, you can start centurion-remote with --auto-approve.")
+                    if let fingerprint = connectionManager.clientFingerprint, !fingerprint.isEmpty {
+                        Text("On your Centurion computer, run:")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                        Text("centurion-remote approve \(fingerprint)")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(ColorTheme.primaryText())
+                            .textSelection(.enabled)
+                        Button("Copy approve command") {
+                            UIPasteboard.general.string =
+                                "centurion-remote approve \(fingerprint)"
+                            Haptics.success()
+                        }
+                        .buttonStyle(CenturionGhostButtonStyle())
+                    }
+                    Text("We retry automatically after you approve. While testing, you can also start with --auto-approve.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(3)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("Try Again") {
+            Button("Try Again Now") {
                 connectionManager.retryConnection()
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
@@ -532,15 +570,17 @@ struct ConnectionPairingSheet: View {
     }
 
     private var searchingState: some View {
-        LoadingState(message: "Looking for your Centurion on your network…")
-            .padding()
-            .overlay(alignment: .bottom) {
-                Text("Make sure your Centurion is running and both devices are on the same network.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
+        VStack(spacing: Spacing.lg) {
+            LoadingState(message: "Looking for your Centurion on your network…")
+            Text("Make sure Centurion Remote is running on your computer and both devices are on the same network.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            manualConnectSection
+        }
+        .padding()
     }
 
     private var deviceList: some View {
@@ -572,7 +612,44 @@ struct ConnectionPairingSheet: View {
                 .buttonStyle(.plain)
                 .disabled(connectionManager.connectionState == .connecting)
             }
+            Section {
+                manualConnectSection
+                    .listRowBackground(Color.clear)
+            }
         }
         .scrollContentBackground(.hidden)
+    }
+
+    private var manualConnectSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Button {
+                showManualEntry.toggle()
+            } label: {
+                Text(showManualEntry ? "Hide manual address" : "Enter address manually")
+            }
+            .buttonStyle(CenturionGhostButtonStyle())
+
+            if showManualEntry {
+                TextField("Hostname or IP", text: $manualHost)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .padding(Spacing.sm)
+                    .background(ColorTheme.surface())
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                TextField("Port", text: $manualPort)
+                    .keyboardType(.numberPad)
+                    .padding(Spacing.sm)
+                    .background(ColorTheme.surface())
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                Button("Connect") {
+                    let port = Int(manualPort) ?? 9119
+                    connectionManager.connect(host: manualHost, port: port)
+                }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .disabled(manualHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

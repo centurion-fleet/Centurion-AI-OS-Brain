@@ -3,7 +3,7 @@ import Network
 
 /// Discovers Centurion devices on the local network using mDNS/Bonjour.
 ///
-/// Centurion OS Desktop advertises itself as `_centurion._tcp` on the
+/// Centurion on Linux, Mac, or Windows advertises itself as `_centurion._tcp` on the
 /// local network. The iPhone discovers it without any configuration,
 /// cloud dependency, or central server — pure local network discovery.
 ///

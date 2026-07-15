@@ -241,29 +241,66 @@ typealias AmberButtonStyle = CenturionPrimaryButtonStyle
 
 // MARK: - Connection Status Dot
 
-/// Animated connection indicator — glowing amber pulse
+/// Connection status chip — green when linked, with an optional encryption lock.
 struct StatusDot: View {
     let isConnected: Bool
-    
+    var isEncrypted: Bool = false
+
     @State private var isPulsing = false
-    
+
     var body: some View {
-        Circle()
-            .fill(isConnected ? ColorTheme.success() : ColorTheme.mutedText())
-            .frame(width: 8, height: 8)
-            .overlay(
-                Circle()
-                    .stroke(isConnected ? ColorTheme.success() : Color.clear, lineWidth: 2)
-                    .scaleEffect(isPulsing ? 1.6 : 1.0)
-                    .opacity(isPulsing ? 0.0 : 0.6)
-            )
-            .onAppear {
-                if isConnected {
-                    withAnimation(Motion.heavy.repeatForever(autoreverses: false)) {
-                        isPulsing = true
-                    }
+        HStack(spacing: 4) {
+            Circle()
+                .fill(isConnected ? ColorTheme.success() : ColorTheme.mutedText())
+                .frame(width: 8, height: 8)
+                .overlay(
+                    Circle()
+                        .stroke(isConnected ? ColorTheme.success() : Color.clear, lineWidth: 2)
+                        .scaleEffect(isPulsing ? 1.6 : 1.0)
+                        .opacity(isPulsing ? 0.0 : 0.6)
+                )
+            if isConnected && isEncrypted {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(ColorTheme.success())
+                    .accessibilityLabel("Crypto Chat encrypted")
+            }
+        }
+        .onAppear {
+            if isConnected {
+                withAnimation(Motion.heavy.repeatForever(autoreverses: false)) {
+                    isPulsing = true
                 }
             }
+        }
+    }
+}
+
+/// Crypto Chat status — the private encrypted conversation channel public AIs do not offer.
+struct EncryptionStatusBadge: View {
+    let isEncrypted: Bool
+
+    var body: some View {
+        HStack(spacing: Spacing.xs) {
+            Image(systemName: isEncrypted ? "lock.shield.fill" : "lock.open")
+                .font(.caption.weight(.semibold))
+            Text(isEncrypted ? "Crypto Chat" : "Crypto Chat off")
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundColor(isEncrypted ? ColorTheme.success() : ColorTheme.mutedText())
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(isEncrypted
+                      ? ColorTheme.success().opacity(0.12)
+                      : ColorTheme.mutedText().opacity(0.08))
+        )
+        .accessibilityLabel(
+            isEncrypted
+                ? "Crypto Chat on — private encrypted conversation with your Centurion"
+                : "Crypto Chat off"
+        )
     }
 }
 

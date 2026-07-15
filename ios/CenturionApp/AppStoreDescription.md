@@ -10,7 +10,11 @@ Your Personal-Centurion in Your Pocket
 
 **Centurion is the communication interface to your Personal-Centurion — a private AI that lives on your desk, knows your mission, and helps you live it. Every conversation advances what matters.**
 
-Not a chatbot. Not a project manager with messaging. Your Personal-Centurion is a dedicated AI that belongs to you alone — no cloud, no subscription, no one else's data mixed in. It runs on your hardware, on your network, encrypted end-to-end. This iPhone app is how you talk to it.
+Not a chatbot. Not a project manager with messaging. Your Personal-Centurion is a dedicated AI that belongs to you alone — no cloud, no subscription, no one else's data mixed in. It runs on your hardware, on your network. This iPhone app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
+
+**CRYPTO CHAT**
+
+Crypto Chat is the end-to-end encrypted link between your iPhone and your Personal-Centurion on your network. No routing servers. No public AI account in the middle. Your words stay between you and your Centurion — a point of difference cloud chatbots cannot match.
 
 **CHAT IS THE INTERFACE**
 
@@ -56,7 +60,7 @@ Centurion has no backdoors, no admin access, no ability to read your conversatio
 **A Personal-Centurion is required.** This app connects to your Centurion AI OS device on your local network. Visit centurionfleet.com to learn more.
 
 ## Keywords
-encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
+Crypto Chat, encrypted messenger, privacy, bonjour, local network, zero server, mission control, AI chat, secure messaging, end-to-end encryption, pfs, x25519, no cloud, offline messenger, personal AI
 
 ## Support URL
 https://help.personal-centurion.com
@@ -68,4 +72,4 @@ https://centurionfleet.com
 https://centurionfleet.com/privacy
 
 ## Promotional Text
-The communication interface to your Personal-Centurion. A private AI that lives on your desk, knows your mission, and helps you live it. No servers. No metadata.
+The communication interface to your Personal-Centurion. Crypto Chat — private encrypted conversation public AIs do not offer. No servers. No metadata.

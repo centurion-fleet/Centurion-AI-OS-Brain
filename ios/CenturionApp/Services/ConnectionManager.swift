@@ -23,10 +23,17 @@ final class ConnectionManager: ObservableObject {
     @Published var remoteCatalog: RemoteModelCatalog?
     @Published var routingMode: String = "manual"
     @Published var lastRoutedDisplayName: String?
-    /// True when the model list came from the on-device fallback instead of the Mac.
+    /// True when the model list came from the on-device fallback instead of the Centurion.
     @Published private(set) var thinkingCatalogUsedFallback = false
     /// Display name of the Centurion being linked (shown during pairing).
     @Published private(set) var activeConnectionTarget: String?
+    /// SHA256 fingerprint of this iPhone’s identity key (for host `approve`).
+    @Published private(set) var clientFingerprint: String?
+
+    /// Live session is up and messages are secretboxed.
+    var isChannelEncrypted: Bool {
+        connectionState == .connected && currentSessionKey != nil
+    }
 
     private let bonjourDiscoverer = BonjourDiscoverer()
     private let secureChannel = SecureChannel()
@@ -36,9 +43,11 @@ final class ConnectionManager: ObservableObject {
     private var pendingDevice: CenturionDevice?
     private var keepaliveTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
+    private var approvalRetryTask: Task<Void, Never>?
     private let remoteIO = RemoteIOPipeline()
     private let maximumFrameSize = 8 * 1024 * 1024
     private let handshakeTimeoutSeconds: UInt64 = 15
+    private static let lastDeviceKey = "centurion.remote.lastDevice"
 
     private let chatTimeoutSeconds: UInt64 = 180
 
@@ -53,12 +62,21 @@ final class ConnectionManager: ObservableObject {
 
     init() {
         bonjourDiscoverer.delegate = self
+        do {
+            let identity = try IdentityKey.loadOrCreate()
+            identityKey = identity
+            clientFingerprint = identity.fingerprint
+        } catch {
+            // Identity loads again in startDiscovery / connect paths.
+        }
     }
 
     func startDiscovery() {
         connectionState = .discovering
         do {
-            identityKey = try IdentityKey.loadOrCreate()
+            let identity = try IdentityKey.loadOrCreate()
+            identityKey = identity
+            clientFingerprint = identity.fingerprint
         } catch {
             connectionState = .error("Your secure iPhone identity could not be loaded.")
             return
@@ -66,16 +84,84 @@ final class ConnectionManager: ObservableObject {
         bonjourDiscoverer.startDiscovery()
     }
 
+    /// Soft reconnect after the brain operator has approved this fingerprint.
     func retryConnection() {
+        reconnectPending(stopApprovalLoop: true)
+    }
+
+    /// Reconnect without cancelling an active approval poll (used by the auto-retry loop).
+    private func reconnectPending(stopApprovalLoop: Bool) {
+        if stopApprovalLoop {
+            stopApprovalRetryLoop()
+        }
         if let pendingDevice {
-            connect(to: pendingDevice)
+            connect(to: pendingDevice, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let saved = loadLastDevice() {
+            connect(to: saved, stopApprovalLoop: stopApprovalLoop)
             return
         }
         if let device = discoveredDevices.first {
-            connect(to: device)
+            connect(to: device, stopApprovalLoop: stopApprovalLoop)
             return
         }
         startDiscovery()
+    }
+
+    /// After splash / on enter foreground: rediscover and join the last trusted Centurion.
+    func attemptAutoReconnect() {
+        guard connectionState == .disconnected || isErrorState else { return }
+        guard let saved = loadLastDevice() else { return }
+        pendingDevice = saved
+        startDiscovery()
+        // Give Bonjour a moment, then connect to saved or matching discovery row.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard self.connectionState == .discovering
+                    || self.connectionState == .disconnected
+                    || self.isErrorState else { return }
+            if let match = self.discoveredDevices.first(where: {
+                $0.serviceName == saved.serviceName
+                    || (!$0.hostname.isEmpty && $0.hostname == saved.hostname)
+                    || (!$0.ipAddress.isEmpty && $0.ipAddress == saved.ipAddress)
+            }) {
+                self.connect(to: match)
+            } else {
+                self.connect(to: saved)
+            }
+        }
+    }
+
+    private var isErrorState: Bool {
+        if case .error = connectionState { return true }
+        return false
+    }
+
+    /// Manual Tailscale / IP fallback when Bonjour cannot see the brain.
+    func connect(host: String, port: Int = 9119, name: String = "Centurion") {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            connectionState = .error("Enter the Centurion’s hostname or IP address.")
+            return
+        }
+        let device = CenturionDevice(
+            id: UUID(),
+            name: name,
+            hostname: trimmed.contains(where: \.isLetter) ? trimmed : "",
+            ipAddress: trimmed.contains(where: \.isLetter) ? "" : trimmed,
+            port: port > 0 ? port : 9119,
+            serviceName: nil,
+            serviceType: nil,
+            serviceDomain: nil,
+            publicKey: nil,
+            isConnected: false,
+            connectionMethod: trimmed.contains("ts.net") || trimmed.contains("tailscale")
+                ? .tailscale
+                : .lan,
+            lastSeen: Date()
+        )
+        connect(to: device)
     }
 
     /// Use the Bonjour service endpoint when available — that matches how discovery
@@ -110,8 +196,11 @@ final class ConnectionManager: ObservableObject {
         return params
     }
 
-    func connect(to device: CenturionDevice) {
-        disconnect()
+    func connect(to device: CenturionDevice, stopApprovalLoop: Bool = true) {
+        if stopApprovalLoop {
+            stopApprovalRetryLoop()
+        }
+        softTearDown(clearPending: false)
         connectionState = .connecting
         activeConnectionTarget = device.name
         pendingDevice = device
@@ -125,6 +214,15 @@ final class ConnectionManager: ObservableObject {
     }
 
     func disconnect() {
+        stopApprovalRetryLoop()
+        softTearDown(clearPending: true)
+        clearLastDevice()
+        connectionState = .disconnected
+        markDiscoveredDevicesDisconnected()
+    }
+
+    /// Tears the socket down without wiping pairing context (approval retry).
+    private func softTearDown(clearPending: Bool) {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
         keepaliveTask?.cancel()
@@ -132,11 +230,51 @@ final class ConnectionManager: ObservableObject {
         connection?.cancel()
         connection = nil
         connectedDevice = nil
-        pendingDevice = nil
         currentSessionKey = nil
         activeConnectionTarget = nil
-        connectionState = .disconnected
-        markDiscoveredDevicesDisconnected()
+        if clearPending {
+            pendingDevice = nil
+        }
+    }
+
+    private func persistLastDevice(_ device: CenturionDevice) {
+        guard let data = try? JSONEncoder().encode(device) else { return }
+        UserDefaults.standard.set(data, forKey: Self.lastDeviceKey)
+    }
+
+    private func loadLastDevice() -> CenturionDevice? {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastDeviceKey) else { return nil }
+        return try? JSONDecoder().decode(CenturionDevice.self, from: data)
+    }
+
+    private func clearLastDevice() {
+        UserDefaults.standard.removeObject(forKey: Self.lastDeviceKey)
+    }
+
+    private func startApprovalRetryLoop() {
+        stopApprovalRetryLoop()
+        approvalRetryTask = Task { @MainActor [weak self] in
+            // Poll gently so the user only needs to approve on Fedora once.
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard let self else { return }
+                guard case .awaitingApproval = self.connectionState else { return }
+                self.reconnectPending(stopApprovalLoop: false)
+                // Wait for this attempt to settle before looping.
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if self.connectionState == .connected { return }
+                if case .awaitingApproval = self.connectionState { continue }
+                if case .connecting = self.connectionState {
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                }
+                if self.connectionState == .connected { return }
+            }
+        }
+    }
+
+    private func stopApprovalRetryLoop() {
+        approvalRetryTask?.cancel()
+        approvalRetryTask = nil
     }
 
     func sendMessage(_ text: String) async throws -> String {
@@ -738,10 +876,12 @@ final class ConnectionManager: ObservableObject {
                     self.connection = nil
                     self.currentSessionKey = nil
                     self.activeConnectionTarget = nil
+                    // Keep pendingDevice so Try Again / auto-retry can reconnect.
                     self.connectionState = .awaitingApproval(
                         status.message
-                            ?? "Approve this iPhone on your Centurion, then try again."
+                            ?? "Approve this iPhone on your Centurion computer, then wait — we will retry automatically."
                     )
+                    self.startApprovalRetryLoop()
                 }
                 return
             }
@@ -760,14 +900,17 @@ final class ConnectionManager: ObservableObject {
             publicKey: serverPublicKey
         )
 
+        stopApprovalRetryLoop()
         currentSessionKey = sessionKey
         clearConnectionTimeout()
         if let pendingDevice {
-            connectedDevice = pendingDevice.asConnected(
+            let linked = pendingDevice.asConnected(
                 publicKey: serverPublicKey,
                 hostname: pendingDevice.hostname.nilIfEmpty,
                 port: pendingDevice.port > 0 ? pendingDevice.port : 9119
             )
+            connectedDevice = linked
+            persistLastDevice(linked)
             markDiscoveredDeviceConnected(pendingDevice.id)
         }
         connectionState = .connected

@@ -161,7 +161,10 @@ struct ChatView: View {
                 Spacer()
 
                 if connectionManager.connectionState == .connected {
-                    StatusDot(isConnected: true)
+                    StatusDot(
+                        isConnected: true,
+                        isEncrypted: connectionManager.isChannelEncrypted
+                    )
                 }
             }
             .padding(.horizontal, Spacing.sm)

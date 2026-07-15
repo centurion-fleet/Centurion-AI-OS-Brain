@@ -23,7 +23,7 @@ Every screen must consciously serve at least one category. Ship nothing that onl
 |----------|---------------|--------------------------|
 | **Delight and Fun** | Memorable, satisfying, enhanced by Apple tech | Ceremonial moments (Mission Discovery), warm haptics, earned celebration — never gimmicks |
 | **Inclusivity** | Works for varied abilities, ages, languages | Dynamic Type, VoiceOver, high contrast, plain language, no jargon on default surfaces |
-| **Innovation** | Novel, native use of Apple tech that defines the genre | Private LAN pairing, encrypted companion link, mission-centered AI — innovation serves trust, not spectacle |
+| **Innovation** | Novel, native use of Apple tech that defines the genre | Crypto Chat (private LAN pairing + encrypted companion link), mission-centered AI — innovation serves trust, not spectacle |
 | **Interaction** | Intuitive, effortless, platform-native | One obvious next step per screen; standard iOS patterns; 44pt targets; predictable navigation |
 | **Social Impact** | Meaningful improvement to people's lives | Personal mission, agency, dignity — "you are in charge of your destiny" |
 | **Visuals and Graphics** | Stunning, cohesive, skillfully drawn, animated with purpose | Centurion v5: cream canvas, near-ink text, cool interactive blue for chrome; serif editorial; restrained motion (see `design-tokens/tokens.json`) |

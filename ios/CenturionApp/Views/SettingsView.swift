@@ -283,8 +283,10 @@ struct SettingsView: View {
 
             CenturionReassuranceRow(
                 icon: "lock.fill",
-                title: "Encrypted in transit",
-                detail: "Protected the same way sensitive apps protect your data"
+                title: "Crypto Chat",
+                detail: connectionManager.isChannelEncrypted
+                    ? "On — private encrypted conversation with your Centurion"
+                    : "Link your Centurion to turn on Crypto Chat — something public AIs do not offer"
             )
 
             sectionDivider
@@ -426,7 +428,7 @@ struct KeyExportView: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Your iPhone Security Code",
-                    subtitle: "Approve this code on your Centurion → Devices when pairing for the first time."
+                    subtitle: "Approve this code on your Centurion computer when pairing for the first time (for example: centurion-remote approve <code>)."
                 )
 
                 Image(systemName: "key.fill")

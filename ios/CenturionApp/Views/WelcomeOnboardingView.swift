@@ -8,6 +8,7 @@ struct WelcomeOnboardingView: View {
 
     @State private var step: OnboardingStep = .welcome
     @State private var showMissionDiscovery = false
+    @State private var showPairingSheet = false
 
     enum OnboardingStep {
         case welcome
@@ -47,6 +48,15 @@ struct WelcomeOnboardingView: View {
                 finishOnboarding()
             }
         }
+        .sheet(isPresented: $showPairingSheet) {
+            ConnectionPairingSheet()
+                .environmentObject(connectionManager)
+        }
+        .onChange(of: connectionManager.connectionState) { _, state in
+            if state == .connected && step == .connect {
+                showPairingSheet = false
+            }
+        }
     }
 
     // MARK: - Steps
@@ -68,7 +78,7 @@ struct WelcomeOnboardingView: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Link Your Centurion",
-                subtitle: "Make sure your iPhone and Centurion are on the same Wi‑Fi."
+                subtitle: "Make sure your iPhone and Centurion computer are on the same Wi‑Fi."
             )
 
             AtmosphericSurface {
@@ -76,7 +86,7 @@ struct WelcomeOnboardingView: View {
                     Image(systemName: "app.connected.to.app.below.fill")
                         .font(.system(size: 36, weight: .light))
                         .foregroundColor(ColorTheme.accent())
-                    Text("Open You → Your link whenever you're ready.")
+                    Text("We’ll look for your Centurion and turn on Crypto Chat — a private encrypted conversation public AIs do not offer.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -87,9 +97,7 @@ struct WelcomeOnboardingView: View {
             .padding(.horizontal, Spacing.lg)
 
             if connectionManager.connectionState == .connected {
-                Label("Connected", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(ColorTheme.success())
+                EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
             }
         }
     }
@@ -131,16 +139,24 @@ struct WelcomeOnboardingView: View {
                 .buttonStyle(CenturionPrimaryButtonStyle())
             case .connect:
                 VStack(spacing: Spacing.md) {
-                    Button("Continue") {
-                        withAnimation(Motion.standard) { step = .mission }
-                        Haptics.lightTap()
-                    }
-                    .buttonStyle(CenturionPrimaryButtonStyle())
+                    if connectionManager.connectionState == .connected {
+                        Button("Continue") {
+                            withAnimation(Motion.standard) { step = .mission }
+                            Haptics.lightTap()
+                        }
+                        .buttonStyle(CenturionPrimaryButtonStyle())
+                    } else {
+                        Button("Find my Centurion") {
+                            showPairingSheet = true
+                            Haptics.lightTap()
+                        }
+                        .buttonStyle(CenturionPrimaryButtonStyle())
 
-                    Button("Skip for now") {
-                        withAnimation(Motion.standard) { step = .mission }
+                        Button("Skip for now") {
+                            withAnimation(Motion.standard) { step = .mission }
+                        }
+                        .buttonStyle(CenturionGhostButtonStyle())
                     }
-                    .buttonStyle(CenturionGhostButtonStyle())
                 }
             case .mission:
                 VStack(spacing: Spacing.md) {
