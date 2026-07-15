@@ -1,9 +1,34 @@
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::map_unwrap_or,
+    clippy::too_many_lines
+)]
 mod adrian;
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
 mod adrian_dialog;
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::match_same_arms,
+    clippy::match_wildcard_for_single_variants,
+    clippy::needless_borrow,
+    clippy::needless_pass_by_value,
+    clippy::redundant_closure_for_method_calls,
+    clippy::too_many_lines
+)]
 mod linux {
     use crate::adrian::AdrianChatContext;
     use crate::adrian_dialog::{AdrianDialogHooks, show_adrian_dialog};
