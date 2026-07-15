@@ -25,6 +25,7 @@ mod adrian_dialog;
     clippy::match_same_arms,
     clippy::match_wildcard_for_single_variants,
     clippy::needless_borrow,
+    clippy::needless_borrows_for_generic_args,
     clippy::needless_pass_by_value,
     clippy::redundant_closure_for_method_calls,
     clippy::too_many_lines
@@ -1115,7 +1116,7 @@ mod linux {
                         })
                         .unwrap_or_else(|| "Support bundle found.".to_owned());
                     adw::MessageDialog::builder()
-                        .heading(&format!("Support Code {code}"))
+                        .heading(format!("Support Code {code}"))
                         .body(&body)
                         .close_response("ok")
                         .build()

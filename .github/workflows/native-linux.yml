@@ -58,6 +58,7 @@ jobs:
             -A clippy::redundant_closure_for_method_calls \
             -A clippy::match_same_arms \
             -A clippy::needless_borrow \
+            -A clippy::needless_borrows_for_generic_args \
             -A dead_code \
             -A unused_imports
 
