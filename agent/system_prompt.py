@@ -98,6 +98,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
+    # Autonomy / reporting oversight — loaded once per session (cache-safe).
+    try:
+        from centurion_cli.oversight import build_oversight_guidance
+
+        _oversight = build_oversight_guidance()
+        if _oversight:
+            stable_parts.append(_oversight)
+    except Exception:
+        pass
+
     # Pointer to the centurion-os skill + docs for user questions about Centurion itself.
     stable_parts.append(CENTURION_AGENT_HELP_GUIDANCE)
 

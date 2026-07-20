@@ -272,6 +272,53 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    OversightGet {
+        id: Uuid,
+    },
+    OversightGetResponse {
+        id: Uuid,
+        ok: bool,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    OversightPut {
+        id: Uuid,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        apply_level_preset: Option<bool>,
+    },
+    OversightPutResponse {
+        id: Uuid,
+        ok: bool,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SoulGet {
+        id: Uuid,
+    },
+    SoulGetResponse {
+        id: Uuid,
+        ok: bool,
+        soul: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SoulPut {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        soul: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        markdown: Option<String>,
+    },
+    SoulPutResponse {
+        id: Uuid,
+        ok: bool,
+        soul: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
     Ready,
     Ping,
     Pong,

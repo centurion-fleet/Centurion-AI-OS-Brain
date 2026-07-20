@@ -766,6 +766,47 @@ final class ConnectionManager: ObservableObject {
         return payload["snapshot"] as? [String: Any] ?? [:]
     }
 
+    func fetchOversight() async throws -> [String: Any] {
+        try await invokeRemote(action: "oversight_get")
+    }
+
+    func putOversight(
+        _ oversight: [String: Any],
+        applyLevelPreset: Bool = true
+    ) async throws -> [String: Any] {
+        let payload = try await invokeRemote(
+            action: "oversight_put",
+            extra: [
+                "oversight": oversight,
+                "apply_level_preset": applyLevelPreset,
+            ]
+        )
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not save oversight preferences."
+            )
+        }
+        return payload
+    }
+
+    func fetchSoul() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "soul_get")
+        return payload["soul"] as? [String: Any] ?? [:]
+    }
+
+    func putSoul(_ fields: [String: Any]) async throws -> [String: Any] {
+        let payload = try await invokeRemote(
+            action: "soul_put",
+            extra: ["soul": fields]
+        )
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not save your Sovereign's Soul."
+            )
+        }
+        return payload["soul"] as? [String: Any] ?? [:]
+    }
+
     func setFamilyBeneficiary(firstName: String) async throws -> [String: Any] {
         let payload = try await invokeRemote(
             action: "beneficiary_set_family_member",
@@ -939,6 +980,10 @@ final class ConnectionManager: ObservableObject {
             "remote_model_apply_response": "remote_model_apply",
             "remote_model_save_key_response": "remote_model_save_key",
             "remote_routing_mode_response": "remote_routing_mode",
+            "oversight_get_response": "oversight_get",
+            "oversight_put_response": "oversight_put",
+            "soul_get_response": "soul_get",
+            "soul_put_response": "soul_put",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {

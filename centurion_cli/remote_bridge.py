@@ -92,6 +92,14 @@ def handle_request(
         return _handle_telegram_import_bundle(request, request_id)
     if action == "telegram_import_preview":
         return _handle_telegram_import_preview(request_id)
+    if action == "oversight_get":
+        return _handle_oversight_get(request_id)
+    if action == "oversight_put":
+        return _handle_oversight_put(request, request_id)
+    if action == "soul_get":
+        return _handle_soul_get(request_id)
+    if action == "soul_put":
+        return _handle_soul_put(request, request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -700,9 +708,15 @@ def _run_agent_quiet(text: str) -> str:
     from contextlib import redirect_stderr, redirect_stdout
 
     from centurion_cli.oneshot import _run_agent
+    from centurion_cli.oversight import should_enable_remote_yolo
 
     logging.disable(logging.CRITICAL)
-    os.environ.setdefault("CENTURION_YOLO_MODE", "1")
+    # Only max-autonomy (or approvals.mode=off) gets YOLO on remote chat.
+    # Lower levels rely on host approval / deny paths instead of auto-approving.
+    if should_enable_remote_yolo():
+        os.environ.setdefault("CENTURION_YOLO_MODE", "1")
+    else:
+        os.environ.pop("CENTURION_YOLO_MODE", None)
     os.environ.setdefault("CENTURION_ACCEPT_HOOKS", "1")
     os.environ["CENTURION_DISABLE_OPENROUTER"] = "1"
     os.environ["CENTURION_PLATFORM"] = "remote"
@@ -710,6 +724,112 @@ def _run_agent_quiet(text: str) -> str:
         devnull
     ), redirect_stderr(devnull):
         return _run_agent(text) or ""
+
+
+def _handle_oversight_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.oversight import get_oversight_snapshot
+
+        snapshot = get_oversight_snapshot()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "oversight_get",
+            "oversight": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="oversight_get", exc=exc)
+
+
+def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.oversight import put_oversight_prefs
+
+        updates = request.get("oversight")
+        if not isinstance(updates, dict):
+            # Allow flat fields on the request for convenience.
+            updates = {
+                key: request[key]
+                for key in (
+                    "autonomy_level",
+                    "report_cadence",
+                    "ask_before_initiative",
+                    "confirm_dangerous_commands",
+                    "confirm_external_actions",
+                )
+                if key in request
+            }
+        if not updates:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "oversight_put",
+                "code": "INVALID_REQUEST",
+                "error": "Oversight updates are required.",
+                "message": "Oversight updates are required.",
+                "retryable": False,
+            }
+        apply_level_preset = bool(request.get("apply_level_preset", True))
+        snapshot = put_oversight_prefs(
+            updates, apply_level_preset=apply_level_preset
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "oversight_put",
+            "oversight": snapshot,
+            "message": "Saved. Changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="oversight_put", exc=exc)
+
+
+def _handle_soul_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.soul_sync import read_soul
+
+        soul = read_soul()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "soul_get",
+            "soul": soul,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="soul_get", exc=exc)
+
+
+def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.soul_sync import write_soul
+
+        fields = request.get("soul")
+        if not isinstance(fields, dict):
+            fields = request.get("fields")
+        markdown = request.get("markdown")
+        if not isinstance(fields, dict) and not isinstance(markdown, str):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "soul_put",
+                "code": "INVALID_REQUEST",
+                "error": "Soul fields or markdown are required.",
+                "message": "Soul fields or markdown are required.",
+                "retryable": False,
+            }
+        soul = write_soul(
+            fields if isinstance(fields, dict) else None,
+            markdown=markdown if isinstance(markdown, str) else None,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "soul_put",
+            "soul": soul,
+            "message": "Saved. Soul changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="soul_put", exc=exc)
 
 
 def _read_request() -> dict[str, Any]:

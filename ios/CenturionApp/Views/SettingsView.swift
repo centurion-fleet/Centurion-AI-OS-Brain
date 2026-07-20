@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var adrianService: AdrianService
     @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
+    @EnvironmentObject private var oversightStore: OversightStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
@@ -38,6 +39,7 @@ struct SettingsView: View {
                     DeviceLinkSection(showPairingSheet: $showPairingSheet)
                     ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                     youSection
+                    reportingOversightSection
                     collaborationsSection
                     privacySection
                     supportSection
@@ -143,9 +145,35 @@ struct SettingsView: View {
                 CenturionListRow(
                     icon: "sparkles",
                     title: "Your Sovereign's Soul",
-                    subtitle: missionStore.hasSoulConfiguration
-                        ? "Personality and rules configured"
-                        : "Personality and rules for your AI"
+                    subtitle: missionStore.soulSubtitle
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            NavigationLink(destination: AutonomyLevelView()) {
+                CenturionListRow(
+                    icon: "slider.horizontal.3",
+                    title: "Autonomy Level",
+                    subtitle: oversightStore.autonomySubtitle
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var reportingOversightSection: some View {
+        settingsSection(
+            title: "Reporting & Oversight",
+            icon: "eye",
+            footer: "Controls how often your Centurion reports back and what needs your confirmation. Changes apply on the next conversation."
+        ) {
+            NavigationLink(destination: ReportingOversightView()) {
+                CenturionListRow(
+                    icon: "eye",
+                    title: "Reporting & Oversight",
+                    subtitle: oversightStore.oversightSubtitle
                 )
             }
             .buttonStyle(.plain)

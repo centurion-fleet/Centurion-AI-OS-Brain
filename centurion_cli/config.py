@@ -664,6 +664,20 @@ DEFAULT_CONFIG = {
         # only controls how inbound user images are presented.
         "image_input_mode": "auto",
         "disabled_toolsets": [],
+        # Remote/Desktop autonomy ladder (strict | balanced | proactive | high).
+        # Applied via centurion_cli.oversight; maps onto approvals.mode +
+        # oversight.* presets. Default Balanced for new users.
+        "autonomy_level": "balanced",
+    },
+
+    # Reporting & oversight preferences (Remote You-tab / Desktop Settings).
+    # Behavioral guidance is injected at session start; report_cadence also
+    # informs in-app Pulse filtering. No OS push channel in this build.
+    "oversight": {
+        "report_cadence": "when_needed",  # off | when_needed | daily | after_significant_actions
+        "ask_before_initiative": True,
+        "confirm_dangerous_commands": True,
+        "confirm_external_actions": True,
     },
     
     "terminal": {

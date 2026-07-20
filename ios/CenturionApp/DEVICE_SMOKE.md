@@ -22,11 +22,22 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] Before first link, demo banner may appear
 - [ ] After successful link, demo conversations clear (`clearDemoData`)
 
-## Mission / Soul
+## Mission / Soul / Autonomy / Oversight
 
 - [ ] Open Mission; edit or view Life Mission
-- [ ] Soul Document / interview paths open without crash
+- [ ] You → **Your Sovereign's Soul** opens; subtitle reflects sync state when linked
+- [ ] Shape Your Sovereign shows save warning; note about next-conversation effect
+- [ ] After save while linked, Soul syncs to Sovereign `SOUL.md`
+- [ ] You → **Autonomy Level** shows four levels; default Balanced; description updates
+- [ ] **Reporting & Oversight** section opens; cadence / confirm / initiative toggles save
+- [ ] Changes apply on next conversation (not mid-chat)
 - [ ] Commitment chat frames and sends when connected
+
+## Desktop Settings (parity)
+
+- [ ] Settings → Autonomy Level Adjust changes host preference
+- [ ] Settings → Your Sovereign's Soul View/Edit saves with warning copy
+- [ ] Settings → Reporting & Oversight Adjust saves cadence and toggles
 
 ## Adrian (optional help)
 

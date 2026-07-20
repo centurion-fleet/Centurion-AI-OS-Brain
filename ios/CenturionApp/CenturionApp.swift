@@ -25,6 +25,7 @@ struct CenturionApp: App {
                     .environmentObject(services.dataMode)
                     .environmentObject(services.swarmStore)
                     .environmentObject(services.beneficiaryStore)
+                    .environmentObject(services.oversightStore)
                     .opacity(showSplash || showOnboarding ? 0 : 1)
                     .allowsHitTesting(!showSplash && !showOnboarding)
 
@@ -70,6 +71,8 @@ struct CenturionApp: App {
                     Task {
                         await services.swarmStore.refresh(from: services.connectionManager)
                         await services.beneficiaryStore.refresh(from: services.connectionManager)
+                        await services.oversightStore.refresh(from: services.connectionManager)
+                        await services.missionStore.refreshSoul(from: services.connectionManager)
                     }
                 } else {
                     clearedDemoForConnection = false

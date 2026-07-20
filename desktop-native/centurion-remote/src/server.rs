@@ -760,6 +760,124 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::OversightGet { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "oversight_get", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::OversightGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        oversight: payload
+                            .get("oversight")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::OversightPut {
+                id,
+                oversight,
+                apply_level_preset,
+            } => {
+                let mut body = serde_json::json!({ "oversight": oversight });
+                if let Some(preset) = apply_level_preset {
+                    body["apply_level_preset"] = serde_json::Value::Bool(preset);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "oversight_put", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::OversightPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        oversight: payload
+                            .get("oversight")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SoulGet { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "soul_get", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SoulGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        soul: payload
+                            .get("soul")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SoulPut { id, soul, markdown } => {
+                let mut body = serde_json::Map::new();
+                if let Some(soul) = soul {
+                    body.insert("soul".to_owned(), soul);
+                }
+                if let Some(markdown) = markdown {
+                    body.insert(
+                        "markdown".to_owned(),
+                        serde_json::Value::String(markdown),
+                    );
+                }
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "soul_put",
+                        serde_json::Value::Object(body),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SoulPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        soul: payload
+                            .get("soul")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::Ping => RemoteMessage::Pong,
             _ => RemoteMessage::Error {
                 id: None,

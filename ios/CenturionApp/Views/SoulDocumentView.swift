@@ -3,8 +3,12 @@ import SwiftUI
 /// Your Sovereign's Soul — how your AI companion speaks and behaves.
 struct SoulDocumentView: View {
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var showShareSheet = false
     @State private var showInterview = false
+    @State private var pendingSoul: SoulDocument?
+    @State private var showSaveWarning = false
+    @State private var syncMessage: String?
 
     private var soul: SoulDocument { missionStore.soul }
 
@@ -34,6 +38,19 @@ struct SoulDocumentView: View {
                     emptyState
                         .padding(.bottom, Spacing.lg)
                 }
+
+                Text("Changes may take time to fully take effect — they apply on the next conversation.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let syncMessage {
+                    Text(syncMessage)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.dimAccent())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .frame(maxWidth: 428)
             .padding()
@@ -60,8 +77,29 @@ struct SoulDocumentView: View {
         }
         .sheet(isPresented: $showInterview) {
             SoulInterviewView(existingSoul: missionStore.soul) { document in
-                missionStore.updateSoul(document)
+                pendingSoul = document
+                showSaveWarning = true
             }
+        }
+        .alert("Change Your Sovereign's Soul?", isPresented: $showSaveWarning) {
+            Button("Cancel", role: .cancel) {
+                pendingSoul = nil
+            }
+            Button("Save Changes") {
+                guard let pendingSoul else { return }
+                missionStore.updateSoul(pendingSoul)
+                self.pendingSoul = nil
+                Task {
+                    syncMessage = await missionStore.syncSoulToSovereign(
+                        connectionManager: connectionManager
+                    )
+                }
+            }
+        } message: {
+            Text("This changes how your Centurion speaks and behaves. Changes may take time to fully take effect — they apply on the next conversation.")
+        }
+        .task {
+            await missionStore.refreshSoul(from: connectionManager)
         }
     }
 

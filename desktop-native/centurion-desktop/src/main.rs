@@ -38,6 +38,7 @@ mod linux {
     use libadwaita as adw;
     use serde::Deserialize;
     use std::cell::RefCell;
+    use std::io::Write;
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
 
@@ -526,6 +527,44 @@ mod linux {
 
         settings.append(
             &gtk::Label::builder()
+                .label("You & Oversight")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(12)
+                .build(),
+        );
+        let autonomy_row = adw::ActionRow::builder()
+            .title("Autonomy Level")
+            .subtitle("Balanced (default) — follow with light interpretation")
+            .icon_name("preferences-desktop-symbolic")
+            .build();
+        let autonomy_button = gtk::Button::with_label("Adjust");
+        autonomy_button.set_valign(gtk::Align::Center);
+        autonomy_row.add_suffix(&autonomy_button);
+        settings_list.append(&autonomy_row);
+
+        let soul_row = adw::ActionRow::builder()
+            .title("Your Sovereign's Soul")
+            .subtitle("Personality and rules for your Centurion")
+            .icon_name("emoji-people-symbolic")
+            .build();
+        let soul_button = gtk::Button::with_label("View / Edit");
+        soul_button.set_valign(gtk::Align::Center);
+        soul_row.add_suffix(&soul_button);
+        settings_list.append(&soul_row);
+
+        let oversight_row = adw::ActionRow::builder()
+            .title("Reporting & Oversight")
+            .subtitle("Report cadence and confirmation preferences")
+            .icon_name("eye-open-negative-filled-symbolic")
+            .build();
+        let oversight_button = gtk::Button::with_label("Adjust");
+        oversight_button.set_valign(gtk::Align::Center);
+        oversight_row.add_suffix(&oversight_button);
+        settings_list.append(&oversight_row);
+
+        settings.append(
+            &gtk::Label::builder()
                 .label("Transition")
                 .css_classes(["title-4"])
                 .xalign(0.0)
@@ -657,12 +696,21 @@ mod linux {
         update_status();
         refresh_thinking_status(&thinking_detail, &thinking_settings_row);
         refresh_backup_thinking_services(&backup_thinking_row);
+        refresh_autonomy_row(&autonomy_row);
+        refresh_soul_row(&soul_row);
+        refresh_oversight_row(&oversight_row);
         let thinking_poll_detail = thinking_detail.clone();
         let thinking_poll_row = thinking_settings_row.clone();
         let backup_poll_row = backup_thinking_row.clone();
+        let autonomy_poll_row = autonomy_row.clone();
+        let soul_poll_row = soul_row.clone();
+        let oversight_poll_row = oversight_row.clone();
         glib::timeout_add_seconds_local(30, move || {
             refresh_thinking_status(&thinking_poll_detail, &thinking_poll_row);
             refresh_backup_thinking_services(&backup_poll_row);
+            refresh_autonomy_row(&autonomy_poll_row);
+            refresh_soul_row(&soul_poll_row);
+            refresh_oversight_row(&oversight_poll_row);
             glib::ControlFlow::Continue
         });
         restore_thinking_button.connect_clicked({
@@ -689,6 +737,23 @@ mod linux {
             let thinking_detail = thinking_detail.clone();
             let window = window.clone();
             move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        autonomy_button.connect_clicked({
+            let window = window.clone();
+            let autonomy_row = autonomy_row.clone();
+            let oversight_row = oversight_row.clone();
+            move |_| show_autonomy_dialog(&window, &autonomy_row, &oversight_row)
+        });
+        soul_button.connect_clicked({
+            let window = window.clone();
+            let soul_row = soul_row.clone();
+            move |_| show_soul_dialog(&window, &soul_row)
+        });
+        oversight_button.connect_clicked({
+            let window = window.clone();
+            let oversight_row = oversight_row.clone();
+            let autonomy_row = autonomy_row.clone();
+            move |_| show_oversight_dialog(&window, &oversight_row, &autonomy_row)
         });
         health_check_button.connect_clicked({
             let window = window.clone();
@@ -995,6 +1060,380 @@ mod linux {
             .ok()?;
         // Parse JSON even when exit status is non-zero (no Telegram history found).
         serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn bridge_python() -> String {
+        std::env::var("CENTURION_PYTHON")
+            .ok()
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| "python3".to_owned())
+    }
+
+    fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
+        let mut body = serde_json::Map::new();
+        body.insert("id".to_owned(), serde_json::json!("desktop-settings"));
+        body.insert("action".to_owned(), serde_json::Value::String(action.to_owned()));
+        if let serde_json::Value::Object(map) = extra {
+            for (key, value) in map {
+                body.insert(key, value);
+            }
+        }
+        let payload = serde_json::Value::Object(body).to_string();
+        let mut child = Command::new(bridge_python())
+            .args(["-m", "centurion_cli.remote_bridge"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(payload.as_bytes()).ok()?;
+        }
+        let output = child.wait_with_output().ok()?;
+        if !output.status.success() && output.stdout.is_empty() {
+            return None;
+        }
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn autonomy_label(level: &str) -> &'static str {
+        match level {
+            "strict" => "Strict — follow instructions exactly, minimal initiative",
+            "balanced" => "Balanced — follow with light interpretation",
+            "proactive" => "Proactive — suggest improvements and take small actions",
+            "high" => "High Autonomy — maximum freedom within boundaries",
+            _ => "Balanced — follow with light interpretation",
+        }
+    }
+
+    fn refresh_autonomy_row(row: &adw::ActionRow) {
+        let Some(payload) = run_bridge_action("oversight_get", serde_json::json!({})) else {
+            row.set_subtitle("Could not read autonomy level.");
+            return;
+        };
+        let level = payload
+            .pointer("/oversight/autonomy_level")
+            .and_then(|v| v.as_str())
+            .unwrap_or("balanced");
+        row.set_subtitle(autonomy_label(level));
+    }
+
+    fn refresh_soul_row(row: &adw::ActionRow) {
+        let Some(payload) = run_bridge_action("soul_get", serde_json::json!({})) else {
+            row.set_subtitle("Could not read your Sovereign's Soul.");
+            return;
+        };
+        let summary = payload
+            .pointer("/soul/personalitySummary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if summary.is_empty() {
+            let exists = payload
+                .pointer("/soul/exists")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            row.set_subtitle(if exists {
+                "Soul document on this Centurion"
+            } else {
+                "Not set yet — shape personality and rules"
+            });
+        } else {
+            let clipped: String = summary.chars().take(72).collect();
+            row.set_subtitle(&clipped);
+        }
+    }
+
+    fn refresh_oversight_row(row: &adw::ActionRow) {
+        let Some(payload) = run_bridge_action("oversight_get", serde_json::json!({})) else {
+            row.set_subtitle("Could not read reporting preferences.");
+            return;
+        };
+        let cadence = payload
+            .pointer("/oversight/report_cadence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("when_needed");
+        let ask = payload
+            .pointer("/oversight/ask_before_initiative")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let cadence_label = match cadence {
+            "off" => "Off",
+            "daily" => "Daily",
+            "after_significant_actions" => "After significant actions",
+            _ => "When needed",
+        };
+        row.set_subtitle(&format!(
+            "{cadence_label} · ask before initiative: {}",
+            if ask { "on" } else { "off" }
+        ));
+    }
+
+    fn show_autonomy_dialog(
+        parent: &adw::ApplicationWindow,
+        autonomy_row: &adw::ActionRow,
+        oversight_row: &adw::ActionRow,
+    ) {
+        let current = run_bridge_action("oversight_get", serde_json::json!({}))
+            .and_then(|p| {
+                p.pointer("/oversight/autonomy_level")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "balanced".to_owned());
+
+        let dialog = adw::MessageDialog::builder()
+            .heading("Autonomy Level")
+            .body(
+                "How much freedom your Centurion has. Changes apply on the next conversation.\n\n\
+                 Strict — follow exactly\n\
+                 Balanced — light interpretation (default)\n\
+                 Proactive — suggest and take small actions\n\
+                 High Autonomy — maximum freedom within boundaries",
+            )
+            .close_response("cancel")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        for (id, label) in [
+            ("strict", "Strict"),
+            ("balanced", "Balanced"),
+            ("proactive", "Proactive"),
+            ("high", "High Autonomy"),
+        ] {
+            dialog.add_response(id, label);
+            if id == current {
+                dialog.set_response_appearance(id, adw::ResponseAppearance::Suggested);
+                dialog.set_default_response(Some(id));
+            }
+        }
+        dialog.set_transient_for(Some(parent));
+        let autonomy_row = autonomy_row.clone();
+        let oversight_row = oversight_row.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if matches!(response, "strict" | "balanced" | "proactive" | "high") {
+                let _ = run_bridge_action(
+                    "oversight_put",
+                    serde_json::json!({
+                        "oversight": { "autonomy_level": response },
+                        "apply_level_preset": true,
+                    }),
+                );
+                refresh_autonomy_row(&autonomy_row);
+                refresh_oversight_row(&oversight_row);
+            }
+            dialog.close();
+        });
+        dialog.present();
+    }
+
+    fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
+        let markdown = run_bridge_action("soul_get", serde_json::json!({}))
+            .and_then(|p| {
+                p.pointer("/soul/markdown")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            })
+            .unwrap_or_default();
+
+        let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
+        buffer.set_text(&markdown);
+        let view = gtk::TextView::builder()
+            .buffer(&buffer)
+            .wrap_mode(gtk::WrapMode::WordChar)
+            .monospace(true)
+            .editable(true)
+            .build();
+        let scrolled = gtk::ScrolledWindow::builder()
+            .child(&view)
+            .min_content_height(280)
+            .min_content_width(480)
+            .hexpand(true)
+            .vexpand(true)
+            .build();
+
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.set_margin_top(12);
+        content.set_margin_bottom(12);
+        content.set_margin_start(12);
+        content.set_margin_end(12);
+        content.append(
+            &gtk::Label::builder()
+                .label(
+                    "This changes how your Centurion speaks and behaves. \
+                     Changes may take time to fully take effect — they apply on the next conversation.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+        content.append(&scrolled);
+
+        let dialog = adw::MessageDialog::builder()
+            .heading("Your Sovereign's Soul")
+            .close_response("cancel")
+            .extra_child(&content)
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("save", "Save Changes");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("save"));
+        dialog.set_transient_for(Some(parent));
+        let soul_row = soul_row.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response == "save" {
+                let (start, end) = buffer.bounds();
+                let text = buffer.text(&start, &end, false);
+                let _ = run_bridge_action(
+                    "soul_put",
+                    serde_json::json!({ "markdown": text.as_str() }),
+                );
+                refresh_soul_row(&soul_row);
+            }
+            dialog.close();
+        });
+        dialog.present();
+    }
+
+    fn show_oversight_dialog(
+        parent: &adw::ApplicationWindow,
+        oversight_row: &adw::ActionRow,
+        autonomy_row: &adw::ActionRow,
+    ) {
+        let snapshot = run_bridge_action("oversight_get", serde_json::json!({}))
+            .and_then(|p| p.get("oversight").cloned())
+            .unwrap_or_else(|| serde_json::json!({}));
+        let cadence = snapshot
+            .get("report_cadence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("when_needed")
+            .to_owned();
+        let ask = snapshot
+            .get("ask_before_initiative")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let dangerous = snapshot
+            .get("confirm_dangerous_commands")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let external = snapshot
+            .get("confirm_external_actions")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let cadence_model = gtk::StringList::new(&[
+            "off",
+            "when_needed",
+            "daily",
+            "after_significant_actions",
+        ]);
+        let cadence_drop = gtk::DropDown::from_strings(&[
+            "Off",
+            "When needed",
+            "Daily",
+            "After significant actions",
+        ]);
+        let selected = match cadence.as_str() {
+            "off" => 0_u32,
+            "daily" => 2,
+            "after_significant_actions" => 3,
+            _ => 1,
+        };
+        cadence_drop.set_selected(selected);
+        let _ = cadence_model;
+
+        let ask_switch = gtk::Switch::builder().active(ask).valign(gtk::Align::Center).build();
+        let dangerous_switch = gtk::Switch::builder()
+            .active(dangerous)
+            .valign(gtk::Align::Center)
+            .build();
+        let external_switch = gtk::Switch::builder()
+            .active(external)
+            .valign(gtk::Align::Center)
+            .build();
+
+        let list = gtk::ListBox::new();
+        list.add_css_class("boxed-list");
+
+        let cadence_row = adw::ActionRow::builder()
+            .title("Report cadence")
+            .subtitle("How often your Centurion reports back")
+            .build();
+        cadence_row.add_suffix(&cadence_drop);
+        list.append(&cadence_row);
+
+        let ask_row = adw::ActionRow::builder()
+            .title("Ask before taking initiative")
+            .build();
+        ask_row.add_suffix(&ask_switch);
+        ask_row.set_activatable_widget(Some(&ask_switch));
+        list.append(&ask_row);
+
+        let dangerous_row = adw::ActionRow::builder()
+            .title("Confirm dangerous commands")
+            .build();
+        dangerous_row.add_suffix(&dangerous_switch);
+        dangerous_row.set_activatable_widget(Some(&dangerous_switch));
+        list.append(&dangerous_row);
+
+        let external_row = adw::ActionRow::builder()
+            .title("Confirm external actions")
+            .build();
+        external_row.add_suffix(&external_switch);
+        external_row.set_activatable_widget(Some(&external_switch));
+        list.append(&external_row);
+
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.set_margin_top(12);
+        content.set_margin_bottom(12);
+        content.set_margin_start(12);
+        content.set_margin_end(12);
+        content.append(
+            &gtk::Label::builder()
+                .label("Changes apply on the next conversation.")
+                .xalign(0.0)
+                .build(),
+        );
+        content.append(&list);
+
+        let dialog = adw::MessageDialog::builder()
+            .heading("Reporting & Oversight")
+            .close_response("cancel")
+            .extra_child(&content)
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("save", "Save");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        dialog.set_default_response(Some("save"));
+        dialog.set_transient_for(Some(parent));
+
+        let oversight_row = oversight_row.clone();
+        let autonomy_row = autonomy_row.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response == "save" {
+                let cadence_value = match cadence_drop.selected() {
+                    0 => "off",
+                    2 => "daily",
+                    3 => "after_significant_actions",
+                    _ => "when_needed",
+                };
+                let _ = run_bridge_action(
+                    "oversight_put",
+                    serde_json::json!({
+                        "oversight": {
+                            "report_cadence": cadence_value,
+                            "ask_before_initiative": ask_switch.is_active(),
+                            "confirm_dangerous_commands": dangerous_switch.is_active(),
+                            "confirm_external_actions": external_switch.is_active(),
+                        },
+                        "apply_level_preset": false,
+                    }),
+                );
+                refresh_oversight_row(&oversight_row);
+                refresh_autonomy_row(&autonomy_row);
+            }
+            dialog.close();
+        });
+        dialog.present();
     }
 
     fn show_telegram_history_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
