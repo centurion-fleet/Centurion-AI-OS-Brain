@@ -1,16 +1,20 @@
 {
   "id": "centurion-ai-os",
   "name": "Centurion AI OS",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Self-improving open-source AI agent by Centurion Fleet with ACP editor integration, persistent memory, skills, and rich tool support.",
   "repository": "https://github.com/centurion-fleet/Centurion-AI-OS",
   "website": "https://github.com/centurion-fleet/Centurion-AI-OS/docs/user-guide/features/acp",
-  "authors": ["Centurion Fleet"],
+  "authors": [
+    "Centurion Fleet"
+  ],
   "license": "MIT",
   "distribution": {
     "uvx": {
-      "package": "centurionai-os[acp]==5.0.0",
-      "args": ["centurion-acp"]
+      "package": "centurionai-os[acp]==5.0.1",
+      "args": [
+        "centurion-acp"
+      ]
     }
   }
 }
