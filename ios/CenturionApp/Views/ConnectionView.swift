@@ -37,7 +37,7 @@ struct ConnectionView: View {
         }
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(
-                initialMessage: "Your Centurion's thinking service needs attention."
+                initialMessage: "Your Sovereign's thinking service needs attention."
             )
             .environmentObject(connectionManager)
         }
@@ -62,11 +62,11 @@ struct ConnectionView: View {
 
     private var trustStatement: some View {
         VStack(spacing: Spacing.xs) {
-            Text("Your Centurion stays reliable when your iPhone is linked to your Centurion.")
+            Text("Your Sovereign stays reliable when your iPhone is linked — Tailscale first, Wi‑Fi as fallback.")
                 .font(.system(.subheadline, design: .serif).weight(.medium))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
-            Text("This shows whether your iPhone is linked and whether your Centurion can think properly.")
+            Text("This shows whether your iPhone is linked and whether your Sovereign can think properly.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -108,14 +108,36 @@ struct ConnectionView: View {
     @ViewBuilder
     private var primaryActionButton: some View {
         if connectionManager.connectionState != .connected {
-            Button {
-                Haptics.lightTap()
-                showPairingSheet = true
-            } label: {
-                Text("Find my Centurion")
+            if hasSavedLink {
+                VStack(spacing: Spacing.sm) {
+                    Button {
+                        Haptics.lightTap()
+                        connectionManager.reconnect()
+                    } label: {
+                        Text("Reconnect")
+                    }
+                    .buttonStyle(CenturionPrimaryButtonStyle())
+                    .accessibilityLabel("Reconnect to your Sovereign")
+
+                    Button {
+                        Haptics.lightTap()
+                        showPairingSheet = true
+                    } label: {
+                        Text("Find my Sovereign")
+                    }
+                    .buttonStyle(CenturionGhostButtonStyle())
+                    .accessibilityLabel("Find my Sovereign")
+                }
+            } else {
+                Button {
+                    Haptics.lightTap()
+                    showPairingSheet = true
+                } label: {
+                    Text("Find my Sovereign")
+                }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .accessibilityLabel("Find my Sovereign")
             }
-            .buttonStyle(CenturionPrimaryButtonStyle())
-            .accessibilityLabel("Find my Centurion")
         } else if connectionManager.llmHealth.needsAttention {
             Button {
                 Haptics.lightTap()
@@ -125,7 +147,23 @@ struct ConnectionView: View {
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
             .accessibilityLabel("Fix Thinking Service")
+        } else {
+            Button {
+                Haptics.lightTap()
+                connectionManager.reconnect()
+            } label: {
+                Text("Reconnect")
+            }
+            .buttonStyle(CenturionGhostButtonStyle())
+            .accessibilityLabel("Reconnect to your Sovereign")
         }
+    }
+
+    private var hasSavedLink: Bool {
+        if case .error = connectionManager.connectionState { return true }
+        if case .awaitingApproval = connectionManager.connectionState { return true }
+        if case .connecting = connectionManager.connectionState { return true }
+        return connectionManager.hasPersistedLink
     }
 
     private var supportLinks: some View {
@@ -147,7 +185,7 @@ struct ConnectionView: View {
         AtmosphericSurface {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 CenturionSectionHeader(title: "Your Privacy", icon: "lock.shield")
-                Text("Crypto Chat keeps conversations between you and your Centurion on your network — encrypted end to end. Public AIs have no equivalent.")
+                Text("Crypto Chat keeps conversations between you and your Sovereign on your private mesh — encrypted end to end. Public AIs have no equivalent.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)
@@ -157,7 +195,9 @@ struct ConnectionView: View {
 
     private var deviceLinkHeadline: String {
         switch connectionManager.connectionState {
-        case .connected: return "Linked"
+        case .connected:
+            let badge = connectionManager.linkPathBadge
+            return badge.isEmpty ? "Linked" : "Linked · \(badge)"
         case .awaitingApproval: return "Waiting for approval"
         case .discovering, .connecting: return "Connecting"
         case .error: return "Connection issue"
@@ -169,19 +209,23 @@ struct ConnectionView: View {
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
-                return connectionManager.isChannelEncrypted
+                let base = connectionManager.isChannelEncrypted
                     ? "Crypto Chat on — linked to \(device.name)"
                     : "Linked to \(device.name)"
+                if !device.isTailscalePath {
+                    return "\(base). Turn on Tailscale for a steadier link."
+                }
+                return base
             }
             return connectionManager.isChannelEncrypted
-                ? "Crypto Chat on — linked to your Centurion"
-                : "Linked to your Centurion"
+                ? "Crypto Chat on — linked to your Sovereign"
+                : "Linked to your Sovereign"
         case .discovering:
-            return "Looking for your Centurion on your network"
+            return "Looking for your Sovereign — Tailscale first, then Wi‑Fi"
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link your iPhone to turn on Crypto Chat"
+            return "Link over Tailscale when you can — Wi‑Fi works as a fallback"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -200,11 +244,11 @@ struct ConnectionView: View {
         }
         switch connectionManager.llmHealth {
         case .healthy:
-            return "Your Centurion can answer messages."
+            return "Your Sovereign can answer messages."
         case .unknown:
-            return "Checking with your Centurion…"
+            return "Checking with your Sovereign…"
         default:
-            return "Your Centurion may not be able to reply right now."
+            return "Your Sovereign may not be able to reply right now."
         }
     }
 }
@@ -236,29 +280,59 @@ struct DeviceLinkSection: View {
                     }
 
                     if connectionManager.connectionState != .connected {
-                        Button {
-                            Haptics.lightTap()
-                            showPairingSheet = true
-                        } label: {
-                            Text("Find my Centurion")
-                        }
-                        .buttonStyle(CenturionPrimaryButtonStyle())
-                    } else {
-                        Button(role: .destructive) {
-                            connectionManager.disconnect()
-                        } label: {
-                            HStack(spacing: Spacing.sm) {
-                                Image(systemName: "power")
-                                Text("Disconnect")
-                                Spacer()
+                        VStack(spacing: Spacing.sm) {
+                            if hasSavedLink {
+                                Button {
+                                    Haptics.lightTap()
+                                    connectionManager.reconnect()
+                                } label: {
+                                    Text("Reconnect")
+                                }
+                                .buttonStyle(CenturionPrimaryButtonStyle())
+
+                                Button {
+                                    Haptics.lightTap()
+                                    showPairingSheet = true
+                                } label: {
+                                    Text("Find my Sovereign")
+                                }
+                                .buttonStyle(CenturionGhostButtonStyle())
+                            } else {
+                                Button {
+                                    Haptics.lightTap()
+                                    showPairingSheet = true
+                                } label: {
+                                    Text("Find my Sovereign")
+                                }
+                                .buttonStyle(CenturionPrimaryButtonStyle())
                             }
-                            .font(.body)
-                            .foregroundColor(ColorTheme.error())
                         }
-                        .buttonStyle(.plain)
+                    } else {
+                        VStack(spacing: Spacing.sm) {
+                            Button {
+                                Haptics.lightTap()
+                                connectionManager.reconnect()
+                            } label: {
+                                Text("Reconnect")
+                            }
+                            .buttonStyle(CenturionGhostButtonStyle())
+
+                            Button(role: .destructive) {
+                                connectionManager.disconnect()
+                            } label: {
+                                HStack(spacing: Spacing.sm) {
+                                    Image(systemName: "power")
+                                    Text("Disconnect")
+                                    Spacer()
+                                }
+                                .font(.body)
+                                .foregroundColor(ColorTheme.error())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
 
-                    Text("Your iPhone and Centurion should be on the same Wi‑Fi (or reachable via Tailscale).")
+                    Text("Tailscale keeps you linked at home and away. Same Wi‑Fi is a fallback when Tailscale is off.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,9 +341,18 @@ struct DeviceLinkSection: View {
         }
     }
 
+    private var hasSavedLink: Bool {
+        if case .error = connectionManager.connectionState { return true }
+        if case .awaitingApproval = connectionManager.connectionState { return true }
+        if case .connecting = connectionManager.connectionState { return true }
+        return connectionManager.hasPersistedLink
+    }
+
     private var deviceLinkHeadline: String {
         switch connectionManager.connectionState {
-        case .connected: return "Linked"
+        case .connected:
+            let badge = connectionManager.linkPathBadge
+            return badge.isEmpty ? "Linked" : "Linked · \(badge)"
         case .awaitingApproval: return "Waiting for approval"
         case .discovering, .connecting: return "Connecting"
         case .error: return "Connection issue"
@@ -281,19 +364,23 @@ struct DeviceLinkSection: View {
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
-                return connectionManager.isChannelEncrypted
+                let base = connectionManager.isChannelEncrypted
                     ? "Crypto Chat on — linked to \(device.name)"
                     : "Linked to \(device.name)"
+                if !device.isTailscalePath {
+                    return "\(base). Turn on Tailscale for a steadier link."
+                }
+                return base
             }
             return connectionManager.isChannelEncrypted
-                ? "Crypto Chat on — linked to your Centurion"
-                : "Linked to your Centurion"
+                ? "Crypto Chat on — linked to your Sovereign"
+                : "Linked to your Sovereign"
         case .discovering:
-            return "Looking for your Centurion on your network"
+            return "Looking for your Sovereign — Tailscale first, then Wi‑Fi"
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link your iPhone to turn on Crypto Chat"
+            return "Link over Tailscale when you can — Wi‑Fi works as a fallback"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -311,7 +398,7 @@ struct ThinkingServiceSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            CenturionSectionHeader(title: "How Your Centurion Thinks", icon: "brain.head.profile")
+            CenturionSectionHeader(title: "How Your Sovereign Thinks", icon: "brain.head.profile")
 
             AtmosphericSurface {
                 VStack(spacing: Spacing.md) {
@@ -331,7 +418,7 @@ struct ThinkingServiceSection: View {
                         }
 
                         if connectionManager.routingMode == "phoenix" {
-                            Text("Auto-select is on — your Centurion picks an LLM from your message.")
+                            Text("Auto-select is on — your Sovereign picks an LLM from your message.")
                                 .font(.caption)
                                 .foregroundColor(ColorTheme.mutedText())
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -361,7 +448,7 @@ struct ThinkingServiceSection: View {
                             .buttonStyle(CenturionPrimaryButtonStyle())
                         }
                     } else {
-                        Text("Link your Centurion first to see whether it can think properly.")
+                        Text("Link your Sovereign first to see whether it can think properly.")
                             .font(.subheadline)
                             .foregroundColor(ColorTheme.mutedText())
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -369,7 +456,7 @@ struct ThinkingServiceSection: View {
                 }
             }
 
-            Text("API keys are saved on your Centurion, not on this iPhone.")
+            Text("API keys are saved on your Sovereign, not on this iPhone.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
@@ -393,11 +480,11 @@ struct ThinkingServiceSection: View {
         }
         switch connectionManager.llmHealth {
         case .healthy:
-            return "Your Centurion can answer messages."
+            return "Your Sovereign can answer messages."
         case .unknown:
-            return "Checking with your Centurion…"
+            return "Checking with your Sovereign…"
         default:
-            return "Your Centurion may not be able to reply right now."
+            return "Your Sovereign may not be able to reply right now."
         }
     }
 }
@@ -448,8 +535,14 @@ struct ConnectionPairingSheet: View {
                 }
             }
             .onChange(of: connectionManager.connectionState) { _, newState in
+                // Stay open for pairing approval; only auto-close on a stable link.
                 if newState == .connected {
-                    dismiss()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(600))
+                        if connectionManager.connectionState == .connected {
+                            dismiss()
+                        }
+                    }
                 }
             }
         }
@@ -462,7 +555,7 @@ struct ConnectionPairingSheet: View {
                     "Linking to \($0)…"
                 } ?? "Setting up Crypto Chat…"
             )
-            Text("Keep this screen open. Your Centurion may ask you to approve this iPhone.")
+            Text("Keep this screen open. Your Sovereign may ask you to approve this iPhone.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -476,8 +569,8 @@ struct ConnectionPairingSheet: View {
             ErrorState(
                 title: "Couldn't link",
                 message: message,
-                retryTitle: "Try again",
-                onRetry: { connectionManager.retryConnection() }
+                retryTitle: "Reconnect",
+                onRetry: { connectionManager.reconnect() }
             )
             if !connectionManager.discoveredDevices.isEmpty {
                 Button("Back to device list") {
@@ -492,7 +585,7 @@ struct ConnectionPairingSheet: View {
     private var connectedState: some View {
         VStack(spacing: Spacing.lg) {
             SuccessMoment(
-                title: "Linked to your Centurion",
+                title: linkedSuccessTitle,
                 message: connectionManager.connectedDevice?.name
             )
             EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
@@ -502,11 +595,16 @@ struct ConnectionPairingSheet: View {
         .padding()
     }
 
+    private var linkedSuccessTitle: String {
+        let badge = connectionManager.linkPathBadge
+        return badge.isEmpty ? "Linked to your Sovereign" : "Linked · \(badge)"
+    }
+
     private func awaitingApprovalState(message: String) -> some View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
-                title: "Approve on your Centurion",
-                subtitle: "Your iPhone found your Centurion. Approve it once on the computer, then this screen will finish linking automatically."
+                title: "Approve on your Sovereign",
+                subtitle: "Your iPhone found your Sovereign. Approve it once on the computer, then this screen will finish linking automatically."
             )
             Image(systemName: "hourglass.circle.fill")
                 .font(.system(size: 48))
@@ -517,7 +615,7 @@ struct ConnectionPairingSheet: View {
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.primaryText())
                     if let fingerprint = connectionManager.clientFingerprint, !fingerprint.isEmpty {
-                        Text("On your Centurion computer, run:")
+                        Text("On your Sovereign computer, run:")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                         Text("centurion-remote approve \(fingerprint)")
@@ -554,8 +652,8 @@ struct ConnectionPairingSheet: View {
 
     private var searchingState: some View {
         VStack(spacing: Spacing.lg) {
-            LoadingState(message: "Looking for your Centurion on your network…")
-            Text("Make sure Centurion Remote is running on your computer and both devices are on the same network.")
+            LoadingState(message: "Looking for your Sovereign…")
+            Text("Prefer Tailscale: enter the MagicDNS name or Tailscale IP from your Sovereign. Same Wi‑Fi discovery is a fallback.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -569,7 +667,7 @@ struct ConnectionPairingSheet: View {
     private var deviceList: some View {
         List {
             Section {
-                Text("Tap your Centurion below. Both devices must be on the same Wi‑Fi, and Local Network access must be enabled for this app in iPhone Settings.")
+                Text("Tap your Sovereign below for Wi‑Fi discovery, or enter a Tailscale MagicDNS name / IP for the preferred link.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .listRowBackground(Color.clear)
@@ -613,7 +711,7 @@ struct ConnectionPairingSheet: View {
             .buttonStyle(CenturionGhostButtonStyle())
 
             if showManualEntry {
-                TextField("Hostname or IP", text: $manualHost)
+                TextField("Tailscale MagicDNS or IP", text: $manualHost)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)

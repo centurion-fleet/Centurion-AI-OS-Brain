@@ -68,7 +68,7 @@ struct LifeMission: Identifiable, Codable {
     }
 }
 
-/// The phases of a Centurion mission loop — from discovery through to verification.
+/// The phases of a Sovereign mission loop — from discovery through to verification.
 enum LoopPhase: String, CaseIterable {
     case discovering = "Discovering"
     case planning = "Planning"
@@ -87,7 +87,7 @@ enum LoopPhase: String, CaseIterable {
     }
 }
 
-/// What the Centurion is doing RIGHT NOW — the live loop.
+/// What the Sovereign is doing RIGHT NOW — the live loop.
 /// This is the primary UI. The human watches this.
 struct LiveActivity: Identifiable {
     let id: UUID
@@ -237,7 +237,7 @@ struct DecisionOption: Identifiable {
     let description: String
 }
 
-/// A Centurion thought — appears in the Centurion Remote stream.
+/// A Sovereign thought — appears in the Sovereign Remote stream.
 struct CenturionThought: Identifiable {
     let id: UUID
     let text: String
@@ -298,7 +298,7 @@ extension LiveActivity {
     }
 }
 
-/// A document the Centurion has created — research, content, analysis, plans.
+/// A document the Sovereign has created — research, content, analysis, plans.
 /// These are surfaced in the Pulse tab's OUTPUTS section and as inline cards in Chat.
 struct CenturionOutput: Identifiable {
     let id: UUID
@@ -310,7 +310,7 @@ struct CenturionOutput: Identifiable {
     let relatedMission: String?
     let createdAt: Date
     let wordCount: Int
-    let filePath: String            // Where it lives on the Centurion
+    let filePath: String            // Where it lives on the Sovereign
 
     enum OutputType: String, CaseIterable {
         case research = "Research"
@@ -383,7 +383,7 @@ struct LifeMissionTarget: Identifiable, Codable {
     
     static func previewTargets() -> [LifeMissionTarget] {
         [
-            LifeMissionTarget(id: UUID(), title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
+            LifeMissionTarget(id: UUID(), title: "Build Sovereign", description: "Create the world's most personal AI companion"),
             LifeMissionTarget(id: UUID(), title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
             LifeMissionTarget(id: UUID(), title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
         ]

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Your Centurion's Soul — how your AI companion speaks and behaves.
+/// Your Sovereign's Soul — how your AI companion speaks and behaves.
 struct SoulDocumentView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @State private var showShareSheet = false
@@ -25,7 +25,7 @@ struct SoulDocumentView: View {
                         HStack(spacing: Spacing.xs) {
                             Image(systemName: "pencil")
                                 .font(.subheadline)
-                            Text("Shape Your Centurion")
+                            Text("Shape Your Sovereign")
                         }
                     }
                     .buttonStyle(CenturionSecondaryButtonStyle())
@@ -40,7 +40,7 @@ struct SoulDocumentView: View {
             .frame(maxWidth: .infinity)
         }
         .background(secondaryBackground)
-        .navigationTitle("Your Centurion's Soul")
+        .navigationTitle("Your Sovereign's Soul")
         .toolbar {
             if soul.isValid {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -80,7 +80,7 @@ struct SoulDocumentView: View {
             VStack(spacing: Spacing.md) {
                 CenturionSectionHeader(title: "Personality", icon: "sparkles")
 
-                Text("Your Centurion's Soul")
+                Text("Your Sovereign's Soul")
                     .font(Typography.editorialTitle)
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
@@ -108,7 +108,7 @@ struct SoulDocumentView: View {
             icon: "sparkles",
             title: "Not set yet",
             message: "Define how it speaks, what it always does, and what it never does. This is separate from your life mission — it's about your AI companion.",
-            actionTitle: "Set Up Your Centurion's Soul",
+            actionTitle: "Set Up Your Sovereign's Soul",
             action: {
                 Haptics.mediumTap()
                 showInterview = true
@@ -188,7 +188,7 @@ struct SoulDocumentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
-                    SheetHeader(title: "Your Centurion's Soul")
+                    SheetHeader(title: "Your Sovereign's Soul")
 
                     AtmosphericSurface(elevated: true) {
                         VStack(spacing: Spacing.md) {
@@ -207,7 +207,7 @@ struct SoulDocumentView: View {
                         .frame(maxWidth: .infinity)
                     }
 
-                    Text("Share how your Centurion is configured to work with you.")
+                    Text("Share how your Sovereign is configured to work with you.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -247,7 +247,7 @@ struct SoulDocumentView: View {
     }
 
     private func generateShareText() -> String {
-        var text = "✨ Your Centurion's Soul — Centurion AI\n\n"
+        var text = "✨ Your Sovereign's Soul — Sovereign\n\n"
         if !soul.personalitySummary.isEmpty {
             text += "\(soul.personalitySummary)\n\n"
         }
@@ -255,7 +255,7 @@ struct SoulDocumentView: View {
         if !soul.communicationStyle.isEmpty { text += "Speaks: \(soul.communicationStyle)\n" }
         if !soul.alwaysDo.isEmpty { text += "Always: \(soul.alwaysDo.joined(separator: ", "))\n" }
         if !soul.neverDo.isEmpty { text += "Never: \(soul.neverDo.joined(separator: ", "))\n" }
-        text += "\nHow my Centurion is configured to work with me."
+        text += "\nHow my Sovereign is configured to work with me."
         return text
     }
 

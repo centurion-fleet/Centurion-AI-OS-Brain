@@ -70,6 +70,10 @@ def handle_request(
         return _handle_swarm_connect(request, request_id)
     if action == "swarm_invite":
         return _handle_swarm_invite(request, request_id)
+    if action == "swarm_resolve_signal":
+        return _handle_swarm_resolve_signal(request, request_id)
+    if action == "swarm_create_board":
+        return _handle_swarm_create_board(request, request_id)
     if action == "beneficiary_snapshot":
         return _handle_beneficiary_snapshot(request_id)
     if action == "beneficiary_set_family_member":
@@ -419,6 +423,48 @@ def _handle_swarm_invite(request: dict[str, Any], request_id: str) -> dict[str, 
         }
     except Exception as exc:
         return _error_response(request_id, action="swarm_invite", exc=exc)
+
+
+def _handle_swarm_resolve_signal(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.swarm_state import resolve_signal
+
+        signal_id = str(request.get("signal_id") or "").strip()
+        choice_note = str(request.get("choice_note") or "").strip()
+        result = resolve_signal(signal_id, choice_note=choice_note)
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_resolve_signal",
+            "message": result.get("message") or result.get("error"),
+            "result": result,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_resolve_signal", exc=exc)
+
+
+def _handle_swarm_create_board(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.swarm_state import create_collaboration_board
+
+        name = str(request.get("name") or "").strip()
+        objective = str(request.get("objective") or "").strip()
+        mission_id = str(request.get("mission_id") or "").strip() or None
+        result = create_collaboration_board(
+            name=name,
+            objective=objective,
+            mission_id=mission_id,
+        )
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_create_board",
+            "message": result.get("message") or result.get("error"),
+            "result": result,
+            "snapshot": result.get("snapshot"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_create_board", exc=exc)
 
 
 def _handle_beneficiary_snapshot(request_id: str) -> dict[str, Any]:

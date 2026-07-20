@@ -60,7 +60,7 @@ These are **desktop-native** capabilities that only the Linux app can provide be
 | Feature | Why Linux-Only | Priority |
 |---------|---------------|----------|
 | **Full Terminal (PTY)** | Native process execution, `bash`, `python`, `git`, `ssh`, `docker` — all CLI tools. Real shell, not a sandbox. | 🚀 Critical |
-| **Centurion AI OS Core** | The actual agent loop runs here — tool calls, model orchestration, memory, state management. iPhone just talks to it. | 🚀 Critical |
+| **Sovereign Core** | The actual agent loop runs here — tool calls, model orchestration, memory, state management. iPhone just talks to it. | 🚀 Critical |
 | **File System Access** | Read/write any file on the host. Open projects, edit configs, browse directories. Full access. | 🚀 Critical |
 | **Code Execution** | Run scripts, see output, kill processes. True dev environment. | 🚀 Critical |
 | **Local LLM Inference** | llama.cpp integration — run models entirely offline on your own hardware (GPU/CPU). No cloud dependency. | 🔥 High |
@@ -269,7 +269,7 @@ Unlike iPhone which is chat-first, the Linux app should be **shell + chat**. The
 | **Desktop framework** | Tauri 2 (Rust + WebView) | Native Linux binary, small (<10MB), system tray, notifications, file system |
 | **Frontend** | React + TypeScript + Tailwind | Familiar, fast iteration, proven pattern |
 | **Terminal emulator** | xterm.js + node-pty | True terminal in the webview, PTY passthrough |
-| **IPC between UI and Centurion AI OS** | Unix socket + JSON-RPC | Already exists in the codebase (`tui_gateway/`) |
+| **IPC between UI and Sovereign** | Unix socket + JSON-RPC | Already exists in the codebase (`tui_gateway/`) |
 | **Server mode** | Rust HTTP/WS server (actix-web or axum) | Accept incoming connections from iPhone |
 | **mDNS discovery** | Rust (libmdns) | Auto-discovery on local network |
 | **Encryption** | TLS 1.3 + ed25519 keypairs | Secure channel between Linux ↔ iPhone |

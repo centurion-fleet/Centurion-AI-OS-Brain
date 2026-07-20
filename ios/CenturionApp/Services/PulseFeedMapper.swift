@@ -115,7 +115,7 @@ enum PulseFeedMapper {
             summary: outcome.description,
             detail: "Finished by \(outcome.ownerName)",
             result: outcome.description,
-            impact: "Recorded on your Centurion",
+            impact: "Recorded on your Sovereign",
             agentCount: 1,
             duration: 0,
             completedAt: outcome.createdAt,
@@ -145,13 +145,13 @@ enum PulseFeedMapper {
         return DecisionItem(
             id: stableUUID("decision:\(signal.id)"),
             title: signal.message,
-            context: swarmName.map { "From swarm “\($0)”." } ?? "Your Centurion needs a decision.",
+            context: swarmName.map { "From swarm “\($0)”." } ?? "Your Sovereign needs a decision.",
             options: [
                 DecisionOption(label: "Discuss", description: "Open Crypto Chat about this"),
-                DecisionOption(label: "Approve", description: "Tell your Centurion to proceed"),
+                DecisionOption(label: "Approve", description: "Tell your Sovereign to proceed"),
                 DecisionOption(label: "Hold", description: "Pause and ask for more context"),
             ],
-            generatedBy: swarmName ?? "Centurion",
+            generatedBy: swarmName ?? "Sovereign",
             relatedMission: swarmName,
             urgency: signal.type == .ceremony ? .now : .today,
             createdAt: signal.createdAt

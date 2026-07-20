@@ -51,7 +51,7 @@ enum MessageRole: String, Codable {
     var displayName: String {
         switch self {
         case .user: return "You"
-        case .centurion: return "Centurion"
+        case .centurion: return "Sovereign"
         case .system: return ""
         }
     }

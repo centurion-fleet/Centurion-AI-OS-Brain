@@ -65,7 +65,7 @@ struct WelcomeOnboardingView: View {
         VStack(spacing: Spacing.lg) {
             FullBrandHeader()
 
-            Text("This is your private companion — on your network, for your mission.\n\nYou stay in charge. Your Centurion works beside you.")
+            Text("This is your private companion — on your network, for your mission.\n\nYou stay in charge. Your Sovereign works beside you.")
                 .font(.body)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -77,8 +77,8 @@ struct WelcomeOnboardingView: View {
     private var connectStep: some View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
-                title: "Link Your Centurion",
-                subtitle: "Make sure your iPhone and Centurion computer are on the same Wi‑Fi."
+                title: "Link Your Sovereign",
+                subtitle: "Make sure your iPhone and Sovereign computer are on the same Wi‑Fi."
             )
 
             AtmosphericSurface {
@@ -86,7 +86,7 @@ struct WelcomeOnboardingView: View {
                     Image(systemName: "app.connected.to.app.below.fill")
                         .font(.system(size: 36, weight: .light))
                         .foregroundColor(ColorTheme.accent())
-                    Text("We’ll look for your Centurion and turn on Crypto Chat — a private encrypted conversation public AIs do not offer.")
+                    Text("We’ll look for your Sovereign and turn on Crypto Chat — a private encrypted conversation public AIs do not offer.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -114,7 +114,7 @@ struct WelcomeOnboardingView: View {
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: 36, weight: .light))
                         .foregroundColor(ColorTheme.accent().opacity(0.8))
-                    Text("This is about you, not how your Centurion behaves. You can return anytime from Home or Settings.")
+                    Text("This is about you, not how your Sovereign behaves. You can return anytime from Home or Settings.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -146,7 +146,7 @@ struct WelcomeOnboardingView: View {
                         }
                         .buttonStyle(CenturionPrimaryButtonStyle())
                     } else {
-                        Button("Find my Centurion") {
+                        Button("Find my Sovereign") {
                             showPairingSheet = true
                             Haptics.lightTap()
                         }

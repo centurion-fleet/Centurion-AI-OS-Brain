@@ -8,6 +8,10 @@ description: "Session persistence, resume, search, management, and per-platform 
 
 Centurion AI OS automatically saves every conversation as a session. Sessions enable conversation resume, cross-session search, and full conversation history management.
 
+:::info Memory Horizon — Session Recall
+Session storage powers **Session Recall**, the mid field of **[Memory Horizon](./features/memory-layers.md)**. The agent searches past chats with `session_search` instead of loading all history into every prompt.
+:::
+
 ## How Sessions Work
 
 Every conversation — whether from the CLI, Telegram, Discord, Slack, WhatsApp, Signal, Matrix, Teams, or any other messaging platform — is stored as a session with full message history. Sessions are tracked in:

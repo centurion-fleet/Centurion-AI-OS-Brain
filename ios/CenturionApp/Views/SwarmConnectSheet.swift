@@ -1,12 +1,16 @@
 import SwiftUI
 
-/// Join or invite another Centurion owner for multi-brain collaboration.
+/// Join, invite, or start a collaboration — LAN-first; portal credentials behind Advanced.
 struct SwarmConnectSheet: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var missionStore: MissionStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var mode: Mode = .join
+    @State private var mode: Mode = .start
+    @State private var collaborationName = ""
+    @State private var objective = ""
+    @State private var showAdvancedPortal = false
     @State private var token = ""
     @State private var installId = ""
     @State private var projectId = ""
@@ -16,7 +20,7 @@ struct SwarmConnectSheet: View {
     @State private var isBusy = false
 
     enum Mode: String, CaseIterable {
-        case join = "Join"
+        case start = "Start"
         case invite = "Invite"
     }
 
@@ -25,8 +29,8 @@ struct SwarmConnectSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     SheetHeader(
-                        title: "Connect Centurions",
-                        subtitle: "Invite another owner, or join a shared collaboration with Mission Control credentials."
+                        title: "Connect Sovereigns",
+                        subtitle: "Start a collaboration on this Sovereign, or invite another owner. Collaborations serve your Life Mission."
                     )
 
                     Picker("Mode", selection: $mode) {
@@ -36,8 +40,8 @@ struct SwarmConnectSheet: View {
                     }
                     .pickerStyle(.segmented)
 
-                    if mode == .join {
-                        joinForm
+                    if mode == .start {
+                        startForm
                     } else {
                         inviteForm
                     }
@@ -53,14 +57,14 @@ struct SwarmConnectSheet: View {
                             .foregroundColor(ColorTheme.success())
                     }
 
-                    Button(mode == .join ? "Connect this Centurion" : "Send invite") {
+                    Button(mode == .start ? "Start on this Sovereign" : "Send invite") {
                         Task { await submit() }
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())
                     .disabled(isBusy || connectionManager.connectionState != .connected)
 
                     if connectionManager.connectionState != .connected {
-                        Text("Link your Centurion in You first.")
+                        Text("Link your Sovereign in You first.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     }
@@ -79,20 +83,48 @@ struct SwarmConnectSheet: View {
         }
     }
 
-    private var joinForm: some View {
+    private var startForm: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("From the invite or Mission Control setup, paste:")
+            Text("Creates a collaboration on your linked Sovereign — private to your network.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
-            field("Project token (ctk_proj_…)", text: $token)
-            field("Install id", text: $installId)
-            field("Project id", text: $projectId)
+            field("Name", text: $collaborationName)
+            field("What it's for (optional)", text: $objective)
+
+            if !missionStore.mission.statement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Grounded in your Life Mission")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(ColorTheme.mutedText())
+                Text(missionStore.mission.statement)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.primaryText())
+                    .lineLimit(3)
+            }
+
+            DisclosureGroup("Advanced — join via Mission Control", isExpanded: $showAdvancedPortal) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Only if you received share credentials from another owner.")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                    field("Project token", text: $token)
+                    field("Install id", text: $installId)
+                    field("Project id", text: $projectId)
+                    Button("Join with credentials") {
+                        Task { await submitPortalJoin() }
+                    }
+                    .buttonStyle(CenturionGhostButtonStyle())
+                    .disabled(isBusy || connectionManager.connectionState != .connected)
+                }
+                .padding(.top, Spacing.xs)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundColor(ColorTheme.mutedText())
         }
     }
 
     private var inviteForm: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Your Centurion must already be connected to Mission Control. Enter your friend’s customer id.")
+            Text("Invite another owner after this Sovereign is linked to a shared collaboration.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
             field("Friend customer id", text: $friendCustomerId)
@@ -120,13 +152,19 @@ struct SwarmConnectSheet: View {
         isBusy = true
         defer { isBusy = false }
         do {
-            if mode == .join {
-                let message = try await connectionManager.connectSwarm(
-                    token: token.trimmingCharacters(in: .whitespacesAndNewlines),
-                    installId: installId.trimmingCharacters(in: .whitespacesAndNewlines),
-                    projectId: projectId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if mode == .start {
+                let name = collaborationName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else {
+                    errorMessage = "Give this collaboration a name."
+                    return
+                }
+                let payload = try await connectionManager.createSwarmBoard(
+                    name: name,
+                    objective: objective.trimmingCharacters(in: .whitespacesAndNewlines),
+                    missionId: missionStore.mission.id.uuidString
                 )
-                statusMessage = message
+                statusMessage = payload["message"] as? String
+                    ?? "Collaboration started on this Sovereign."
                 await swarmStore.refresh(from: connectionManager)
                 Haptics.success()
             } else {
@@ -137,6 +175,26 @@ struct SwarmConnectSheet: View {
                 statusMessage = message
                 Haptics.success()
             }
+        } catch {
+            errorMessage = error.localizedDescription
+            Haptics.error()
+        }
+    }
+
+    private func submitPortalJoin() async {
+        errorMessage = nil
+        statusMessage = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let message = try await connectionManager.connectSwarm(
+                token: token.trimmingCharacters(in: .whitespacesAndNewlines),
+                installId: installId.trimmingCharacters(in: .whitespacesAndNewlines),
+                projectId: projectId.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            statusMessage = message
+            await swarmStore.refresh(from: connectionManager)
+            Haptics.success()
         } catch {
             errorMessage = error.localizedDescription
             Haptics.error()

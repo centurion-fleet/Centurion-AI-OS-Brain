@@ -58,7 +58,7 @@ struct GetHelpView: View {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 CenturionSectionHeader(title: "Support", icon: "lifepreserver")
 
-                Text("Your Centurion can prepare a short support code on your Centurion brain.")
+                Text("Your Sovereign can prepare a short support code on your Sovereign brain.")
                     .font(.body)
                     .foregroundColor(ColorTheme.primaryText())
 
@@ -120,7 +120,7 @@ struct GetHelpView: View {
             .buttonStyle(CenturionPrimaryButtonStyle())
             .disabled(isWorking || connectionManager.connectionState != .connected)
             .accessibilityLabel("Send to Support")
-            .accessibilityHint("Creates a support code on your Centurion")
+            .accessibilityHint("Creates a support code on your Sovereign")
 
             Button {
                 Task { await runAutoFix() }
@@ -153,7 +153,7 @@ struct GetHelpView: View {
     }
 
     private var footerNote: some View {
-        Text("For deeper setup, use your Centurion brain.")
+        Text("For deeper setup, use your Sovereign brain.")
             .font(.caption)
             .foregroundColor(ColorTheme.mutedText())
             .frame(maxWidth: .infinity, alignment: .center)

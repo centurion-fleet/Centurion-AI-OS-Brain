@@ -5,6 +5,8 @@ struct SwarmOrb: View {
     let swarm: SwarmSummary
     var size: CGFloat = 120
     var showLabel: Bool = true
+    /// Optional Life Mission grounding line under status.
+    var missionLine: String? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var breath: CGFloat = 1.0
@@ -44,6 +46,12 @@ struct SwarmOrb: View {
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineLimit(1)
+                    if let missionLine, !missionLine.isEmpty {
+                        Text(missionLine)
+                            .font(.caption2)
+                            .foregroundColor(ColorTheme.mutedText().opacity(0.9))
+                            .lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: size + 40)
             }

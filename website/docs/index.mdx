@@ -40,6 +40,53 @@ See the full **[Installation Guide](/getting-started/installation)** for what th
 
 It's not a coding copilot tethered to an IDE or a chatbot wrapper around a single API. It's an **autonomous agent** that gets more capable the longer it runs. It lives wherever you put it — a $5 VPS, a GPU cluster, or serverless infrastructure (Daytona, Modal) that costs nearly nothing when idle. Talk to it from Telegram while it works on a cloud VM you never SSH into yourself. It's not tied to your laptop.
 
+## Memory Horizon
+
+Centurion remembers with **Memory Horizon** — three local layers from always-on essentials to sealed archives. Not one opaque blob. Not cloud sync.
+
+<div className="memory-horizon-diagram" aria-label="Memory Horizon diagram">
+  <svg viewBox="0 0 720 280" role="img" xmlns="http://www.w3.org/2000/svg">
+    <title>Memory Horizon — Hot Cache, Session Recall, and Vault</title>
+    <defs>
+      <linearGradient id="mhNear" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#FFD700" stopOpacity="0.35"/>
+        <stop offset="100%" stopColor="#FFD700" stopOpacity="0.08"/>
+      </linearGradient>
+      <linearGradient id="mhMid" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#C89222" stopOpacity="0.28"/>
+        <stop offset="100%" stopColor="#C89222" stopOpacity="0.06"/>
+      </linearGradient>
+      <linearGradient id="mhFar" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#6E8B9E" stopOpacity="0.30"/>
+        <stop offset="100%" stopColor="#6E8B9E" stopOpacity="0.06"/>
+      </linearGradient>
+    </defs>
+    <rect width="720" height="280" rx="16" fill="#0f0f18"/>
+    <text x="36" y="42" fill="#FFD700" fontSize="18" fontWeight="700" fontFamily="Inter, system-ui, sans-serif">Memory Horizon</text>
+    <text x="36" y="64" fill="#9a968e" fontSize="12" fontFamily="Inter, system-ui, sans-serif">Near field → mid field → far field — one job per layer</text>
+    <rect x="28" y="88" width="664" height="168" rx="14" fill="url(#mhFar)" stroke="#6E8B9E" strokeWidth="1.5"/>
+    <text x="48" y="114" fill="#c8d4dc" fontSize="13" fontWeight="600" fontFamily="Inter, system-ui, sans-serif">③ Vault</text>
+    <text x="120" y="114" fill="#9a968e" fontSize="11" fontFamily="Inter, system-ui, sans-serif">Encrypted Core · Experiential · Pattern · opt-in · offline</text>
+    <rect x="48" y="128" width="624" height="110" rx="12" fill="url(#mhMid)" stroke="#C89222" strokeWidth="1.5"/>
+    <text x="68" y="154" fill="#FFEB80" fontSize="13" fontWeight="600" fontFamily="Inter, system-ui, sans-serif">② Session Recall</text>
+    <text x="198" y="154" fill="#9a968e" fontSize="11" fontFamily="Inter, system-ui, sans-serif">state.db · session_search · on demand</text>
+    <rect x="68" y="168" width="584" height="54" rx="10" fill="url(#mhNear)" stroke="#FFD700" strokeWidth="2"/>
+    <text x="88" y="192" fill="#FFD700" fontSize="13" fontWeight="700" fontFamily="Inter, system-ui, sans-serif">① Hot Cache</text>
+    <text x="188" y="192" fill="#e8e4dc" fontSize="11" fontFamily="Inter, system-ui, sans-serif">MEMORY.md + USER.md · ~1,300 tokens · every session</text>
+    <text x="88" y="210" fill="#9a968e" fontSize="10" fontFamily="Inter, system-ui, sans-serif">Always in the system prompt · curated · frozen at session start</text>
+  </svg>
+</div>
+
+| Horizon | What | When |
+|---------|------|------|
+| **① Hot Cache** | `MEMORY.md` + `USER.md` (~1,300 tokens) | **Every session** — essentials always in context |
+| **② Session Recall** | Full chat history in `state.db` | **On demand** — search past conversations |
+| **③ Vault** | Encrypted Core / Experiential / Pattern archive | **Opt-in** — deliberate long-term memory, 100% offline |
+
+Hot Cache and Session Recall work out of the box. Vault needs `centurion vault init` and `vault.enabled: true`.
+
+<Link to="/user-guide/features/memory-layers" style={{display: 'inline-block', marginTop: '0.5rem', marginBottom: '1.5rem'}}>Explore Memory Horizon →</Link>
+
 ## Quick Links
 
 | | |
@@ -50,7 +97,9 @@ It's not a coding copilot tethered to an IDE or a chatbot wrapper around a singl
 | ⚙️ **[Configuration](/user-guide/configuration)** | Config file, providers, models, and options |
 | 💬 **[Messaging Gateway](/user-guide/messaging)** | Set up Telegram, Discord, Slack, WhatsApp, Teams, or more |
 | 🔧 **[Tools & Toolsets](/user-guide/features/tools)** | 70+ built-in tools and how to configure them |
-| 🧠 **[Memory System](/user-guide/features/memory)** | Persistent memory that grows across sessions |
+| 🧠 **[Memory Horizon](/user-guide/features/memory-layers)** | Hot Cache, Session Recall, and Vault — how Centurion remembers |
+| 📝 **[Persistent Memory](/user-guide/features/memory)** | Hot Cache — `MEMORY.md` / `USER.md` in depth |
+| 🔐 **[Vault](/user-guide/features/vault)** | Far horizon — encrypted offline long-term memory |
 | 📚 **[Skills System](/user-guide/features/skills)** | Procedural memory the agent creates and reuses |
 | 🔌 **[MCP Integration](/user-guide/features/mcp)** | Connect to MCP servers, filter their tools, and extend Centurion safely |
 | 🧭 **[Use MCP with Centurion](/guides/use-mcp-with-centurion)** | Practical MCP setup patterns, examples, and tutorials |
@@ -59,6 +108,8 @@ It's not a coding copilot tethered to an IDE or a chatbot wrapper around a singl
 | 🎭 **[Personality & SOUL.md](/user-guide/features/personality)** | Define Centurion' default voice with a global SOUL.md |
 | 📄 **[Context Files](/user-guide/features/context-files)** | Project context files that shape every conversation |
 | 🔒 **[Security](/user-guide/security)** | Command approval, authorization, container isolation |
+| 📋 **[IT Security brief](https://www.1human1ai.com/en-GB/security)** | Canonical web brief for IT reviewers (mail, perimeter, trust) |
+| 📄 **[IT Security one-pager (PDF)](/it-security/Centurion-IT-Security-One-Pager.pdf)** | Print export of that brief — forward to InfoSec |
 | 💡 **[Tips & Best Practices](/guides/tips)** | Quick wins to get the most out of Centurion |
 | 🏗️ **[Architecture](/developer-guide/architecture)** | How it works under the hood |
 | ❓ **[FAQ & Troubleshooting](/reference/faq)** | Common questions and solutions |
@@ -69,7 +120,7 @@ Centurion AI OS, the **Centurion Desktop App** (Linux native, Tauri), and the **
 
 ## Key Features
 
-- **A closed learning loop** — Agent-curated memory with periodic nudges, autonomous skill creation, skill self-improvement during use, FTS5 cross-session recall with LLM summarization, and [Honcho](https://github.com/plastic-labs/honcho) dialectic user modeling
+- **[Memory Horizon](/user-guide/features/memory-layers)** — Three local layers: Hot Cache every session, Session Recall on demand, and opt-in encrypted [Vault](/user-guide/features/vault) — plus optional external memory providers
 - **Runs anywhere, not just your laptop** — 6 terminal backends: local, Docker, SSH, Daytona, Singularity, Modal. Daytona and Modal offer serverless persistence — your environment hibernates when idle, costing nearly nothing
 - **Lives where you do** — CLI, Telegram, Discord, Slack, WhatsApp, Signal, Matrix, Mattermost, Email, SMS, DingTalk, Feishu, WeCom, Weixin, QQ Bot, Yuanbao, BlueBubbles, Home Assistant, Microsoft Teams, Google Chat, and more — 20+ platforms from one gateway
 - **Built by model trainers** — Created by [Centurion Fleet](https://nousresearch.com), the lab behind Centurion, Nomos, and Psyche. Works with [Centurion Portal](https://portal.personal-centurion.com), [OpenRouter](https://openrouter.ai), OpenAI, or any endpoint

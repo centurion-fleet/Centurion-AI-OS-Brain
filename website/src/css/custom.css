@@ -278,3 +278,24 @@ pre.prism-code.language-ascii code {
   background: linear-gradient(135deg, #07070d 0%, #0f0f18 100%);
   padding: 4rem 0;
 }
+
+/* Memory Horizon diagram on docs homepage */
+.memory-horizon-diagram {
+  margin: 1.25rem 0 1.5rem;
+  max-width: 720px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 215, 0, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.memory-horizon-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+[data-theme='light'] .memory-horizon-diagram {
+  border-color: rgba(139, 101, 8, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}

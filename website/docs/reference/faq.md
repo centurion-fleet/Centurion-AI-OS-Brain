@@ -120,10 +120,14 @@ Centurion AI OS, the **Centurion Desktop App** (Linux native, Tauri), and the **
 
 ### What's the difference between memory and skills?
 
-- **Memory** stores **facts** — things the agent knows about you, your projects, and preferences. Memories are retrieved automatically based on relevance.
-- **Skills** store **procedures** — step-by-step instructions for how to do things. Skills are recalled when the agent encounters a similar task.
+Centurion's **[Memory Horizon](../user-guide/features/memory-layers.md)** has three layers; skills are separate:
 
-Both persist across sessions. See [Memory](../user-guide/features/memory.md) and [Skills](../user-guide/features/skills.md) for details.
+- **Hot Cache** (`MEMORY.md` / `USER.md`) — small facts in every session
+- **Session Recall** (`session_search`) — search full past conversations on demand
+- **Vault** (opt-in) — encrypted long-term Core / Experiential / Pattern archives
+- **Skills** store **procedures** — step-by-step instructions for how to do things, recalled when the agent encounters a similar task
+
+Memory Horizon stores **facts**; skills store **how-to**. See [Memory Horizon](../user-guide/features/memory-layers.md), [Persistent Memory](../user-guide/features/memory.md), and [Skills](../user-guide/features/skills.md).
 
 ### Can I use it in my own Python project?
 

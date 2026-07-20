@@ -74,7 +74,7 @@ struct SecurityHubView: View {
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
 
-                Text("Crypto Chat is your private encrypted conversation with your Centurion — on your network, not a public AI cloud. Public chatbots have nothing like it.")
+                Text("Crypto Chat is your private encrypted conversation with your Sovereign — on your network, not a public AI cloud. Public chatbots have nothing like it.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
@@ -90,27 +90,27 @@ struct SecurityHubView: View {
         )
     }
 
-    // MARK: - Why Centurion is different
+    // MARK: - Why Sovereign is different
 
     private var differentiatorCard: some View {
         AtmosphericSurface(elevated: true) {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                CenturionSectionHeader(title: "Why Centurion is different", icon: "sparkles")
+                CenturionSectionHeader(title: "Why Sovereign is different", icon: "sparkles")
 
-                Text("Most AI tools send your prompts to someone else's computers. Centurion is your private AI — on your machine, under your control.")
+                Text("Most AI tools send your prompts to someone else's computers. Sovereign is your private AI — on your machine, under your control.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)
 
                 CenturionReassuranceRow(
                     icon: "desktopcomputer",
-                    title: "Runs on your Centurion",
+                    title: "Runs on your Sovereign",
                     detail: "Your companion lives on your computer — not a shared public service that trains on strangers' chats."
                 )
                 CenturionReassuranceRow(
                     icon: "lock.shield.fill",
                     title: "Crypto Chat",
-                    detail: "End-to-end encrypted talk with your Centurion on your network — something public AIs simply do not offer."
+                    detail: "End-to-end encrypted talk with your Sovereign on your network — something public AIs simply do not offer."
                 )
                 CenturionReassuranceRow(
                     icon: "house.fill",
@@ -120,7 +120,7 @@ struct SecurityHubView: View {
                 CenturionReassuranceRow(
                     icon: "person.fill.checkmark",
                     title: "You stay in charge",
-                    detail: "You set the mission, the Soul, and who may connect. Centurion works for you — not the other way around."
+                    detail: "You set the mission, the Soul, and who may connect. Sovereign works for you — not the other way around."
                 )
             }
         }
@@ -133,14 +133,14 @@ struct SecurityHubView: View {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 CenturionSectionHeader(title: "When someone says…", icon: "quote.bubble")
 
-                Text("Use these calm answers when colleagues or leaders push back on AI. Centurion is not \"another chatbot in the cloud.\"")
+                Text("Use these calm answers when colleagues or leaders push back on AI. Sovereign is not \"another chatbot in the cloud.\"")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
 
                 rebukeCard(
                     claim: "\"That's too much of a security risk.\"",
-                    answer: "Typical cloud AI sends your words to a company's servers. Centurion runs on your computer and talks to your iPhone through Crypto Chat — encrypted on your network, with no phone number and no public cloud account."
+                    answer: "Typical cloud AI sends your words to a company's servers. Sovereign runs on your computer and talks to your iPhone through Crypto Chat — encrypted on your network, with no phone number and no public cloud account."
                 )
                 rebukeCard(
                     claim: "\"It's unsafe — anyone could read it.\"",
@@ -148,11 +148,11 @@ struct SecurityHubView: View {
                 )
                 rebukeCard(
                     claim: "\"AI will replace our jobs / we can't trust it.\"",
-                    answer: "Centurion is built for a 1:1 relationship with your private AI — to lift day-to-day pressure and help you live your mission. You stay the decision-maker. It is assistance under your control, not a black-box service owned by someone else."
+                    answer: "Sovereign is built for a 1:1 relationship with your private AI — to lift day-to-day pressure and help you live your mission. You stay the decision-maker. It is assistance under your control, not a black-box service owned by someone else."
                 )
                 rebukeCard(
                     claim: "\"We're not allowed to put company data in AI.\"",
-                    answer: "That policy usually targets public cloud chatbots. With Centurion, work stays on your machine and your network by design. You can show leadership this Privacy & Trust page — including how we compare to cloud AI and messaging apps."
+                    answer: "That policy usually targets public cloud chatbots. With Sovereign, work stays on your machine and your network by design. You can show leadership this Privacy & Trust page — including how we compare to cloud AI and messaging apps."
                 )
             }
         }
@@ -190,11 +190,11 @@ struct SecurityHubView: View {
                 .tint(ColorTheme.accent())
 
                 if showMessagingComparison {
-                    Text("Privacy of the private link — how Centurion Remote compares to popular messengers.")
+                    Text("Privacy of the private link — how Sovereign Remote compares to popular messengers.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                     comparisonTable(
-                        headers: ["", "Centurion", "Signal", "Telegram"],
+                        headers: ["", "Sovereign", "Signal", "Telegram"],
                         rows: [
                             ("End-to-end encrypted", .full, .full, .partial),
                             ("Zero server metadata", .full, .none, .none),
@@ -204,11 +204,11 @@ struct SecurityHubView: View {
                         ]
                     )
                 } else {
-                    Text("What changes when AI lives on your Centurion instead of a public cloud chatbot.")
+                    Text("What changes when AI lives on your Sovereign instead of a public cloud chatbot.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                     comparisonTable(
-                        headers: ["", "Centurion", "Cloud AI"],
+                        headers: ["", "Sovereign", "Cloud AI"],
                         rows: [
                             ("Runs on your computer", .full, .none),
                             ("Private network remote", .full, .none),
@@ -347,7 +347,7 @@ struct SecurityHubView: View {
                 CenturionReassuranceRow(
                     icon: "house.fill",
                     title: "Stays on your network",
-                    detail: "Messages travel between your iPhone and your Centurion — not through a public messaging server."
+                    detail: "Messages travel between your iPhone and your Sovereign — not through a public messaging server."
                 )
                 CenturionReassuranceRow(
                     icon: "lock.fill",
@@ -357,7 +357,7 @@ struct SecurityHubView: View {
                 CenturionReassuranceRow(
                     icon: "person.fill.checkmark",
                     title: "You stay in control",
-                    detail: "No phone number, no social login, no company reading your private Centurion conversations."
+                    detail: "No phone number, no social login, no company reading your private Sovereign conversations."
                 )
             }
         }
@@ -375,8 +375,8 @@ struct SecurityHubView: View {
                             .font(.headline)
                             .foregroundColor(ColorTheme.primaryText())
                         Text(isConnected
-                             ? "Your Centurion is reachable on your local network."
-                             : "Open You to link your Centurion.")
+                             ? "Your Sovereign is reachable on your local network."
+                             : "Open You to link your Sovereign.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     }
@@ -390,7 +390,7 @@ struct SecurityHubView: View {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 CenturionSectionHeader(title: "Built so we can't peek", icon: "hand.raised")
 
-                Text("Centurion has no backdoors and no ability to read your private link conversations — even if someone demanded it. The encryption is designed so that data simply is not available off your devices.")
+                Text("Sovereign has no backdoors and no ability to read your private link conversations — even if someone demanded it. The encryption is designed so that data simply is not available off your devices.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)

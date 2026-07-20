@@ -1,13 +1,14 @@
 import Foundation
 import Network
 
-/// Manages the encrypted connection between iPhone and Centurion.
+/// Manages the encrypted connection between iPhone and Sovereign.
 ///
-/// Connection priority:
-/// 1. LAN (mDNS/Bonjour) — zero internet, zero latency, maximum privacy
+/// Connection priority (Tailscale-first for stability):
+/// 1. Tailscale MagicDNS / Tailscale IP — preferred at home and away
+/// 2. LAN (Bonjour / LAN IP) — only when Tailscale is unavailable
 ///
 /// Encryption flow:
-/// 1. Discover Centurion via Bonjour (LAN)
+/// 1. Reach Centurion via Tailscale (or LAN fallback)
 /// 2. Exchange X25519 public keys for key agreement
 /// 3. Establish directional session keys
 /// 4. All messages encrypted with XSalsa20-Poly1305
@@ -23,9 +24,9 @@ final class ConnectionManager: ObservableObject {
     @Published var remoteCatalog: RemoteModelCatalog?
     @Published var routingMode: String = "manual"
     @Published var lastRoutedDisplayName: String?
-    /// True when the model list came from the on-device fallback instead of the Centurion.
+    /// True when the model list came from the on-device fallback instead of the Sovereign.
     @Published private(set) var thinkingCatalogUsedFallback = false
-    /// Display name of the Centurion being linked (shown during pairing).
+    /// Display name of the Sovereign being linked (shown during pairing).
     @Published private(set) var activeConnectionTarget: String?
     /// SHA256 fingerprint of this iPhone’s identity key (for host `approve`).
     @Published private(set) var clientFingerprint: String?
@@ -33,6 +34,20 @@ final class ConnectionManager: ObservableObject {
     /// Live session is up and messages are secretboxed.
     var isChannelEncrypted: Bool {
         connectionState == .connected && currentSessionKey != nil
+    }
+
+    /// "Tailscale" or "Wi‑Fi" when linked; empty otherwise.
+    var linkPathBadge: String {
+        guard connectionState == .connected,
+              let device = connectedDevice ?? pendingDevice else { return "" }
+        return device.isTailscalePath
+            ? CenturionDevice.ConnectionMethod.tailscale.linkBadge
+            : CenturionDevice.ConnectionMethod.lan.linkBadge
+    }
+
+    /// True when a previous Tailscale or LAN endpoint was saved for reconnect.
+    var hasPersistedLink: Bool {
+        loadLastDevice() != nil || loadLastLanDevice() != nil
     }
 
     private let bonjourDiscoverer = BonjourDiscoverer()
@@ -44,12 +59,19 @@ final class ConnectionManager: ObservableObject {
     private var keepaliveTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
     private var approvalRetryTask: Task<Void, Never>?
+    private var pathMonitor: NWPathMonitor?
+    private var pathDebounceTask: Task<Void, Never>?
+    /// When a Tailscale attempt fails, allow one LAN fallback for this reconnect cycle.
+    private var allowLanFallback = true
+    /// After a Tailscale→LAN cascade, surface Tailscale-first recovery if LAN also fails.
+    private var recoveryPrefersTailscale = false
     private let remoteIO = RemoteIOPipeline()
     private let maximumFrameSize = 8 * 1024 * 1024
-    private let handshakeTimeoutSeconds: UInt64 = 15
+    private let handshakeTimeoutSeconds: TimeInterval = 15
     private static let lastDeviceKey = "centurion.remote.lastDevice"
+    private static let lastLanDeviceKey = "centurion.remote.lastLanDevice"
 
-    private let chatTimeoutSeconds: UInt64 = 180
+    private let chatTimeoutSeconds: TimeInterval = 180
 
     enum ConnectionState: Equatable {
         case disconnected
@@ -69,6 +91,7 @@ final class ConnectionManager: ObservableObject {
         } catch {
             // Identity loads again in startDiscovery / connect paths.
         }
+        startPathMonitor()
     }
 
     func startDiscovery() {
@@ -89,16 +112,49 @@ final class ConnectionManager: ObservableObject {
         reconnectPending(stopApprovalLoop: true)
     }
 
+    /// One-tap reconnect: Tailscale first, then LAN.
+    func reconnect() {
+        allowLanFallback = true
+        recoveryPrefersTailscale = false
+        reconnectWithPriority(stopApprovalLoop: true)
+    }
+
     /// Reconnect without cancelling an active approval poll (used by the auto-retry loop).
     private func reconnectPending(stopApprovalLoop: Bool) {
+        reconnectWithPriority(stopApprovalLoop: stopApprovalLoop)
+    }
+
+    /// Prefer Tailscale saved endpoint; LAN only if mesh is unavailable.
+    private func reconnectWithPriority(stopApprovalLoop: Bool) {
         if stopApprovalLoop {
             stopApprovalRetryLoop()
         }
-        if let pendingDevice {
-            connect(to: pendingDevice, stopApprovalLoop: stopApprovalLoop)
+
+        // Keep Bonjour warm for LAN fallback inventory.
+        if connectionState != .discovering {
+            bonjourDiscoverer.startDiscovery()
+        }
+
+        if let pending = pendingDevice, pending.isTailscalePath {
+            connect(to: pending, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let saved = loadLastDevice(), saved.isTailscalePath {
+            pendingDevice = saved
+            connect(to: saved, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let pending = pendingDevice {
+            connect(to: pending, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let lan = loadLastLanDevice() {
+            pendingDevice = lan
+            connect(to: lan, stopApprovalLoop: stopApprovalLoop)
             return
         }
         if let saved = loadLastDevice() {
+            pendingDevice = saved
             connect(to: saved, stopApprovalLoop: stopApprovalLoop)
             return
         }
@@ -109,28 +165,12 @@ final class ConnectionManager: ObservableObject {
         startDiscovery()
     }
 
-    /// After splash / on enter foreground: rediscover and join the last trusted Centurion.
+    /// After splash / on enter foreground: Tailscale first, Bonjour only as fallback.
     func attemptAutoReconnect() {
         guard connectionState == .disconnected || isErrorState else { return }
-        guard let saved = loadLastDevice() else { return }
-        pendingDevice = saved
-        startDiscovery()
-        // Give Bonjour a moment, then connect to saved or matching discovery row.
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            guard self.connectionState == .discovering
-                    || self.connectionState == .disconnected
-                    || self.isErrorState else { return }
-            if let match = self.discoveredDevices.first(where: {
-                $0.serviceName == saved.serviceName
-                    || (!$0.hostname.isEmpty && $0.hostname == saved.hostname)
-                    || (!$0.ipAddress.isEmpty && $0.ipAddress == saved.ipAddress)
-            }) {
-                self.connect(to: match)
-            } else {
-                self.connect(to: saved)
-            }
-        }
+        guard loadLastDevice() != nil || loadLastLanDevice() != nil else { return }
+        allowLanFallback = true
+        reconnectWithPriority(stopApprovalLoop: true)
     }
 
     private var isErrorState: Bool {
@@ -138,13 +178,14 @@ final class ConnectionManager: ObservableObject {
         return false
     }
 
-    /// Manual Tailscale / IP fallback when Bonjour cannot see the brain.
-    func connect(host: String, port: Int = 9119, name: String = "Centurion") {
+    /// Manual Tailscale / IP connect. Tailscale hosts are tagged as the preferred path.
+    func connect(host: String, port: Int = 9119, name: String = "Sovereign") {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            connectionState = .error("Enter the Centurion’s hostname or IP address.")
+            connectionState = .error("Enter the Sovereign’s hostname or IP address.")
             return
         }
+        let isTailscale = CenturionDevice.isTailscaleHost(trimmed)
         let device = CenturionDevice(
             id: UUID(),
             name: name,
@@ -156,24 +197,23 @@ final class ConnectionManager: ObservableObject {
             serviceDomain: nil,
             publicKey: nil,
             isConnected: false,
-            connectionMethod: trimmed.contains("ts.net") || trimmed.contains("tailscale")
-                ? .tailscale
-                : .lan,
+            connectionMethod: isTailscale ? .tailscale : .lan,
             lastSeen: Date()
         )
+        allowLanFallback = true
         connect(to: device)
     }
 
-    /// Use the Bonjour service endpoint when available — that matches how discovery
-    /// found the device. Fall back to hostname/IP only when service metadata is missing.
+    /// Prefer a stable host/IP endpoint. Bonjour `.service` endpoints are fragile:
+    /// stopping or refreshing the browser can cancel sockets opened that way, which
+    /// showed up as a brief success then "could not be reached" on reconnect.
     private func connectionEndpoint(for device: CenturionDevice) -> NWEndpoint {
         let port = NWEndpoint.Port(rawValue: UInt16(device.port))
             ?? NWEndpoint.Port(integerLiteral: 9119)
 
-        if let name = device.serviceName,
-           let type = device.serviceType,
-           let domain = device.serviceDomain {
-            return .service(name: name, type: type, domain: domain, interface: nil)
+        // Prefer hostname for Tailscale MagicDNS so the mesh path stays stable.
+        if device.isTailscalePath, !device.hostname.isEmpty {
+            return .hostPort(host: NWEndpoint.Host(device.hostname), port: port)
         }
 
         if !device.ipAddress.isEmpty {
@@ -187,7 +227,28 @@ final class ConnectionManager: ObservableObject {
             return .hostPort(host: NWEndpoint.Host(host), port: port)
         }
 
+        if let name = device.serviceName,
+           let type = device.serviceType,
+           let domain = device.serviceDomain {
+            return .service(name: name, type: type, domain: domain, interface: nil)
+        }
+
         return .hostPort(host: NWEndpoint.Host("localhost"), port: port)
+    }
+
+    private func resolvedRemoteIP(from connection: NWConnection) -> String? {
+        guard let endpoint = connection.currentPath?.remoteEndpoint else { return nil }
+        switch endpoint {
+        case .hostPort(let host, _):
+            let value = "\(host)"
+            // Strip optional zone id (e.g. fe80::1%en0).
+            if let percent = value.firstIndex(of: "%") {
+                return String(value[..<percent])
+            }
+            return value
+        default:
+            return nil
+        }
     }
 
     private func connectionParameters() -> NWParameters {
@@ -216,7 +277,11 @@ final class ConnectionManager: ObservableObject {
     func disconnect() {
         stopApprovalRetryLoop()
         softTearDown(clearPending: true)
+        bonjourDiscoverer.stopDiscovery()
         clearLastDevice()
+        clearLastLanDevice()
+        allowLanFallback = true
+        recoveryPrefersTailscale = false
         connectionState = .disconnected
         markDiscoveredDevicesDisconnected()
     }
@@ -249,6 +314,69 @@ final class ConnectionManager: ObservableObject {
 
     private func clearLastDevice() {
         UserDefaults.standard.removeObject(forKey: Self.lastDeviceKey)
+    }
+
+    private func persistLastLanDevice(_ device: CenturionDevice) {
+        guard let data = try? JSONEncoder().encode(device) else { return }
+        UserDefaults.standard.set(data, forKey: Self.lastLanDeviceKey)
+    }
+
+    private func loadLastLanDevice() -> CenturionDevice? {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastLanDeviceKey) else { return nil }
+        return try? JSONDecoder().decode(CenturionDevice.self, from: data)
+    }
+
+    private func clearLastLanDevice() {
+        UserDefaults.standard.removeObject(forKey: Self.lastLanDeviceKey)
+    }
+
+    /// Persist Tailscale as primary when possible; keep a separate LAN fallback.
+    private func persistLinkedDevice(_ linked: CenturionDevice) {
+        if linked.isTailscalePath {
+            persistLastDevice(linked)
+        } else {
+            persistLastLanDevice(linked)
+            if let primary = loadLastDevice(), primary.isTailscalePath {
+                // Keep MagicDNS / Tailscale as the preferred reconnect target.
+            } else {
+                persistLastDevice(linked)
+            }
+        }
+    }
+
+    private func startPathMonitor() {
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in
+                self?.handlePathChange()
+            }
+        }
+        monitor.start(queue: .global(qos: .utility))
+    }
+
+    private func handlePathChange() {
+        pathDebounceTask?.cancel()
+        pathDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+
+            // Prefer mesh whenever Tailscale is known — upgrade off LAN fallback.
+            if self.connectionState == .connected,
+               let current = self.connectedDevice, !current.isTailscalePath,
+               let mesh = self.loadLastDevice(), mesh.isTailscalePath {
+                self.allowLanFallback = true
+                self.recoveryPrefersTailscale = false
+                self.connect(to: mesh, stopApprovalLoop: true)
+                return
+            }
+
+            guard self.connectionState == .disconnected || self.isErrorState else { return }
+            guard self.loadLastDevice() != nil || self.loadLastLanDevice() != nil else { return }
+            self.allowLanFallback = true
+            self.recoveryPrefersTailscale = false
+            self.reconnectWithPriority(stopApprovalLoop: true)
+        }
     }
 
     private func startApprovalRetryLoop() {
@@ -299,7 +427,7 @@ final class ConnectionManager: ObservableObject {
                 )
             }
         } catch is TimeoutError {
-            let message = "Your Centurion is taking too long to respond. Try again in a moment."
+            let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
             throw ConnectionError.serverRejected(message)
@@ -323,14 +451,14 @@ final class ConnectionManager: ObservableObject {
             if response.code == "DEVICE_REVOKED" {
                 handleDeviceRevoked(
                     response.message
-                        ?? "This iPhone is no longer approved on your Centurion."
+                        ?? "This iPhone is no longer approved on your Sovereign."
                 )
                 throw ConnectionError.serverRejected(
                     response.message
-                        ?? "This iPhone is no longer approved on your Centurion."
+                        ?? "This iPhone is no longer approved on your Sovereign."
                 )
             }
-            let message = response.message ?? "Your Centurion could not complete that request."
+            let message = response.message ?? "Your Sovereign could not complete that request."
             let code = response.code
             let retryable = response.retryable ?? true
             lastLLMError = (message, code, retryable)
@@ -373,7 +501,7 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// User-facing name for the active LLM (not the Centurion device name).
+    /// User-facing name for the active LLM (not the Sovereign device name).
     var thinkingServiceHeadline: String {
         if routingMode == "phoenix", lastRoutedDisplayName?.isEmpty != false {
             return "Auto-select"
@@ -399,11 +527,11 @@ final class ConnectionManager: ObservableObject {
         }
         switch llmHealth {
         case .healthy:
-            return "Your Centurion can answer messages."
+            return "Your Sovereign can answer messages."
         case .unknown:
-            return "Checking with your Centurion…"
+            return "Checking with your Sovereign…"
         default:
-            return "Your Centurion may not be able to reply right now."
+            return "Your Sovereign may not be able to reply right now."
         }
     }
 
@@ -426,6 +554,19 @@ final class ConnectionManager: ObservableObject {
     func friendlyRemoteError(_ error: Error) -> String {
         if let connectionError = error as? ConnectionError {
             return connectionError.localizedDescription
+        }
+        if let nwError = error as? NWError {
+            return friendlyConnectionError(nwError)
+        }
+        let ns = error as NSError
+        if ns.domain == "Network.NWError" || ns.domain.contains("NWError") {
+            // POSIX 53 = ECONNABORTED — peer/OS aborted a still-"linked" socket.
+            if ns.code == Int(POSIXErrorCode.ECONNABORTED.rawValue) {
+                return "Your Sovereign closed the connection. Tap Find my Sovereign and link again."
+            }
+            if ns.code == Int(POSIXErrorCode.ECONNRESET.rawValue) {
+                return "The link to your Sovereign was reset. Tap Find my Sovereign and link again."
+            }
         }
         return error.localizedDescription
     }
@@ -581,6 +722,45 @@ final class ConnectionManager: ObservableObject {
             ?? "Invite sent."
     }
 
+    /// Resolve a Collaboration Signal on the Brain (Needs your choice → continue).
+    @discardableResult
+    func resolveSwarmSignal(signalId: String, choiceNote: String = "") async throws -> [String: Any] {
+        var extra: [String: Any] = ["signal_id": signalId]
+        if !choiceNote.isEmpty {
+            extra["choice_note"] = choiceNote
+        }
+        let payload = try await invokeRemote(action: "swarm_resolve_signal", extra: extra)
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not record your choice."
+            )
+        }
+        return payload["result"] as? [String: Any] ?? payload
+    }
+
+    /// Start a collaboration board on this Sovereign (LAN / local Brain).
+    @discardableResult
+    func createSwarmBoard(
+        name: String,
+        objective: String = "",
+        missionId: String? = nil
+    ) async throws -> [String: Any] {
+        var extra: [String: Any] = [
+            "name": name,
+            "objective": objective,
+        ]
+        if let missionId, !missionId.isEmpty {
+            extra["mission_id"] = missionId
+        }
+        let payload = try await invokeRemote(action: "swarm_create_board", extra: extra)
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not start collaboration."
+            )
+        }
+        return payload
+    }
+
     func fetchBeneficiarySnapshot() async throws -> [String: Any] {
         let payload = try await invokeRemote(action: "beneficiary_snapshot")
         return payload["snapshot"] as? [String: Any] ?? [:]
@@ -706,7 +886,7 @@ final class ConnectionManager: ObservableObject {
     private func invokeRemote(
         action: String,
         extra: [String: Any] = [:],
-        timeoutSeconds: UInt64 = 30
+        timeoutSeconds: TimeInterval = 30
     ) async throws -> [String: Any] {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
@@ -750,6 +930,8 @@ final class ConnectionManager: ObservableObject {
             "swarm_snapshot_response": "swarm_snapshot",
             "swarm_connect_response": "swarm_connect",
             "swarm_invite_response": "swarm_invite",
+            "swarm_resolve_signal_response": "swarm_resolve_signal",
+            "swarm_create_board_response": "swarm_create_board",
             "beneficiary_snapshot_response": "beneficiary_snapshot",
             "beneficiary_set_family_member_response": "beneficiary_set_family_member",
             "beneficiary_submit_colleague_response": "beneficiary_submit_colleague",
@@ -807,9 +989,13 @@ final class ConnectionManager: ObservableObject {
                         self.connectionState = .error(self.friendlyConnectionError(error))
                     }
                 case .cancelled:
+                    guard self.connection === newConnection else { return }
                     if self.connectionState == .connected {
-                        self.handleConnectionLoss("Your Centurion closed the connection")
-                    } else if self.connection === newConnection {
+                        self.handleConnectionLoss("Your Sovereign closed the connection")
+                    } else if case .awaitingApproval = self.connectionState {
+                        // Pairing challenge intentionally closed the socket — keep waiting UI.
+                        break
+                    } else if self.connectionState == .connecting {
                         self.connectionState = .disconnected
                     }
                 default:
@@ -853,7 +1039,7 @@ final class ConnectionManager: ObservableObject {
                 )
             } catch CryptoError.serverIdentityChanged {
                 self.failConnection(
-                    "This Centurion was reset. Remove its saved trust in Settings, then connect again."
+                    "This Sovereign was reset. Remove its saved trust in Settings, then connect again."
                 )
             } catch ConnectionError.serverRejected(let message) {
                 self.failConnection(message)
@@ -895,21 +1081,22 @@ final class ConnectionManager: ObservableObject {
             if status.code == "PAIRING_APPROVAL_REQUIRED" {
                 clearConnectionTimeout()
                 await MainActor.run {
-                    self.connection?.cancel()
-                    self.connection = nil
+                    // Set awaiting-approval before cancelling so the socket teardown
+                    // handler does not briefly flash "Not linked".
                     self.currentSessionKey = nil
                     self.activeConnectionTarget = nil
-                    // Keep pendingDevice so Try Again / auto-retry can reconnect.
                     self.connectionState = .awaitingApproval(
                         status.message
-                            ?? "Approve this iPhone on your Centurion computer, then wait — we will retry automatically."
+                            ?? "Approve this iPhone on your Sovereign computer, then wait — we will retry automatically."
                     )
+                    self.connection?.cancel()
+                    self.connection = nil
                     self.startApprovalRetryLoop()
                 }
                 return
             }
             throw ConnectionError.serverRejected(
-                status.message ?? "Approve this iPhone on your Centurion, then try again."
+                status.message ?? "Approve this iPhone on your Sovereign, then try again."
             )
         }
         guard status.type == "ready" else {
@@ -927,18 +1114,24 @@ final class ConnectionManager: ObservableObject {
         currentSessionKey = sessionKey
         clearConnectionTimeout()
         if let pendingDevice {
+            let resolvedIP = resolvedRemoteIP(from: connection)
+                ?? pendingDevice.ipAddress.nilIfEmpty
             let linked = pendingDevice.asConnected(
                 publicKey: serverPublicKey,
                 hostname: pendingDevice.hostname.nilIfEmpty,
-                port: pendingDevice.port > 0 ? pendingDevice.port : 9119
+                port: pendingDevice.port > 0 ? pendingDevice.port : 9119,
+                ipAddress: resolvedIP
             )
             connectedDevice = linked
-            persistLastDevice(linked)
+            persistLinkedDevice(linked)
             markDiscoveredDeviceConnected(pendingDevice.id)
+            allowLanFallback = true
+            recoveryPrefersTailscale = false
         }
         connectionState = .connected
         activeConnectionTarget = nil
-        bonjourDiscoverer.stopDiscovery()
+        // Keep Bonjour browsing alive while linked — cancelling the browser can drop
+        // NWConnections that were opened via a Bonjour service endpoint.
         startKeepalive()
         Task { await refreshThinkingStatus() }
     }
@@ -966,7 +1159,7 @@ final class ConnectionManager: ObservableObject {
                     await MainActor.run {
                         if self.connectionState == .connected {
                             self.handleConnectionLoss(
-                                "Your Centurion closed the connection"
+                                "Your Sovereign closed the connection"
                             )
                         }
                     }
@@ -998,11 +1191,11 @@ final class ConnectionManager: ObservableObject {
         if response.type == "error", response.code == "DEVICE_REVOKED" {
             handleDeviceRevoked(
                 response.message
-                    ?? "This iPhone is no longer approved on your Centurion."
+                    ?? "This iPhone is no longer approved on your Sovereign."
             )
             throw ConnectionError.serverRejected(
                 response.message
-                    ?? "This iPhone is no longer approved on your Centurion."
+                    ?? "This iPhone is no longer approved on your Sovereign."
             )
         }
         guard response.type == "pong" else {
@@ -1020,6 +1213,35 @@ final class ConnectionManager: ObservableObject {
         currentSessionKey = nil
         markDiscoveredDevicesDisconnected()
         activeConnectionTarget = nil
+
+        let tailscaleRecovery = """
+        Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
+        and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
+        use Find my Sovereign on Wi‑Fi.
+        """
+
+        // Tailscale-first: if mesh failed, try LAN once before surfacing an error.
+        if allowLanFallback, pendingDevice?.isTailscalePath == true {
+            allowLanFallback = false
+            if let lan = loadLastLanDevice()
+                ?? discoveredDevices.first(where: { !$0.isTailscalePath })
+                ?? discoveredDevices.first {
+                recoveryPrefersTailscale = true
+                pendingDevice = lan
+                connect(to: lan, stopApprovalLoop: false)
+                return
+            }
+            recoveryPrefersTailscale = false
+            connectionState = .error(tailscaleRecovery)
+            return
+        }
+
+        if recoveryPrefersTailscale {
+            recoveryPrefersTailscale = false
+            connectionState = .error(tailscaleRecovery)
+            return
+        }
+
         connectionState = .error(message)
     }
 
@@ -1052,16 +1274,18 @@ final class ConnectionManager: ObservableObject {
     private func friendlyConnectionError(_ error: NWError) -> String {
         switch error {
         case .posix(.ECONNREFUSED):
-            return "This Centurion is visible but is not accepting connections yet."
+            return "This Sovereign is visible but is not accepting connections yet."
         case .posix(.ETIMEDOUT):
             return "The connection timed out. Check that both devices are on the same network."
+        case .posix(.ECONNABORTED), .posix(.ECONNRESET):
+            return "Your Sovereign closed the connection. Tap Find my Sovereign and link again."
         default:
-            return "Your Centurion could not be reached. Please try again."
+            return "Your Sovereign could not be reached. Please try again."
         }
     }
 
     private func withTimeout<T>(
-        seconds: UInt64,
+        seconds: TimeInterval,
         operation: @escaping () async throws -> T
     ) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
@@ -1069,7 +1293,7 @@ final class ConnectionManager: ObservableObject {
                 try await operation()
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                try await Task.sleep(for: .seconds(seconds))
                 throw TimeoutError()
             }
             let result = try await group.next()!
@@ -1326,12 +1550,12 @@ enum ConnectionError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConnected: return "Not connected to any Centurion"
+        case .notConnected: return "Not connected to any Sovereign"
         case .encryptionFailed: return "Message encryption failed"
-        case .connectionClosed: return "Your Centurion closed the connection"
-        case .invalidResponse: return "Your Centurion sent an invalid response"
+        case .connectionClosed: return "Your Sovereign closed the connection"
+        case .invalidResponse: return "Your Sovereign sent an invalid response"
         case .messageTooLarge:
-            return "Your Centurion sent a response that was too large. Restart centurion-remote on your Mac, then try again."
+            return "Your Sovereign sent a response that was too large. Restart centurion-remote on your Mac, then try again."
         case .serverRejected(let message): return message
         }
     }

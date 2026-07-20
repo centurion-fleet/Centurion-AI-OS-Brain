@@ -1298,6 +1298,21 @@ DEFAULT_CONFIG = {
         "provider": "",
     },
 
+    # Vault — offline sealed long-term memory (AES-GCM at rest, local embeddings).
+    # Complements MEMORY.md/USER.md; never auto-ingests turns.
+    "vault": {
+        "enabled": False,              # opt-in until unlocked + initialized
+        "prefetch_on_turn": False,
+        "require_user_confirm": False,
+        "max_entry_chars": 4000,
+        "max_search_results": 8,
+        "hybrid_fts_weight": 0.4,
+        "hybrid_semantic_weight": 0.6,
+        "model_filename": "nomic-embed-text-v1.5.Q4_K_M.gguf",
+        "embed_base_url": "",          # empty = in-process/stub; loopback only if set
+        "clear_fts_on_lock": True,
+    },
+
     # Subagent delegation — override the provider:model used by delegate_task
     # so child agents can run on a different (cheaper/faster) provider and model.
     # Uses the same runtime provider resolution as CLI/gateway startup, so all
@@ -3472,7 +3487,7 @@ _KNOWN_ROOT_KEYS = {
     "_config_version", "model", "providers", "fallback_model",
     "fallback_providers", "credential_pool_strategies", "toolsets",
     "agent", "terminal", "display", "compression", "delegation",
-    "auxiliary", "custom_providers", "context", "memory", "gateway",
+    "auxiliary", "custom_providers", "context", "memory", "vault", "gateway",
     "sessions",
 }
 

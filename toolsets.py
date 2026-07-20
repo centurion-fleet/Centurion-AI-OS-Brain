@@ -47,7 +47,7 @@ _CENTURION_CORE_TOOLS = [
     # Text-to-speech
     "text_to_speech",
     # Planning & memory
-    "todo", "memory",
+    "todo", "memory", "vault",
     # Session history search
     "session_search",
     # Clarifying questions
@@ -215,6 +215,12 @@ TOOLSETS = {
         "tools": ["memory"],
         "includes": []
     },
+
+    "vault": {
+        "description": "Offline sealed long-term memory (Vault) — deliberate propose/commit/search",
+        "tools": ["vault"],
+        "includes": []
+    },
     
     "session_search": {
         "description": "Search and recall past conversations with summarization",
@@ -359,7 +365,7 @@ TOOLSETS = {
             "browser_type", "browser_scroll", "browser_back",
             "browser_press", "browser_get_images",
             "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
-            "todo", "memory",
+            "todo", "memory", "vault",
             "session_search",
             "execute_code", "delegate_task",
         ],
@@ -385,7 +391,7 @@ TOOLSETS = {
             "browser_press", "browser_get_images",
             "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
             # Planning & memory
-            "todo", "memory",
+            "todo", "memory", "vault",
             # Session history search
             "session_search",
             # Code execution + delegation

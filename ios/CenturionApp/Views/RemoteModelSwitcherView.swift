@@ -42,7 +42,7 @@ struct RemoteModelSwitcherView: View {
 
     private var fallbackNotice: some View {
         AtmosphericSurface {
-            Text("Showing the built-in model list. Key status may be outdated until your Centurion responds — restart centurion-remote on your Mac if this persists.")
+            Text("Showing the built-in model list. Key status may be outdated until your Sovereign responds — restart centurion-remote on your Mac if this persists.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(3)
@@ -58,7 +58,7 @@ struct RemoteModelSwitcherView: View {
                         Text("Auto-select model")
                             .font(.body.weight(.semibold))
                             .foregroundColor(ColorTheme.primaryText())
-                        Text("Your Centurion picks an LLM from your message. This is not your Centurion's name.")
+                        Text("Your Sovereign picks an LLM from your message. This is not your Sovereign's name.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     }
@@ -111,7 +111,7 @@ struct RemoteModelSwitcherView: View {
                         .disabled(isBusy)
 
                         if row.needsKey {
-                            Button("Add API key on Centurion") {
+                            Button("Add API key on Sovereign") {
                                 keyConnector = row
                             }
                             .font(.caption.weight(.medium))
@@ -128,13 +128,13 @@ struct RemoteModelSwitcherView: View {
     private func apiKeySheet(for connector: RemoteConnectorRow) -> some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                Text("Keys stay on your Centurion — not on this iPhone.")
+                Text("Keys stay on your Sovereign — not on this iPhone.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                 SecureField("API key", text: $apiKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Button("Save on Centurion") {
+                Button("Save on Sovereign") {
                     Task {
                         let result = await connectionManager.saveRemoteAPIKey(
                             connectorId: connector.id,

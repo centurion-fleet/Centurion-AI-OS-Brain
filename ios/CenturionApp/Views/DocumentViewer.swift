@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A beautiful document viewer for Centurion-created content.
 /// Renders markdown-style content with warm typography matching the app's aesthetic.
-/// Every document the Centurion creates can be read, shared, and saved from here.
+/// Every document the Sovereign creates can be read, shared, and saved from here.
 struct DocumentViewer: View {
     let output: CenturionOutput
     @State private var showShare = false

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Centurion Remote — the AI's dashboard. The human's window into what their
+/// Sovereign Remote — the AI's dashboard. The human's window into what their
 /// Centurion is doing, has done, and needs.
 ///
 /// This is NOT a human project management tool. There are no tasks to check off,
-/// no milestones to track, no human-speed progress bars. This is the Centurion's
+/// no milestones to track, no human-speed progress bars. This is the Sovereign's
 /// cockpit — showing live loops, completed wins, and decisions that need the human.
 ///
 /// Notification system: each category has a badge count for items newer than
@@ -220,8 +220,8 @@ struct MissionPortfolioView: View {
                                 ? "Nothing running right now"
                                 : "Working on now",
                             message: connectionManager.connectionState == .connected
-                                ? "When your Centurion is mid-loop, it shows up here."
-                                : "Link your Centurion in You to see live work."
+                                ? "When your Sovereign is mid-loop, it shows up here."
+                                : "Link your Sovereign in You to see live work."
                         )
                     }
                 case .wins:
@@ -230,8 +230,8 @@ struct MissionPortfolioView: View {
                             icon: "trophy",
                             title: "No finished work yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Completed outcomes from your Centurion will appear here."
-                                : "Link your Centurion to see finished wins."
+                                ? "Completed outcomes from your Sovereign will appear here."
+                                : "Link your Sovereign to see finished wins."
                         )
                     } else {
                         completedLoopsSection
@@ -244,8 +244,8 @@ struct MissionPortfolioView: View {
                             icon: "doc.richtext",
                             title: "No outputs yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Documents and results your Centurion creates will appear here."
-                                : "Link your Centurion to see documents it creates."
+                                ? "Documents and results your Sovereign creates will appear here."
+                                : "Link your Sovereign to see documents it creates."
                         )
                     }
                 case .decisions:
@@ -257,7 +257,7 @@ struct MissionPortfolioView: View {
                             title: "All clear",
                             message: connectionManager.connectionState == .connected
                                 ? "Nothing needs your choice right now."
-                                : "Link your Centurion to see decisions that need you."
+                                : "Link your Sovereign to see decisions that need you."
                         )
                     }
                 case .pulse:
@@ -266,8 +266,8 @@ struct MissionPortfolioView: View {
                             icon: "waveform.path.ecg",
                             title: "No updates yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Activity from your Centurion streams in here."
-                                : "Link your Centurion to see its update stream."
+                                ? "Activity from your Sovereign streams in here."
+                                : "Link your Sovereign to see its update stream."
                         )
                     } else {
                         thoughtsSection
@@ -357,7 +357,7 @@ struct MissionPortfolioView: View {
                 .foregroundColor(ColorTheme.mutedText())
                 .tracking(2)
 
-            Text("Priorities you turned on in Mission. Working on now below is what your Centurion is executing.")
+            Text("Priorities you turned on in Mission. Working on now below is what your Sovereign is executing.")
                 .font(.caption2)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(3)
@@ -445,7 +445,7 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 10)
     }
 
-    // MARK: - 1. LIVE — What the Centurion Is Doing Right Now
+    // MARK: - 1. LIVE — What the Sovereign Is Doing Right Now
 
     private var liveActivitySection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -774,7 +774,7 @@ struct MissionPortfolioView: View {
         return "\(minutes / 60)h \(minutes % 60)m"
     }
 
-    // MARK: - 3. OUTPUTS — Documents the Centurion Created
+    // MARK: - 3. OUTPUTS — Documents the Sovereign Created
 
     private var outputsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -1036,14 +1036,14 @@ struct MissionPortfolioView: View {
                 Image(systemName: "waveform.path.ecg")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent())
-                Text("Centurion Remote")
+                Text("Sovereign Remote")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 Button(action: {
                     openDiscuss(
-                        title: "Centurion Remote",
-                        detail: "General updates stream from your Centurion."
+                        title: "Sovereign Remote",
+                        detail: "General updates stream from your Sovereign."
                     )
                 }) {
                     Image(systemName: "bubble.left.and.bubble.right")

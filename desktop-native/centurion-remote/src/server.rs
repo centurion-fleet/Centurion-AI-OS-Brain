@@ -437,6 +437,73 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::SwarmResolveSignal {
+                id,
+                signal_id,
+                choice_note,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_resolve_signal",
+                        serde_json::json!({
+                            "signal_id": signal_id,
+                            "choice_note": choice_note,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmResolveSignalResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SwarmCreateBoard {
+                id,
+                name,
+                objective,
+                mission_id,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_create_board",
+                        serde_json::json!({
+                            "name": name,
+                            "objective": objective,
+                            "mission_id": mission_id,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmCreateBoardResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                        snapshot: payload.get("snapshot").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::BeneficiarySnapshot { id } => {
                 match state
                     .bridge

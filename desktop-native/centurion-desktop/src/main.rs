@@ -174,6 +174,198 @@ mod linux {
         TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
     }
 
+    #[derive(Debug, Default, Clone)]
+    struct LinkAddresses {
+        magic_dns: Option<String>,
+        tailscale_ip: Option<String>,
+        lan_ips: Vec<String>,
+    }
+
+    fn is_tailscale_ip(ip: &str) -> bool {
+        let parts: Vec<u8> = ip
+            .split('.')
+            .filter_map(|part| part.parse().ok())
+            .collect();
+        parts.len() == 4 && parts[0] == 100 && (64..=127).contains(&parts[1])
+    }
+
+    fn discover_link_addresses() -> LinkAddresses {
+        let mut addresses = LinkAddresses::default();
+
+        if let Ok(output) = Command::new("tailscale").args(["ip", "-4"]).output() {
+            if output.status.success() {
+                let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+                if !ip.is_empty() {
+                    addresses.tailscale_ip = Some(ip);
+                }
+            }
+        }
+
+        if let Ok(output) = Command::new("tailscale")
+            .args(["status", "--json"])
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    if addresses.magic_dns.is_none() {
+                        if let Some(dns) = value
+                            .get("Self")
+                            .and_then(|self_node| self_node.get("DNSName"))
+                            .and_then(|v| v.as_str())
+                        {
+                            let trimmed = dns.trim_end_matches('.').to_owned();
+                            if !trimmed.is_empty() {
+                                addresses.magic_dns = Some(trimmed);
+                            }
+                        }
+                    }
+                    if addresses.tailscale_ip.is_none() {
+                        if let Some(ip) = value
+                            .get("Self")
+                            .and_then(|self_node| self_node.get("TailscaleIPs"))
+                            .and_then(|ips| ips.as_array())
+                            .and_then(|ips| ips.first())
+                            .and_then(|v| v.as_str())
+                        {
+                            addresses.tailscale_ip = Some(ip.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Ok(output) = Command::new("hostname").args(["-I"]).output() {
+            if output.status.success() {
+                for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+                    if token.contains(':') || token.starts_with("127.") {
+                        continue;
+                    }
+                    if is_tailscale_ip(token) {
+                        if addresses.tailscale_ip.is_none() {
+                            addresses.tailscale_ip = Some(token.to_owned());
+                        }
+                        continue;
+                    }
+                    if !addresses.lan_ips.iter().any(|existing| existing == token) {
+                        addresses.lan_ips.push(token.to_owned());
+                    }
+                }
+            }
+        }
+
+        addresses
+    }
+
+    fn copy_to_clipboard(text: &str) {
+        if let Some(display) = gtk::gdk::Display::default() {
+            display.clipboard().set_text(text);
+        }
+    }
+
+    fn build_link_address_row(title: &str, value: &str, _primary: bool) -> gtk::Box {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.set_hexpand(true);
+        let labels = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        labels.set_hexpand(true);
+        labels.append(
+            &gtk::Label::builder()
+                .label(title)
+                .css_classes(["dim-label"])
+                .xalign(0.0)
+                .build(),
+        );
+        labels.append(
+            &gtk::Label::builder()
+                .label(value)
+                .selectable(true)
+                .xalign(0.0)
+                .build(),
+        );
+        row.append(&labels);
+        let copy = gtk::Button::with_label("Copy");
+        copy.add_css_class("flat");
+        copy.set_valign(gtk::Align::Center);
+        let value_owned = value.to_owned();
+        copy.connect_clicked(move |_| copy_to_clipboard(&value_owned));
+        row.append(&copy);
+        row
+    }
+
+    fn refresh_link_addresses(container: &gtk::Box) {
+        while let Some(child) = container.first_child() {
+            container.remove(&child);
+        }
+
+        container.append(
+            &gtk::Label::builder()
+                .label("iPhone link address")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .build(),
+        );
+
+        let addresses = discover_link_addresses();
+        let mut showed_primary = false;
+
+        if let Some(dns) = addresses.magic_dns.as_deref() {
+            container.append(&build_link_address_row(
+                "Tailscale (preferred)",
+                dns,
+                true,
+            ));
+            showed_primary = true;
+        } else if let Some(ip) = addresses.tailscale_ip.as_deref() {
+            container.append(&build_link_address_row(
+                "Tailscale (preferred)",
+                ip,
+                true,
+            ));
+            showed_primary = true;
+        }
+
+        if showed_primary {
+            if let (Some(dns), Some(ip)) = (
+                addresses.magic_dns.as_deref(),
+                addresses.tailscale_ip.as_deref(),
+            ) {
+                if dns != ip {
+                    container.append(&build_link_address_row("Tailscale IP", ip, false));
+                }
+            }
+        } else {
+            container.append(
+                &gtk::Label::builder()
+                    .label(
+                        "Tailscale is not detected. Install and sign in on this Centurion for the preferred iPhone link.",
+                    )
+                    .wrap(true)
+                    .xalign(0.0)
+                    .css_classes(["dim-label"])
+                    .build(),
+            );
+        }
+
+        if let Some(lan) = addresses.lan_ips.first() {
+            container.append(&build_link_address_row(
+                "Wi‑Fi fallback",
+                &format!("{lan}:9119"),
+                false,
+            ));
+        }
+
+        container.append(
+            &gtk::Label::builder()
+                .label(
+                    "Allow TCP 9119 on the Tailscale interface (firewall). Crypto Chat stays on your private mesh — not a company relay.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .margin_top(4)
+                .build(),
+        );
+    }
+
     fn build_window(application: &adw::Application, supervisor: Rc<RefCell<RemoteSupervisor>>) {
         if let Some(window) = application.active_window() {
             window.present();
@@ -207,6 +399,12 @@ mod linux {
         status_card.append(&app_icon_image(72));
         status_card.append(&status_title);
         status_card.append(&status_detail);
+
+        let link_addresses = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        link_addresses.set_margin_top(8);
+        refresh_link_addresses(&link_addresses);
+        status_card.append(&link_addresses);
+
         status_card.append(&thinking_title);
         status_card.append(&thinking_detail);
 
@@ -284,8 +482,10 @@ mod linux {
         settings_list.add_css_class("boxed-list");
         settings_list.append(
             &adw::ActionRow::builder()
-                .title("Private network")
-                .subtitle("Your Centurion is discoverable only on this local network.")
+                .title("Private mesh")
+                .subtitle(
+                    "Prefer Tailscale MagicDNS for iPhone linking. Same Wi‑Fi is a local fallback only.",
+                )
                 .icon_name("network-wireless-symbolic")
                 .build(),
         );
@@ -436,16 +636,20 @@ mod linux {
         let update_status = {
             let status_title = status_title.clone();
             let status_detail = status_detail.clone();
+            let link_addresses = link_addresses.clone();
             let supervisor = supervisor.clone();
             move || match supervisor.borrow_mut().ensure_running() {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
-                    status_detail
-                        .set_label("Your iPhone can find this Centurion on the private network.");
+                    status_detail.set_label(
+                        "Copy the Tailscale address below into CenturionAI Remote, or use Find my Centurion on Wi‑Fi as a fallback.",
+                    );
+                    refresh_link_addresses(&link_addresses);
                 }
                 Err(error) => {
                     status_title.set_label("Your Centurion needs attention");
                     status_detail.set_label(&error);
+                    refresh_link_addresses(&link_addresses);
                 }
             }
         };
@@ -521,16 +725,23 @@ mod linux {
             let window = window.clone();
             move |_| show_support_health_dialog(&window)
         });
-        restart.connect_clicked(move |_| {
-            let result = supervisor.borrow_mut().restart();
-            match result {
-                Ok(()) => {
-                    status_title.set_label("Your Centurion is ready");
-                    status_detail.set_label("The private iPhone connection has restarted safely.");
-                }
-                Err(error) => {
-                    status_title.set_label("Restart did not complete");
-                    status_detail.set_label(&error);
+        restart.connect_clicked({
+            let link_addresses = link_addresses.clone();
+            move |_| {
+                let result = supervisor.borrow_mut().restart();
+                match result {
+                    Ok(()) => {
+                        status_title.set_label("Your Centurion is ready");
+                        status_detail.set_label(
+                            "The private iPhone connection has restarted. Prefer the Tailscale address below.",
+                        );
+                        refresh_link_addresses(&link_addresses);
+                    }
+                    Err(error) => {
+                        status_title.set_label("Restart did not complete");
+                        status_detail.set_label(&error);
+                        refresh_link_addresses(&link_addresses);
+                    }
                 }
             }
         });

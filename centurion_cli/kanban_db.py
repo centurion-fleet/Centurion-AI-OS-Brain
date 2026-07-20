@@ -438,6 +438,7 @@ def write_board_metadata(
     color: Optional[str] = None,
     archived: Optional[bool] = None,
     default_workdir: Optional[str] = None,
+    mission_id: Optional[str] = None,
 ) -> dict:
     """Create / update ``board.json`` for ``board``.
 
@@ -461,6 +462,8 @@ def write_board_metadata(
         meta["archived"] = bool(archived)
     if default_workdir is not None:
         meta["default_workdir"] = str(default_workdir) if default_workdir else None
+    if mission_id is not None:
+        meta["mission_id"] = str(mission_id).strip() or None
     if not meta.get("created_at"):
         meta["created_at"] = int(time.time())
     path = board_metadata_path(slug)
@@ -481,6 +484,7 @@ def create_board(
     icon: Optional[str] = None,
     color: Optional[str] = None,
     default_workdir: Optional[str] = None,
+    mission_id: Optional[str] = None,
 ) -> dict:
     """Create a new board directory + DB + metadata. Idempotent.
 
@@ -498,6 +502,7 @@ def create_board(
         icon=icon,
         color=color,
         default_workdir=default_workdir,
+        mission_id=mission_id,
     )
     # Touch the DB so list_boards() sees it immediately.
     init_db(board=normed)

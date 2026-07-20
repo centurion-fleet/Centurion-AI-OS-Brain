@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Opens the Personal Centurion help center in Safari.
+/// Opens the Sovereign help center in Safari.
 struct HelpCenterLink: View {
     var title: String = "Browse Help Center"
     var url: URL = CenturionHelp.baseURL
@@ -17,7 +17,7 @@ struct HelpCenterLink: View {
                 .foregroundColor(ColorTheme.accent())
         }
         .accessibilityLabel(title)
-        .accessibilityHint("Opens the Personal Centurion help website")
+        .accessibilityHint("Opens the Sovereign help website")
     }
 }
 
@@ -35,7 +35,7 @@ struct AdrianLink: View {
                 .foregroundColor(ColorTheme.accent())
         }
         .accessibilityLabel("Talk to Adrian")
-        .accessibilityHint("Open Adrian, Centurion's creator online — caring expert guidance")
+        .accessibilityHint("Open Adrian, Sovereign's creator online — caring expert guidance")
     }
 }
 

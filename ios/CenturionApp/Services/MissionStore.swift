@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Single source of truth for the human's mission and the Centurion's Soul.
+/// Single source of truth for the human's mission and the Sovereign's Soul.
 /// Mission = you. Soul = your AI companion's personality and rules.
 @MainActor
 final class MissionStore: ObservableObject {
@@ -110,7 +110,7 @@ final class MissionStore: ObservableObject {
                     id: UUID(),
                     title: goal,
                     description: updated.profile.whyThisMission.isEmpty
-                        ? "A commitment your Centurion is helping you fulfill."
+                        ? "A commitment your Sovereign is helping you fulfill."
                         : updated.profile.whyThisMission
                 )
             }
@@ -242,7 +242,7 @@ final class MissionStore: ObservableObject {
                     id: UUID(),
                     title: goal,
                     description: legacy.whyThisMission.isEmpty
-                        ? "A commitment your Centurion is helping you fulfill."
+                        ? "A commitment your Sovereign is helping you fulfill."
                         : legacy.whyThisMission
                 )
             }
@@ -389,7 +389,7 @@ final class MissionStore: ObservableObject {
     }
 
     static func discoveryShareMessage(answers: [String: String], questions: [MissionQuestion]) -> String {
-        var lines = ["I've completed my Mission Discovery on Centurion Remote.", ""]
+        var lines = ["I've completed my Mission Discovery on Sovereign Remote.", ""]
         for question in questions {
             guard let answer = answers[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !answer.isEmpty else { continue }

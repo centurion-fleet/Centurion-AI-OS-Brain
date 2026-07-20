@@ -73,7 +73,7 @@ struct MissionView: View {
 
     private func openCommitmentChat(for target: LifeMissionTarget) {
         guard connectionManager.connectionState == .connected else {
-            chatError = "Pair with your Centurion in You first, then chat about this commitment."
+            chatError = "Pair with your Sovereign in You first, then chat about this commitment."
             return
         }
         Haptics.lightTap()
@@ -119,7 +119,7 @@ struct MissionView: View {
                         .multilineTextAlignment(.center)
                         .lineSpacing(6)
 
-                    Text("Your Centurion exists to help you discover what matters,\nthen walk beside you as you live it.")
+                    Text("Your Sovereign exists to help you discover what matters,\nthen walk beside you as you live it.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -136,7 +136,7 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Discover Your Mission", icon: "sparkles")
 
-            Text("Reflect on your life — what matters and what you're building. This isn't about how your Centurion behaves; it's about you.")
+            Text("Reflect on your life — what matters and what you're building. This isn't about how your Sovereign behaves; it's about you.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
@@ -164,7 +164,7 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Active Commitments", icon: "target")
 
-            Text("Living commitments your Centurion helps you fulfill. Turn on the ones to prioritize on Home, or tap the chat bubble to discuss and refine them.")
+            Text("Living commitments your Sovereign helps you fulfill. Turn on the ones to prioritize on Home, or tap the chat bubble to discuss and refine them.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
@@ -198,7 +198,7 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "About You", icon: "person.fill")
 
-            Text("Context that helps your Centurion understand your world — story, values, people, and what you need help with.")
+            Text("Context that helps your Sovereign understand your world — story, values, people, and what you need help with.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)

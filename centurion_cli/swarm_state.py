@@ -323,3 +323,134 @@ def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
         "tasks": portal.get("tasks", []),
         "message": portal.get("message"),
     }
+
+
+def resolve_signal(signal_id: str, *, choice_note: str = "") -> dict[str, Any]:
+    """Resolve a human Signal on the Brain (unblock kanban task) + optional Vault receipt.
+
+    Signal ids are ``{board_slug}:{task_id}:signal``.
+    """
+    raw = str(signal_id or "").strip()
+    parts = raw.split(":")
+    if len(parts) < 3 or parts[-1] != "signal":
+        return {
+            "ok": False,
+            "error": "Unrecognized signal id.",
+            "signal_id": raw,
+        }
+    board_slug = parts[0]
+    task_id = ":".join(parts[1:-1])
+    if not board_slug or not task_id:
+        return {"ok": False, "error": "Malformed signal id.", "signal_id": raw}
+
+    try:
+        from centurion_cli import kanban_db
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "signal_id": raw}
+
+    try:
+        conn = kanban_db.connect(board=board_slug)
+        try:
+            ok = kanban_db.unblock_task(conn, task_id)
+        finally:
+            conn.close()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "signal_id": raw, "swarm_id": board_slug}
+
+    vault_entry_id = None
+    try:
+        vault_entry_id = _deposit_decision_receipt(
+            board_slug=board_slug,
+            task_id=task_id,
+            choice_note=choice_note,
+        )
+    except Exception:
+        vault_entry_id = None
+
+    return {
+        "ok": True,
+        "signal_id": raw,
+        "swarm_id": board_slug,
+        "task_id": task_id,
+        "unblocked": bool(ok),
+        "vault_entry_id": vault_entry_id,
+        "message": "Choice recorded. Your Sovereigns can continue.",
+    }
+
+
+def create_collaboration_board(
+    *,
+    name: str,
+    objective: str = "",
+    mission_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a LAN/local collaboration board tethered to Life Mission when provided."""
+    title = str(name or "").strip()
+    if not title:
+        return {"ok": False, "error": "Collaboration name is required."}
+
+    try:
+        from centurion_cli import kanban_db
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    # Slug from name — keep readable and unique-ish
+    import re
+    import time as _time
+
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "collaboration"
+    slug = f"{base[:40]}-{int(_time.time()) % 100000}"
+    try:
+        meta = kanban_db.create_board(
+            slug,
+            name=title,
+            description=str(objective or "").strip()
+            or "Your Centurions are working together on this collaboration.",
+            mission_id=str(mission_id).strip() if mission_id else None,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    snapshot = get_swarm_snapshot()
+    swarm = next(
+        (s for s in snapshot.get("swarms", []) if s.get("id") == meta.get("slug") or s.get("id") == slug),
+        None,
+    )
+    return {
+        "ok": True,
+        "swarm_id": slug,
+        "board": meta,
+        "swarm": swarm,
+        "snapshot": snapshot,
+        "message": f"Collaboration “{title}” is ready on this Sovereign.",
+    }
+
+
+def _deposit_decision_receipt(
+    *,
+    board_slug: str,
+    task_id: str,
+    choice_note: str = "",
+) -> str | None:
+    """Best-effort experiential Vault note when Vault is unlocked."""
+    try:
+        from agent.vault import open_vault
+    except Exception:
+        return None
+    vault = open_vault(writes_allowed=True)
+    if not vault.is_unlocked:
+        return None
+    note = (choice_note or "").strip()
+    text = (
+        f"Collaboration decision on {board_slug}: resolved signal for task {task_id}."
+        + (f" Note: {note}" if note else "")
+    )
+    prop = vault.propose(
+        memory_type="experiential",
+        text=text,
+        rationale="Human resolved a Collaboration Signal on Remote.",
+        tags=["collaboration", "decision", board_slug],
+        importance=6,
+    )
+    entry = vault.commit(prop.id)
+    return entry.id

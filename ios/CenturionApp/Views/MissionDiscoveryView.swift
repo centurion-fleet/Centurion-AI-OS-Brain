@@ -112,14 +112,14 @@ struct MissionDiscoveryView: View {
                 switch status {
                 case .sent:
                     Alert(
-                        title: Text("Shared With Your Centurion"),
+                        title: Text("Shared With Your Sovereign"),
                         message: Text("Your mission discovery has been sent securely."),
                         dismissButton: .default(Text("OK"))
                     )
                 case .notConnected:
                     Alert(
                         title: Text("Not Connected"),
-                        message: Text("Pair with your Centurion in You first, then share your mission."),
+                        message: Text("Pair with your Sovereign in You first, then share your mission."),
                         dismissButton: .default(Text("OK"))
                     )
                 }
@@ -465,7 +465,7 @@ struct MissionSummaryView: View {
                                 ProgressView()
                                     .tint(.white)
                             }
-                            Text("Share With My Centurion")
+                            Text("Share With My Sovereign")
                         }
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())

@@ -154,28 +154,6 @@ struct SwarmSummary: Identifiable, Codable, Equatable {
     }
 }
 
-struct SwarmFormationProposal: Identifiable, Equatable {
-    let id: UUID
-    var objective: String
-    var suggestedName: String
-    var participantNames: [String]
-    var source: SwarmFormationSource
-
-    init(
-        id: UUID = UUID(),
-        objective: String,
-        suggestedName: String,
-        participantNames: [String] = ["Your Centurion", "Research Centurion", "Strategy Centurion"],
-        source: SwarmFormationSource = .chat
-    ) {
-        self.id = id
-        self.objective = objective
-        self.suggestedName = suggestedName
-        self.participantNames = participantNames
-        self.source = source
-    }
-}
-
 // MARK: - Preview data
 
 extension SwarmSummary {
@@ -276,7 +254,7 @@ extension SwarmOutcome {
                     ? "Positioning white paper ready for your review"
                     : "Three content briefs drafted for next week",
                 status: index == 0 ? .ready : .inProgress,
-                ownerName: swarm.participants.first(where: { $0.kind == .centurion })?.name ?? "Centurion",
+                ownerName: swarm.participants.first(where: { $0.kind == .centurion })?.name ?? "Sovereign",
                 createdAt: Date().addingTimeInterval(Double(-1800 * (index + 1)))
             )
         }

@@ -139,12 +139,12 @@ struct ConversationListView: View {
                     message: "Chat about a mission target or send a message — conversations appear here automatically."
                 )
             } else if connectionManager.connectionState == .discovering {
-                LoadingState(message: "Looking for your Centurion…")
+                LoadingState(message: "Looking for your Sovereign…")
             } else {
                 EmptyState(
                     icon: "antenna.radiowaves.left.and.right",
                     title: "Not connected",
-                    message: "Open You to link your iPhone to your Centurion."
+                    message: "Open You to link your iPhone to your Sovereign."
                 )
             }
         }

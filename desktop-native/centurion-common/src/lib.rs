@@ -144,6 +144,38 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result: Option<serde_json::Value>,
     },
+    SwarmResolveSignal {
+        id: Uuid,
+        signal_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        choice_note: Option<String>,
+    },
+    SwarmResolveSignalResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+    },
+    SwarmCreateBoard {
+        id: Uuid,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        objective: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mission_id: Option<String>,
+    },
+    SwarmCreateBoardResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        snapshot: Option<serde_json::Value>,
+    },
     BeneficiarySnapshot {
         id: Uuid,
     },

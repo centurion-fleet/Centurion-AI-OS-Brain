@@ -191,9 +191,9 @@ This is the top of Mission Control. Everything else is subordinate.
 
 ---
 
-## 9. Centurion Remote
+## 9. Sovereign Remote
 
-Contextual thoughts from the Centurion appear in Mission Control — not just reactive answers:
+Contextual thoughts from the Sovereign appear in Mission Control — not just reactive answers:
 
 - Progress updates ("Revenue at 74% of quarterly target")
 - Alerts ("Content Strategy is blocked — awaiting feedback for 8 days")

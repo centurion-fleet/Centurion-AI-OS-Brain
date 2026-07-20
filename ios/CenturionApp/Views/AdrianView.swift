@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Chat with Adrian — the online presence of Centurion's creator.
+/// Chat with Adrian — the online presence of Sovereign's creator.
 struct AdrianView: View {
     @EnvironmentObject private var adrianService: AdrianService
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -61,9 +61,9 @@ struct AdrianView: View {
                         CenturionSectionHeader(title: "Meet Adrian", icon: "person.crop.circle")
 
                         Text(
-                            "Adrian online is Adrian who created Centurion. His passion is helping you live "
+                            "Adrian online is Adrian who created Sovereign. His passion is helping you live "
                                 + "your mission — lift daily pressure, free your thinking, and deepen your "
-                                + "1:1 relationship with your private Centurion. Missions evolve; that's expected."
+                                + "1:1 relationship with your private Sovereign. Missions evolve; that's expected."
                         )
                         .font(.body)
                         .foregroundColor(ColorTheme.primaryText())
@@ -71,7 +71,7 @@ struct AdrianView: View {
 
                         Text(
                             "Adrian listens first, then helps one step at a time. Answers are drawn from "
-                                + "the Personal Centurion Help Center at help.personal-centurion.com — "
+                                + "the Sovereign Help Center at help.1human1ai.com — "
                                 + "the same articles you can browse on the web."
                         )
                         .font(.subheadline)
@@ -79,7 +79,7 @@ struct AdrianView: View {
                         .lineSpacing(4)
 
                         Text(
-                            "He works over the internet, separate from your private Centurion link, "
+                            "He works over the internet, separate from your private Sovereign link, "
                                 + "and sees only what helps — link status, thinking health in plain words, "
                                 + "and a short mission summary if you've set one. Never your chat history or secrets."
                         )
