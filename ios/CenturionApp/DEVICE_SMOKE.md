@@ -33,6 +33,17 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] Changes apply on next conversation (not mid-chat)
 - [ ] Commitment chat frames and sends when connected
 
+## Plans (Propose first + Host sync)
+
+- [ ] Chat shows **Talk** / **Propose first** chips
+- [ ] Propose first drafts a plan; Home **Plans** / Needs your choice / Documents show it
+- [ ] Live may show “Drafting a plan…” while planning
+- [ ] Plan review: **Proceed** / **Adjust** / **Hold** work; Proceed syncs to host when linked
+- [ ] Risk badge appears when host classifies the plan
+- [ ] **Templates** under Home → Plans instantiate a reviewable plan when linked
+- [ ] **Share for review** accepts a reviewer customer id and records reviewers on the plan
+- [ ] After reconnect, plans refresh from the Sovereign (host is source of truth)
+
 ## Desktop Settings (parity)
 
 - [ ] Settings → Autonomy Level Adjust changes host preference

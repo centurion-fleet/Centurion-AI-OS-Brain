@@ -75,6 +75,7 @@ struct CenturionApp: App {
                         await services.beneficiaryStore.refresh(from: services.connectionManager)
                         await services.oversightStore.refresh(from: services.connectionManager)
                         await services.missionStore.refreshSoul(from: services.connectionManager)
+                        await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
                     }
                 } else {
                     clearedDemoForConnection = false

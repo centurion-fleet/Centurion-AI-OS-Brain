@@ -7,8 +7,11 @@ struct PlanReviewView: View {
     var onProceed: () -> Void
     var onAdjust: () -> Void
     var onHold: () -> Void
+    var onShare: ((String) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @State private var reviewerId = ""
+    @State private var shareMessage: String?
 
     var body: some View {
         ScrollView {
@@ -86,6 +89,49 @@ struct PlanReviewView: View {
                     }
                 }
 
+                if !plan.share.reviewers.isEmpty || !plan.share.comments.isEmpty {
+                    section(title: "Shared review", icon: "person.2") {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            ForEach(plan.share.reviewers) { reviewer in
+                                Text("\(reviewer.customerId) — \(reviewer.status)")
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.mutedText())
+                            }
+                            ForEach(plan.share.comments) { comment in
+                                Text("\(comment.author): \(comment.body)")
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.primaryText())
+                            }
+                        }
+                    }
+                }
+
+                if onShare != nil {
+                    section(title: "Share for review", icon: "square.and.arrow.up") {
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            TextField("Reviewer customer id", text: $reviewerId)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .font(.subheadline)
+                            Button {
+                                let trimmed = reviewerId.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                Haptics.mediumTap()
+                                onShare?(trimmed)
+                                shareMessage = "Shared for review."
+                            } label: {
+                                Text("Share with reviewer")
+                            }
+                            .buttonStyle(CenturionSecondaryButtonStyle())
+                            if let shareMessage {
+                                Text(shareMessage)
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.mutedText())
+                            }
+                        }
+                    }
+                }
+
                 VStack(spacing: Spacing.sm) {
                     Button {
                         Haptics.success()
@@ -140,6 +186,12 @@ struct PlanReviewView: View {
                     Text("PLAN")
                         .font(Typography.sectionLabel)
                         .tracking(1.5)
+                    if let risk = plan.risk {
+                        Spacer()
+                        Text(risk.displayLabel)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(ColorTheme.accent())
+                    }
                 }
                 .foregroundColor(ColorTheme.accent())
 

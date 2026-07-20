@@ -770,6 +770,103 @@ final class ConnectionManager: ObservableObject {
         try await invokeRemote(action: "oversight_get")
     }
 
+    // MARK: - Plans
+
+    func fetchPlans(status: String = "all") async throws -> [PlanArtifact] {
+        let payload = try await invokeRemote(
+            action: "plans_list",
+            extra: ["status": status]
+        )
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not load plans.")
+        }
+        let raw = payload["plans"] as? [[String: Any]] ?? []
+        return raw.compactMap(PlanArtifact.decode(from:))
+    }
+
+    func putPlan(_ plan: PlanArtifact) async throws -> PlanArtifact? {
+        let payload = try await invokeRemote(
+            action: "plan_put",
+            extra: ["plan": plan.hostPayload]
+        )
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not save plan.")
+        }
+        if let dict = payload["plan"] as? [String: Any] {
+            return PlanArtifact.decode(from: dict)
+        }
+        return nil
+    }
+
+    func decidePlan(
+        planId: String,
+        choice: String,
+        note: String? = nil,
+        reviewerCustomerId: String? = nil
+    ) async throws -> PlanArtifact? {
+        var extra: [String: Any] = [
+            "plan_id": planId,
+            "choice": choice,
+        ]
+        if let note, !note.isEmpty { extra["note"] = note }
+        if let reviewerCustomerId, !reviewerCustomerId.isEmpty {
+            extra["reviewer_customer_id"] = reviewerCustomerId
+        }
+        let payload = try await invokeRemote(action: "plan_decide", extra: extra)
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not record decision.")
+        }
+        if let dict = payload["plan"] as? [String: Any] {
+            return PlanArtifact.decode(from: dict)
+        }
+        return nil
+    }
+
+    func sharePlan(
+        planId: String,
+        reviewerCustomerId: String,
+        role: String = "observer"
+    ) async throws -> PlanArtifact? {
+        let payload = try await invokeRemote(
+            action: "plan_share",
+            extra: [
+                "plan_id": planId,
+                "reviewer_customer_id": reviewerCustomerId,
+                "role": role,
+            ]
+        )
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not share plan.")
+        }
+        if let dict = payload["plan"] as? [String: Any] {
+            return PlanArtifact.decode(from: dict)
+        }
+        return nil
+    }
+
+    func fetchPlanTemplates() async throws -> [PlanTemplate] {
+        let payload = try await invokeRemote(action: "plan_templates_list")
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not load templates.")
+        }
+        let raw = payload["templates"] as? [[String: Any]] ?? []
+        return raw.compactMap(PlanTemplate.decode(from:))
+    }
+
+    func instantiatePlanTemplate(templateId: String) async throws -> PlanArtifact? {
+        let payload = try await invokeRemote(
+            action: "plan_template_instantiate",
+            extra: ["template_id": templateId]
+        )
+        guard payload["ok"] as? Bool ?? false else {
+            throw ConnectionError.serverRejected(payload["message"] as? String ?? "Could not create plan from template.")
+        }
+        if let dict = payload["plan"] as? [String: Any] {
+            return PlanArtifact.decode(from: dict)
+        }
+        return nil
+    }
+
     func putOversight(
         _ oversight: [String: Any],
         applyLevelPreset: Bool = true
@@ -984,6 +1081,15 @@ final class ConnectionManager: ObservableObject {
             "oversight_put_response": "oversight_put",
             "soul_get_response": "soul_get",
             "soul_put_response": "soul_put",
+            "plans_list_response": "plans_list",
+            "plan_get_response": "plan_get",
+            "plan_put_response": "plan_put",
+            "plan_decide_response": "plan_decide",
+            "plan_share_response": "plan_share",
+            "plan_comment_response": "plan_comment",
+            "plan_templates_list_response": "plan_templates_list",
+            "plan_template_instantiate_response": "plan_template_instantiate",
+            "plan_save_template_response": "plan_save_template",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {

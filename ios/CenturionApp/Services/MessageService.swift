@@ -122,12 +122,12 @@ final class MessageService: ObservableObject {
         if proposeFirst, let planStore {
             let artifact = ProposeFirstChat.parseArtifact(from: rawResponse)
                 ?? ProposeFirstChat.fallbackArtifact(from: displayResponse.isEmpty ? rawResponse : displayResponse, userRequest: text)
-            planStore.upsert(artifact)
+            await planStore.upsertAndSync(artifact, connectionManager: connectionManager)
             if displayResponse.isEmpty {
-                displayResponse = "I've drafted a plan for your review on Home — open Needs your choice or Documents when you're ready."
+                displayResponse = "I've drafted a plan for your review on Home — open Plans, Needs your choice, or Documents when you're ready."
             } else if !displayResponse.localizedCaseInsensitiveContains("home")
                         && !displayResponse.localizedCaseInsensitiveContains("plan") {
-                displayResponse += "\n\nYou can review this plan on Home under Needs your choice or Documents."
+                displayResponse += "\n\nYou can review this plan on Home under Plans, Needs your choice, or Documents."
             }
         }
 

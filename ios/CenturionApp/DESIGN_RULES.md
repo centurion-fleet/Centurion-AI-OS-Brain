@@ -77,7 +77,7 @@ Every screen answers: *Why am I here? What can I do next?*
 |------|---------|------------------|
 | **Mission** | The **human** — life purpose, active commitments, story/values/context | Mission screen, Mission Discovery, Pulse banner |
 | **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Sovereign's Soul screen, Shape Your Sovereign flow |
-| **Plan** | A **reviewable proposal** from your Sovereign before consequential work — not life Mission | Chat “Propose first”, Home Needs your choice / Documents, Plan review |
+| **Plan** | A **reviewable proposal** from your Sovereign before consequential work — not life Mission | Chat “Propose first”, Home **Plans** / Needs your choice / Documents, Plan review |
 
 Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces. Never call an agent plan a “Mission.”
 
@@ -147,6 +147,7 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 | Internal | User-facing |
 |----------|-------------|
 | Live | Working on now |
+| Plans | Plans (reviewable proposals) |
 | Wins | Finished for you |
 | Outputs | Documents |
 | Decisions | Needs your choice |
