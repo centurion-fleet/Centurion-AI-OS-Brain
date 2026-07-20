@@ -29,11 +29,17 @@ final class MissionStore: ObservableObject {
         }
         mission = resolvedMission
 
+        var resolvedSoul: SoulDocument
         if let loaded = Self.loadSoul() {
-            soul = loaded
+            resolvedSoul = loaded
         } else {
-            soul = SoulDocument()
+            resolvedSoul = SoulDocument()
         }
+        let beforeAlwaysDo = resolvedSoul.alwaysDo
+        if resolvedSoul.isValid {
+            resolvedSoul.ensureProposeFirstStandingRule()
+        }
+        soul = resolvedSoul
 
         if let ids = Self.loadActiveTargetIDs() {
             activeTargetIDs = ids
@@ -42,6 +48,10 @@ final class MissionStore: ObservableObject {
         }
 
         discoveryAnswers = Self.loadDiscoveryAnswers() ?? [:]
+
+        if beforeAlwaysDo != resolvedSoul.alwaysDo {
+            persistSoul()
+        }
 
         if !UserDefaults.standard.bool(forKey: Self.migrationKey) {
             runLegacyMigration()
@@ -174,6 +184,7 @@ final class MissionStore: ObservableObject {
 
     func updateSoul(_ document: SoulDocument) {
         var updated = document
+        updated.ensureProposeFirstStandingRule()
         updated.updatedAt = Date()
         if updated.version < 2 { updated.version = 2 }
         soul = updated

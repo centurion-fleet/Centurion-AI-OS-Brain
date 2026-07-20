@@ -22,6 +22,19 @@ struct SoulDocumentView: View {
                 if soul.isValid {
                     soulContent
 
+                    AtmosphericSurface {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Plans before consequential work")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(ColorTheme.primaryText())
+                            Text("Standing rule: “\(PlanArtifact.proposeFirstStandingRule)” — use Propose first in Chat, then Proceed on Home.")
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                                .lineSpacing(3)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     Button(action: {
                         Haptics.mediumTap()
                         showInterview = true

@@ -24,6 +24,7 @@ struct CenturionApp: App {
                     .environmentObject(services.adrianService)
                     .environmentObject(services.dataMode)
                     .environmentObject(services.swarmStore)
+                    .environmentObject(services.planStore)
                     .environmentObject(services.beneficiaryStore)
                     .environmentObject(services.oversightStore)
                     .opacity(showSplash || showOnboarding ? 0 : 1)
@@ -65,6 +66,7 @@ struct CenturionApp: App {
                 if state == .connected {
                     if !clearedDemoForConnection {
                         services.messageService.clearDemoData()
+                        services.planStore.clearDemoData()
                         ConversationStore.shared.restore(into: services.messageService)
                         clearedDemoForConnection = true
                     }

@@ -2,7 +2,7 @@ import Foundation
 
 /// Maps brain `swarm_snapshot` fields into the Home Pulse pill models.
 /// Live / Wins / Outputs / Decisions / Updates are projections of
-/// swarms, signals, outcomes, and activities — no extra remote action needed.
+/// swarms, signals, outcomes, activities — plus local PlanArtifact reviews.
 @MainActor
 enum PulseFeedMapper {
     struct Feed {
@@ -13,7 +13,7 @@ enum PulseFeedMapper {
         var thoughts: [CenturionThought]
     }
 
-    static func map(from store: SwarmStore) -> Feed {
+    static func map(from store: SwarmStore, planStore: PlanStore? = nil) -> Feed {
         let liveSwarm = store.heroSwarms
             .filter {
                 $0.pulse == .active
@@ -30,14 +30,30 @@ enum PulseFeedMapper {
             .sorted { $0.createdAt > $1.createdAt }
             .map(completedLoop(from:))
 
-        let outputs = store.outcomes
+        var outputs = store.outcomes
             .sorted { $0.createdAt > $1.createdAt }
             .prefix(20)
             .map(output(from:))
 
-        let decisions = store.signalsRequiringAttention
+        if let planStore {
+            let planOutputs = planStore.plans.map { $0.asCenturionOutput() }
+            outputs = mergeOutputs(planOutputs + Array(outputs))
+        }
+
+        var decisions = store.signalsRequiringAttention
             .sorted { $0.createdAt > $1.createdAt }
-            .map { decision(from: $0, store: store) }
+            .map { decision(from: $0, store: store, planStore: planStore) }
+
+        if let planStore {
+            let planDecisions = planStore.pendingReview
+                .filter { plan in
+                    // Avoid duplicating a swarm-backed decision already mapped.
+                    guard let signalId = plan.signalId else { return true }
+                    return !decisions.contains { $0.signalId == signalId }
+                }
+                .map { $0.asDecisionItem() }
+            decisions = planDecisions + decisions
+        }
 
         let thoughts = store.activities
             .sorted { $0.at > $1.at }
@@ -47,7 +63,7 @@ enum PulseFeedMapper {
         return Feed(
             liveActivity: liveSwarm.map { liveActivity(from: $0, store: store) },
             wins: wins,
-            outputs: Array(outputs),
+            outputs: Array(outputs.prefix(24)),
             decisions: decisions,
             thoughts: Array(thoughts)
         )
@@ -97,10 +113,22 @@ enum PulseFeedMapper {
         case .idle: progress = 0.1
         }
 
+        let summary: String
+        if phase == .planning {
+            let objective = swarm.objective.trimmingCharacters(in: .whitespacesAndNewlines)
+            summary = objective.isEmpty
+                ? "Drafting a plan…"
+                : "Drafting a plan: \(objective)"
+        } else if swarm.objective.isEmpty {
+            summary = swarm.displayName
+        } else {
+            summary = swarm.objective
+        }
+
         return LiveActivity(
             id: stableUUID("live:\(swarm.id)"),
             phase: phase,
-            summary: swarm.objective.isEmpty ? swarm.displayName : swarm.objective,
+            summary: summary,
             detail: detail,
             progress: progress,
             startedAt: swarm.updatedAt,
@@ -126,12 +154,26 @@ enum PulseFeedMapper {
 
     private static func output(from outcome: SwarmOutcome) -> CenturionOutput {
         let title = outcome.description
+        let type: CenturionOutput.OutputType = looksLikePlan(title) ? .plan : .report
+        let body: String
+        if type == .plan {
+            body = """
+            # \(title)
+
+            Your Sovereign proposes this plan.
+
+            Owner: \(outcome.ownerName)
+            Status: \(outcome.status.rawValue)
+            """
+        } else {
+            body = "# \(title)\n\nOwner: \(outcome.ownerName)\nStatus: \(outcome.status.rawValue)\n"
+        }
         return CenturionOutput(
             id: stableUUID("output:\(outcome.id)"),
             title: String(title.prefix(80)),
             summary: title,
-            content: "# \(title)\n\nOwner: \(outcome.ownerName)\nStatus: \(outcome.status.rawValue)\n",
-            type: .report,
+            content: body,
+            type: type,
             sourceLoop: outcome.ownerName,
             relatedMission: outcome.ownerName,
             createdAt: outcome.createdAt,
@@ -140,21 +182,51 @@ enum PulseFeedMapper {
         )
     }
 
-    private static func decision(from signal: SwarmSignal, store: SwarmStore) -> DecisionItem {
+    private static func decision(
+        from signal: SwarmSignal,
+        store: SwarmStore,
+        planStore: PlanStore?
+    ) -> DecisionItem {
         let swarmName = store.swarm(for: signal.swarmId)?.displayName
+        let isPlan = looksLikePlan(signal.message)
+            || (planStore?.plans.contains { $0.signalId == signal.id } ?? false)
+
+        if isPlan {
+            if let existing = planStore?.plans.first(where: { $0.signalId == signal.id }) {
+                return existing.asDecisionItem()
+            }
+            let plan = PlanArtifact(
+                id: stableUUID("plan-signal:\(signal.id)"),
+                title: String(signal.message.prefix(80)),
+                goal: signal.message,
+                steps: [],
+                risks: [],
+                openQuestions: [],
+                summary: signal.message,
+                relatedMission: swarmName,
+                signalId: signal.id,
+                status: .pendingReview,
+                createdAt: signal.createdAt
+            )
+            return plan.asDecisionItem()
+        }
+
         return DecisionItem(
             id: stableUUID("decision:\(signal.id)"),
             title: signal.message,
-            context: swarmName.map { "From swarm “\($0)”." } ?? "Your Sovereign needs a decision.",
+            context: swarmName.map { "From collaboration “\($0)”." } ?? "Your Sovereign needs a decision.",
             options: [
-                DecisionOption(label: "Discuss", description: "Open Crypto Chat about this"),
-                DecisionOption(label: "Approve", description: "Tell your Sovereign to proceed"),
-                DecisionOption(label: "Hold", description: "Pause and ask for more context"),
+                DecisionOption(label: "Proceed", description: "Tell your Sovereign to continue"),
+                DecisionOption(label: "Adjust", description: "Open Crypto Chat about this"),
+                DecisionOption(label: "Hold", description: "Keep this in Needs your choice for now"),
             ],
             generatedBy: swarmName ?? "Sovereign",
             relatedMission: swarmName,
             urgency: signal.type == .ceremony ? .now : .today,
-            createdAt: signal.createdAt
+            createdAt: signal.createdAt,
+            signalId: signal.id,
+            planId: nil,
+            kind: .general
         )
     }
 
@@ -180,6 +252,31 @@ enum PulseFeedMapper {
             timestamp: activity.at,
             relatedMission: swarmName
         )
+    }
+
+    private static func looksLikePlan(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("plan")
+            || lower.contains("propose")
+            || lower.contains("before we")
+            || lower.contains("approve the")
+            || lower.contains("positioning angle")
+    }
+
+    private static func mergeOutputs(_ items: [CenturionOutput]) -> [CenturionOutput] {
+        var seen = Set<UUID>()
+        var result: [CenturionOutput] = []
+        for item in items.sorted(by: { $0.createdAt > $1.createdAt }) {
+            if seen.insert(item.id).inserted {
+                result.append(item)
+            }
+        }
+        // Plans first within the recent window
+        return result.sorted { lhs, rhs in
+            if lhs.type == .plan && rhs.type != .plan { return true }
+            if lhs.type != .plan && rhs.type == .plan { return false }
+            return lhs.createdAt > rhs.createdAt
+        }
     }
 
     private static func stableUUID(_ key: String) -> UUID {

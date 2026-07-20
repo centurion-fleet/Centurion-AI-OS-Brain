@@ -30,11 +30,27 @@ struct SoulDocument: Codable {
         soul.tone = "Direct and warm"
         soul.communicationStyle = "Headlines first, details on request. No filler."
         soul.pushbackStyle = "Push back when I'm rushing past something important."
-        soul.alwaysDo = ["Summarise before detail", "Flag risks early"]
+        soul.alwaysDo = [
+            "Summarise before detail",
+            "Flag risks early",
+            PlanArtifact.proposeFirstStandingRule,
+        ]
         soul.neverDo = ["Soften bad news", "Use jargon without explaining it"]
         soul.uncertaintyStyle = "Say what you know, what you don't, and what you'd check next."
         soul.responseLength = "Brief by default, thorough when I ask"
         return soul
+    }
+
+    /// Ensure the standing Propose-first rule is present without duplicating it.
+    mutating func ensureProposeFirstStandingRule() {
+        let rule = PlanArtifact.proposeFirstStandingRule
+        let alreadyHas = alwaysDo.contains {
+            $0.localizedCaseInsensitiveContains("propose a plan first")
+                || $0 == rule
+        }
+        if !alreadyHas {
+            alwaysDo.append(rule)
+        }
     }
 }
 
@@ -124,8 +140,8 @@ struct SoulQuestion: Identifiable {
             SoulQuestion(
                 stage: .rules,
                 question: "What should your Sovereign always do?",
-                hint: "Habits and behaviours you want every time.",
-                placeholder: "e.g. Flag risks early, summarise before detail",
+                hint: "Habits and behaviours you want every time. Include proposing a plan before consequential work if that fits you.",
+                placeholder: "e.g. Flag risks early; for consequential work, propose a plan first and wait for my Proceed",
                 inputType: .tags
             ),
             SoulQuestion(

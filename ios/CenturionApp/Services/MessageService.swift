@@ -67,10 +67,13 @@ final class MessageService: ObservableObject {
     }
 
     /// Send a message in a conversation context. Returns the conversation used.
+    /// When `proposeFirst` is true, the host is framed to draft a plan only and stop.
     func sendMessage(
         _ text: String,
         in context: ConversationContext,
-        missionStore: MissionStore? = nil
+        missionStore: MissionStore? = nil,
+        planStore: PlanStore? = nil,
+        proposeFirst: Bool = false
     ) async throws -> Conversation {
         guard connectionManager.connectionState == .connected else {
             throw MessageError.notConnected
@@ -86,7 +89,9 @@ final class MessageService: ObservableObject {
         appendMessage(userMessage)
 
         let outboundBody: String
-        if case .commitment(let id, _) = context,
+        if proposeFirst {
+            outboundBody = ProposeFirstChat.frameOutbound(userText: text)
+        } else if case .commitment(let id, _) = context,
            let missionStore,
            let commitment = missionStore.commitment(with: id) {
             outboundBody = MissionCommitmentChat.frameOutbound(
@@ -104,12 +109,26 @@ final class MessageService: ObservableObject {
         )
 
         let rawResponse = try await connectionManager.sendMessage(outbound)
-        let displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+
+        var displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+        displayResponse = ProposeFirstChat.displayText(strippingArtifactFrom: displayResponse)
 
         if let missionStore,
            let payload = MissionCommitmentChat.parseUpdate(from: rawResponse) {
             missionStore.applyCommitmentUpdate(payload)
             syncConversationTitle(for: conversation.id, missionStore: missionStore)
+        }
+
+        if proposeFirst, let planStore {
+            let artifact = ProposeFirstChat.parseArtifact(from: rawResponse)
+                ?? ProposeFirstChat.fallbackArtifact(from: displayResponse.isEmpty ? rawResponse : displayResponse, userRequest: text)
+            planStore.upsert(artifact)
+            if displayResponse.isEmpty {
+                displayResponse = "I've drafted a plan for your review on Home — open Needs your choice or Documents when you're ready."
+            } else if !displayResponse.localizedCaseInsensitiveContains("home")
+                        && !displayResponse.localizedCaseInsensitiveContains("plan") {
+                displayResponse += "\n\nYou can review this plan on Home under Needs your choice or Documents."
+            }
         }
 
         appendMessage(

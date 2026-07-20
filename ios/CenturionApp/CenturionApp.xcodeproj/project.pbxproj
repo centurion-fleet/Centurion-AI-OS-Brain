@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04C7786025CFB85183422275 /* ProposeFirstChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52A6773664B52FEC07930276 /* ProposeFirstChat.swift */; };
 		06F77B8AAFFD24BF59B9FAD9 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 03214021F1121C95DBE4833B /* Sodium */; };
 		071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6096C31D013137594862DE99 /* RemoteModelCatalog.swift */; };
 		0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */; };
@@ -30,6 +31,7 @@
 		5492E373A05DDAE48D1404E8 /* BonjourDiscoverer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */; };
 		58C0162D7BE79027664DC4F1 /* MissionOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCFCE375932A009864E2E75 /* MissionOrb.swift */; };
 		5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */; };
+		60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */; };
 		63F7E1999B2EB04B37513075 /* SwarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 807258BF5E1D7EADE682EECA /* SwarmStore.swift */; };
 		671859331884297D8A3D7437 /* BeneficiaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C989D7F978D178255AA120 /* BeneficiaryStore.swift */; };
 		72AF12B750F36E4AD5A86152 /* GetHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */; };
@@ -42,6 +44,7 @@
 		7B6E3A4535648BC3F269D364 /* CenturionShowcaseSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */; };
 		807F405D012F1890317AF5EA /* ReportingOversightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */; };
 		8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */; };
+		8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */; };
 		8FFB5DDC4C56C09C9FEF1D47 /* AutonomyLevelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */; };
 		922EFE1700AF8A11F4448081 /* OversightPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */; };
 		92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */; };
@@ -68,6 +71,7 @@
 		E04CC701C6B56F3DF9ACBA7C /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */; };
 		E23F76E5AC6117269C7E4130 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A80D40A15B92264F4AFAD3FC /* PrivacyInfo.xcprivacy */; };
 		E5216EB9A8759B83932AB1A8 /* SwarmOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */; };
+		E95C824FF4B08337C20FF13E /* PlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C5078D1657EA32E7464F4E /* PlanStore.swift */; };
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
 		FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
@@ -79,6 +83,7 @@
 		0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteModelSwitcherView.swift; sourceTree = "<group>"; };
 		15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1608B826ED73D403B7D6D39D /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanReviewView.swift; sourceTree = "<group>"; };
 		1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseFeedMapper.swift; sourceTree = "<group>"; };
 		1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CenturionApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FE7DA4FA608AA25FCAE719E /* MissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionView.swift; sourceTree = "<group>"; };
@@ -94,6 +99,7 @@
 		4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionTheme.swift; sourceTree = "<group>"; };
 		51401B6F9885163352D34464 /* SoulDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocument.swift; sourceTree = "<group>"; };
 		51C989D7F978D178255AA120 /* BeneficiaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeneficiaryStore.swift; sourceTree = "<group>"; };
+		52A6773664B52FEC07930276 /* ProposeFirstChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProposeFirstChat.swift; sourceTree = "<group>"; };
 		5B9193269D351542527FAE36 /* ThinkingRecoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingRecoverySheet.swift; sourceTree = "<group>"; };
 		5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionShowcaseSection.swift; sourceTree = "<group>"; };
 		5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionDiscoveryView.swift; sourceTree = "<group>"; };
@@ -128,9 +134,11 @@
 		D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
 		D967220CE7E18782E047ACD2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DCCFCE375932A009864E2E75 /* MissionOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionOrb.swift; sourceTree = "<group>"; };
+		E2C5078D1657EA32E7464F4E /* PlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanStore.swift; sourceTree = "<group>"; };
 		E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutonomyLevelView.swift; sourceTree = "<group>"; };
 		ED3109FC232D48D3C3445556 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMission.swift; sourceTree = "<group>"; };
+		EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanArtifact.swift; sourceTree = "<group>"; };
 		F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F5FA050811F918E8D8DFE861 /* MessageError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageError.swift; sourceTree = "<group>"; };
 		F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightPrefs.swift; sourceTree = "<group>"; };
@@ -171,6 +179,7 @@
 				DCCFCE375932A009864E2E75 /* MissionOrb.swift */,
 				762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */,
 				1FE7DA4FA608AA25FCAE719E /* MissionView.swift */,
+				1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */,
 				BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */,
 				0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */,
 				8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */,
@@ -217,6 +226,7 @@
 				2816DC1C66616790651EBA30 /* Message.swift */,
 				0E3C229C48C642E36295368A /* MissionProject.swift */,
 				F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */,
+				EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */,
 				6096C31D013137594862DE99 /* RemoteModelCatalog.swift */,
 				51401B6F9885163352D34464 /* SoulDocument.swift */,
 				D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */,
@@ -239,6 +249,8 @@
 				2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
 				2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */,
+				E2C5078D1657EA32E7464F4E /* PlanStore.swift */,
+				52A6773664B52FEC07930276 /* ProposeFirstChat.swift */,
 				1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */,
 				807258BF5E1D7EADE682EECA /* SwarmStore.swift */,
 			);
@@ -388,7 +400,11 @@
 				41C67F5E153C660BF68F7AA8 /* MissionView.swift in Sources */,
 				922EFE1700AF8A11F4448081 /* OversightPrefs.swift in Sources */,
 				1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */,
+				60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */,
+				8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */,
+				E95C824FF4B08337C20FF13E /* PlanStore.swift in Sources */,
 				37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */,
+				04C7786025CFB85183422275 /* ProposeFirstChat.swift in Sources */,
 				25FF2605824E4261873AA1E7 /* PulseFeedMapper.swift in Sources */,
 				071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */,
 				FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */,

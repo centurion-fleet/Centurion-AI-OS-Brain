@@ -17,12 +17,15 @@ struct ChatView: View {
     @EnvironmentObject private var dataMode: AppDataMode
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var planStore: PlanStore
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
     @State private var showCollaborationSheet = false
+    /// Talk = normal reply. Propose first = draft a plan and stop for Home review.
+    @State private var proposeFirst = false
     @FocusState private var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 
@@ -531,13 +534,20 @@ struct ChatView: View {
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.xs) {
+            chatIntentPicker
+                .padding(.horizontal, Spacing.md)
+
             AtmosphericSurface(elevated: true) {
                 HStack(spacing: Spacing.sm) {
                     TextField(
                         selectedConversation != nil
-                            ? "Message about \(selectedConversation!.displayTitle)…"
-                            : "Message your Sovereign…",
+                            ? (proposeFirst
+                                ? "Ask for a plan about \(selectedConversation!.displayTitle)…"
+                                : "Message about \(selectedConversation!.displayTitle)…")
+                            : (proposeFirst
+                                ? "Ask your Sovereign to propose a plan…"
+                                : "Message your Sovereign…"),
                         text: $messageText
                     )
                     .textFieldStyle(.plain)
@@ -580,6 +590,63 @@ struct ChatView: View {
         .padding(.bottom, Spacing.lg)
     }
 
+    private var chatIntentPicker: some View {
+        HStack(spacing: Spacing.xs) {
+            intentChip(
+                title: "Talk",
+                systemImage: "bubble.left.fill",
+                selected: !proposeFirst
+            ) {
+                proposeFirst = false
+            }
+            intentChip(
+                title: "Propose first",
+                systemImage: "list.clipboard",
+                selected: proposeFirst
+            ) {
+                proposeFirst = true
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("How should your Sovereign respond")
+    }
+
+    private func intentChip(
+        title: String,
+        systemImage: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.lightTap()
+            action()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundColor(selected ? ColorTheme.accent() : ColorTheme.mutedText())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(selected ? ColorTheme.accent().opacity(0.12) : ColorTheme.surfaceElevated())
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        selected ? ColorTheme.accent().opacity(0.35) : ColorTheme.border(),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     // MARK: - Actions
 
     private func sendMessage() {
@@ -612,7 +679,9 @@ struct ChatView: View {
                 let conversation = try await messageService.sendMessage(
                     text,
                     in: context,
-                    missionStore: missionStore
+                    missionStore: missionStore,
+                    planStore: planStore,
+                    proposeFirst: proposeFirst
                 )
                 if !stayOnAllChat {
                     selectedConversation = conversation

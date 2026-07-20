@@ -203,31 +203,53 @@ struct DecisionItem: Identifiable {
     let relatedMission: String?
     let urgency: Urgency
     let createdAt: Date
-    
+    /// Brain swarm signal id when this decision maps to `swarm_resolve_signal`.
+    let signalId: String?
+    /// Local PlanArtifact id when this is a plan review.
+    let planId: UUID?
+    let kind: Kind
+
+    enum Kind: String {
+        case general
+        case plan
+    }
+
     enum Urgency: String {
         case now = "Now"
         case today = "Today"
         case thisWeek = "This Week"
         case whenever = "Whenever"
     }
-    
+
+    init(
+        id: UUID,
+        title: String,
+        context: String,
+        options: [DecisionOption],
+        generatedBy: String,
+        relatedMission: String?,
+        urgency: Urgency,
+        createdAt: Date,
+        signalId: String? = nil,
+        planId: UUID? = nil,
+        kind: Kind = .general
+    ) {
+        self.id = id
+        self.title = title
+        self.context = context
+        self.options = options
+        self.generatedBy = generatedBy
+        self.relatedMission = relatedMission
+        self.urgency = urgency
+        self.createdAt = createdAt
+        self.signalId = signalId
+        self.planId = planId
+        self.kind = kind
+    }
+
     static func preview() -> [DecisionItem] {
-        [
-            DecisionItem(
-                id: UUID(),
-                title: "Approve Q3 positioning angle",
-                context: "The Strategist has identified 'The Compliance-First Approach' as the highest-potential positioning angle. It targets an underserved $2.4M segment with 3 ready-to-use messaging pillars.",
-                options: [
-                    DecisionOption(label: "Approve", description: "Use this angle for Q3 GTM"),
-                    DecisionOption(label: "Modify", description: "Suggest adjustments"),
-                    DecisionOption(label: "Reject", description: "Go back to research"),
-                ],
-                generatedBy: "Strategist Agent",
-                relatedMission: "Q3 Go-to-Market",
-                urgency: .today,
-                createdAt: Date().addingTimeInterval(-600)
-            ),
-        ]
+        let plan = PlanArtifact.preview()
+        return [plan.asDecisionItem()]
     }
 }
 
@@ -334,6 +356,7 @@ struct CenturionOutput: Identifiable {
 
     static func preview() -> [CenturionOutput] {
         [
+            PlanArtifact.preview().asCenturionOutput(),
             CenturionOutput(
                 id: UUID(),
                 title: "Q3 Market Positioning Analysis",
