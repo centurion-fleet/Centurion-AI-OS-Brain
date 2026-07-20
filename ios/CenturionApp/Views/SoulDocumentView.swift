@@ -1,10 +1,14 @@
 import SwiftUI
 
-/// Your Centurion's Soul — how your AI companion speaks and behaves.
+/// Your Sovereign's Soul — how your AI companion speaks and behaves.
 struct SoulDocumentView: View {
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var connectionManager: ConnectionManager
     @State private var showShareSheet = false
     @State private var showInterview = false
+    @State private var pendingSoul: SoulDocument?
+    @State private var showSaveWarning = false
+    @State private var syncMessage: String?
 
     private var soul: SoulDocument { missionStore.soul }
 
@@ -18,6 +22,19 @@ struct SoulDocumentView: View {
                 if soul.isValid {
                     soulContent
 
+                    AtmosphericSurface {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Plans before consequential work")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(ColorTheme.primaryText())
+                            Text("Standing rule: “\(PlanArtifact.proposeFirstStandingRule)” — use Propose first in Chat, then Proceed on Home.")
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                                .lineSpacing(3)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     Button(action: {
                         Haptics.mediumTap()
                         showInterview = true
@@ -25,7 +42,7 @@ struct SoulDocumentView: View {
                         HStack(spacing: Spacing.xs) {
                             Image(systemName: "pencil")
                                 .font(.subheadline)
-                            Text("Shape Your Centurion")
+                            Text("Shape Your Sovereign")
                         }
                     }
                     .buttonStyle(CenturionSecondaryButtonStyle())
@@ -34,13 +51,26 @@ struct SoulDocumentView: View {
                     emptyState
                         .padding(.bottom, Spacing.lg)
                 }
+
+                Text("Changes may take time to fully take effect — they apply on the next conversation.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let syncMessage {
+                    Text(syncMessage)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.dimAccent())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .frame(maxWidth: 428)
             .padding()
             .frame(maxWidth: .infinity)
         }
         .background(secondaryBackground)
-        .navigationTitle("Your Centurion's Soul")
+        .navigationTitle("Your Sovereign's Soul")
         .toolbar {
             if soul.isValid {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -60,8 +90,29 @@ struct SoulDocumentView: View {
         }
         .sheet(isPresented: $showInterview) {
             SoulInterviewView(existingSoul: missionStore.soul) { document in
-                missionStore.updateSoul(document)
+                pendingSoul = document
+                showSaveWarning = true
             }
+        }
+        .alert("Change Your Sovereign's Soul?", isPresented: $showSaveWarning) {
+            Button("Cancel", role: .cancel) {
+                pendingSoul = nil
+            }
+            Button("Save Changes") {
+                guard let pendingSoul else { return }
+                missionStore.updateSoul(pendingSoul)
+                self.pendingSoul = nil
+                Task {
+                    syncMessage = await missionStore.syncSoulToSovereign(
+                        connectionManager: connectionManager
+                    )
+                }
+            }
+        } message: {
+            Text("This changes how your Centurion speaks and behaves. Changes may take time to fully take effect — they apply on the next conversation.")
+        }
+        .task {
+            await missionStore.refreshSoul(from: connectionManager)
         }
     }
 
@@ -80,7 +131,7 @@ struct SoulDocumentView: View {
             VStack(spacing: Spacing.md) {
                 CenturionSectionHeader(title: "Personality", icon: "sparkles")
 
-                Text("Your Centurion's Soul")
+                Text("Your Sovereign's Soul")
                     .font(Typography.editorialTitle)
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
@@ -108,7 +159,7 @@ struct SoulDocumentView: View {
             icon: "sparkles",
             title: "Not set yet",
             message: "Define how it speaks, what it always does, and what it never does. This is separate from your life mission — it's about your AI companion.",
-            actionTitle: "Set Up Your Centurion's Soul",
+            actionTitle: "Set Up Your Sovereign's Soul",
             action: {
                 Haptics.mediumTap()
                 showInterview = true
@@ -188,7 +239,7 @@ struct SoulDocumentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
-                    SheetHeader(title: "Your Centurion's Soul")
+                    SheetHeader(title: "Your Sovereign's Soul")
 
                     AtmosphericSurface(elevated: true) {
                         VStack(spacing: Spacing.md) {
@@ -207,7 +258,7 @@ struct SoulDocumentView: View {
                         .frame(maxWidth: .infinity)
                     }
 
-                    Text("Share how your Centurion is configured to work with you.")
+                    Text("Share how your Sovereign is configured to work with you.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
@@ -247,7 +298,7 @@ struct SoulDocumentView: View {
     }
 
     private func generateShareText() -> String {
-        var text = "✨ Your Centurion's Soul — Centurion AI\n\n"
+        var text = "✨ Your Sovereign's Soul — Sovereign\n\n"
         if !soul.personalitySummary.isEmpty {
             text += "\(soul.personalitySummary)\n\n"
         }
@@ -255,7 +306,7 @@ struct SoulDocumentView: View {
         if !soul.communicationStyle.isEmpty { text += "Speaks: \(soul.communicationStyle)\n" }
         if !soul.alwaysDo.isEmpty { text += "Always: \(soul.alwaysDo.joined(separator: ", "))\n" }
         if !soul.neverDo.isEmpty { text += "Never: \(soul.neverDo.joined(separator: ", "))\n" }
-        text += "\nHow my Centurion is configured to work with me."
+        text += "\nHow my Sovereign is configured to work with me."
         return text
     }
 

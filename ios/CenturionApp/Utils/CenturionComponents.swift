@@ -44,12 +44,12 @@ enum Typography {
 
 // MARK: - Compact Brand Header
 
-/// Main tab header — mark + PERSONAL CENTURION wordmark. Minimal, premium.
+/// Main tab header — mark + CENTURION brand wordmark. Minimal, premium.
 struct CompactBrandHeader: View {
     var body: some View {
         HStack(spacing: Spacing.sm) {
             CenturionAppMark(size: 28)
-            Text("PERSONAL CENTURION")
+            Text("CENTURION")
                 .font(Typography.brandWordmark)
                 .foregroundColor(ColorTheme.mutedText())
                 .tracking(2.5)
@@ -58,13 +58,13 @@ struct CompactBrandHeader: View {
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Personal Centurion")
+        .accessibilityLabel("Centurion")
     }
 }
 
 // MARK: - Full Brand Header
 
-/// Secondary screens — mark, product name, tagline.
+/// Secondary screens — mark, brand, product name, tagline.
 struct FullBrandHeader: View {
     var body: some View {
         VStack(spacing: Spacing.sm) {
@@ -75,19 +75,22 @@ struct FullBrandHeader: View {
                 CenturionAppMark(size: 56)
             }
             VStack(spacing: 4) {
-                Text("CenturionAI Remote")
+                Text("Centurion")
                     .font(.title2.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Your private companion on your network")
-                    .font(.subheadline)
+                Text("Sovereign Remote")
+                    .font(.subheadline.weight(.medium))
                     .foregroundColor(ColorTheme.mutedText())
-                    .multilineTextAlignment(.center)
+                Text("1 Human 1 AI")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.dimAccent())
+                    .tracking(1)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("CenturionAI Remote. Your private companion on your network.")
+        .accessibilityLabel("Centurion. Sovereign Remote. 1 Human 1 AI.")
     }
 }
 

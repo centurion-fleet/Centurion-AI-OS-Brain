@@ -9,7 +9,9 @@ final class AppServices: ObservableObject {
     let dataMode: AppDataMode
     let adrianService: AdrianService
     let swarmStore: SwarmStore
+    let planStore: PlanStore
     let beneficiaryStore: BeneficiaryStore
+    let oversightStore: OversightStore
 
     init() {
         let connectionManager = ConnectionManager()
@@ -20,7 +22,9 @@ final class AppServices: ObservableObject {
         self.missionStore = MissionStore()
         self.adrianService = AdrianService()
         self.swarmStore = SwarmStore()
+        self.planStore = PlanStore()
         self.beneficiaryStore = BeneficiaryStore()
+        self.oversightStore = OversightStore()
         dataMode.update(connectionState: connectionManager.connectionState)
     }
 }

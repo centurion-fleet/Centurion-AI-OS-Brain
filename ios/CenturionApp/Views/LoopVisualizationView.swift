@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A living orbital visualization of the Centurion's agents at work.
+/// A living orbital visualization of the Sovereign's agents at work.
 /// Each agent orbits the center, connection lines pulse with data flow,
 /// and the phase indicator shows where we are in the loop.
 ///

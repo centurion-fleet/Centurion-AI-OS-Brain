@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shapes your Centurion's Soul — AI personality, tone, and rules.
+/// Shapes your Sovereign's Soul — AI personality, tone, and rules.
 struct SoulInterviewView: View {
     let existingSoul: SoulDocument?
     let onComplete: (SoulDocument) -> Void
@@ -31,7 +31,7 @@ struct SoulInterviewView: View {
                 }
             }
             .background(secondaryBackground)
-            .navigationTitle("Shape Your Centurion")
+            .navigationTitle("Shape Your Sovereign")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -311,8 +311,8 @@ struct SoulInterviewView: View {
                 FullBrandHeader()
 
                 SuccessMoment(
-                    title: "Your Centurion Knows How to Be Your Companion",
-                    message: "Personality and rules are set.\nYour Centurion will speak and behave the way you've defined."
+                    title: "Your Sovereign Knows How to Be Your Companion",
+                    message: "Personality and rules are set.\nYour Sovereign will speak and behave the way you've defined."
                 )
 
                 if !soul.personalitySummary.isEmpty {

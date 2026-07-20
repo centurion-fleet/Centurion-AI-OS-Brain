@@ -1,6 +1,6 @@
-# CenturionAI Remote — App Styling Guide
+# Sovereign Remote — App Styling Guide
 
-**Version:** 2.0 · **Product:** Personal Centurion Remote (iOS)  
+**Version:** 2.0 · **Product:** Sovereign Remote (iOS)  
 **Principles:** Calm, premium, quietly powerful — subtle Art Deco, warm amber, aged metallics, moody atmospheric lighting.
 
 Companion to [DESIGN_RULES.md](DESIGN_RULES.md) (audience + language lock). This guide owns **tokens, materials, and component behavior**.
@@ -43,7 +43,7 @@ Semantic roles (implement in `CenturionTheme.swift`):
 
 | Style | Use | Font |
 |-------|-----|------|
-| `Typography.brandWordmark` | "PERSONAL CENTURION" compact header | System, semibold, tracked caps |
+| `Typography.brandWordmark` | "SOVEREIGN" compact header | System, semibold, tracked caps |
 | `Typography.editorialTitle` | Mission statements, ceremony | Serif, `.title2`+ |
 | `Typography.screenTitle` | Section heroes | `.title3` semibold |
 | `Typography.body` | Default copy | `.body` (≥17pt at default DT) |
@@ -89,7 +89,7 @@ Elevation via `Elevation.card` shadow + `AtmosphericSurface` vignette — moody,
 
 | Context | Component |
 |---------|-----------|
-| **Main tabs** (Chat, Home, You) | `CompactBrandHeader` — mark + "PERSONAL CENTURION" |
+| **Main tabs** (Chat, Home, You) | `CompactBrandHeader` — mark + "SOVEREIGN" |
 | **Secondary screens** (Mission, Soul, Get Help, Adrian, Privacy & Trust, …) | `FullBrandHeader` — mark + product name + tagline |
 | **Sheets / modals** | No header, or `SheetHeader` (title only) |
 

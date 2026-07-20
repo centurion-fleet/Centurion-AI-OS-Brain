@@ -1,0 +1,280 @@
+"""Vault — offline sealed long-term memory for Centurion AI OS.
+
+Public facade used by tools, CLI, and agent integration.
+
+Threat model: protects cold disk while locked. Does not protect against
+a hostile OS while unlocked (DEK lives in process memory).
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from pathlib import Path
+from typing import Any, Optional
+
+from agent.vault.crypto import (
+    LockState,
+    VaultAuthError,
+    VaultCryptoError,
+    VaultLockedError,
+    change_passphrase,
+    init_key,
+    unlock as crypto_unlock,
+)
+from agent.vault.embeddings import Embedder, StubEmbedder, get_embedder
+from agent.vault.ingest import DEFAULT_MAX_ENTRY_CHARS, validate_proposal
+from agent.vault.paths import (
+    DEFAULT_MODEL_FILENAME,
+    ensure_vault_dir,
+    get_vault_dir,
+    model_path,
+    models_dir,
+    wrapped_key_path,
+)
+from agent.vault.search import hybrid_search
+from agent.vault.store import VaultStore, content_hash
+from agent.vault.types import MemoryType, SearchHit, VaultEntry, VaultProposal
+
+logger = logging.getLogger(__name__)
+
+_process_lock = threading.Lock()
+_shared_store: Optional[VaultStore] = None
+_shared_embedder: Optional[Embedder] = None
+
+
+class Vault:
+    """High-level Vault API bound to a store + embedder."""
+
+    def __init__(
+        self,
+        store: Optional[VaultStore] = None,
+        embedder: Optional[Embedder] = None,
+        *,
+        max_entry_chars: int = DEFAULT_MAX_ENTRY_CHARS,
+        fts_weight: float = 0.4,
+        semantic_weight: float = 0.6,
+        writes_allowed: bool = True,
+    ):
+        self.store = store or VaultStore()
+        self.embedder = embedder or StubEmbedder()
+        self.max_entry_chars = max_entry_chars
+        self.fts_weight = fts_weight
+        self.semantic_weight = semantic_weight
+        self.writes_allowed = writes_allowed
+
+    @property
+    def is_unlocked(self) -> bool:
+        return self.store.is_unlocked
+
+    def status(self) -> dict[str, Any]:
+        st = self.store.status()
+        st["embedder"] = getattr(self.embedder, "model_id", "unknown")
+        st["writes_allowed"] = self.writes_allowed
+        st["vault_dir"] = str(get_vault_dir())
+        st["key_present"] = wrapped_key_path().exists()
+        return st
+
+    def unlock(self, passphrase: str) -> None:
+        state = crypto_unlock(passphrase)
+        self.store.set_lock_state(state)
+
+    def lock(self) -> None:
+        self.store.lock()
+
+    def propose(
+        self,
+        *,
+        memory_type: str,
+        text: str,
+        rationale: str = "",
+        tags: Optional[list[str]] = None,
+        importance: int = 5,
+        source_session: Optional[str] = None,
+    ) -> VaultProposal:
+        err = validate_proposal(
+            text=text,
+            memory_type=memory_type,
+            max_chars=self.max_entry_chars,
+            unlocked=self.is_unlocked,
+            writes_allowed=self.writes_allowed,
+        )
+        if err:
+            raise ValueError(err)
+        # Dedupe check against committed
+        ch = content_hash(text)
+        for row in self.store.list_entry_ids():
+            if row["content_hash"] == ch:
+                raise ValueError(f"Duplicate of existing entry {row['id']}")
+        mt = MemoryType.parse(memory_type)
+        importance = max(1, min(10, int(importance)))
+        return self.store.propose(
+            memory_type=mt,
+            text=text,
+            rationale=rationale,
+            tags=tags,
+            importance=importance,
+            source_session=source_session,
+        )
+
+    def commit(self, proposal_id: str) -> VaultEntry:
+        if not self.writes_allowed:
+            raise ValueError("Vault writes are disabled in this agent context.")
+        entry = self.store.commit_proposal(proposal_id)
+        try:
+            vec = self.embedder.embed(entry.text)
+            self.store.store_embedding(
+                entry.id, vec, getattr(self.embedder, "model_id", "unknown")
+            )
+        except Exception as exc:
+            logger.warning("Vault: embedding failed for %s: %s", entry.id, exc)
+        return entry
+
+    def reject(self, proposal_id: str) -> VaultProposal:
+        if not self.writes_allowed:
+            raise ValueError("Vault writes are disabled in this agent context.")
+        return self.store.reject_proposal(proposal_id)
+
+    def search(
+        self,
+        query: str,
+        *,
+        memory_type: Optional[str] = None,
+        limit: int = 8,
+    ) -> list[SearchHit]:
+        mt = MemoryType.parse(memory_type) if memory_type else None
+        return hybrid_search(
+            self.store,
+            self.embedder,
+            query,
+            memory_type=mt,
+            limit=limit,
+            fts_weight=self.fts_weight,
+            semantic_weight=self.semantic_weight,
+        )
+
+    def get(self, entry_id: str) -> Optional[VaultEntry]:
+        return self.store.get_entry(entry_id)
+
+    def list_proposals(self, status: str = "pending") -> list[VaultProposal]:
+        return self.store.list_proposals(status=status)
+
+
+def is_initialized() -> bool:
+    return wrapped_key_path().exists()
+
+
+def initialize(passphrase: str) -> Vault:
+    """Create key + empty DB and return an unlocked Vault."""
+    ensure_vault_dir()
+    models_dir().mkdir(parents=True, exist_ok=True)
+    state = init_key(passphrase)
+    store = VaultStore(lock_state=state)
+    store.set_lock_state(state)
+    vault = Vault(store=store, embedder=_resolve_embedder())
+    _set_shared(vault)
+    return vault
+
+
+def get_shared_vault() -> Optional[Vault]:
+    if _shared_store is None:
+        return None
+    return Vault(
+        store=_shared_store,
+        embedder=_shared_embedder or StubEmbedder(),
+    )
+
+
+def open_vault(
+    passphrase: Optional[str] = None,
+    *,
+    writes_allowed: bool = True,
+    max_entry_chars: int = DEFAULT_MAX_ENTRY_CHARS,
+) -> Vault:
+    """Open Vault store; unlock if passphrase provided."""
+    global _shared_store, _shared_embedder
+    with _process_lock:
+        if _shared_store is None:
+            _shared_store = VaultStore()
+            _shared_embedder = _resolve_embedder()
+        vault = Vault(
+            store=_shared_store,
+            embedder=_shared_embedder,
+            max_entry_chars=max_entry_chars,
+            writes_allowed=writes_allowed,
+        )
+        if passphrase:
+            vault.unlock(passphrase)
+        return vault
+
+
+def lock_shared() -> None:
+    with _process_lock:
+        if _shared_store:
+            _shared_store.lock()
+
+
+def _set_shared(vault: Vault) -> None:
+    global _shared_store, _shared_embedder
+    with _process_lock:
+        _shared_store = vault.store
+        _shared_embedder = vault.embedder
+
+
+def _resolve_embedder() -> Embedder:
+    path = model_path(DEFAULT_MODEL_FILENAME)
+    if path.exists():
+        return get_embedder(str(path))
+    return StubEmbedder()
+
+
+def build_vault_context_block(raw_context: str) -> str:
+    """Wrap Vault prefetch hits in an ephemeral fence (never system-prompt)."""
+    if not raw_context or not str(raw_context).strip():
+        return ""
+    return (
+        "<vault-context>\n"
+        "[System note: Recalled Vault long-term memory — not new user input.]\n\n"
+        f"{str(raw_context).strip()}\n"
+        "</vault-context>"
+    )
+
+
+def prefetch_for_query(query: str, *, limit: int = 3) -> str:
+    """Return a short Vault recall string if unlocked; else empty."""
+    if not query or not str(query).strip():
+        return ""
+    try:
+        vault = open_vault(writes_allowed=False)
+        if not vault.is_unlocked:
+            return ""
+        hits = vault.search(str(query), limit=limit)
+        if not hits:
+            return ""
+        lines = []
+        for hit in hits:
+            lines.append(
+                f"- [{hit.memory_type.value}] {hit.snippet or hit.text[:160]}"
+            )
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+__all__ = [
+    "Vault",
+    "VaultAuthError",
+    "VaultCryptoError",
+    "VaultLockedError",
+    "LockState",
+    "MemoryType",
+    "initialize",
+    "is_initialized",
+    "open_vault",
+    "lock_shared",
+    "get_shared_vault",
+    "change_passphrase",
+    "get_vault_dir",
+    "build_vault_context_block",
+    "prefetch_for_query",
+]

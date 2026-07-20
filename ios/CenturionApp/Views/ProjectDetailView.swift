@@ -129,7 +129,7 @@ struct ProjectDetailView: View {
         EmptyState(
             icon: "target",
             title: "No milestones yet",
-            message: "Milestones will appear here once the Centurion creates them"
+            message: "Milestones will appear here once the Sovereign creates them"
         )
     }
 

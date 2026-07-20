@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Centurion's Soul — AI personality, tone, and rules.
+/// The Sovereign's Soul — AI personality, tone, and rules.
 /// Maps to desktop `SOUL.md`; defines how your companion speaks and behaves.
 struct SoulDocument: Codable {
     var version: Int = 2
@@ -30,11 +30,27 @@ struct SoulDocument: Codable {
         soul.tone = "Direct and warm"
         soul.communicationStyle = "Headlines first, details on request. No filler."
         soul.pushbackStyle = "Push back when I'm rushing past something important."
-        soul.alwaysDo = ["Summarise before detail", "Flag risks early"]
+        soul.alwaysDo = [
+            "Summarise before detail",
+            "Flag risks early",
+            PlanArtifact.proposeFirstStandingRule,
+        ]
         soul.neverDo = ["Soften bad news", "Use jargon without explaining it"]
         soul.uncertaintyStyle = "Say what you know, what you don't, and what you'd check next."
         soul.responseLength = "Brief by default, thorough when I ask"
         return soul
+    }
+
+    /// Ensure the standing Propose-first rule is present without duplicating it.
+    mutating func ensureProposeFirstStandingRule() {
+        let rule = PlanArtifact.proposeFirstStandingRule
+        let alreadyHas = alwaysDo.contains {
+            $0.localizedCaseInsensitiveContains("propose a plan first")
+                || $0 == rule
+        }
+        if !alreadyHas {
+            alwaysDo.append(rule)
+        }
     }
 }
 
@@ -69,7 +85,7 @@ struct LegacySoulDocument: Codable {
     var toolsYouUse: [String] = []
 }
 
-/// A single Soul Interview question — shapes the Centurion's AI personality.
+/// A single Soul Interview question — shapes the Sovereign's AI personality.
 struct SoulQuestion: Identifiable {
     let id = UUID()
     let stage: SoulStage
@@ -95,21 +111,21 @@ struct SoulQuestion: Identifiable {
         [
             SoulQuestion(
                 stage: .voice,
-                question: "In one or two sentences, who is your Centurion?",
+                question: "In one or two sentences, who is your Sovereign?",
                 hint: "Describe the companion you want — not yourself.",
                 placeholder: "e.g. A calm, direct advisor who respects my time",
                 inputType: .multiline
             ),
             SoulQuestion(
                 stage: .voice,
-                question: "What tone should your Centurion use?",
+                question: "What tone should your Sovereign use?",
                 hint: "Warm, direct, formal, casual — or a mix.",
                 placeholder: "e.g. Direct and warm, never stiff",
                 inputType: .text
             ),
             SoulQuestion(
                 stage: .voice,
-                question: "How should your Centurion speak to you?",
+                question: "How should your Sovereign speak to you?",
                 hint: "Headlines first? Detailed? Gentle? Match your preference.",
                 placeholder: "e.g. Lead with the answer, then offer detail if I want it",
                 inputType: .multiline
@@ -123,28 +139,28 @@ struct SoulQuestion: Identifiable {
             ),
             SoulQuestion(
                 stage: .rules,
-                question: "What should your Centurion always do?",
-                hint: "Habits and behaviours you want every time.",
-                placeholder: "e.g. Flag risks early, summarise before detail",
+                question: "What should your Sovereign always do?",
+                hint: "Habits and behaviours you want every time. Include proposing a plan before consequential work if that fits you.",
+                placeholder: "e.g. Flag risks early; for consequential work, propose a plan first and wait for my Proceed",
                 inputType: .tags
             ),
             SoulQuestion(
                 stage: .boundaries,
-                question: "What should your Centurion never do?",
+                question: "What should your Sovereign never do?",
                 hint: "Hard limits — things that would break trust.",
                 placeholder: "e.g. Soften bad news, guess when unsure",
                 inputType: .tags
             ),
             SoulQuestion(
                 stage: .boundaries,
-                question: "When should your Centurion push back on you?",
+                question: "When should your Sovereign push back on you?",
                 hint: "Healthy disagreement keeps you on course.",
                 placeholder: "e.g. When I'm skipping something important",
                 inputType: .multiline
             ),
             SoulQuestion(
                 stage: .boundaries,
-                question: "How should your Centurion handle uncertainty?",
+                question: "How should your Sovereign handle uncertainty?",
                 hint: "What to do when it doesn't know the answer.",
                 placeholder: "e.g. Say what it knows, what it doesn't, and what to check next",
                 inputType: .multiline
@@ -171,7 +187,7 @@ struct HumanContextQuestion: Identifiable {
             HumanContextQuestion(stage: "How You Work", question: "How do you work best?", hint: "Solo or team? Fast or methodical? Async or real-time?", placeholder: "e.g. Fast-moving, delegate-heavy", inputType: .multiline),
             HumanContextQuestion(stage: "How You Work", question: "What timezone are you in, and when do you work?", hint: "", placeholder: "e.g. AEST, 6am—6pm", inputType: .text),
             HumanContextQuestion(stage: "What You Need", question: "What are your biggest challenges right now?", hint: "What's in your way?", placeholder: "e.g. Finding reliable talent", inputType: .tags),
-            HumanContextQuestion(stage: "What You Need", question: "What do you want your Centurion to handle for you?", hint: "What would free up your time?", placeholder: "e.g. Market research, drafting", inputType: .tags),
+            HumanContextQuestion(stage: "What You Need", question: "What do you want your Sovereign to handle for you?", hint: "What would free up your time?", placeholder: "e.g. Market research, drafting", inputType: .tags),
             HumanContextQuestion(stage: "Your World", question: "What tools do you use every day?", hint: "Apps, platforms, anything you live in.", placeholder: "e.g. Telegram, Email, X", inputType: .tags),
         ]
     }

@@ -664,6 +664,20 @@ DEFAULT_CONFIG = {
         # only controls how inbound user images are presented.
         "image_input_mode": "auto",
         "disabled_toolsets": [],
+        # Remote/Desktop autonomy ladder (strict | balanced | proactive | high).
+        # Applied via centurion_cli.oversight; maps onto approvals.mode +
+        # oversight.* presets. Default Balanced for new users.
+        "autonomy_level": "balanced",
+    },
+
+    # Reporting & oversight preferences (Remote You-tab / Desktop Settings).
+    # Behavioral guidance is injected at session start; report_cadence also
+    # informs in-app Pulse filtering. No OS push channel in this build.
+    "oversight": {
+        "report_cadence": "when_needed",  # off | when_needed | daily | after_significant_actions
+        "ask_before_initiative": True,
+        "confirm_dangerous_commands": True,
+        "confirm_external_actions": True,
     },
     
     "terminal": {
@@ -1296,6 +1310,21 @@ DEFAULT_CONFIG = {
         # "hindsight", "holographic", "retaindb", "byterover".
         # Only ONE external provider is allowed at a time.
         "provider": "",
+    },
+
+    # Vault — offline sealed long-term memory (AES-GCM at rest, local embeddings).
+    # Complements MEMORY.md/USER.md; never auto-ingests turns.
+    "vault": {
+        "enabled": False,              # opt-in until unlocked + initialized
+        "prefetch_on_turn": False,
+        "require_user_confirm": False,
+        "max_entry_chars": 4000,
+        "max_search_results": 8,
+        "hybrid_fts_weight": 0.4,
+        "hybrid_semantic_weight": 0.6,
+        "model_filename": "nomic-embed-text-v1.5.Q4_K_M.gguf",
+        "embed_base_url": "",          # empty = in-process/stub; loopback only if set
+        "clear_fts_on_lock": True,
     },
 
     # Subagent delegation — override the provider:model used by delegate_task
@@ -3472,7 +3501,7 @@ _KNOWN_ROOT_KEYS = {
     "_config_version", "model", "providers", "fallback_model",
     "fallback_providers", "credential_pool_strategies", "toolsets",
     "agent", "terminal", "display", "compression", "delegation",
-    "auxiliary", "custom_providers", "context", "memory", "gateway",
+    "auxiliary", "custom_providers", "context", "memory", "vault", "gateway",
     "sessions",
 }
 

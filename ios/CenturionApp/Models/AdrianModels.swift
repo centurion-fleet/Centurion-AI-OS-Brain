@@ -1,6 +1,6 @@
 import Foundation
 
-/// Adrian — Centurion's cloud support guide (independent of the LAN Centurion link).
+/// Adrian — Sovereign's cloud support guide (independent of the LAN Sovereign link).
 struct AdrianMessage: Identifiable, Equatable {
     let id: UUID
     let role: Role
@@ -55,7 +55,7 @@ enum AdrianAction: String {
 }
 
 enum AdrianConfig {
-    /// Adrian on iPhone uses the Help Center API — same articles as help.personal-centurion.com.
+    /// Adrian on iPhone uses the Help Center API — same articles as help.1human1ai.com.
     static var baseURL: URL {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CenturionAdrianBaseURL") as? String,
            let url = URL(string: raw), !raw.isEmpty {
@@ -65,9 +65,9 @@ enum AdrianConfig {
     }
 }
 
-/// Personal Centurion help center — single source of truth for support articles and Adrian answers.
+/// Sovereign help center — single source of truth for support articles and Adrian answers.
 enum CenturionHelp {
-    static let baseURL = URL(string: "https://help.personal-centurion.com")!
+    static let baseURL = URL(string: "https://help.1human1ai.com")!
 
     static func article(category: String, slug: String) -> URL {
         baseURL.appending(path: "docs/\(category)/\(slug)")

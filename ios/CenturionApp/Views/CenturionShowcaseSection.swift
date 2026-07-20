@@ -27,7 +27,7 @@ struct CenturionShowcaseSection: View {
                 .environmentObject(beneficiaryStore)
                 .environmentObject(connectionManager)
         }
-        .alert("Centurion earned", isPresented: $beneficiaryStore.showRewardCelebration) {
+        .alert("Sovereign earned", isPresented: $beneficiaryStore.showRewardCelebration) {
             Button("Nominate next") {
                 beneficiaryStore.dismissRewardCelebration()
                 showNominateSheet = true
@@ -37,9 +37,9 @@ struct CenturionShowcaseSection: View {
             }
         } message: {
             if let name = beneficiaryStore.lastRewardedName {
-                Text("You've earned a complimentary Centurion for \(name). Our team will be in touch.")
+                Text("You've earned a complimentary Sovereign for \(name). Our team will be in touch.")
             } else {
-                Text("You've earned a complimentary family Centurion. Our team will be in touch.")
+                Text("You've earned a complimentary family Sovereign. Our team will be in touch.")
             }
         }
         .task(id: connectionManager.connectionState) {
@@ -49,22 +49,22 @@ struct CenturionShowcaseSection: View {
 
     private var differenceStory: some View {
         VStack(spacing: Spacing.md) {
-            Text("Your private Centurion — on your machine, for your mission.")
+            Text("Your private Sovereign — on your machine, for your mission.")
                 .font(.system(.title3, design: .serif).weight(.semibold))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
 
-            Text("Show a colleague why you chose Centurion.")
+            Text("Show a colleague why you chose Sovereign.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
 
             VStack(spacing: Spacing.sm) {
-                ShowcasePillar(icon: "server.rack", title: "Yours, not rented", detail: "AI runs on your Centurion, not a cloud chatbot.")
+                ShowcasePillar(icon: "server.rack", title: "Yours, not rented", detail: "AI runs on your Sovereign, not a cloud chatbot.")
                 ShowcasePillar(icon: "target", title: "Mission-centered", detail: "Built around your life purpose, not endless tasks.")
                 ShowcasePillar(icon: "lock.shield", title: "Private by design", detail: "Your network, your data, your control.")
-                ShowcasePillar(icon: "iphone.and.arrow.forward", title: "Always beside you", detail: "Your phone is a calm remote — your Centurion does the work.")
+                ShowcasePillar(icon: "iphone.and.arrow.forward", title: "Always beside you", detail: "Your phone is a calm remote — your Sovereign does the work.")
             }
 
             Button {
@@ -133,13 +133,13 @@ struct FamilyBeneficiaryCard: View {
 
             AtmosphericSurface(showRim: true) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text("Introduce four colleagues who buy Centurion — earn one for someone you love.")
+                    Text("Introduce four colleagues who buy Sovereign — earn one for someone you love.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(4)
 
                     if beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned > 0 {
-                        Text("\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned) family Centurion\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned == 1 ? "" : "s") earned")
+                        Text("\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned) family Sovereign\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned == 1 ? "" : "s") earned")
                             .font(.caption.weight(.medium))
                             .foregroundColor(ColorTheme.accent())
                     }
@@ -162,7 +162,7 @@ struct FamilyBeneficiaryCard: View {
                 }
             }
 
-            Text("Refer colleagues who will buy their own Centurion. Family members are who you're earning for — they can't be counted as referrals.")
+            Text("Refer colleagues who will buy their own Sovereign. Family members are who you're earning for — they can't be counted as referrals.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
@@ -174,7 +174,7 @@ struct FamilyBeneficiaryCard: View {
     private var beneficiaryGoalBlock: some View {
         if beneficiaryStore.hasBeneficiary {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text("Earning a Centurion for \(beneficiaryStore.beneficiaryFirstName)")
+                Text("Earning a Sovereign for \(beneficiaryStore.beneficiaryFirstName)")
                     .font(.body.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
                 Text("\(beneficiaryStore.successfulCount) of \(beneficiaryStore.referralsRequired) colleagues")
@@ -287,7 +287,7 @@ struct NominateFamilyBeneficiarySheet: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Family beneficiary",
-                    subtitle: "Who in your family are you earning a complimentary Centurion for? First name only."
+                    subtitle: "Who in your family are you earning a complimentary Sovereign for? First name only."
                 )
 
                 TextField("First name", text: $firstName)
@@ -351,7 +351,7 @@ struct AddColleagueReferralSheet: View {
                 VStack(spacing: Spacing.lg) {
                     SheetHeader(
                         title: "Refer a colleague",
-                        subtitle: "A business contact who may buy their own Centurion — not a family member."
+                        subtitle: "A business contact who may buy their own Sovereign — not a family member."
                     )
 
                     TextField("Name", text: $name)

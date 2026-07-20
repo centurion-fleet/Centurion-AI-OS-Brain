@@ -15,13 +15,17 @@ struct ChatView: View {
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var dataMode: AppDataMode
-    @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var missionStore: MissionStore
+    @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var planStore: PlanStore
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
+    @State private var showCollaborationSheet = false
+    /// Talk = normal reply. Propose first = draft a plan and stop for Home review.
+    @State private var proposeFirst = false
     @FocusState private var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 
@@ -30,7 +34,6 @@ struct ChatView: View {
 
     /// Pull-down tray state
     @State private var showTray = false
-    @State private var showFormationSheet = false
 
     var body: some View {
         Group {
@@ -66,16 +69,6 @@ struct ChatView: View {
 
             if let sendError {
                 llmErrorBanner(sendError)
-            }
-
-            if let proposal = swarmStore.formationProposal {
-                SwarmFormationCard(
-                    proposal: proposal,
-                    onStart: { showFormationSheet = true },
-                    onDismiss: { swarmStore.dismissFormationProposal() }
-                )
-                .padding(.horizontal, Spacing.md)
-                .padding(.top, Spacing.xs)
             }
 
             if showTray {
@@ -143,14 +136,14 @@ struct ChatView: View {
         }
         .background(ColorTheme.background())
         .sheet(isPresented: $showRecoverySheet) {
-            ThinkingRecoverySheet(initialMessage: sendError ?? "Your Centurion's thinking service needs attention.")
+            ThinkingRecoverySheet(initialMessage: sendError ?? "Your Sovereign's thinking service needs attention.")
                 .environmentObject(connectionManager)
         }
-        .sheet(isPresented: $showFormationSheet) {
-            if let proposal = swarmStore.formationProposal {
-                SwarmFormationSheet(proposal: proposal)
-                    .environmentObject(swarmStore)
-            }
+        .sheet(isPresented: $showCollaborationSheet) {
+            SwarmConnectSheet()
+                .environmentObject(connectionManager)
+                .environmentObject(swarmStore)
+                .environmentObject(missionStore)
         }
     }
 
@@ -194,6 +187,17 @@ struct ChatView: View {
                 Spacer()
 
                 if connectionManager.connectionState == .connected {
+                    Button {
+                        Haptics.lightTap()
+                        showCollaborationSheet = true
+                    } label: {
+                        Image(systemName: "circle.grid.cross")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Start collaboration")
+
                     StatusDot(
                         isConnected: true,
                         isEncrypted: connectionManager.isChannelEncrypted
@@ -397,7 +401,7 @@ struct ChatView: View {
                 Image(systemName: "wifi.slash")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
-                Text("Not connected — link your Centurion in You to send messages.")
+                Text("Not connected — link your Sovereign in You to send messages.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
@@ -418,7 +422,7 @@ struct ChatView: View {
                     Image(systemName: "exclamationmark.circle")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.error())
-                    Text("Your Centurion is having trouble thinking right now. Tap to fix.")
+                    Text("Your Sovereign is having trouble thinking right now. Tap to fix.")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(ColorTheme.primaryText())
                         .multilineTextAlignment(.leading)
@@ -434,7 +438,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.xs)
-        .accessibilityLabel("Your Centurion is having trouble thinking right now. Tap to fix.")
+        .accessibilityLabel("Your Sovereign is having trouble thinking right now. Tap to fix.")
         .accessibilityHint("Opens the Fix Thinking Service screen")
     }
 
@@ -465,7 +469,7 @@ struct ChatView: View {
                 title: "Crypto Chat",
                 message: connectionManager.connectionState == .connected
                     ? "Your unified stream starts here. Context badges show which mission thread each message belongs to."
-                    : "Link your Centurion in You to start Crypto Chat — a private encrypted conversation public AIs do not offer."
+                    : "Link your Sovereign in You to start Crypto Chat — a private encrypted conversation public AIs do not offer."
             )
             Spacer()
         }
@@ -477,7 +481,7 @@ struct ChatView: View {
         if case .commitment = context {
             message = """
             Ask to rename this commitment, sharpen its description, or turn it off on Home. \
-            When your Centurion applies a change, it updates here automatically.
+            When your Sovereign applies a change, it updates here automatically.
             """
         } else {
             message = "Messages here appear in the full chat stream too."
@@ -530,13 +534,20 @@ struct ChatView: View {
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Spacing.xs) {
+            chatIntentPicker
+                .padding(.horizontal, Spacing.md)
+
             AtmosphericSurface(elevated: true) {
                 HStack(spacing: Spacing.sm) {
                     TextField(
                         selectedConversation != nil
-                            ? "Message about \(selectedConversation!.displayTitle)…"
-                            : "Message your Centurion…",
+                            ? (proposeFirst
+                                ? "Ask for a plan about \(selectedConversation!.displayTitle)…"
+                                : "Message about \(selectedConversation!.displayTitle)…")
+                            : (proposeFirst
+                                ? "Ask your Sovereign to propose a plan…"
+                                : "Message your Sovereign…"),
                         text: $messageText
                     )
                     .textFieldStyle(.plain)
@@ -579,6 +590,63 @@ struct ChatView: View {
         .padding(.bottom, Spacing.lg)
     }
 
+    private var chatIntentPicker: some View {
+        HStack(spacing: Spacing.xs) {
+            intentChip(
+                title: "Talk",
+                systemImage: "bubble.left.fill",
+                selected: !proposeFirst
+            ) {
+                proposeFirst = false
+            }
+            intentChip(
+                title: "Propose first",
+                systemImage: "list.clipboard",
+                selected: proposeFirst
+            ) {
+                proposeFirst = true
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("How should your Sovereign respond")
+    }
+
+    private func intentChip(
+        title: String,
+        systemImage: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.lightTap()
+            action()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundColor(selected ? ColorTheme.accent() : ColorTheme.mutedText())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(selected ? ColorTheme.accent().opacity(0.12) : ColorTheme.surfaceElevated())
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        selected ? ColorTheme.accent().opacity(0.35) : ColorTheme.border(),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     // MARK: - Actions
 
     private func sendMessage() {
@@ -592,7 +660,7 @@ struct ChatView: View {
         isSending = true
 
         // Select the conversation before the async send so the user's message
-        // stays visible while waiting for the Centurion response.
+        // stays visible while waiting for the Sovereign response.
         let stayOnAllChat = selectedConversation == nil
         let context: ConversationContext
         if let selected = selectedConversation {
@@ -611,7 +679,9 @@ struct ChatView: View {
                 let conversation = try await messageService.sendMessage(
                     text,
                     in: context,
-                    missionStore: missionStore
+                    missionStore: missionStore,
+                    planStore: planStore,
+                    proposeFirst: proposeFirst
                 )
                 if !stayOnAllChat {
                     selectedConversation = conversation
@@ -621,7 +691,7 @@ struct ChatView: View {
                 }
             } catch {
                 Haptics.error()
-                sendError = error.localizedDescription
+                sendError = connectionManager.friendlyRemoteError(error)
             }
             isSending = false
         }
@@ -689,7 +759,7 @@ struct ChatView: View {
             }
 
             if message.role == .centurion {
-                Text("Centurion")
+                Text("Sovereign")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(ColorTheme.accent())
                     .padding(.horizontal, 4)

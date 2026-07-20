@@ -70,6 +70,10 @@ def handle_request(
         return _handle_swarm_connect(request, request_id)
     if action == "swarm_invite":
         return _handle_swarm_invite(request, request_id)
+    if action == "swarm_resolve_signal":
+        return _handle_swarm_resolve_signal(request, request_id)
+    if action == "swarm_create_board":
+        return _handle_swarm_create_board(request, request_id)
     if action == "beneficiary_snapshot":
         return _handle_beneficiary_snapshot(request_id)
     if action == "beneficiary_set_family_member":
@@ -88,6 +92,32 @@ def handle_request(
         return _handle_telegram_import_bundle(request, request_id)
     if action == "telegram_import_preview":
         return _handle_telegram_import_preview(request_id)
+    if action == "oversight_get":
+        return _handle_oversight_get(request_id)
+    if action == "oversight_put":
+        return _handle_oversight_put(request, request_id)
+    if action == "soul_get":
+        return _handle_soul_get(request_id)
+    if action == "soul_put":
+        return _handle_soul_put(request, request_id)
+    if action == "plans_list":
+        return _handle_plans_list(request, request_id)
+    if action == "plan_get":
+        return _handle_plan_get(request, request_id)
+    if action == "plan_put":
+        return _handle_plan_put(request, request_id)
+    if action == "plan_decide":
+        return _handle_plan_decide(request, request_id)
+    if action == "plan_share":
+        return _handle_plan_share(request, request_id)
+    if action == "plan_comment":
+        return _handle_plan_comment(request, request_id)
+    if action == "plan_templates_list":
+        return _handle_plan_templates_list(request_id)
+    if action == "plan_template_instantiate":
+        return _handle_plan_template_instantiate(request, request_id)
+    if action == "plan_save_template":
+        return _handle_plan_save_template(request, request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -421,6 +451,48 @@ def _handle_swarm_invite(request: dict[str, Any], request_id: str) -> dict[str, 
         return _error_response(request_id, action="swarm_invite", exc=exc)
 
 
+def _handle_swarm_resolve_signal(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.swarm_state import resolve_signal
+
+        signal_id = str(request.get("signal_id") or "").strip()
+        choice_note = str(request.get("choice_note") or "").strip()
+        result = resolve_signal(signal_id, choice_note=choice_note)
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_resolve_signal",
+            "message": result.get("message") or result.get("error"),
+            "result": result,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_resolve_signal", exc=exc)
+
+
+def _handle_swarm_create_board(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.swarm_state import create_collaboration_board
+
+        name = str(request.get("name") or "").strip()
+        objective = str(request.get("objective") or "").strip()
+        mission_id = str(request.get("mission_id") or "").strip() or None
+        result = create_collaboration_board(
+            name=name,
+            objective=objective,
+            mission_id=mission_id,
+        )
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_create_board",
+            "message": result.get("message") or result.get("error"),
+            "result": result,
+            "snapshot": result.get("snapshot"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_create_board", exc=exc)
+
+
 def _handle_beneficiary_snapshot(request_id: str) -> dict[str, Any]:
     try:
         from centurion_cli.beneficiary_state import get_beneficiary_snapshot
@@ -654,9 +726,15 @@ def _run_agent_quiet(text: str) -> str:
     from contextlib import redirect_stderr, redirect_stdout
 
     from centurion_cli.oneshot import _run_agent
+    from centurion_cli.oversight import should_enable_remote_yolo
 
     logging.disable(logging.CRITICAL)
-    os.environ.setdefault("CENTURION_YOLO_MODE", "1")
+    # Only max-autonomy (or approvals.mode=off) gets YOLO on remote chat.
+    # Lower levels rely on host approval / deny paths instead of auto-approving.
+    if should_enable_remote_yolo():
+        os.environ.setdefault("CENTURION_YOLO_MODE", "1")
+    else:
+        os.environ.pop("CENTURION_YOLO_MODE", None)
     os.environ.setdefault("CENTURION_ACCEPT_HOOKS", "1")
     os.environ["CENTURION_DISABLE_OPENROUTER"] = "1"
     os.environ["CENTURION_PLATFORM"] = "remote"
@@ -664,6 +742,445 @@ def _run_agent_quiet(text: str) -> str:
         devnull
     ), redirect_stderr(devnull):
         return _run_agent(text) or ""
+
+
+def _handle_oversight_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.oversight import get_oversight_snapshot
+
+        snapshot = get_oversight_snapshot()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "oversight_get",
+            "oversight": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="oversight_get", exc=exc)
+
+
+def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.oversight import put_oversight_prefs
+
+        updates = request.get("oversight")
+        if not isinstance(updates, dict):
+            # Allow flat fields on the request for convenience.
+            updates = {
+                key: request[key]
+                for key in (
+                    "autonomy_level",
+                    "report_cadence",
+                    "ask_before_initiative",
+                    "confirm_dangerous_commands",
+                    "confirm_external_actions",
+                )
+                if key in request
+            }
+        if not updates:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "oversight_put",
+                "code": "INVALID_REQUEST",
+                "error": "Oversight updates are required.",
+                "message": "Oversight updates are required.",
+                "retryable": False,
+            }
+        apply_level_preset = bool(request.get("apply_level_preset", True))
+        snapshot = put_oversight_prefs(
+            updates, apply_level_preset=apply_level_preset
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "oversight_put",
+            "oversight": snapshot,
+            "message": "Saved. Changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="oversight_put", exc=exc)
+
+
+def _handle_soul_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.soul_sync import read_soul
+
+        soul = read_soul()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "soul_get",
+            "soul": soul,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="soul_get", exc=exc)
+
+
+def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.soul_sync import write_soul
+
+        fields = request.get("soul")
+        if not isinstance(fields, dict):
+            fields = request.get("fields")
+        markdown = request.get("markdown")
+        if not isinstance(fields, dict) and not isinstance(markdown, str):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "soul_put",
+                "code": "INVALID_REQUEST",
+                "error": "Soul fields or markdown are required.",
+                "message": "Soul fields or markdown are required.",
+                "retryable": False,
+            }
+        soul = write_soul(
+            fields if isinstance(fields, dict) else None,
+            markdown=markdown if isinstance(markdown, str) else None,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "soul_put",
+            "soul": soul,
+            "message": "Saved. Soul changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="soul_put", exc=exc)
+
+
+def _handle_plans_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import list_plans
+
+        status = request.get("status")
+        plans = list_plans(str(status) if status is not None else "all")
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plans_list",
+            "plans": plans,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plans_list", exc=exc)
+
+
+def _handle_plan_get(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import get_plan
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        if not plan_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_get",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id is required",
+                "message": "plan_id is required",
+            }
+        plan = get_plan(plan_id)
+        if plan is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_get",
+                "code": "NOT_FOUND",
+                "error": "Plan not found",
+                "message": "Plan not found",
+            }
+        from centurion_cli.plans import _plan_to_ios
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_get",
+            "plan": _plan_to_ios(plan),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_get", exc=exc)
+
+
+def _handle_plan_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import put_plan
+
+        payload = request.get("plan")
+        if not isinstance(payload, dict):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_put",
+                "code": "INVALID_REQUEST",
+                "error": "plan object is required",
+                "message": "plan object is required",
+            }
+        plan = put_plan(payload)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_put",
+            "plan": plan,
+            "message": "Plan saved.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_put", exc=exc)
+
+
+def _handle_plan_decide(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import decide_plan
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        choice = str(request.get("choice") or "").strip()
+        if not plan_id or not choice:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_decide",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id and choice are required",
+                "message": "plan_id and choice are required",
+            }
+        plan = decide_plan(
+            plan_id,
+            choice,
+            note=request.get("note"),
+            reviewer_customer_id=(
+                str(request["reviewer_customer_id"]).strip()
+                if request.get("reviewer_customer_id")
+                else None
+            ),
+        )
+        messages = {
+            "approve": "Proceed recorded. Your Sovereign can continue with this plan.",
+            "reject": "Plan rejected.",
+            "request_changes": "Changes requested. Plan is ready to adjust.",
+            "hold": "Plan held for later.",
+        }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_decide",
+            "plan": plan,
+            "message": messages.get(choice.lower(), "Decision recorded."),
+        }
+    except KeyError:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_decide",
+            "code": "NOT_FOUND",
+            "error": "Plan not found",
+            "message": "Plan not found",
+        }
+    except ValueError as exc:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_decide",
+            "code": "INVALID_REQUEST",
+            "error": str(exc),
+            "message": str(exc),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_decide", exc=exc)
+
+
+def _handle_plan_share(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import share_plan
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        reviewer = str(request.get("reviewer_customer_id") or "").strip()
+        if not plan_id or not reviewer:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_share",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id and reviewer_customer_id are required",
+                "message": "plan_id and reviewer_customer_id are required",
+            }
+        plan = share_plan(
+            plan_id,
+            reviewer_customer_id=reviewer,
+            role=str(request.get("role") or "observer"),
+            board_id=(
+                str(request["board_id"]).strip() if request.get("board_id") else None
+            ),
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_share",
+            "plan": plan,
+            "message": "Plan shared for review.",
+        }
+    except KeyError:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_share",
+            "code": "NOT_FOUND",
+            "error": "Plan not found",
+            "message": "Plan not found",
+        }
+    except ValueError as exc:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_share",
+            "code": "INVALID_REQUEST",
+            "error": str(exc),
+            "message": str(exc),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_share", exc=exc)
+
+
+def _handle_plan_comment(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import comment_plan
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        body = str(request.get("body") or "").strip()
+        if not plan_id or not body:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_comment",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id and body are required",
+                "message": "plan_id and body are required",
+            }
+        plan = comment_plan(
+            plan_id,
+            body,
+            author=str(request.get("author") or "owner"),
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_comment",
+            "plan": plan,
+            "message": "Comment added.",
+        }
+    except KeyError:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_comment",
+            "code": "NOT_FOUND",
+            "error": "Plan not found",
+            "message": "Plan not found",
+        }
+    except ValueError as exc:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_comment",
+            "code": "INVALID_REQUEST",
+            "error": str(exc),
+            "message": str(exc),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_comment", exc=exc)
+
+
+def _handle_plan_templates_list(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import list_templates
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_templates_list",
+            "templates": list_templates(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_templates_list", exc=exc)
+
+
+def _handle_plan_template_instantiate(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import instantiate_template
+
+        template_id = str(request.get("template_id") or "").strip()
+        if not template_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_template_instantiate",
+                "code": "INVALID_REQUEST",
+                "error": "template_id is required",
+                "message": "template_id is required",
+            }
+        overrides = request.get("overrides")
+        plan = instantiate_template(
+            template_id,
+            overrides if isinstance(overrides, dict) else None,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_template_instantiate",
+            "plan": plan,
+            "message": "Plan created from template.",
+        }
+    except KeyError:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_template_instantiate",
+            "code": "NOT_FOUND",
+            "error": "Template not found",
+            "message": "Template not found",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_template_instantiate", exc=exc)
+
+
+def _handle_plan_save_template(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.plans import save_plan_as_template
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        if not plan_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "plan_save_template",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id is required",
+                "message": "plan_id is required",
+            }
+        title = request.get("title")
+        tmpl = save_plan_as_template(
+            plan_id,
+            title=str(title).strip() if title else None,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plan_save_template",
+            "template": tmpl,
+            "message": "Saved as template.",
+        }
+    except KeyError:
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "plan_save_template",
+            "code": "NOT_FOUND",
+            "error": "Plan not found",
+            "message": "Plan not found",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plan_save_template", exc=exc)
 
 
 def _read_request() -> dict[str, Any]:

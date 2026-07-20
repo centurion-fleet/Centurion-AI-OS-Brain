@@ -134,7 +134,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
     }
 }
 
-/// A Centurion device discovered on the local network via Bonjour.
+/// A Sovereign device discovered on the local network via Bonjour.
 struct CenturionDevice: Identifiable, Codable, Equatable {
     let id: UUID
     let name: String
@@ -177,9 +177,37 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
         self.lastSeen = lastSeen
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, name, hostname, ipAddress, port
+        case serviceName, serviceType, serviceDomain
+        case publicKey, isConnected, connectionMethod, lastSeen
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        hostname = try container.decode(String.self, forKey: .hostname)
+        ipAddress = try container.decode(String.self, forKey: .ipAddress)
+        port = try container.decode(Int.self, forKey: .port)
+        serviceName = try container.decodeIfPresent(String.self, forKey: .serviceName)
+        serviceType = try container.decodeIfPresent(String.self, forKey: .serviceType)
+        serviceDomain = try container.decodeIfPresent(String.self, forKey: .serviceDomain)
+        publicKey = try container.decodeIfPresent(Data.self, forKey: .publicKey)
+        isConnected = try container.decode(Bool.self, forKey: .isConnected)
+        lastSeen = try container.decode(Date.self, forKey: .lastSeen)
+        if let method = try container.decodeIfPresent(ConnectionMethod.self, forKey: .connectionMethod) {
+            connectionMethod = method
+        } else {
+            connectionMethod = Self.isTailscaleEndpoint(hostname: hostname, ipAddress: ipAddress)
+                ? .tailscale
+                : .lan
+        }
+    }
+
     enum ConnectionMethod: String, Codable {
-        case lan      // Local network (mDNS)
-        case tailscale // Tailscale tunnel
+        case lan      // Local network (mDNS) — fallback only
+        case tailscale // Tailscale mesh — preferred path
 
         var icon: String {
             switch self {
@@ -187,20 +215,63 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
             case .tailscale: return "shield.fill"
             }
         }
+
+        /// Short badge for Device link UI.
+        var linkBadge: String {
+            switch self {
+            case .lan: return "Wi‑Fi"
+            case .tailscale: return "Tailscale"
+            }
+        }
     }
-    func asConnected(publicKey: Data?, hostname: String? = nil, port: Int? = nil) -> CenturionDevice {
-        CenturionDevice(
+
+    /// True when this device should be reached over Tailscale first.
+    var isTailscalePath: Bool {
+        connectionMethod == .tailscale
+            || Self.isTailscaleEndpoint(hostname: hostname, ipAddress: ipAddress)
+    }
+
+    static func isTailscaleEndpoint(hostname: String, ipAddress: String) -> Bool {
+        isTailscaleHost(hostname) || isTailscaleHost(ipAddress)
+    }
+
+    static func isTailscaleHost(_ value: String) -> Bool {
+        let host = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !host.isEmpty else { return false }
+        if host.contains("ts.net") || host.contains("tailscale") { return true }
+        // Tailscale CGNAT range 100.64.0.0/10
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        if parts.count == 4, parts[0] == 100, (64...127).contains(parts[1]) {
+            return true
+        }
+        return false
+    }
+
+    func asConnected(
+        publicKey: Data?,
+        hostname: String? = nil,
+        port: Int? = nil,
+        ipAddress: String? = nil,
+        connectionMethod: ConnectionMethod? = nil
+    ) -> CenturionDevice {
+        let resolvedHostname = hostname ?? self.hostname
+        let resolvedIP = ipAddress ?? self.ipAddress
+        let resolvedMethod = connectionMethod
+            ?? (Self.isTailscaleEndpoint(hostname: resolvedHostname, ipAddress: resolvedIP)
+                ? .tailscale
+                : self.connectionMethod)
+        return CenturionDevice(
             id: id,
             name: name,
-            hostname: hostname ?? self.hostname,
-            ipAddress: ipAddress,
+            hostname: resolvedHostname,
+            ipAddress: resolvedIP,
             port: port ?? (self.port > 0 ? self.port : 9119),
             serviceName: serviceName,
             serviceType: serviceType,
             serviceDomain: serviceDomain,
             publicKey: publicKey,
             isConnected: true,
-            connectionMethod: connectionMethod,
+            connectionMethod: resolvedMethod,
             lastSeen: Date()
         )
     }

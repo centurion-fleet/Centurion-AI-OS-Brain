@@ -144,6 +144,38 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result: Option<serde_json::Value>,
     },
+    SwarmResolveSignal {
+        id: Uuid,
+        signal_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        choice_note: Option<String>,
+    },
+    SwarmResolveSignalResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+    },
+    SwarmCreateBoard {
+        id: Uuid,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        objective: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mission_id: Option<String>,
+    },
+    SwarmCreateBoardResponse {
+        id: Uuid,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        snapshot: Option<serde_json::Value>,
+    },
     BeneficiarySnapshot {
         id: Uuid,
     },
@@ -237,6 +269,169 @@ pub enum RemoteMessage {
         id: Uuid,
         ok: bool,
         bundle: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    OversightGet {
+        id: Uuid,
+    },
+    OversightGetResponse {
+        id: Uuid,
+        ok: bool,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    OversightPut {
+        id: Uuid,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        apply_level_preset: Option<bool>,
+    },
+    OversightPutResponse {
+        id: Uuid,
+        ok: bool,
+        oversight: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SoulGet {
+        id: Uuid,
+    },
+    SoulGetResponse {
+        id: Uuid,
+        ok: bool,
+        soul: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SoulPut {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        soul: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        markdown: Option<String>,
+    },
+    SoulPutResponse {
+        id: Uuid,
+        ok: bool,
+        soul: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlansList {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        status: Option<String>,
+    },
+    PlansListResponse {
+        id: Uuid,
+        ok: bool,
+        plans: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanGet {
+        id: Uuid,
+        plan_id: String,
+    },
+    PlanGetResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanPut {
+        id: Uuid,
+        plan: serde_json::Value,
+    },
+    PlanPutResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanDecide {
+        id: Uuid,
+        plan_id: String,
+        choice: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reviewer_customer_id: Option<String>,
+    },
+    PlanDecideResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanShare {
+        id: Uuid,
+        plan_id: String,
+        reviewer_customer_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        board_id: Option<String>,
+    },
+    PlanShareResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanComment {
+        id: Uuid,
+        plan_id: String,
+        body: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        author: Option<String>,
+    },
+    PlanCommentResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanTemplatesList {
+        id: Uuid,
+    },
+    PlanTemplatesListResponse {
+        id: Uuid,
+        ok: bool,
+        templates: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanTemplateInstantiate {
+        id: Uuid,
+        template_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overrides: Option<serde_json::Value>,
+    },
+    PlanTemplateInstantiateResponse {
+        id: Uuid,
+        ok: bool,
+        plan: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    PlanSaveTemplate {
+        id: Uuid,
+        plan_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+    PlanSaveTemplateResponse {
+        id: Uuid,
+        ok: bool,
+        template: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },

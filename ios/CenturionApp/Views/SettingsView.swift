@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var adrianService: AdrianService
     @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
+    @EnvironmentObject private var oversightStore: OversightStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
@@ -38,6 +39,7 @@ struct SettingsView: View {
                     DeviceLinkSection(showPairingSheet: $showPairingSheet)
                     ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                     youSection
+                    reportingOversightSection
                     collaborationsSection
                     privacySection
                     supportSection
@@ -58,7 +60,7 @@ struct SettingsView: View {
                 try? IdentityKey.reset()
             }
         } message: {
-            Text("Your iPhone will get a new security identity. Approve it again on your Centurion before reconnecting.")
+            Text("Your iPhone will get a new security identity. Approve it again on your Sovereign before reconnecting.")
         }
         .sheet(isPresented: $showKeyExport) {
             KeyExportView()
@@ -69,7 +71,7 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(
-                initialMessage: "Your Centurion's thinking service needs attention."
+                initialMessage: "Your Sovereign's thinking service needs attention."
             )
             .environmentObject(connectionManager)
         }
@@ -142,10 +144,36 @@ struct SettingsView: View {
             NavigationLink(destination: SoulDocumentView()) {
                 CenturionListRow(
                     icon: "sparkles",
-                    title: "Your Centurion's Soul",
-                    subtitle: missionStore.hasSoulConfiguration
-                        ? "Personality and rules configured"
-                        : "Personality and rules for your AI"
+                    title: "Your Sovereign's Soul",
+                    subtitle: missionStore.soulSubtitle
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            NavigationLink(destination: AutonomyLevelView()) {
+                CenturionListRow(
+                    icon: "slider.horizontal.3",
+                    title: "Autonomy Level",
+                    subtitle: oversightStore.autonomySubtitle
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var reportingOversightSection: some View {
+        settingsSection(
+            title: "Reporting & Oversight",
+            icon: "eye",
+            footer: "Controls how often your Centurion reports back and what needs your confirmation. Changes apply on the next conversation."
+        ) {
+            NavigationLink(destination: ReportingOversightView()) {
+                CenturionListRow(
+                    icon: "eye",
+                    title: "Reporting & Oversight",
+                    subtitle: oversightStore.oversightSubtitle
                 )
             }
             .buttonStyle(.plain)
@@ -189,7 +217,7 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "person.badge.plus",
-                    title: "Connect another Centurion",
+                    title: "Connect another Sovereign",
                     subtitle: "Invite a friend or join a shared collaboration"
                 )
             }
@@ -197,15 +225,26 @@ struct SettingsView: View {
 
             sectionDivider
 
-            Picker("Notifications", selection: Binding(
-                get: { swarmStore.digestMode },
-                set: { swarmStore.setDigestMode($0) }
-            )) {
-                ForEach(SwarmStore.SwarmDigestMode.allCases, id: \.self) { mode in
-                    Text(mode.label).tag(mode)
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("Pulse attention")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ColorTheme.primaryText())
+                Text("Controls what shows in the app — not phone alerts. OS notifications are not part of this build.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker("Pulse attention", selection: Binding(
+                    get: { swarmStore.digestMode },
+                    set: { swarmStore.setDigestMode($0) }
+                )) {
+                    ForEach(SwarmStore.SwarmDigestMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
                 }
+                .tint(ColorTheme.accent())
+                .labelsHidden()
             }
-            .tint(ColorTheme.accent())
+            .padding(.vertical, Spacing.xs)
         }
     }
 
@@ -235,7 +274,7 @@ struct SettingsView: View {
                 CenturionListRow(
                     icon: "book.pages",
                     title: "Browse Help Center",
-                    subtitle: "help.personal-centurion.com"
+                    subtitle: "help.1human1ai.com"
                 )
             }
             .buttonStyle(.plain)
@@ -279,13 +318,13 @@ struct SettingsView: View {
         settingsSection(
             title: "Privacy & Trust",
             icon: "lock.shield",
-            footer: "Share this with leadership when someone says AI is \"too risky\" — Centurion is built differently."
+            footer: "Share this with leadership when someone says AI is \"too risky\" — Sovereign is built differently."
         ) {
             Button { showPrivacyTrust = true } label: {
                 CenturionListRow(
                     icon: "lock.shield.fill",
                     title: "Privacy & Trust",
-                    subtitle: "Why Centurion is different — comparisons & calm answers"
+                    subtitle: "Why Sovereign is different — comparisons & calm answers"
                 )
             }
             .buttonStyle(.plain)
@@ -295,7 +334,7 @@ struct SettingsView: View {
             CenturionReassuranceRow(
                 icon: "network",
                 title: "Private on your network",
-                detail: "Messages stay between your iPhone and Centurion"
+                detail: "Messages stay between your iPhone and Sovereign"
             )
 
             sectionDivider
@@ -304,8 +343,8 @@ struct SettingsView: View {
                 icon: "lock.fill",
                 title: "Crypto Chat",
                 detail: connectionManager.isChannelEncrypted
-                    ? "On — private encrypted conversation with your Centurion"
-                    : "Link your Centurion to turn on Crypto Chat — something public AIs do not offer"
+                    ? "On — private encrypted conversation with your Sovereign"
+                    : "Link your Sovereign to turn on Crypto Chat — something public AIs do not offer"
             )
 
             sectionDivider
@@ -322,9 +361,16 @@ struct SettingsView: View {
         settingsSection(title: "About", icon: "info.circle") {
             VStack(spacing: Spacing.sm) {
                 CenturionAppMark(size: 64)
-                Text("CenturionAI Remote")
+                Text("Centurion")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
+                Text("Sovereign Remote")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                Text("1 Human 1 AI")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.dimAccent())
+                    .tracking(1)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Spacing.sm)
@@ -447,7 +493,7 @@ struct KeyExportView: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Your iPhone Security Code",
-                    subtitle: "Approve this code on your Centurion computer when pairing for the first time (for example: centurion-remote approve <code>)."
+                    subtitle: "Approve this code on your Sovereign computer when pairing for the first time (for example: centurion-remote approve <code>)."
                 )
 
                 Image(systemName: "key.fill")

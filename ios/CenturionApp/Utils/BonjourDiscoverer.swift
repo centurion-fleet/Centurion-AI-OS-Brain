@@ -8,7 +8,7 @@ import Network
 /// cloud dependency, or central server — pure local network discovery.
 ///
 /// This is the first layer of the security model: if you can't reach
-/// the Centurion's network, you can't even see it exists.
+/// the Sovereign's network, you can't even see it exists.
 
 protocol BonjourDiscovererDelegate: AnyObject {
     func didDiscover(device: CenturionDevice)
@@ -34,7 +34,7 @@ final class BonjourDiscoverer {
             if case .failed(let error) = state {
                 self?.browser?.cancel()
                 self?.delegate?.didFailDiscovery(
-                    message: "We couldn't search your network. Allow local network access for CenturionAI Remote in Settings."
+                    message: "We couldn't search your network. Allow local network access for Sovereign Remote in Settings."
                 )
                 print("[Bonjour] Discovery failed: \(error)")
             }

@@ -18,6 +18,13 @@ struct SwarmConstellationHero: View {
         max(0, swarmStore.heroSwarms.count - maxVisible)
     }
 
+    private func missionLine(for swarm: SwarmSummary) -> String? {
+        swarmStore.missionGroundingLine(
+            for: swarm,
+            lifeMissionStatement: hasMission ? missionSnippet : nil
+        )
+    }
+
     var body: some View {
         if visible.isEmpty {
             EmptyView()
@@ -28,6 +35,11 @@ struct SwarmConstellationHero: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(ColorTheme.mutedText())
                     Spacer()
+                    if swarmStore.isShowingOfflineCache {
+                        Text("Last known")
+                            .font(.caption2)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
                     if overflow > 0 || swarmStore.heroSwarms.count > 1 {
                         Button("See all") {
                             Haptics.lightTap()
@@ -58,7 +70,8 @@ struct SwarmConstellationHero: View {
                                 SwarmOrb(
                                     swarm: swarm,
                                     size: orbSize(rank: index, swarm: swarm),
-                                    showLabel: true
+                                    showLabel: true,
+                                    missionLine: missionLine(for: swarm)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -146,7 +159,17 @@ struct ConstellationView: View {
                                 Haptics.lightTap()
                                 onSelectSwarm(swarm)
                             } label: {
-                                SwarmOrb(swarm: swarm, size: 96, showLabel: true)
+                                SwarmOrb(
+                                    swarm: swarm,
+                                    size: 96,
+                                    showLabel: true,
+                                    missionLine: swarm.missionId != nil
+                                        ? (swarmStore.missionGroundingLine(
+                                            for: swarm,
+                                            lifeMissionStatement: nil
+                                          ) ?? "Life Mission")
+                                        : nil
+                                )
                             }
                             .buttonStyle(.plain)
                             .offset(constellationOffset(for: index, total: displayed.count))

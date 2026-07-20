@@ -1061,6 +1061,9 @@ def init_agent(
     agent._memory_nudge_interval = 10
     agent._turns_since_memory = 0
     agent._iters_since_skill = 0
+    agent._skip_memory = bool(skip_memory)
+    agent._vault_prefetch_on_turn = False
+    mem_config = {}
     if not skip_memory:
         try:
             mem_config = _agent_cfg.get("memory", {})
@@ -1076,7 +1079,14 @@ def init_agent(
                 agent._memory_store.load_from_disk()
         except Exception:
             pass  # Memory is optional -- don't break agent init
-    
+
+        try:
+            vault_cfg = _agent_cfg.get("vault", {}) or {}
+            agent._vault_prefetch_on_turn = bool(
+                vault_cfg.get("enabled") and vault_cfg.get("prefetch_on_turn")
+            )
+        except Exception:
+            agent._vault_prefetch_on_turn = False
 
 
     # Memory provider plugin (external — one at a time, alongside built-in)

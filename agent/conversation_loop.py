@@ -658,6 +658,19 @@ def run_conversation(
         except Exception:
             pass
 
+    # Vault ephemeral prefetch (opt-in; never mutates system prompt).
+    _vault_prefetch_cache = ""
+    if getattr(agent, "_vault_prefetch_on_turn", False) and not getattr(
+        agent, "_skip_memory", False
+    ):
+        try:
+            from agent.vault import prefetch_for_query
+
+            _q = original_user_message if isinstance(original_user_message, str) else ""
+            _vault_prefetch_cache = prefetch_for_query(_q, limit=3) or ""
+        except Exception:
+            pass
+
     # Optional opt-in runtime: if api_mode == codex_app_server, hand the
     # turn to the codex app-server subprocess (terminal/file ops/patching
     # all run inside Codex). Default Centurion path is bypassed entirely.
@@ -831,6 +844,15 @@ def run_conversation(
                     _fenced = build_memory_context_block(_ext_prefetch_cache)
                     if _fenced:
                         _injections.append(_fenced)
+                if _vault_prefetch_cache:
+                    try:
+                        from agent.vault import build_vault_context_block
+
+                        _vf = build_vault_context_block(_vault_prefetch_cache)
+                        if _vf:
+                            _injections.append(_vf)
+                    except Exception:
+                        pass
                 if _plugin_user_context:
                     _injections.append(_plugin_user_context)
                 if _injections:

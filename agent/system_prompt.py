@@ -33,6 +33,7 @@ from agent.prompt_builder import (
     CENTURION_AGENT_HELP_GUIDANCE,
     KANBAN_GUIDANCE,
     MEMORY_GUIDANCE,
+    VAULT_GUIDANCE,
     OPENAI_MODEL_EXECUTION_GUIDANCE,
     PLATFORM_HINTS,
     SESSION_SEARCH_GUIDANCE,
@@ -97,6 +98,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
+    # Autonomy / reporting oversight — loaded once per session (cache-safe).
+    try:
+        from centurion_cli.oversight import build_oversight_guidance
+
+        _oversight = build_oversight_guidance()
+        if _oversight:
+            stable_parts.append(_oversight)
+    except Exception:
+        pass
+
     # Pointer to the centurion-os skill + docs for user questions about Centurion itself.
     stable_parts.append(CENTURION_AGENT_HELP_GUIDANCE)
 
@@ -104,6 +115,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     tool_guidance = []
     if "memory" in agent.valid_tool_names:
         tool_guidance.append(MEMORY_GUIDANCE)
+    if "vault" in agent.valid_tool_names:
+        tool_guidance.append(VAULT_GUIDANCE)
     if "session_search" in agent.valid_tool_names:
         tool_guidance.append(SESSION_SEARCH_GUIDANCE)
     if "skill_manage" in agent.valid_tool_names:

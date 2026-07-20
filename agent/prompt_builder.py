@@ -157,6 +157,16 @@ MEMORY_GUIDANCE = (
     "workflows belong in skills, not memory."
 )
 
+VAULT_GUIDANCE = (
+    "You have Vault — offline sealed long-term memory for durable facts that outgrow "
+    "the tiny MEMORY.md hot cache. Types: core (stable identity/preferences), "
+    "experiential (significant events and decisions), pattern (recurring workflows). "
+    "Always vault(action='propose') then vault(action='commit') — never dump transcripts. "
+    "Use vault(action='search') when long-horizon context may help. "
+    "If Vault is locked, tell the user to run `centurion vault unlock`. "
+    "Keep hot-cache facts in the memory tool; keep long-horizon archives in Vault."
+)
+
 SESSION_SEARCH_GUIDANCE = (
     "When the user references something from a past conversation or you suspect "
     "relevant cross-session context exists, use session_search to recall it before "

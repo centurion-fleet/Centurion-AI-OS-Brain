@@ -1,6 +1,6 @@
 import Foundation
 
-/// Talks to Adrian — the online presence of Centurion's creator; caring expert guidance when online.
+/// Talks to Adrian — the online presence of Sovereign's creator; caring expert guidance when online.
 @MainActor
 final class AdrianService: ObservableObject {
     @Published private(set) var messages: [AdrianMessage] = []
@@ -42,14 +42,14 @@ final class AdrianService: ObservableObject {
             AdrianMessage(
                 role: .adrian,
                 content: """
-                I'm Adrian — your guide to Personal Centurion. Ask me anything: getting set up, \
+                I'm Adrian — your guide to Sovereign. Ask me anything: getting set up, \
                 linking your iPhone, privacy, or fixing a problem. I'll walk you through it, one \
                 clear step at a time.
 
-                My answers come from the same Help Center articles at help.personal-centurion.com — \
+                My answers come from the same Help Center articles at help.1human1ai.com — \
                 update those once, and both the website and this chat stay in sync.
 
-                I work over the internet, separate from your Centurion on your Centurion brain. \
+                I work over the internet, separate from your Sovereign on your Sovereign brain. \
                 I see only what helps — link status, thinking health, and a short mission summary \
                 if you've set one. Never your chat history or secrets.
 

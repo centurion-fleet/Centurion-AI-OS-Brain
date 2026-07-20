@@ -8,6 +8,10 @@ description: "How Centurion AI OS remembers across sessions — MEMORY.md, USER.
 
 Centurion AI OS has bounded, curated memory that persists across sessions. This lets it remember your preferences, your projects, your environment, and things it has learned.
 
+:::info Memory Horizon — Hot Cache
+This page covers **Hot Cache** (`MEMORY.md` / `USER.md`), the near field of **[Memory Horizon](./memory-layers.md)**. The mid field is **Session Recall** ([sessions](../sessions.md)); the far field is **Vault** ([vault](./vault.md)).
+:::
+
 ## How It Works
 
 Two files make up the agent's memory:
@@ -223,3 +227,7 @@ centurion memory status     # check what's active
 ```
 
 See the [Memory Providers](./memory-providers.md) guide for full details on each provider, setup instructions, and comparison.
+
+## Vault (far horizon)
+
+For sealed, offline long-horizon memory without an external provider, use **[Vault](./vault.md)** — the far field of **[Memory Horizon](./memory-layers.md)**. Encrypted Core / Experiential / Pattern entries under `{CENTURION_HOME}/vault/`. Keep the Hot Cache small; put durable archives in Vault.

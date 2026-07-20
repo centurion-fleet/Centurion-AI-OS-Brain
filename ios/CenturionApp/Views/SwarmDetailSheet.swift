@@ -3,6 +3,8 @@ import SwiftUI
 /// Layer 2 — one Swarm expanded with a single human action when needed.
 struct SwarmDetailSheet: View {
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var connectionManager: ConnectionManager
+    @EnvironmentObject private var missionStore: MissionStore
     @Environment(\.dismiss) private var dismiss
 
     let swarm: SwarmSummary
@@ -12,6 +14,13 @@ struct SwarmDetailSheet: View {
 
     private var current: SwarmSummary {
         swarmStore.swarm(for: swarm.id) ?? swarm
+    }
+
+    private var missionLine: String? {
+        swarmStore.missionGroundingLine(
+            for: current,
+            lifeMissionStatement: missionStore.mission.statement
+        )
     }
 
     var body: some View {
@@ -28,6 +37,14 @@ struct SwarmDetailSheet: View {
                         title: current.displayName,
                         subtitle: current.statusLabel
                     )
+
+                    if let missionLine {
+                        Text(missionLine)
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, Spacing.md)
+                    }
 
                     Text(current.objective)
                         .font(.body)
@@ -100,7 +117,7 @@ struct SwarmDetailSheet: View {
                         .lineSpacing(3)
                     Button("I've decided") {
                         Haptics.lightTap()
-                        swarmStore.resolveSignal(signal.id)
+                        swarmStore.resolveSignal(signal.id, connectionManager: connectionManager)
                     }
                     .buttonStyle(CenturionGhostButtonStyle())
                 }
@@ -137,7 +154,7 @@ struct SwarmDetailSheet: View {
 
     private func handlePrimaryAction() {
         if let signal = swarmStore.signals(for: current.id).first {
-            swarmStore.resolveSignal(signal.id)
+            swarmStore.resolveSignal(signal.id, connectionManager: connectionManager)
         }
         onDiscuss?(current)
     }

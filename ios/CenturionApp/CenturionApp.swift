@@ -24,7 +24,9 @@ struct CenturionApp: App {
                     .environmentObject(services.adrianService)
                     .environmentObject(services.dataMode)
                     .environmentObject(services.swarmStore)
+                    .environmentObject(services.planStore)
                     .environmentObject(services.beneficiaryStore)
+                    .environmentObject(services.oversightStore)
                     .opacity(showSplash || showOnboarding ? 0 : 1)
                     .allowsHitTesting(!showSplash && !showOnboarding)
 
@@ -64,12 +66,16 @@ struct CenturionApp: App {
                 if state == .connected {
                     if !clearedDemoForConnection {
                         services.messageService.clearDemoData()
+                        services.planStore.clearDemoData()
                         ConversationStore.shared.restore(into: services.messageService)
                         clearedDemoForConnection = true
                     }
                     Task {
                         await services.swarmStore.refresh(from: services.connectionManager)
                         await services.beneficiaryStore.refresh(from: services.connectionManager)
+                        await services.oversightStore.refresh(from: services.connectionManager)
+                        await services.missionStore.refreshSoul(from: services.connectionManager)
+                        await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
                     }
                 } else {
                     clearedDemoForConnection = false

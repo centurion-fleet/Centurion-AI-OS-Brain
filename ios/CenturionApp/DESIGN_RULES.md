@@ -1,6 +1,6 @@
-# Centurion Remote — Design Rules (Locked)
+# Sovereign Remote — Design Rules (Locked)
 
-**Version:** 1.1 · **Product:** CenturionAI Remote (iOS) · **Audience:** Successful adults 50+, non-technical, newly self-directed with personal AI
+**Version:** 1.1 · **Product:** Sovereign Remote (iOS) · **Audience:** Successful adults 50+, non-technical, newly self-directed with personal AI
 
 **Locked release (v1.1):** Calm Remote UX (device link ≠ thinking, Get Help, plain language) + **Adrian** online (You only, founder mission-first personality). Do not regress without explicit product review.
 
@@ -40,7 +40,7 @@ Every screen answers: *Why am I here? What can I do next?*
 ### Clarity
 - Strong visual hierarchy: headline → explanation → action.
 - No competing accents or equal-weight controls.
-- State is visible in plain language ("Connected to your Centurion" not "Discovering").
+- State is visible in plain language ("Connected to your Sovereign" not "Discovering").
 
 ### Simplicity (friction removal, not minimalism)
 - Strip machinery from default views.
@@ -65,10 +65,10 @@ Every screen answers: *Why am I here? What can I do next?*
 ### Language rules
 | Never (default UI) | Always |
 |--------------------|--------|
-| Remote Control, protocol, transport, Bonjour, mDNS | Your Centurion, private connection, on your network |
-| LLM, model, provider, agent, sub-agent, loop phase | Your Centurion is working on… / Needs your decision |
+| Remote Control, protocol, transport, Bonjour, mDNS | Your Sovereign, private connection, on your network |
+| LLM, model, provider, agent, sub-agent, loop phase | Your Sovereign is working on… / Needs your decision |
 | Output, filesystem path, source loop | Document / Ready for you |
-| Soul (without context) | Your Centurion's Soul — personality and rules for your AI |
+| Soul (without context) | Your Sovereign's Soul — personality and rules for your AI |
 | Mission (without context) | Your life purpose, commitments, and personal context |
 | XSalsa20, X25519, PFS, nonce | Your conversations stay private on your network |
 
@@ -76,9 +76,10 @@ Every screen answers: *Why am I here? What can I do next?*
 | Term | Meaning | User-facing home |
 |------|---------|------------------|
 | **Mission** | The **human** — life purpose, active commitments, story/values/context | Mission screen, Mission Discovery, Pulse banner |
-| **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Centurion's Soul screen, Shape Your Centurion flow |
+| **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Sovereign's Soul screen, Shape Your Sovereign flow |
+| **Plan** | A **reviewable proposal** from your Sovereign before consequential work — not life Mission | Chat “Propose first”, Home **Plans** / Needs your choice / Documents, Plan review |
 
-Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces.
+Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces. Never call an agent plan a “Mission.”
 
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.
@@ -94,7 +95,7 @@ Never ask "what is your mission?" in Soul flows. Never describe human story/valu
 1. Welcome — what this is, in one paragraph.
 2. Link — find Centurion on your network in **You** (guided).
 3. Mission Discovery — optional but invited, ceremonial.
-4. Pulse — calm view of what your Centurion is doing for you.
+4. Pulse — calm view of what your Sovereign is doing for you.
 
 ---
 
@@ -104,7 +105,7 @@ Use tokens from `Utils/CenturionTheme.swift` and `Utils/DesignSystem.swift` only
 
 ### Tab chrome (v2 — award restyle)
 
-Use `MainTabChrome` on all **four** main tabs with **`CompactBrandHeader`** (app mark + "PERSONAL CENTURION").
+Use `MainTabChrome` on all **four** main tabs with **`CompactBrandHeader`** (app mark + "SOVEREIGN").
 
 | Context | Header |
 |---------|--------|
@@ -132,11 +133,11 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 ### Three tabs — human names (display)
 | Tab | User-facing purpose | Default content |
 |-----|---------------------|-----------------|
-| Chat | Talk with your Centurion | Conversations, calm messaging |
-| Home | What your Centurion is doing | Human outcomes, not agent topology |
+| Chat | Talk with your Sovereign | Conversations, calm messaging |
+| Home | What your Sovereign is doing | Human outcomes, not agent topology |
 | You | Sales story + personal hub | Family Beneficiary Program, link, thinking, mission, privacy, collaborations |
 
-**Connect is not a tab.** Device link, thinking service, and pairing live under **You → Your link** and **How Your Centurion Thinks**.
+**Connect is not a tab.** Device link, thinking service, and pairing live under **You → Your link** and **How Your Sovereign Thinks**.
 
 **Privacy is not a separate tab.** Full privacy comparison lives under **You → Privacy & Trust** (`SecurityHubView`).
 
@@ -146,6 +147,7 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 | Internal | User-facing |
 |----------|-------------|
 | Live | Working on now |
+| Plans | Plans (reviewable proposals) |
 | Wins | Finished for you |
 | Outputs | Documents |
 | Decisions | Needs your choice |
@@ -206,8 +208,8 @@ Before any release:
 ## 10. Calm Remote UX (locked)
 
 ### Device link vs thinking service
-- **Device link** — iPhone connected to the Centurion computer on the LAN.
-- **Thinking service** — whether the Centurion on the computer can think.
+- **Device link** — iPhone connected to the Sovereign computer on the LAN.
+- **Thinking service** — whether the Sovereign on the computer can think.
 - Never merge these into one status on default surfaces.
 
 ### Get Help (host-backed)
@@ -218,9 +220,9 @@ Before any release:
 ### Adrian (cloud-backed) — locked
 
 - **Single source of truth:** support content lives only in the **personal-centurion-help-center** repo (`content/`). Web Ask Adrian (`/api/ask`) and iPhone Talk to Adrian (`/api/v1/chat`) both retrieve from those articles. Do not duplicate procedures in iOS strings or `centurion_cli/adrian/knowledge.md` for customer-facing guidance.
-- **Adrian** is Adrian online — Centurion's creator, hosted at [help.personal-centurion.com](https://help.personal-centurion.com); no customer API keys.
+- **Adrian** is Adrian online — Sovereign's creator, hosted at [help.1human1ai.com](https://help.1human1ai.com); no customer API keys.
 - **Placement:** **You** → Support only (`Talk to Adrian` beside Get Help). No global floating control on other tabs.
-- **Passion:** help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Centurion.
+- **Passion:** help users **live their mission** — lift daily pressure, free thinking, deepen 1:1 with private Sovereign.
 - **Evolving mission:** missions change over time; never treat mission as a one-time checkbox.
 - **Personality:** listen first; one step at a time (Loop: understand → act → adjust); expert before advising; plain language.
 - **Superpowers:** AI speed clears the path; human creativity dreams the future — Adrian aligns both.
@@ -244,7 +246,7 @@ Before any release:
 
 | Never (default UI) | Always |
 |--------------------|--------|
-| Swarm, sub-agent, kanban, column, task board | Collaboration, your Centurions |
+| Swarm, sub-agent, kanban, column, task board | Collaboration, your Sovereigns |
 | Blocked task, sprint phase, dispatcher | Paused, in progress, needs your choice |
 | Agent topology, spawn tree | Show how it's working (opt-in) |
 
@@ -263,12 +265,12 @@ Before any release:
 ### Human attention model
 
 - Humans see **Signals** only (decisions, ceremonies) — not handoffs, tool progress, or activity log.
-- Digest setting: **Tell me when needed** (default) vs **Daily summary**.
-- Formation: proposed in Chat after conversation — never a blank create form on Home.
+- Pulse attention setting (in-app only): **Surface decisions in the app when needed** (default) vs **Keep Pulse quieter until I open it**. Does **not** schedule OS push or local notifications in the current ship.
+- Collaboration entry: **Connect another Sovereign** (invite / join). Local “Start collaboration” formation preview is not shipped.
 
 ### Brain vs Remote architecture
 
-Centurion Remote is a pocket mission cockpit, not the collaboration database.
+Sovereign Remote is a pocket mission cockpit, not the collaboration database.
 The Linux Centurion Brain owns all collaboration state under the active
 `CENTURION_HOME`:
 
@@ -284,7 +286,7 @@ their mission while out in the world:
 - Decide: open Signals with one clear action.
 - Receive: finished documents/outcomes, readable and shareable.
 - Steer: Discuss with collaboration context carried back to the Brain.
-- Form: confirm a collaboration; the Brain creates the board/project.
+- Collaborate: invite or join via Connect another Sovereign; Brain owns boards/projects.
 
 ### Collaboration isolation
 
@@ -309,7 +311,7 @@ workspaces, memories, or chat context unless the human explicitly links them.
 - [ ] Default surfaces use plain language from table above
 - [ ] Orb motion honors Reduce Motion
 - [ ] Demo swarms labeled when `showsDemoContent` is on
-- [ ] Remote reads collaboration state from the Centurion Brain; iPhone stores
+- [ ] Remote reads collaboration state from the Sovereign Brain; iPhone stores
       only preferences/cache
 - [ ] Dashboard `/mission` and Remote use the same Brain-owned snapshot service
 

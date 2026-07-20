@@ -1,12 +1,13 @@
 import Foundation
 import SwiftUI
 
-/// Single source of truth for the human's mission and the Centurion's Soul.
+/// Single source of truth for the human's mission and the Sovereign's Soul.
 /// Mission = you. Soul = your AI companion's personality and rules.
 @MainActor
 final class MissionStore: ObservableObject {
     @Published private(set) var mission: LifeMission
     @Published private(set) var soul: SoulDocument
+    @Published private(set) var soulSyncedWithSovereign = false
     @Published var activeTargetIDs: Set<UUID>
 
     private static let missionKey = "centurion.lifeMission.v1"
@@ -28,11 +29,17 @@ final class MissionStore: ObservableObject {
         }
         mission = resolvedMission
 
+        var resolvedSoul: SoulDocument
         if let loaded = Self.loadSoul() {
-            soul = loaded
+            resolvedSoul = loaded
         } else {
-            soul = SoulDocument()
+            resolvedSoul = SoulDocument()
         }
+        let beforeAlwaysDo = resolvedSoul.alwaysDo
+        if resolvedSoul.isValid {
+            resolvedSoul.ensureProposeFirstStandingRule()
+        }
+        soul = resolvedSoul
 
         if let ids = Self.loadActiveTargetIDs() {
             activeTargetIDs = ids
@@ -41,6 +48,10 @@ final class MissionStore: ObservableObject {
         }
 
         discoveryAnswers = Self.loadDiscoveryAnswers() ?? [:]
+
+        if beforeAlwaysDo != resolvedSoul.alwaysDo {
+            persistSoul()
+        }
 
         if !UserDefaults.standard.bool(forKey: Self.migrationKey) {
             runLegacyMigration()
@@ -66,6 +77,15 @@ final class MissionStore: ObservableObject {
 
     var hasSoulConfiguration: Bool {
         soul.isValid
+    }
+
+    var soulSubtitle: String {
+        if !hasSoulConfiguration {
+            return "Personality and rules for your AI"
+        }
+        return soulSyncedWithSovereign
+            ? "Personality and rules configured"
+            : "On this phone — link to sync"
     }
 
     func toggleActiveTarget(_ id: UUID) {
@@ -110,7 +130,7 @@ final class MissionStore: ObservableObject {
                     id: UUID(),
                     title: goal,
                     description: updated.profile.whyThisMission.isEmpty
-                        ? "A commitment your Centurion is helping you fulfill."
+                        ? "A commitment your Sovereign is helping you fulfill."
                         : updated.profile.whyThisMission
                 )
             }
@@ -164,11 +184,85 @@ final class MissionStore: ObservableObject {
 
     func updateSoul(_ document: SoulDocument) {
         var updated = document
+        updated.ensureProposeFirstStandingRule()
         updated.updatedAt = Date()
         if updated.version < 2 { updated.version = 2 }
         soul = updated
+        soulSyncedWithSovereign = false
         persistSoul()
         markPersisted()
+    }
+
+    /// Pull host SOUL.md into the local structured document when linked.
+    func refreshSoul(from connectionManager: ConnectionManager) async {
+        guard connectionManager.connectionState == .connected else { return }
+        do {
+            let payload = try await connectionManager.fetchSoul()
+            if let merged = Self.soulDocument(fromHost: payload) {
+                // Prefer host when local is empty; otherwise keep local edits until push.
+                if !soul.isValid || Self.hostLooksRicher(payload, than: soul) {
+                    soul = merged
+                    persistSoul()
+                    markPersisted()
+                }
+                soulSyncedWithSovereign = true
+            }
+        } catch {
+            // Offline / bridge failure — keep local cache.
+        }
+    }
+
+    /// Push local Soul to the Sovereign after an explicit user confirmation.
+    @discardableResult
+    func syncSoulToSovereign(connectionManager: ConnectionManager) async -> String? {
+        guard connectionManager.connectionState == .connected else {
+            return "Saved on this phone. Link your Sovereign to sync."
+        }
+        do {
+            let fields: [String: Any] = [
+                "personalitySummary": soul.personalitySummary,
+                "tone": soul.tone,
+                "communicationStyle": soul.communicationStyle,
+                "pushbackStyle": soul.pushbackStyle,
+                "alwaysDo": soul.alwaysDo,
+                "neverDo": soul.neverDo,
+                "uncertaintyStyle": soul.uncertaintyStyle,
+                "responseLength": soul.responseLength,
+            ]
+            let payload = try await connectionManager.putSoul(fields)
+            if let merged = Self.soulDocument(fromHost: payload) {
+                soul = merged
+                persistSoul()
+            }
+            soulSyncedWithSovereign = true
+            markPersisted()
+            return "Saved. Soul changes apply on the next conversation."
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private static func soulDocument(fromHost payload: [String: Any]) -> SoulDocument? {
+        var doc = SoulDocument()
+        doc.personalitySummary = payload["personalitySummary"] as? String ?? ""
+        doc.tone = payload["tone"] as? String ?? ""
+        doc.communicationStyle = payload["communicationStyle"] as? String ?? ""
+        doc.pushbackStyle = payload["pushbackStyle"] as? String ?? ""
+        doc.alwaysDo = payload["alwaysDo"] as? [String] ?? []
+        doc.neverDo = payload["neverDo"] as? [String] ?? []
+        doc.uncertaintyStyle = payload["uncertaintyStyle"] as? String ?? ""
+        doc.responseLength = payload["responseLength"] as? String ?? ""
+        doc.updatedAt = Date()
+        doc.version = 2
+        return doc.isValid || !(payload["markdown"] as? String ?? "").isEmpty ? doc : nil
+    }
+
+    private static func hostLooksRicher(_ payload: [String: Any], than local: SoulDocument) -> Bool {
+        let hostSummary = (payload["personalitySummary"] as? String ?? "").count
+        let hostAlways = (payload["alwaysDo"] as? [String] ?? []).count
+        let hostNever = (payload["neverDo"] as? [String] ?? []).count
+        let localScore = local.personalitySummary.count + local.alwaysDo.count + local.neverDo.count
+        return (hostSummary + hostAlways + hostNever) > localScore
     }
 
     // MARK: - Legacy migration
@@ -242,7 +336,7 @@ final class MissionStore: ObservableObject {
                     id: UUID(),
                     title: goal,
                     description: legacy.whyThisMission.isEmpty
-                        ? "A commitment your Centurion is helping you fulfill."
+                        ? "A commitment your Sovereign is helping you fulfill."
                         : legacy.whyThisMission
                 )
             }
@@ -389,7 +483,7 @@ final class MissionStore: ObservableObject {
     }
 
     static func discoveryShareMessage(answers: [String: String], questions: [MissionQuestion]) -> String {
-        var lines = ["I've completed my Mission Discovery on Centurion Remote.", ""]
+        var lines = ["I've completed my Mission Discovery on Sovereign Remote.", ""]
         for question in questions {
             guard let answer = answers[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !answer.isEmpty else { continue }

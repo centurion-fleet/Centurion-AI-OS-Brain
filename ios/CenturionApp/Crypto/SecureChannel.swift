@@ -1,7 +1,7 @@
 import Foundation
 import Sodium
 
-/// Encrypted bidirectional channel between iPhone and Centurion.
+/// Encrypted bidirectional channel between iPhone and Sovereign.
 ///
 /// Uses XSalsa20-Poly1305 (secretbox) for authenticated encryption
 /// with independent directional keys and a fresh random nonce for
@@ -10,7 +10,7 @@ import Sodium
 final class SecureChannel {
     private let sodium = Sodium()
     
-    /// Encrypt a message for transit to the Centurion
+    /// Encrypt a message for transit to the Sovereign
     func encrypt(_ message: Data, using key: SessionKey) throws -> Data {
         let ciphertext: [UInt8]? = sodium.secretBox.seal(
             message: [UInt8](message),
@@ -24,7 +24,7 @@ final class SecureChannel {
         return Data(ciphertext)
     }
     
-    /// Decrypt a message received from the Centurion
+    /// Decrypt a message received from the Sovereign
     func decrypt(_ ciphertextWithNonce: Data, using key: SessionKey) throws -> Data {
         let plaintext: [UInt8]? = sodium.secretBox.open(
             nonceAndAuthenticatedCipherText: [UInt8](ciphertextWithNonce),

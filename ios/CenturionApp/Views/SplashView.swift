@@ -80,7 +80,7 @@ struct SplashView: View {
                     .tracking(4)
                     .opacity(phase == .glow ? 0.4 : taglineOpacity)
 
-                Text("Live Your Personal Mission")
+                Text("1 Human 1 AI")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.dimAccent())
                     .tracking(1.5)

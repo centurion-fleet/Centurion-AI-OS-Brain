@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Design system — the physics, rhythm, and soul of the Centurion app.
+/// Design system — the physics, rhythm, and soul of the Sovereign app.
 /// Every number, curve, and gesture is intentional. Nothing is default.
 
 // MARK: - Motion Design
@@ -122,7 +122,7 @@ struct DemoDataBanner: View {
                 Text("Sample updates")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("These are examples until you link your Centurion in Connect.")
+                Text("These are examples until you link your Sovereign in Connect.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -136,7 +136,7 @@ struct DemoDataBanner: View {
                 .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sample updates. These are examples until you link your Centurion in Connect.")
+        .accessibilityLabel("Sample updates. These are examples until you link your Sovereign in Connect.")
     }
 }
 
@@ -298,7 +298,7 @@ struct EncryptionStatusBadge: View {
         )
         .accessibilityLabel(
             isEncrypted
-                ? "Crypto Chat on — private encrypted conversation with your Centurion"
+                ? "Crypto Chat on — private encrypted conversation with your Sovereign"
                 : "Crypto Chat off"
         )
     }
@@ -319,7 +319,7 @@ struct CenturionAppMark: View {
             .aspectRatio(1, contentMode: .fit)
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .accessibilityLabel("Centurion app icon")
+            .accessibilityLabel("Sovereign app icon")
     }
 }
 

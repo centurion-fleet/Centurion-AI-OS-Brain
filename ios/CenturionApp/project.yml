@@ -22,6 +22,8 @@ targets:
     platform: iOS
     sources:
       - path: Assets.xcassets
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: CenturionApp.swift
       - path: ContentView.swift
       - path: Views
@@ -35,10 +37,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         MARKETING_VERSION: "5.0.0"
-        CURRENT_PROJECT_VERSION: "8"
+        CURRENT_PROJECT_VERSION: "11"
     info:
       path: Info.plist
       properties:
+        CFBundleDisplayName: Sovereign Remote
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UIApplicationSceneManifest:
@@ -50,7 +53,7 @@ targets:
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: "Centurion needs local network access to find your Centurion on your Wi‑Fi."
+        NSLocalNetworkUsageDescription: "Sovereign Remote needs local network access to find your Sovereign on your Wi‑Fi."
         NSBonjourServices:
           - _centurion._tcp
         NSAppTransportSecurity:

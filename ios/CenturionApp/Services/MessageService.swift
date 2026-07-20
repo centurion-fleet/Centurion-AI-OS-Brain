@@ -67,10 +67,13 @@ final class MessageService: ObservableObject {
     }
 
     /// Send a message in a conversation context. Returns the conversation used.
+    /// When `proposeFirst` is true, the host is framed to draft a plan only and stop.
     func sendMessage(
         _ text: String,
         in context: ConversationContext,
-        missionStore: MissionStore? = nil
+        missionStore: MissionStore? = nil,
+        planStore: PlanStore? = nil,
+        proposeFirst: Bool = false
     ) async throws -> Conversation {
         guard connectionManager.connectionState == .connected else {
             throw MessageError.notConnected
@@ -86,7 +89,9 @@ final class MessageService: ObservableObject {
         appendMessage(userMessage)
 
         let outboundBody: String
-        if case .commitment(let id, _) = context,
+        if proposeFirst {
+            outboundBody = ProposeFirstChat.frameOutbound(userText: text)
+        } else if case .commitment(let id, _) = context,
            let missionStore,
            let commitment = missionStore.commitment(with: id) {
             outboundBody = MissionCommitmentChat.frameOutbound(
@@ -104,12 +109,26 @@ final class MessageService: ObservableObject {
         )
 
         let rawResponse = try await connectionManager.sendMessage(outbound)
-        let displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+
+        var displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+        displayResponse = ProposeFirstChat.displayText(strippingArtifactFrom: displayResponse)
 
         if let missionStore,
            let payload = MissionCommitmentChat.parseUpdate(from: rawResponse) {
             missionStore.applyCommitmentUpdate(payload)
             syncConversationTitle(for: conversation.id, missionStore: missionStore)
+        }
+
+        if proposeFirst, let planStore {
+            let artifact = ProposeFirstChat.parseArtifact(from: rawResponse)
+                ?? ProposeFirstChat.fallbackArtifact(from: displayResponse.isEmpty ? rawResponse : displayResponse, userRequest: text)
+            await planStore.upsertAndSync(artifact, connectionManager: connectionManager)
+            if displayResponse.isEmpty {
+                displayResponse = "I've drafted a plan for your review on Home — open Plans, Needs your choice, or Documents when you're ready."
+            } else if !displayResponse.localizedCaseInsensitiveContains("home")
+                        && !displayResponse.localizedCaseInsensitiveContains("plan") {
+                displayResponse += "\n\nYou can review this plan on Home under Plans, Needs your choice, or Documents."
+            }
         }
 
         appendMessage(
@@ -138,7 +157,7 @@ final class MessageService: ObservableObject {
             let speaker: String
             switch message.role {
             case .user: speaker = "User"
-            case .centurion: speaker = "Centurion"
+            case .centurion: speaker = "Sovereign"
             case .system: continue
             }
             lines.append("\(speaker): \(message.content)")
@@ -147,7 +166,7 @@ final class MessageService: ObservableObject {
         lines.append("Latest user message:")
         lines.append(latestUserText)
         lines.append("")
-        lines.append("Reply as Centurion to the latest user message.")
+        lines.append("Reply as Sovereign to the latest user message.")
         return lines.joined(separator: "\n")
     }
 
@@ -202,46 +221,6 @@ final class MessageService: ObservableObject {
             conversations: conversations,
             messages: allMessages
         )
-    }
-
-    /// Generate a context-aware Centurion response for preview
-    private func generateResponse(for text: String, in context: ConversationContext) -> String {
-        // In production this comes from the LLM via the encrypted channel.
-        // For preview we return contextual responses.
-        let lower = text.lowercased()
-        if lower.contains("status") || lower.contains("progress") {
-            switch context {
-            case .program(_, let name):
-                return "**\(name)** is on track. \(Int.random(in: 60..<95))% of targets are active. Would you like a breakdown by target?"
-            case .target(_, let name, _):
-                return "**\(name)** progress: \(Int.random(in: 2..<5)) of \(Int.random(in: 4..<8)) tasks complete. There \(Bool.random() ? "is a blocked item" : "are no blockers") I'd like to discuss."
-            case .task(_, let name, _, _):
-                return "On **\(name)**: \(Bool.random() ? "I'm waiting on stakeholder feedback before I can proceed." : "Making good progress. Should have an update by end of day.")"
-            case .commitment(_, let title):
-                return "Let's look at **\(title)** together. Tell me what feels unclear or what you'd like to change."
-            case .standalone:
-                return "Good question. Let me check the current state of things and get back to you."
-            }
-        }
-        if lower.contains("help") || lower.contains("suggest") {
-            return "Here's what I'd suggest based on the current context: let's break this down into actionable next steps. What specific outcome are you looking for?"
-        }
-        if lower.contains("blocked") || lower.contains("stuck") || lower.contains("issue") {
-            return "I understand this is blocking progress. Let me analyse what's needed to unblock it. The quickest path forward would be to \(Bool.random() ? "schedule a review with the stakeholder" : "reallocate resources from a lower-priority item")."
-        }
-        // Default contextual response
-        switch context {
-        case .program(_, let name):
-            return "I've noted your thoughts on **\(name)**. I'll incorporate this into the next review cycle. Is there anything specific you want me to action?"
-        case .target(_, let name, let program):
-            return "Thanks for flagging this on **\(name)** (under \(program)). I'll update the task board and keep you posted on any changes."
-        case .task(_, let name, _, _):
-            return "Noted on **\(name)**. I'll adjust the approach. Let me know if you want me to escalate any blockers."
-        case .commitment(_, let title):
-            return "I've noted your thoughts on the commitment **\(title)**. Ask me to rename or refine it whenever you're ready."
-        case .standalone:
-            return "Got it. I'll think about this and follow up. Is there anything else on your mind?"
-        }
     }
 
     // MARK: - Sample Data

@@ -10,9 +10,11 @@ Centurion AI OS includes a rich set of capabilities that extend far beyond basic
 
 ## Core
 
+- **[Memory Horizon](memory-layers.md)** — Centurion's three-layer memory: Hot Cache (every session), Session Recall (on demand), and Vault (opt-in encrypted archive).
 - **[Tools & Toolsets](tools.md)** — Tools are functions that extend the agent's capabilities. They're organized into logical toolsets that can be enabled or disabled per platform, covering web search, terminal execution, file editing, memory, delegation, and more.
 - **[Skills System](skills.md)** — On-demand knowledge documents the agent can load when needed. Skills follow a progressive disclosure pattern to minimize token usage and are compatible with the [agentskills.io](https://agentskills.io/specification) open standard.
-- **[Persistent Memory](memory.md)** — Bounded, curated memory that persists across sessions. Centurion remembers your preferences, projects, environment, and things it has learned via `MEMORY.md` and `USER.md`.
+- **[Persistent Memory](memory.md)** — Hot Cache: bounded `MEMORY.md` and `USER.md` injected into every session.
+- **[Vault](vault.md)** — Far horizon: encrypted offline long-term Core / Experiential / Pattern memory (opt-in).
 - **[Context Files](context-files.md)** — Centurion automatically discovers and loads project context files (`.centurion.md`, `AGENTS.md`, `CLAUDE.md`, `SOUL.md`, `.cursorrules`) that shape how it behaves in your project.
 - **[Context References](context-references.md)** — Type `@` followed by a reference to inject files, folders, git diffs, and URLs directly into your messages. Centurion expands the reference inline and appends the content automatically.
 - **[Checkpoints](../checkpoints-and-rollback.md)** — Centurion automatically snapshots your working directory before making file changes, giving you a safety net to roll back with `/rollback` if something goes wrong.

@@ -437,6 +437,73 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::SwarmResolveSignal {
+                id,
+                signal_id,
+                choice_note,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_resolve_signal",
+                        serde_json::json!({
+                            "signal_id": signal_id,
+                            "choice_note": choice_note,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmResolveSignalResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SwarmCreateBoard {
+                id,
+                name,
+                objective,
+                mission_id,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "swarm_create_board",
+                        serde_json::json!({
+                            "name": name,
+                            "objective": objective,
+                            "mission_id": mission_id,
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SwarmCreateBoardResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        result: payload.get("result").cloned(),
+                        snapshot: payload.get("snapshot").cloned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::BeneficiarySnapshot { id } => {
                 match state
                     .bridge
@@ -683,6 +750,412 @@ async fn handle_connection(
                             .unwrap_or(false),
                         bundle: payload
                             .get("bundle")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::OversightGet { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "oversight_get", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::OversightGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        oversight: payload
+                            .get("oversight")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::OversightPut {
+                id,
+                oversight,
+                apply_level_preset,
+            } => {
+                let mut body = serde_json::json!({ "oversight": oversight });
+                if let Some(preset) = apply_level_preset {
+                    body["apply_level_preset"] = serde_json::Value::Bool(preset);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "oversight_put", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::OversightPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        oversight: payload
+                            .get("oversight")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SoulGet { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "soul_get", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SoulGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        soul: payload
+                            .get("soul")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SoulPut { id, soul, markdown } => {
+                let mut body = serde_json::Map::new();
+                if let Some(soul) = soul {
+                    body.insert("soul".to_owned(), soul);
+                }
+                if let Some(markdown) = markdown {
+                    body.insert(
+                        "markdown".to_owned(),
+                        serde_json::Value::String(markdown),
+                    );
+                }
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "soul_put",
+                        serde_json::Value::Object(body),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SoulPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        soul: payload
+                            .get("soul")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlansList { id, status } => {
+                let mut body = serde_json::Map::new();
+                if let Some(status) = status {
+                    body.insert("status".to_owned(), serde_json::Value::String(status));
+                }
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "plans_list",
+                        serde_json::Value::Object(body),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlansListResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plans: payload
+                            .get("plans")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([])),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanGet { id, plan_id } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "plan_get",
+                        serde_json::json!({ "plan_id": plan_id }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanPut { id, plan } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "plan_put",
+                        serde_json::json!({ "plan": plan }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanDecide {
+                id,
+                plan_id,
+                choice,
+                note,
+                reviewer_customer_id,
+            } => {
+                let mut body = serde_json::json!({
+                    "plan_id": plan_id,
+                    "choice": choice,
+                });
+                if let Some(note) = note {
+                    body["note"] = serde_json::Value::String(note);
+                }
+                if let Some(reviewer) = reviewer_customer_id {
+                    body["reviewer_customer_id"] = serde_json::Value::String(reviewer);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_decide", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanDecideResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanShare {
+                id,
+                plan_id,
+                reviewer_customer_id,
+                role,
+                board_id,
+            } => {
+                let mut body = serde_json::json!({
+                    "plan_id": plan_id,
+                    "reviewer_customer_id": reviewer_customer_id,
+                });
+                if let Some(role) = role {
+                    body["role"] = serde_json::Value::String(role);
+                }
+                if let Some(board_id) = board_id {
+                    body["board_id"] = serde_json::Value::String(board_id);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_share", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanShareResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanComment {
+                id,
+                plan_id,
+                body,
+                author,
+            } => {
+                let mut req = serde_json::json!({
+                    "plan_id": plan_id,
+                    "body": body,
+                });
+                if let Some(author) = author {
+                    req["author"] = serde_json::Value::String(author);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_comment", req)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanCommentResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanTemplatesList { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_templates_list", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanTemplatesListResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        templates: payload
+                            .get("templates")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([])),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanTemplateInstantiate {
+                id,
+                template_id,
+                overrides,
+            } => {
+                let mut body = serde_json::json!({ "template_id": template_id });
+                if let Some(overrides) = overrides {
+                    body["overrides"] = overrides;
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_template_instantiate", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanTemplateInstantiateResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        plan: payload
+                            .get("plan")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::PlanSaveTemplate { id, plan_id, title } => {
+                let mut body = serde_json::json!({ "plan_id": plan_id });
+                if let Some(title) = title {
+                    body["title"] = serde_json::Value::String(title);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "plan_save_template", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::PlanSaveTemplateResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        template: payload
+                            .get("template")
                             .cloned()
                             .unwrap_or_else(|| serde_json::json!({})),
                         message: payload

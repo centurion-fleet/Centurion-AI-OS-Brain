@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Centurion Remote — the AI's dashboard. The human's window into what their
+/// Sovereign Remote — the AI's dashboard. The human's window into what their
 /// Centurion is doing, has done, and needs.
 ///
 /// This is NOT a human project management tool. There are no tasks to check off,
-/// no milestones to track, no human-speed progress bars. This is the Centurion's
+/// no milestones to track, no human-speed progress bars. This is the Sovereign's
 /// cockpit — showing live loops, completed wins, and decisions that need the human.
 ///
 /// Notification system: each category has a badge count for items newer than
 /// the user's last visit to that category. Badges clear when you tap the pill.
 enum PulseCategory: String, CaseIterable {
     case live = "LIVE"
+    case plans = "PLANS"
     case wins = "WINS"
     case outputs = "OUTPUTS"
     case decisions = "DECISIONS"
@@ -19,6 +20,7 @@ enum PulseCategory: String, CaseIterable {
     var displayTitle: String {
         switch self {
         case .live: return "Working on now"
+        case .plans: return "Plans"
         case .wins: return "Finished"
         case .outputs: return "Documents"
         case .decisions: return "Needs your choice"
@@ -29,6 +31,7 @@ enum PulseCategory: String, CaseIterable {
     var icon: String {
         switch self {
         case .live:      return "bolt.circle.fill"
+        case .plans:     return "list.clipboard.fill"
         case .wins:      return "trophy.fill"
         case .outputs:   return "doc.richtext.fill"
         case .decisions: return "lightbulb.fill"
@@ -40,6 +43,7 @@ enum PulseCategory: String, CaseIterable {
 struct MissionPortfolioView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var planStore: PlanStore
     @EnvironmentObject private var dataMode: AppDataMode
     @State private var liveActivity: LiveActivity?
     @State private var completedLoops: [CompletedLoop] = []
@@ -58,6 +62,8 @@ struct MissionPortfolioView: View {
     @State private var chatTarget: ChatSheetTarget?
     /// Output document viewer state
     @State private var selectedOutput: CenturionOutput?
+    /// Plan review sheet
+    @State private var selectedPlan: PlanArtifact?
     /// Swarm constellation sheets
     @State private var selectedSwarm: SwarmSummary?
     @State private var showConstellation = false
@@ -66,6 +72,7 @@ struct MissionPortfolioView: View {
     // Stores the last time each category was viewed. Items newer than this date
     // show a "new" indicator and contribute to the pill badge count.
     @AppStorage("pulse_note_live")     private var lastSeenLive: TimeInterval = 0
+    @AppStorage("pulse_note_plans")    private var lastSeenPlans: TimeInterval = 0
     @AppStorage("pulse_note_wins")     private var lastSeenWins: TimeInterval = 0
     @AppStorage("pulse_note_outputs")  private var lastSeenOutputs: TimeInterval = 0
     @AppStorage("pulse_note_decisions") private var lastSeenDecisions: TimeInterval = 0
@@ -73,6 +80,7 @@ struct MissionPortfolioView: View {
 
     /// Count of unseen items per category
     private var badgeCounts: [PulseCategory: Int] {
+        let plans = Date(timeIntervalSinceReferenceDate: lastSeenPlans)
         let wins = Date(timeIntervalSinceReferenceDate: lastSeenWins)
         let outputs = Date(timeIntervalSinceReferenceDate: lastSeenOutputs)
         let decisions = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
@@ -81,6 +89,7 @@ struct MissionPortfolioView: View {
             .live: (swarmStore.heroSwarms.contains {
                 $0.pulse == .active || $0.pulse == .attention || $0.pulse == .waiting || $0.pulse == .blocked
             } || liveActivity != nil) ? 1 : 0,
+            .plans: planStore.pendingReview.filter { $0.createdAt > plans }.count,
             .wins: completedLoops.filter { $0.completedAt > wins }.count,
             .outputs: self.outputs.filter { $0.createdAt > outputs }.count,
             .decisions: self.decisions.filter { $0.createdAt > decisions }.count,
@@ -93,6 +102,7 @@ struct MissionPortfolioView: View {
         let now = Date.timeIntervalSinceReferenceDate
         switch category {
         case .live:     lastSeenLive = now
+        case .plans:    lastSeenPlans = now
         case .wins:     lastSeenWins = now
         case .outputs:  lastSeenOutputs = now
         case .decisions: lastSeenDecisions = now
@@ -105,6 +115,7 @@ struct MissionPortfolioView: View {
         let threshold: Date
         switch category {
         case .live:     threshold = Date(timeIntervalSinceReferenceDate: lastSeenLive)
+        case .plans:    threshold = Date(timeIntervalSinceReferenceDate: lastSeenPlans)
         case .wins:     threshold = Date(timeIntervalSinceReferenceDate: lastSeenWins)
         case .outputs:  threshold = Date(timeIntervalSinceReferenceDate: lastSeenOutputs)
         case .decisions: threshold = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
@@ -156,6 +167,9 @@ struct MissionPortfolioView: View {
                 applyPulseFromSwarmStore()
             }
         }
+        .onChange(of: planStore.plans.count) { _, _ in
+            applyPulseFromSwarmStore()
+        }
         .onAppear {
             withAnimation(Motion.appear.delay(0.1)) {
                 isAppeared = true
@@ -163,6 +177,30 @@ struct MissionPortfolioView: View {
         }
         .sheet(item: $chatTarget) { target in
             chatSheet(for: target.context)
+        }
+        .sheet(item: $selectedPlan) { plan in
+            NavigationStack {
+                PlanReviewView(
+                    plan: plan,
+                    onProceed: { handlePlanProceed(plan) },
+                    onAdjust: { handlePlanAdjust(plan) },
+                    onHold: { handlePlanHold(plan) },
+                    onShare: { reviewerId in
+                        Task {
+                            _ = await planStore.share(
+                                plan.id,
+                                reviewerCustomerId: reviewerId,
+                                connectionManager: connectionManager
+                            )
+                        }
+                    }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { selectedPlan = nil }
+                    }
+                }
+            }
         }
         .sheet(item: $selectedSwarm) { swarm in
             SwarmDetailSheet(swarm: swarm) { discussed in
@@ -220,18 +258,20 @@ struct MissionPortfolioView: View {
                                 ? "Nothing running right now"
                                 : "Working on now",
                             message: connectionManager.connectionState == .connected
-                                ? "When your Centurion is mid-loop, it shows up here."
-                                : "Link your Centurion in You to see live work."
+                                ? "When your Sovereign is mid-loop, it shows up here."
+                                : "Link your Sovereign in You to see live work."
                         )
                     }
+                case .plans:
+                    plansSection
                 case .wins:
                     if completedLoops.isEmpty {
                         EmptyState(
                             icon: "trophy",
                             title: "No finished work yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Completed outcomes from your Centurion will appear here."
-                                : "Link your Centurion to see finished wins."
+                                ? "Completed outcomes from your Sovereign will appear here."
+                                : "Link your Sovereign to see finished wins."
                         )
                     } else {
                         completedLoopsSection
@@ -244,8 +284,8 @@ struct MissionPortfolioView: View {
                             icon: "doc.richtext",
                             title: "No outputs yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Documents and results your Centurion creates will appear here."
-                                : "Link your Centurion to see documents it creates."
+                                ? "Documents and results your Sovereign creates will appear here."
+                                : "Link your Sovereign to see documents it creates."
                         )
                     }
                 case .decisions:
@@ -257,7 +297,7 @@ struct MissionPortfolioView: View {
                             title: "All clear",
                             message: connectionManager.connectionState == .connected
                                 ? "Nothing needs your choice right now."
-                                : "Link your Centurion to see decisions that need you."
+                                : "Link your Sovereign to see decisions that need you."
                         )
                     }
                 case .pulse:
@@ -266,8 +306,8 @@ struct MissionPortfolioView: View {
                             icon: "waveform.path.ecg",
                             title: "No updates yet",
                             message: connectionManager.connectionState == .connected
-                                ? "Activity from your Centurion streams in here."
-                                : "Link your Centurion to see its update stream."
+                                ? "Activity from your Sovereign streams in here."
+                                : "Link your Sovereign to see its update stream."
                         )
                     } else {
                         thoughtsSection
@@ -315,6 +355,7 @@ struct MissionPortfolioView: View {
             }
             applyPulseFromSwarmStore()
         } else if dataMode.showsDemoContent {
+            planStore.seedPreviewIfNeeded(showsDemoContent: true)
             liveActivity = LiveActivity.preview()
             completedLoops = CompletedLoop.preview()
             decisions = DecisionItem.preview()
@@ -331,12 +372,122 @@ struct MissionPortfolioView: View {
     }
 
     private func applyPulseFromSwarmStore() {
-        let feed = PulseFeedMapper.map(from: swarmStore)
+        let feed = PulseFeedMapper.map(from: swarmStore, planStore: planStore)
         liveActivity = feed.liveActivity
         completedLoops = feed.wins
         outputs = feed.outputs
         decisions = feed.decisions
         thoughts = feed.thoughts
+    }
+
+    private func handleDecisionOption(_ option: DecisionOption, for decision: DecisionItem) {
+        Haptics.mediumTap()
+        let label = option.label.lowercased()
+
+        if decision.kind == .plan || decision.planId != nil {
+            let plan = decision.planId.flatMap { planStore.plan(id: $0) }
+                ?? PlanArtifact(
+                    id: decision.planId ?? decision.id,
+                    title: decision.title,
+                    goal: decision.context,
+                    steps: [],
+                    risks: [],
+                    openQuestions: [],
+                    summary: decision.context,
+                    relatedMission: decision.relatedMission,
+                    signalId: decision.signalId,
+                    status: .pendingReview,
+                    createdAt: decision.createdAt
+                )
+            if label.contains("proceed") {
+                handlePlanProceed(plan)
+            } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
+                handlePlanAdjust(plan)
+            } else if label.contains("hold") {
+                handlePlanHold(plan)
+            } else {
+                selectedPlan = plan
+            }
+            return
+        }
+
+        if label.contains("proceed") || label.contains("approve") {
+            if let signalId = decision.signalId {
+                swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
+                applyPulseFromSwarmStore()
+            } else {
+                openDiscuss(
+                    title: "Proceed: \(decision.title)",
+                    detail: "\(decision.title)\n\n\(decision.context)\n\nPlease proceed."
+                )
+            }
+        } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
+            openDiscuss(
+                title: "Adjust: \(decision.title)",
+                detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
+            )
+        } else if label.contains("hold") {
+            // Keep in Needs your choice — no resolve.
+            Haptics.lightTap()
+        } else {
+            openDiscuss(
+                title: "Decision: \(decision.title) — \(option.label)",
+                detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
+            )
+        }
+    }
+
+    private func handlePlanProceed(_ plan: PlanArtifact) {
+        Task {
+            await planStore.decide(plan.id, choice: "approve", connectionManager: connectionManager)
+            if let signalId = plan.signalId {
+                swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
+            } else if connectionManager.connectionState == .connected {
+                openDiscuss(
+                    title: "Proceed: \(plan.title)",
+                    detail: "Please proceed with this plan:\n\n\(plan.markdownContent)"
+                )
+            }
+            applyPulseFromSwarmStore()
+        }
+    }
+
+    private func handlePlanAdjust(_ plan: PlanArtifact) {
+        Task {
+            await planStore.decide(plan.id, choice: "request_changes", connectionManager: connectionManager)
+            openDiscuss(
+                title: "Adjust plan: \(plan.title)",
+                detail: "Your Sovereign proposes this plan. Please help me adjust it before proceeding.\n\n\(plan.markdownContent)"
+            )
+            applyPulseFromSwarmStore()
+        }
+    }
+
+    private func handlePlanHold(_ plan: PlanArtifact) {
+        Task {
+            await planStore.decide(plan.id, choice: "hold", connectionManager: connectionManager)
+            applyPulseFromSwarmStore()
+        }
+    }
+
+    private func openPlan(from output: CenturionOutput) {
+        if let existing = planStore.plan(id: output.id) {
+            selectedPlan = existing
+            return
+        }
+        selectedPlan = PlanArtifact(
+            id: output.id,
+            title: output.title,
+            goal: output.summary,
+            steps: [],
+            risks: [],
+            openQuestions: [],
+            summary: output.summary,
+            relatedMission: output.relatedMission,
+            signalId: nil,
+            status: .pendingReview,
+            createdAt: output.createdAt
+        )
     }
 
     // MARK: - Mission Banner
@@ -357,7 +508,7 @@ struct MissionPortfolioView: View {
                 .foregroundColor(ColorTheme.mutedText())
                 .tracking(2)
 
-            Text("Priorities you turned on in Mission. Working on now below is what your Centurion is executing.")
+            Text("Priorities you turned on in Mission. Working on now below is what your Sovereign is executing.")
                 .font(.caption2)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(3)
@@ -445,7 +596,7 @@ struct MissionPortfolioView: View {
         .offset(y: isAppeared ? 0 : 10)
     }
 
-    // MARK: - 1. LIVE — What the Centurion Is Doing Right Now
+    // MARK: - 1. LIVE — What the Sovereign Is Doing Right Now
 
     private var liveActivitySection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -489,6 +640,13 @@ struct MissionPortfolioView: View {
                     Text(activity.summary)
                         .font(.headline)
                         .foregroundColor(ColorTheme.primaryText())
+
+                    if activity.phase == .planning {
+                        Text("Drafting a plan… You’ll be able to review it under Needs your choice or Documents.")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.accent())
+                            .lineSpacing(3)
+                    }
 
                     Text(activity.detail)
                         .font(.subheadline)
@@ -774,7 +932,7 @@ struct MissionPortfolioView: View {
         return "\(minutes / 60)h \(minutes % 60)m"
     }
 
-    // MARK: - 3. OUTPUTS — Documents the Centurion Created
+    // MARK: - 3. OUTPUTS — Documents the Sovereign Created
 
     private var outputsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -782,11 +940,11 @@ struct MissionPortfolioView: View {
                 Image(systemName: "doc.text.fill")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent())
-                Text("Outputs")
+                Text("Documents")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
-                Text("\(outputs.count) documents")
+                Text("\(outputs.count) ready for you")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -802,9 +960,13 @@ struct MissionPortfolioView: View {
 
     private func outputCard(_ output: CenturionOutput) -> some View {
         VStack(spacing: 0) {
-            // Tappable content area — opens DocumentViewer
+            // Tappable content area — plans open PlanReview; others DocumentViewer
             Button(action: {
-                selectedOutput = output
+                if output.type == .plan {
+                    openPlan(from: output)
+                } else {
+                    selectedOutput = output
+                }
             }) {
                 HStack(spacing: Spacing.sm) {
                     // New indicator dot
@@ -831,7 +993,9 @@ struct MissionPortfolioView: View {
                             .foregroundColor(ColorTheme.primaryText())
                             .lineLimit(1)
 
-                        Text(output.summary)
+                        Text(output.type == .plan
+                             ? "Your Sovereign proposes — tap to review"
+                             : output.summary)
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                             .lineLimit(2)
@@ -894,6 +1058,118 @@ struct MissionPortfolioView: View {
                             Button("Done") { selectedOutput = nil }
                         }
                     }
+            }
+        }
+    }
+
+    // MARK: - Plans — Reviewable proposals
+
+    private var plansSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            if planStore.pendingReview.isEmpty
+                && planStore.inProgress.isEmpty
+                && planStore.completed.isEmpty
+                && planStore.templates.isEmpty {
+                EmptyState(
+                    icon: "list.clipboard",
+                    title: "No plans yet",
+                    message: connectionManager.connectionState == .connected
+                        ? "Use Propose first in Chat, or start from a template below when available."
+                        : "Link your Sovereign to review plans here."
+                )
+            }
+
+            if !planStore.pendingReview.isEmpty {
+                planGroup(title: "Needs review", plans: planStore.pendingReview)
+            }
+            if !planStore.inProgress.isEmpty {
+                planGroup(title: "In progress", plans: planStore.inProgress)
+            }
+            if !planStore.completed.isEmpty {
+                planGroup(title: "Done", plans: Array(planStore.completed.prefix(12)))
+            }
+            if !planStore.templates.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Templates")
+                        .font(.headline)
+                        .foregroundColor(ColorTheme.primaryText())
+                    ForEach(planStore.templates) { template in
+                        Button {
+                            Haptics.mediumTap()
+                            Task {
+                                if let plan = await planStore.instantiateTemplate(
+                                    template.id,
+                                    connectionManager: connectionManager
+                                ) {
+                                    selectedPlan = plan
+                                    applyPulseFromSwarmStore()
+                                }
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(template.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(ColorTheme.primaryText())
+                                if !template.summary.isEmpty {
+                                    Text(template.summary)
+                                        .font(.caption)
+                                        .foregroundColor(ColorTheme.mutedText())
+                                        .lineLimit(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Spacing.md)
+                        }
+                        .buttonStyle(.plain)
+                        .cardStyle()
+                    }
+                }
+            }
+        }
+        .opacity(isAppeared ? 1 : 0)
+    }
+
+    private func planGroup(title: String, plans: [PlanArtifact]) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(ColorTheme.primaryText())
+            ForEach(plans) { plan in
+                Button {
+                    Haptics.mediumTap()
+                    selectedPlan = plan
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(plan.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(ColorTheme.primaryText())
+                                .lineLimit(2)
+                            Spacer()
+                            if let risk = plan.risk {
+                                Text(risk.displayLabel)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundColor(ColorTheme.accent())
+                            }
+                        }
+                        Text(plan.status.displayLabel)
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                        if !plan.goal.isEmpty {
+                            Text(plan.goal)
+                                .font(.caption)
+                                .foregroundColor(ColorTheme.mutedText())
+                                .lineLimit(2)
+                        }
+                        Text("\(plan.steps.count) steps")
+                            .font(.caption2)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.md)
+                }
+                .buttonStyle(.plain)
+                .cardStyle()
             }
         }
     }
@@ -966,20 +1242,51 @@ struct MissionPortfolioView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(ColorTheme.primaryText())
 
+            if decision.kind == .plan {
+                Text("Your Sovereign proposes…")
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(ColorTheme.accent())
+            }
+
             Text(decision.context)
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineLimit(4)
 
+            if decision.kind == .plan || decision.planId != nil {
+                Button {
+                    Haptics.lightTap()
+                    if let planId = decision.planId, let plan = planStore.plan(id: planId) {
+                        selectedPlan = plan
+                    } else {
+                        selectedPlan = PlanArtifact(
+                            id: decision.planId ?? decision.id,
+                            title: decision.title,
+                            goal: decision.context,
+                            steps: [],
+                            risks: [],
+                            openQuestions: [],
+                            summary: decision.context,
+                            relatedMission: decision.relatedMission,
+                            signalId: decision.signalId,
+                            status: .pendingReview,
+                            createdAt: decision.createdAt
+                        )
+                    }
+                } label: {
+                    Text("Review this plan")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.accent())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 2)
+            }
+
             // Options
             VStack(spacing: Spacing.xxs) {
                 ForEach(decision.options) { option in
                     Button(action: {
-                        Haptics.mediumTap()
-                        openDiscuss(
-                            title: "Decision: \(decision.title) — \(option.label)",
-                            detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
-                        )
+                        handleDecisionOption(option, for: decision)
                     }) {
                         HStack {
                             Text(option.label)
@@ -1036,14 +1343,14 @@ struct MissionPortfolioView: View {
                 Image(systemName: "waveform.path.ecg")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent())
-                Text("Centurion Remote")
+                Text("Sovereign Remote")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 Button(action: {
                     openDiscuss(
-                        title: "Centurion Remote",
-                        detail: "General updates stream from your Centurion."
+                        title: "Sovereign Remote",
+                        detail: "General updates stream from your Sovereign."
                     )
                 }) {
                     Image(systemName: "bubble.left.and.bubble.right")

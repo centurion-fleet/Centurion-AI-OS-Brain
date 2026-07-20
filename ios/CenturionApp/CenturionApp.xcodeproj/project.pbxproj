@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04C7786025CFB85183422275 /* ProposeFirstChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52A6773664B52FEC07930276 /* ProposeFirstChat.swift */; };
 		06F77B8AAFFD24BF59B9FAD9 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = 03214021F1121C95DBE4833B /* Sodium */; };
 		071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6096C31D013137594862DE99 /* RemoteModelCatalog.swift */; };
 		0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */; };
 		0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */; };
 		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
+		1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */; };
 		20A0AA4DC14602E1E56E64AE /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB67ACC37C89A1626725E6 /* AdrianView.swift */; };
 		25AE7A4F341CEECABA750074 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE860688EDBD16296174C4F9 /* AppServices.swift */; };
 		25FF2605824E4261873AA1E7 /* PulseFeedMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */; };
@@ -29,7 +31,7 @@
 		5492E373A05DDAE48D1404E8 /* BonjourDiscoverer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463C5024AEC5513FB52C807A /* BonjourDiscoverer.swift */; };
 		58C0162D7BE79027664DC4F1 /* MissionOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCFCE375932A009864E2E75 /* MissionOrb.swift */; };
 		5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */; };
-		60B05791E2B14933DC2F0A7E /* SwarmFormationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 663E28A68E7209F4A6E298E5 /* SwarmFormationViews.swift */; };
+		60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */; };
 		63F7E1999B2EB04B37513075 /* SwarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 807258BF5E1D7EADE682EECA /* SwarmStore.swift */; };
 		671859331884297D8A3D7437 /* BeneficiaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C989D7F978D178255AA120 /* BeneficiaryStore.swift */; };
 		72AF12B750F36E4AD5A86152 /* GetHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */; };
@@ -40,11 +42,14 @@
 		776C89C43273562535733334 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D967220CE7E18782E047ACD2 /* ContentView.swift */; };
 		79327A346B13F76541E0524B /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A427BD838F46B4F357B51D9 /* ConnectionView.swift */; };
 		7B6E3A4535648BC3F269D364 /* CenturionShowcaseSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */; };
+		807F405D012F1890317AF5EA /* ReportingOversightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */; };
 		8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */; };
+		8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */; };
+		8FFB5DDC4C56C09C9FEF1D47 /* AutonomyLevelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */; };
+		922EFE1700AF8A11F4448081 /* OversightPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */; };
 		92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */; };
 		938DA027B96846089B556327 /* AdrianLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CD152F24B51B004DB942B3 /* AdrianLink.swift */; };
 		93C9ACCC2385C98B9EFE42BB /* DocumentViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */; };
-		9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D098FD991C91178ACF8C94 /* LLMProvider.swift */; };
 		A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1608B826ED73D403B7D6D39D /* Conversation.swift */; };
 		AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */; };
 		AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3109FC232D48D3C3445556 /* ConnectionManager.swift */; };
@@ -64,7 +69,9 @@
 		D8FD872EC19FC1E8BC57A611 /* MissionPortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */; };
 		D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */; };
 		E04CC701C6B56F3DF9ACBA7C /* ConstellationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */; };
+		E23F76E5AC6117269C7E4130 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A80D40A15B92264F4AFAD3FC /* PrivacyInfo.xcprivacy */; };
 		E5216EB9A8759B83932AB1A8 /* SwarmOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */; };
+		E95C824FF4B08337C20FF13E /* PlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C5078D1657EA32E7464F4E /* PlanStore.swift */; };
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
 		FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
@@ -76,12 +83,13 @@
 		0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteModelSwitcherView.swift; sourceTree = "<group>"; };
 		15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1608B826ED73D403B7D6D39D /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
-		19D098FD991C91178ACF8C94 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanReviewView.swift; sourceTree = "<group>"; };
 		1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseFeedMapper.swift; sourceTree = "<group>"; };
 		1CF9EC5AF02A56ABF72FDDC1 /* CenturionApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CenturionApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FE7DA4FA608AA25FCAE719E /* MissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionView.swift; sourceTree = "<group>"; };
 		2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionCommitmentChat.swift; sourceTree = "<group>"; };
 		2816DC1C66616790651EBA30 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightStore.swift; sourceTree = "<group>"; };
 		3B87F6A70291CA9DF47F42EF /* MissionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionStore.swift; sourceTree = "<group>"; };
 		3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingView.swift; sourceTree = "<group>"; };
 		3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
@@ -91,12 +99,12 @@
 		4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionTheme.swift; sourceTree = "<group>"; };
 		51401B6F9885163352D34464 /* SoulDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocument.swift; sourceTree = "<group>"; };
 		51C989D7F978D178255AA120 /* BeneficiaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeneficiaryStore.swift; sourceTree = "<group>"; };
+		52A6773664B52FEC07930276 /* ProposeFirstChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProposeFirstChat.swift; sourceTree = "<group>"; };
 		5B9193269D351542527FAE36 /* ThinkingRecoverySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingRecoverySheet.swift; sourceTree = "<group>"; };
 		5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionShowcaseSection.swift; sourceTree = "<group>"; };
 		5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionDiscoveryView.swift; sourceTree = "<group>"; };
 		6096C31D013137594862DE99 /* RemoteModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteModelCatalog.swift; sourceTree = "<group>"; };
 		659E84B23777F03CB4BF0A81 /* AdrianModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianModels.swift; sourceTree = "<group>"; };
-		663E28A68E7209F4A6E298E5 /* SwarmFormationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmFormationViews.swift; sourceTree = "<group>"; };
 		6A427BD838F46B4F357B51D9 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		6D533936FBAD883AD748A223 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6F2351CEAF04740FE74B5907 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
@@ -108,10 +116,12 @@
 		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		88202317CAFA2493C7E033D6 /* AdrianService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianService.swift; sourceTree = "<group>"; };
 		8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmConnectSheet.swift; sourceTree = "<group>"; };
+		8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportingOversightView.swift; sourceTree = "<group>"; };
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
 		A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmDetailSheet.swift; sourceTree = "<group>"; };
+		A80D40A15B92264F4AFAD3FC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulInterviewView.swift; sourceTree = "<group>"; };
 		B57B0D3DA71A941F27F8276B /* CenturionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionComponents.swift; sourceTree = "<group>"; };
 		B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HumanContextInterviewView.swift; sourceTree = "<group>"; };
@@ -124,10 +134,14 @@
 		D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmModels.swift; sourceTree = "<group>"; };
 		D967220CE7E18782E047ACD2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DCCFCE375932A009864E2E75 /* MissionOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionOrb.swift; sourceTree = "<group>"; };
+		E2C5078D1657EA32E7464F4E /* PlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanStore.swift; sourceTree = "<group>"; };
+		E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutonomyLevelView.swift; sourceTree = "<group>"; };
 		ED3109FC232D48D3C3445556 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifeMission.swift; sourceTree = "<group>"; };
+		EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanArtifact.swift; sourceTree = "<group>"; };
 		F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F5FA050811F918E8D8DFE861 /* MessageError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageError.swift; sourceTree = "<group>"; };
+		F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightPrefs.swift; sourceTree = "<group>"; };
 		F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDataMode.swift; sourceTree = "<group>"; };
 		FB5FADFC392151FEFB0301E4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityHubView.swift; sourceTree = "<group>"; };
@@ -151,6 +165,7 @@
 			children = (
 				45CD152F24B51B004DB942B3 /* AdrianLink.swift */,
 				04CB67ACC37C89A1626725E6 /* AdrianView.swift */,
+				E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */,
 				5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */,
 				815E8C975CB35A4357AFF0E1 /* ChatView.swift */,
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
@@ -164,8 +179,10 @@
 				DCCFCE375932A009864E2E75 /* MissionOrb.swift */,
 				762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */,
 				1FE7DA4FA608AA25FCAE719E /* MissionView.swift */,
+				1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */,
 				BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */,
 				0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */,
+				8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */,
 				FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */,
 				15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */,
 				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
@@ -173,7 +190,6 @@
 				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
 				8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */,
 				A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */,
-				663E28A68E7209F4A6E298E5 /* SwarmFormationViews.swift */,
 				FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */,
 				5B9193269D351542527FAE36 /* ThinkingRecoverySheet.swift */,
 				3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */,
@@ -207,9 +223,10 @@
 				79A16D21569AF5135FE2A4CA /* BeneficiaryModels.swift */,
 				1608B826ED73D403B7D6D39D /* Conversation.swift */,
 				ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */,
-				19D098FD991C91178ACF8C94 /* LLMProvider.swift */,
 				2816DC1C66616790651EBA30 /* Message.swift */,
 				0E3C229C48C642E36295368A /* MissionProject.swift */,
+				F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */,
+				EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */,
 				6096C31D013137594862DE99 /* RemoteModelCatalog.swift */,
 				51401B6F9885163352D34464 /* SoulDocument.swift */,
 				D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */,
@@ -231,6 +248,9 @@
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
+				2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */,
+				E2C5078D1657EA32E7464F4E /* PlanStore.swift */,
+				52A6773664B52FEC07930276 /* ProposeFirstChat.swift */,
 				1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */,
 				807258BF5E1D7EADE682EECA /* SwarmStore.swift */,
 			);
@@ -252,6 +272,7 @@
 				F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */,
 				9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */,
 				D967220CE7E18782E047ACD2 /* ContentView.swift */,
+				A80D40A15B92264F4AFAD3FC /* PrivacyInfo.xcprivacy */,
 				D9FADF2360B2D39B2A4B587F /* Crypto */,
 				B3EFDD1F9B1D190735AFF511 /* Models */,
 				C0E7F518524E96F48D59E074 /* Services */,
@@ -327,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */,
+				E23F76E5AC6117269C7E4130 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -343,6 +365,7 @@
 				20A0AA4DC14602E1E56E64AE /* AdrianView.swift in Sources */,
 				2F889D54B96241760B114440 /* AppDataMode.swift in Sources */,
 				25AE7A4F341CEECABA750074 /* AppServices.swift in Sources */,
+				8FFB5DDC4C56C09C9FEF1D47 /* AutonomyLevelView.swift in Sources */,
 				3C0683BD8129E24C1216BA70 /* BeneficiaryModels.swift in Sources */,
 				671859331884297D8A3D7437 /* BeneficiaryStore.swift in Sources */,
 				5492E373A05DDAE48D1404E8 /* BonjourDiscoverer.swift in Sources */,
@@ -363,7 +386,6 @@
 				72AF12B750F36E4AD5A86152 /* GetHelpView.swift in Sources */,
 				8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */,
 				D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */,
-				9A819A9DE26B679011417C57 /* LLMProvider.swift in Sources */,
 				92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */,
 				0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */,
 				D514204DF4E162E34C6756F1 /* Message.swift in Sources */,
@@ -376,10 +398,17 @@
 				72AF68B2AB3F1DDA54CA4514 /* MissionProject.swift in Sources */,
 				304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */,
 				41C67F5E153C660BF68F7AA8 /* MissionView.swift in Sources */,
+				922EFE1700AF8A11F4448081 /* OversightPrefs.swift in Sources */,
+				1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */,
+				60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */,
+				8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */,
+				E95C824FF4B08337C20FF13E /* PlanStore.swift in Sources */,
 				37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */,
+				04C7786025CFB85183422275 /* ProposeFirstChat.swift in Sources */,
 				25FF2605824E4261873AA1E7 /* PulseFeedMapper.swift in Sources */,
 				071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */,
 				FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */,
+				807F405D012F1890317AF5EA /* ReportingOversightView.swift in Sources */,
 				F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */,
 				766953EA2DCD12361AD1AEC1 /* SecurityHubView.swift in Sources */,
 				1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */,
@@ -389,7 +418,6 @@
 				BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */,
 				D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */,
 				BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */,
-				60B05791E2B14933DC2F0A7E /* SwarmFormationViews.swift in Sources */,
 				CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */,
 				E5216EB9A8759B83932AB1A8 /* SwarmOrb.swift in Sources */,
 				63F7E1999B2EB04B37513075 /* SwarmStore.swift in Sources */,
@@ -465,7 +493,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 11;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -548,7 +576,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 11;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

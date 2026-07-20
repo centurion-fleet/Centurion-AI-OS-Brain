@@ -26,7 +26,7 @@ enum CryptoError: Error, LocalizedError {
         case .keyExchangeFailed: return "Failed to establish secure channel"
         case .invalidPublicKey: return "Invalid public key received"
         case .serverIdentityChanged:
-            return "This Centurion's secure identity has changed. Re-pair it before connecting."
+            return "This Sovereign's secure identity has changed. Re-pair it before connecting."
         }
     }
 }
@@ -82,7 +82,7 @@ enum ServerTrustStore {
     }
 }
 
-/// A secure session key established between iPhone and Centurion
+/// A secure session key established between iPhone and Sovereign
 struct SessionKey {
     let receiveKey: Data
     let transmitKey: Data

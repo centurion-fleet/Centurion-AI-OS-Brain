@@ -1,6 +1,6 @@
 import Foundation
 
-/// Framing and parsing for Living Commitment chats on Centurion Remote.
+/// Framing and parsing for Living Commitment chats on Sovereign Remote.
 enum MissionCommitmentChat {
     static let updateFence = "mission-update"
 
@@ -21,7 +21,7 @@ enum MissionCommitmentChat {
             ? "(not set yet)"
             : statement
         return """
-        [Centurion Remote — Living Commitment chat]
+        [Sovereign Remote — Living Commitment chat]
         Life mission: \(missionLine)
         Commitment: \(commitment.title)
         Description: \(commitment.description)

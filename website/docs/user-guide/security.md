@@ -8,6 +8,11 @@ description: "Security model, dangerous command approval, user authorization, co
 
 Centurion AI OS is designed with a defense-in-depth security model. This page covers every security boundary — from command approval to container isolation to user authorization on messaging platforms.
 
+:::tip Shareable brief for IT
+Canonical web brief: **[Centurion for IT reviewers](https://www.1human1ai.com/en-GB/security)** on the main site.
+Print/PDF export: **[Centurion-IT-Security-One-Pager.pdf](/it-security/Centurion-IT-Security-One-Pager.pdf)** (same story, one page). Rebuild with `scripts/build_it_security_onepager.py`.
+:::
+
 ## Overview
 
 The security model has seven layers:

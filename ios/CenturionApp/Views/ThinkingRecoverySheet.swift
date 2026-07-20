@@ -24,7 +24,7 @@ struct ThinkingRecoverySheet: View {
                 VStack(spacing: Spacing.lg) {
                     SheetHeader(
                         title: "Fix Thinking Service",
-                        subtitle: "We'll get your Centurion thinking again"
+                        subtitle: "We'll get your Sovereign thinking again"
                     )
 
                     ErrorState(
@@ -58,7 +58,7 @@ struct ThinkingRecoverySheet: View {
 
                     HelpCenterLink(url: CenturionHelp.thinkingService)
 
-                    Text("API keys and deeper changes are made on your Centurion brain, not on this iPhone.")
+                    Text("API keys and deeper changes are made on your Sovereign brain, not on this iPhone.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)

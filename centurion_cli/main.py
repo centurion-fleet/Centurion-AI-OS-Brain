@@ -10777,6 +10777,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "support", "swarm",
         "send", "sessions", "setup",
         "skills", "slack", "status", "telegram", "tools", "uninstall", "update",
+        "vault",
         "version", "webhook", "whatsapp", "chat", "secrets", "security",
         # Help-ish invocations — plugin commands not being listed in
         # top-level --help is an acceptable trade-off for skipping an
@@ -12862,6 +12863,15 @@ Examples:
             memory_command(args)
 
     memory_parser.set_defaults(func=cmd_memory)
+
+    # =========================================================================
+    # vault command — offline sealed long-term memory
+    # =========================================================================
+    from centurion_cli.vault import build_parser as _build_vault_parser
+    from centurion_cli.vault import vault_command as _vault_command
+
+    vault_parser = _build_vault_parser(subparsers)
+    vault_parser.set_defaults(func=_vault_command)
 
     # =========================================================================
     # tools command

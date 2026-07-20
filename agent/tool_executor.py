@@ -654,6 +654,26 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('memory', function_args, tool_duration, result=function_result)}")
+        elif function_name == "vault":
+            from tools.vault_tool import vault_tool as _vault_tool
+            writes_allowed = not getattr(agent, "_skip_memory", False)
+            function_result = _vault_tool(
+                action=function_args.get("action", ""),
+                memory_type=function_args.get("memory_type", ""),
+                text=function_args.get("text", ""),
+                rationale=function_args.get("rationale", ""),
+                tags=function_args.get("tags"),
+                importance=function_args.get("importance", 5),
+                proposal_id=function_args.get("proposal_id", ""),
+                entry_id=function_args.get("entry_id", ""),
+                query=function_args.get("query", ""),
+                limit=function_args.get("limit", 8),
+                writes_allowed=writes_allowed,
+                source_session=getattr(agent, "session_id", None),
+            )
+            tool_duration = time.time() - tool_start_time
+            if agent._should_emit_quiet_tool_messages():
+                agent._vprint(f"  {_get_cute_tool_message_impl('vault', function_args, tool_duration, result=function_result)}")
         elif function_name == "clarify":
             from tools.clarify_tool import clarify_tool as _clarify_tool
             function_result = _clarify_tool(

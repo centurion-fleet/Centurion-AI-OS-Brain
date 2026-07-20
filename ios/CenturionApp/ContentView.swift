@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var dataMode: AppDataMode
+    @EnvironmentObject private var planStore: PlanStore
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
 
@@ -52,6 +53,7 @@ struct ContentView: View {
             await MainActor.run {
                 if dataMode.showsDemoContent {
                     messageService.seedInitialData()
+                    planStore.seedPreviewIfNeeded(showsDemoContent: true)
                 }
             }
         }

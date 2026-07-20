@@ -68,7 +68,7 @@ struct LifeMission: Identifiable, Codable {
     }
 }
 
-/// The phases of a Centurion mission loop — from discovery through to verification.
+/// The phases of a Sovereign mission loop — from discovery through to verification.
 enum LoopPhase: String, CaseIterable {
     case discovering = "Discovering"
     case planning = "Planning"
@@ -87,7 +87,7 @@ enum LoopPhase: String, CaseIterable {
     }
 }
 
-/// What the Centurion is doing RIGHT NOW — the live loop.
+/// What the Sovereign is doing RIGHT NOW — the live loop.
 /// This is the primary UI. The human watches this.
 struct LiveActivity: Identifiable {
     let id: UUID
@@ -203,31 +203,53 @@ struct DecisionItem: Identifiable {
     let relatedMission: String?
     let urgency: Urgency
     let createdAt: Date
-    
+    /// Brain swarm signal id when this decision maps to `swarm_resolve_signal`.
+    let signalId: String?
+    /// Local PlanArtifact id when this is a plan review.
+    let planId: UUID?
+    let kind: Kind
+
+    enum Kind: String {
+        case general
+        case plan
+    }
+
     enum Urgency: String {
         case now = "Now"
         case today = "Today"
         case thisWeek = "This Week"
         case whenever = "Whenever"
     }
-    
+
+    init(
+        id: UUID,
+        title: String,
+        context: String,
+        options: [DecisionOption],
+        generatedBy: String,
+        relatedMission: String?,
+        urgency: Urgency,
+        createdAt: Date,
+        signalId: String? = nil,
+        planId: UUID? = nil,
+        kind: Kind = .general
+    ) {
+        self.id = id
+        self.title = title
+        self.context = context
+        self.options = options
+        self.generatedBy = generatedBy
+        self.relatedMission = relatedMission
+        self.urgency = urgency
+        self.createdAt = createdAt
+        self.signalId = signalId
+        self.planId = planId
+        self.kind = kind
+    }
+
     static func preview() -> [DecisionItem] {
-        [
-            DecisionItem(
-                id: UUID(),
-                title: "Approve Q3 positioning angle",
-                context: "The Strategist has identified 'The Compliance-First Approach' as the highest-potential positioning angle. It targets an underserved $2.4M segment with 3 ready-to-use messaging pillars.",
-                options: [
-                    DecisionOption(label: "Approve", description: "Use this angle for Q3 GTM"),
-                    DecisionOption(label: "Modify", description: "Suggest adjustments"),
-                    DecisionOption(label: "Reject", description: "Go back to research"),
-                ],
-                generatedBy: "Strategist Agent",
-                relatedMission: "Q3 Go-to-Market",
-                urgency: .today,
-                createdAt: Date().addingTimeInterval(-600)
-            ),
-        ]
+        let plan = PlanArtifact.preview()
+        return [plan.asDecisionItem()]
     }
 }
 
@@ -237,7 +259,7 @@ struct DecisionOption: Identifiable {
     let description: String
 }
 
-/// A Centurion thought — appears in the Centurion Remote stream.
+/// A Sovereign thought — appears in the Sovereign Remote stream.
 struct CenturionThought: Identifiable {
     let id: UUID
     let text: String
@@ -298,7 +320,7 @@ extension LiveActivity {
     }
 }
 
-/// A document the Centurion has created — research, content, analysis, plans.
+/// A document the Sovereign has created — research, content, analysis, plans.
 /// These are surfaced in the Pulse tab's OUTPUTS section and as inline cards in Chat.
 struct CenturionOutput: Identifiable {
     let id: UUID
@@ -310,7 +332,7 @@ struct CenturionOutput: Identifiable {
     let relatedMission: String?
     let createdAt: Date
     let wordCount: Int
-    let filePath: String            // Where it lives on the Centurion
+    let filePath: String            // Where it lives on the Sovereign
 
     enum OutputType: String, CaseIterable {
         case research = "Research"
@@ -334,6 +356,7 @@ struct CenturionOutput: Identifiable {
 
     static func preview() -> [CenturionOutput] {
         [
+            PlanArtifact.preview().asCenturionOutput(),
             CenturionOutput(
                 id: UUID(),
                 title: "Q3 Market Positioning Analysis",
@@ -383,7 +406,7 @@ struct LifeMissionTarget: Identifiable, Codable {
     
     static func previewTargets() -> [LifeMissionTarget] {
         [
-            LifeMissionTarget(id: UUID(), title: "Build Centurion AI", description: "Create the world's most personal AI companion"),
+            LifeMissionTarget(id: UUID(), title: "Build Sovereign", description: "Create the world's most personal AI companion"),
             LifeMissionTarget(id: UUID(), title: "Live with Purpose", description: "Every day aligned with my deeper mission"),
             LifeMissionTarget(id: UUID(), title: "Help Others Find Their Mission", description: "Enable more people to live meaningful lives")
         ]

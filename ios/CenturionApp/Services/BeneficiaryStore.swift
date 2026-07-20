@@ -56,7 +56,7 @@ final class BeneficiaryStore: ObservableObject {
             return false
         }
         guard connectionManager.connectionState == .connected else {
-            lastError = "Link your Centurion in You to save this."
+            lastError = "Link your Sovereign in You to save this."
             return false
         }
         do {
@@ -82,7 +82,7 @@ final class BeneficiaryStore: ObservableObject {
             return false
         }
         guard connectionManager.connectionState == .connected else {
-            lastError = "Link your Centurion in You to send referrals."
+            lastError = "Link your Sovereign in You to send referrals."
             return false
         }
         do {
