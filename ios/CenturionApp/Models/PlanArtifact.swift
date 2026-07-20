@@ -186,37 +186,46 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
         goal = try c.decodeIfPresent(String.self, forKey: .goal) ?? ""
         steps = try c.decodeIfPresent([String].self, forKey: .steps) ?? []
         risks = try c.decodeIfPresent([String].self, forKey: .risks) ?? []
-        let openQuestionsCamel = try c.decodeIfPresent([String].self, forKey: .openQuestions)
-        let openQuestionsSnake = try c.decodeIfPresent([String].self, forKey: .open_questions)
-        openQuestions = openQuestionsCamel ?? openQuestionsSnake ?? []
+        openQuestions = try Self.decodeStringList(c, camel: .openQuestions, snake: .open_questions)
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
-        let relatedMissionCamel = try c.decodeIfPresent(String.self, forKey: .relatedMission)
-        let relatedMissionSnake = try c.decodeIfPresent(String.self, forKey: .related_mission)
-        relatedMission = relatedMissionCamel ?? relatedMissionSnake
-        let signalIdCamel = try c.decodeIfPresent(String.self, forKey: .signalId)
-        let signalIdSnake = try c.decodeIfPresent(String.self, forKey: .signal_id)
-        signalId = signalIdCamel ?? signalIdSnake
+        relatedMission = try Self.decodeOptionalString(c, camel: .relatedMission, snake: .related_mission)
+        signalId = try Self.decodeOptionalString(c, camel: .signalId, snake: .signal_id)
         status = try c.decodeIfPresent(PlanStatus.self, forKey: .status) ?? .pendingReview
         if let date = try c.decodeIfPresent(Date.self, forKey: .createdAt) {
             createdAt = date
+        } else if let raw = try Self.decodeOptionalString(c, camel: .createdAt, snake: .created_at) {
+            createdAt = ISO8601DateFormatter().date(from: raw) ?? Date()
         } else {
-            let createdAtCamel = try c.decodeIfPresent(String.self, forKey: .createdAt)
-            let createdAtSnake = try c.decodeIfPresent(String.self, forKey: .created_at)
-            if let raw = createdAtCamel ?? createdAtSnake {
-                createdAt = ISO8601DateFormatter().date(from: raw) ?? Date()
-            } else {
-                createdAt = Date()
-            }
+            createdAt = Date()
         }
         risk = try c.decodeIfPresent(PlanRisk.self, forKey: .risk)
         requirements = try c.decodeIfPresent([String].self, forKey: .requirements) ?? []
         share = try c.decodeIfPresent(PlanShare.self, forKey: .share) ?? PlanShare()
-        let templateIdCamel = try c.decodeIfPresent(String.self, forKey: .templateId)
-        let templateIdSnake = try c.decodeIfPresent(String.self, forKey: .template_id)
-        templateId = templateIdCamel ?? templateIdSnake
-        let outcomeSummaryCamel = try c.decodeIfPresent(String.self, forKey: .outcomeSummary)
-        let outcomeSummarySnake = try c.decodeIfPresent(String.self, forKey: .outcome_summary)
-        outcomeSummary = outcomeSummaryCamel ?? outcomeSummarySnake
+        templateId = try Self.decodeOptionalString(c, camel: .templateId, snake: .template_id)
+        outcomeSummary = try Self.decodeOptionalString(c, camel: .outcomeSummary, snake: .outcome_summary)
+    }
+
+    /// Prefer camelCase (iOS) then snake_case (host) without `try` inside `??`.
+    private static func decodeStringList(
+        _ c: KeyedDecodingContainer<CodingKeys>,
+        camel: CodingKeys,
+        snake: CodingKeys
+    ) throws -> [String] {
+        if let value = try c.decodeIfPresent([String].self, forKey: camel) {
+            return value
+        }
+        return try c.decodeIfPresent([String].self, forKey: snake) ?? []
+    }
+
+    private static func decodeOptionalString(
+        _ c: KeyedDecodingContainer<CodingKeys>,
+        camel: CodingKeys,
+        snake: CodingKeys
+    ) throws -> String? {
+        if let value = try c.decodeIfPresent(String.self, forKey: camel) {
+            return value
+        }
+        return try c.decodeIfPresent(String.self, forKey: snake)
     }
 
     func encode(to encoder: Encoder) throws {
