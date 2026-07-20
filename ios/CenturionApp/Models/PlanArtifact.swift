@@ -186,35 +186,37 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
         goal = try c.decodeIfPresent(String.self, forKey: .goal) ?? ""
         steps = try c.decodeIfPresent([String].self, forKey: .steps) ?? []
         risks = try c.decodeIfPresent([String].self, forKey: .risks) ?? []
-        openQuestions =
-            (try c.decodeIfPresent([String].self, forKey: .openQuestions))
-            ?? (try c.decodeIfPresent([String].self, forKey: .open_questions))
-            ?? []
+        let openQuestionsCamel = try c.decodeIfPresent([String].self, forKey: .openQuestions)
+        let openQuestionsSnake = try c.decodeIfPresent([String].self, forKey: .open_questions)
+        openQuestions = openQuestionsCamel ?? openQuestionsSnake ?? []
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
-        relatedMission =
-            (try c.decodeIfPresent(String.self, forKey: .relatedMission))
-            ?? (try c.decodeIfPresent(String.self, forKey: .related_mission))
-        signalId =
-            (try c.decodeIfPresent(String.self, forKey: .signalId))
-            ?? (try c.decodeIfPresent(String.self, forKey: .signal_id))
+        let relatedMissionCamel = try c.decodeIfPresent(String.self, forKey: .relatedMission)
+        let relatedMissionSnake = try c.decodeIfPresent(String.self, forKey: .related_mission)
+        relatedMission = relatedMissionCamel ?? relatedMissionSnake
+        let signalIdCamel = try c.decodeIfPresent(String.self, forKey: .signalId)
+        let signalIdSnake = try c.decodeIfPresent(String.self, forKey: .signal_id)
+        signalId = signalIdCamel ?? signalIdSnake
         status = try c.decodeIfPresent(PlanStatus.self, forKey: .status) ?? .pendingReview
         if let date = try c.decodeIfPresent(Date.self, forKey: .createdAt) {
             createdAt = date
-        } else if let raw = try c.decodeIfPresent(String.self, forKey: .created_at)
-                    ?? c.decodeIfPresent(String.self, forKey: .createdAt) {
-            createdAt = ISO8601DateFormatter().date(from: raw) ?? Date()
         } else {
-            createdAt = Date()
+            let createdAtCamel = try c.decodeIfPresent(String.self, forKey: .createdAt)
+            let createdAtSnake = try c.decodeIfPresent(String.self, forKey: .created_at)
+            if let raw = createdAtCamel ?? createdAtSnake {
+                createdAt = ISO8601DateFormatter().date(from: raw) ?? Date()
+            } else {
+                createdAt = Date()
+            }
         }
         risk = try c.decodeIfPresent(PlanRisk.self, forKey: .risk)
         requirements = try c.decodeIfPresent([String].self, forKey: .requirements) ?? []
         share = try c.decodeIfPresent(PlanShare.self, forKey: .share) ?? PlanShare()
-        templateId =
-            (try c.decodeIfPresent(String.self, forKey: .templateId))
-            ?? (try c.decodeIfPresent(String.self, forKey: .template_id))
-        outcomeSummary =
-            (try c.decodeIfPresent(String.self, forKey: .outcomeSummary))
-            ?? (try c.decodeIfPresent(String.self, forKey: .outcome_summary))
+        let templateIdCamel = try c.decodeIfPresent(String.self, forKey: .templateId)
+        let templateIdSnake = try c.decodeIfPresent(String.self, forKey: .template_id)
+        templateId = templateIdCamel ?? templateIdSnake
+        let outcomeSummaryCamel = try c.decodeIfPresent(String.self, forKey: .outcomeSummary)
+        let outcomeSummarySnake = try c.decodeIfPresent(String.self, forKey: .outcome_summary)
+        outcomeSummary = outcomeSummaryCamel ?? outcomeSummarySnake
     }
 
     func encode(to encoder: Encoder) throws {
