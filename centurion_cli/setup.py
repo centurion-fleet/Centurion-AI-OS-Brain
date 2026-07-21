@@ -786,74 +786,11 @@ def _read_nearest_vercel_project(start: Path | None = None) -> dict[str, str]:
 
 
 def _setup_centurion_subscription_path(config: dict) -> bool:
-    """Three-path inference setup when billing is enabled. Returns True if configured."""
-    from centurion_cli.billing import is_billing_enabled
+    """Deprecated: Centurion Subscription / OpenRouter setup paths are retired.
 
-    if not is_billing_enabled(config):
-        return False
-
-    from centurion_cli.cloud_client import (
-        apply_openrouter_key_to_config,
-        validate_subscription_key,
-    )
-
-    billing = config.get("billing") if isinstance(config.get("billing"), dict) else {}
-    portal_url = str(billing.get("portal_url") or "https://personalcenturion.com").rstrip("/")
-    subscribe_url = f"{portal_url}/subscribe"
-
-    print_header("Centurion Subscription")
-    print_info("Connect Centurion OS to your Centurion cloud subscription.")
-    print()
-
-    choices = [
-        f"Subscribe — open {subscribe_url}",
-        "I already have a Centurion API key — paste and validate",
-        "Use my own model provider (bring your own API key)",
-    ]
-    idx = prompt_choice("How would you like to connect?", choices, 0)
-
-    if idx == 0:
-        try:
-            import webbrowser
-
-            webbrowser.open(subscribe_url)
-            print_success(f"Opened {subscribe_url} in your browser.")
-        except Exception:
-            print_info(f"Open this URL in your browser: {subscribe_url}")
-        print_info("After subscribing, copy your API key from Account → API Keys.")
-        print()
-        pasted = prompt("  Paste your Centurion API key (sk-or-v1-…)", password=True).strip()
-        if not pasted:
-            print_info("No key entered — continuing with provider picker.")
-            return False
-        result = validate_subscription_key(pasted, config=config, use_cache=False)
-        if not result.valid:
-            print_error(f"  Key validation failed: {result.error or 'invalid'}")
-            return False
-        apply_openrouter_key_to_config(pasted, config)
-        from centurion_cli.config import save_config
-
-        save_config(config)
-        print_success(f"  Centurion subscription active ({result.plan or 'active'}).")
-        return True
-
-    if idx == 1:
-        pasted = prompt("  Paste your Centurion API key (sk-or-v1-…)", password=True).strip()
-        if not pasted:
-            print_info("No key entered — continuing with provider picker.")
-            return False
-        result = validate_subscription_key(pasted, config=config, use_cache=False)
-        if not result.valid:
-            print_error(f"  Key validation failed: {result.error or 'invalid'}")
-            print_info(f"  Subscribe at: {subscribe_url}")
-            return False
-        apply_openrouter_key_to_config(pasted, config)
-        from centurion_cli.config import save_config
-
-        save_config(config)
-        print_success(f"  API key validated ({result.plan or 'active'}).")
-        return True
-
+    Always returns False so setup goes straight to the bring-your-own-key
+    provider picker. Existing OpenRouter installs keep working via config/env.
+    """
     return False
 
 
@@ -871,7 +808,7 @@ def setup_model_provider(config: dict, *, quick: bool = False):
     from centurion_cli.config import load_config, save_config
 
     print_header("Inference Provider")
-    print_info("Choose how to connect to your main chat model.")
+    print_info("Choose your own model provider (bring your own API key).")
     print_info(f"   Guide: {_DOCS_BASE}/integrations/providers")
     print()
 
@@ -1029,20 +966,12 @@ def setup_model_provider(config: dict, *, quick: bool = False):
         print()
 
         _vision_choices = [
-            "OpenRouter — uses Gemini (free tier at openrouter.ai/keys)",
             "OpenAI-compatible endpoint — base URL, API key, and vision model",
             "Skip for now",
         ]
-        _vision_idx = prompt_choice("Configure vision:", _vision_choices, 2)
+        _vision_idx = prompt_choice("Configure vision:", _vision_choices, 1)
 
-        if _vision_idx == 0:  # OpenRouter
-            _or_key = prompt("  OpenRouter API key", password=True).strip()
-            if _or_key:
-                save_env_value("OPENROUTER_API_KEY", _or_key)
-                print_success("OpenRouter key saved — vision will use Gemini")
-            else:
-                print_info("Skipped — vision won't be available")
-        elif _vision_idx == 1:  # OpenAI-compatible endpoint
+        if _vision_idx == 0:  # OpenAI-compatible endpoint
             _base_url = prompt("  Base URL (blank for OpenAI)").strip() or "https://api.openai.com/v1"
             _api_key_label = "  API key"
             _is_native_openai = base_url_hostname(_base_url) == "api.openai.com"

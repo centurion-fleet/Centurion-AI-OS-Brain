@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct RemoteModelCatalog: Codable, Equatable {
     let textModels: [RemoteConnectorRow]
@@ -56,49 +57,49 @@ struct RemoteModelCatalog: Codable, Equatable {
     private static let bundledTextModels: [RemoteConnectorRow] = [
         bundledRow(
             id: "openai-luna",
-            displayName: "GPT-5.6 Luna",
-            provider: "openai",
-            model: "gpt-5.6-luna",
+            displayName: "GPT-5.4 mini",
+            provider: "openai-api",
+            model: "gpt-5.4-mini",
             keyEnv: "OPENAI_API_KEY",
             bestFor: "Quick answers and lightweight tasks"
         ),
         bundledRow(
             id: "openai-terra",
-            displayName: "GPT-5.6 Terra",
-            provider: "openai",
-            model: "gpt-5.6-terra",
+            displayName: "GPT-5.4",
+            provider: "openai-api",
+            model: "gpt-5.4",
             keyEnv: "OPENAI_API_KEY",
             bestFor: "Code, refactoring, and planning"
         ),
         bundledRow(
             id: "openai-sol-pro",
-            displayName: "GPT-5.6 Sol Pro",
-            provider: "openai",
-            model: "gpt-5.6-sol-pro",
+            displayName: "GPT-5.5 Pro",
+            provider: "openai-api",
+            model: "gpt-5.5-pro",
             keyEnv: "OPENAI_API_KEY",
             bestFor: "Deep analysis and long documents"
         ),
         bundledRow(
             id: "anthropic-sonnet-5",
-            displayName: "Claude Sonnet 5",
+            displayName: "Claude Sonnet 4.6",
             provider: "anthropic",
-            model: "claude-sonnet-5",
+            model: "claude-sonnet-4-6",
             keyEnv: "ANTHROPIC_API_KEY",
             bestFor: "Writing, email drafts, and copy"
         ),
         bundledRow(
             id: "anthropic-opus-4-8",
-            displayName: "Claude Opus 4.8",
+            displayName: "Claude Opus 4.7",
             provider: "anthropic",
-            model: "claude-opus-4-8",
+            model: "claude-opus-4-7",
             keyEnv: "ANTHROPIC_API_KEY",
             bestFor: "Legal review, research, and complex reasoning"
         ),
         bundledRow(
-            id: "google-gemini-3-5-flash",
-            displayName: "Gemini 3.5 Flash",
-            provider: "google",
-            model: "gemini-3.5-flash",
+            id: "gemini-3-5-flash",
+            displayName: "Gemini 3 Flash",
+            provider: "gemini",
+            model: "gemini-3-flash-preview",
             keyEnv: "GEMINI_API_KEY",
             bestFor: "Fast multimodal answers"
         ),
@@ -112,9 +113,9 @@ struct RemoteModelCatalog: Codable, Equatable {
         ),
         bundledRow(
             id: "xai-grok-4-5",
-            displayName: "Grok 4.5",
+            displayName: "Grok 4.3",
             provider: "xai",
-            model: "grok-4.5",
+            model: "grok-4.3",
             keyEnv: "XAI_API_KEY",
             bestFor: "Real-time knowledge and direct answers"
         ),
@@ -124,7 +125,7 @@ struct RemoteModelCatalog: Codable, Equatable {
         bundledRow(
             id: "openai-dalle-3",
             displayName: "DALL-E 3",
-            provider: "openai",
+            provider: "openai-api",
             model: "dall-e-3",
             keyEnv: "OPENAI_API_KEY",
             bestFor: "Images, logos, and thumbnails",
@@ -219,7 +220,7 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
 
     var statusLabel: String {
         if active { return "Active" }
-        if needsKey { return "Needs key" }
+        if needsKey { return "Needs access" }
         if let healthy, !healthy { return "Unreachable" }
         if configured { return "Ready" }
         return "Not set up"
@@ -241,6 +242,129 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
             active: active,
             healthy: healthy
         )
+    }
+}
+
+// MARK: - Provider families (dial)
+
+enum ThinkingFamilyStatus: Equatable {
+    case active
+    case connecting
+    case ready
+    case needsAccess
+    case unreachable
+    case unknown
+
+    var label: String {
+        switch self {
+        case .active: return "Active"
+        case .connecting: return "Connecting"
+        case .ready: return "Ready"
+        case .needsAccess: return "Needs access"
+        case .unreachable: return "Unreachable"
+        case .unknown: return "Checking"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .active: return ColorTheme.accent()
+        case .connecting: return ColorTheme.accent()
+        case .ready: return Color(red: 0.22, green: 0.58, blue: 0.40)
+        case .needsAccess: return ColorTheme.mutedText()
+        case .unreachable: return Color(red: 0.75, green: 0.35, blue: 0.28)
+        case .unknown: return ColorTheme.mutedText()
+        }
+    }
+}
+
+struct ThinkingServiceFamily: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let provider: String
+    let keyEnv: String
+    let connectors: [RemoteConnectorRow]
+    let category: String
+
+    var needsAccess: Bool {
+        connectors.allSatisfy(\.needsKey)
+    }
+
+    var isActive: Bool {
+        connectors.contains(where: \.active)
+    }
+
+    var activeConnector: RemoteConnectorRow? {
+        connectors.first(where: \.active)
+    }
+
+    var preferredConnector: RemoteConnectorRow {
+        activeConnector ?? connectors.first!
+    }
+
+    var summary: String {
+        if let active = activeConnector {
+            return active.bestFor.isEmpty ? active.displayName : active.bestFor
+        }
+        if let first = connectors.first {
+            return first.bestFor.isEmpty
+                ? "\(connectors.count) thinking service\(connectors.count == 1 ? "" : "s")"
+                : first.bestFor
+        }
+        return ""
+    }
+
+    func status(isConnecting: Bool) -> ThinkingFamilyStatus {
+        if isConnecting { return .connecting }
+        if isActive { return .active }
+        if needsAccess { return .needsAccess }
+        if connectors.contains(where: { $0.healthy == false }) { return .unreachable }
+        if connectors.contains(where: \.configured) { return .ready }
+        return .unknown
+    }
+
+    static func families(from catalog: RemoteModelCatalog, category: String = "text") -> [ThinkingServiceFamily] {
+        let rows = category == "creative" ? catalog.creativeModels : catalog.textModels
+        var order: [String] = []
+        var buckets: [String: [RemoteConnectorRow]] = [:]
+        for row in rows {
+            let key = row.provider.lowercased()
+            if buckets[key] == nil {
+                order.append(key)
+                buckets[key] = []
+            }
+            buckets[key, default: []].append(row)
+        }
+        return order.compactMap { key in
+            guard let connectors = buckets[key], let first = connectors.first else { return nil }
+            return ThinkingServiceFamily(
+                id: key,
+                displayName: familyDisplayName(for: first.provider),
+                provider: first.provider,
+                keyEnv: first.keyEnv,
+                connectors: connectors,
+                category: category
+            )
+        }
+    }
+
+    private static func familyDisplayName(for provider: String) -> String {
+        switch provider.lowercased() {
+        case "openai-api", "openai": return "OpenAI"
+        case "anthropic": return "Claude"
+        case "gemini", "google": return "Gemini"
+        case "deepseek": return "DeepSeek"
+        case "xai": return "Grok"
+        case "runway": return "Runway"
+        case "elevenlabs": return "ElevenLabs"
+        case "fal": return "Kling"
+        default:
+            return provider
+                .replacingOccurrences(of: "-", with: " ")
+                .split(separator: " ")
+                .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                .joined(separator: " ")
+        }
     }
 }
 
