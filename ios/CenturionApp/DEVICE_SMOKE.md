@@ -86,9 +86,9 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 Record device model, iOS version, Sovereign hostname, and pass/fail date here when run:
 
 ```
-Date:
-Device:
+Date: 2026-07-21
+Device: (physical smoke pending)
 iOS:
 Sovereign:
-Result:
+Result: Release build SUCCEEDED; Archive 5.0.1 (13) uploaded to App Store Connect (processing). Memory Horizon DEVICE_SMOKE section added. Complete pairing/Crypto Chat/MH gauges on device before promoting TF build.
 ```
