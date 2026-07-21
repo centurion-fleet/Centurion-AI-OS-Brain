@@ -1,4 +1,15 @@
-# App Store screenshots
+# App Store screenshots & icon
+
+## App Store icon (1024×1024)
+
+Source of truth: [`../Assets.xcassets/AppIcon.appiconset/`](../Assets.xcassets/AppIcon.appiconset/)  
+Export for Media Manager: [`AppStoreIcon-1024.png`](AppStoreIcon-1024.png) (RGB, no alpha, full-bleed square).
+
+If App Store Connect still shows the grid placeholder next to the app name:
+
+1. Open **App Information** (or version **5.0.1** → scroll to App Icon if shown).
+2. Upload `AppStoreIcon-1024.png`.
+3. Or attach a processed build that includes the marketing icon (build **14+**), then refresh.
 
 App Store Connect requires real device screenshots. The HTML mockup [`../AppStoreScreenshots.html`](../AppStoreScreenshots.html) is **design reference only** — do not upload it.
 
