@@ -394,7 +394,7 @@ struct DeviceLinkSection: View {
 struct ThinkingServiceSection: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @Binding var showRecoverySheet: Bool
-    @State private var showModelSwitcher = false
+    @State private var showThinkingDial = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -418,7 +418,7 @@ struct ThinkingServiceSection: View {
                         }
 
                         if connectionManager.routingMode == "phoenix" {
-                            Text("Auto-select is on — your Sovereign picks an LLM from your message.")
+                            Text("Automatic choice is on — your Sovereign picks a thinking service from your message.")
                                 .font(.caption)
                                 .foregroundColor(ColorTheme.mutedText())
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -432,7 +432,7 @@ struct ThinkingServiceSection: View {
 
                         Button {
                             Haptics.lightTap()
-                            showModelSwitcher = true
+                            showThinkingDial = true
                         } label: {
                             Text("Choose Thinking Service")
                         }
@@ -456,16 +456,14 @@ struct ThinkingServiceSection: View {
                 }
             }
 
-            Text("API keys are saved on your Sovereign, not on this iPhone.")
+            Text("Access codes are saved on your Sovereign, not on this iPhone.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
         }
-        .sheet(isPresented: $showModelSwitcher) {
-            NavigationStack {
-                RemoteModelSwitcherView()
-                    .environmentObject(connectionManager)
-            }
+        .fullScreenCover(isPresented: $showThinkingDial) {
+            ThinkingServiceDialView()
+                .environmentObject(connectionManager)
         }
     }
 

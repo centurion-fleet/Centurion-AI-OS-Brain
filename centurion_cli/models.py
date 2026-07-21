@@ -992,18 +992,20 @@ except Exception:
     pass
 
 
+# Hidden from interactive setup / ``centurion model`` picker. Runtime support
+# for existing installs remains; new users are steered to bring-your-own keys.
+_HIDDEN_FROM_PICKER = frozenset({"openrouter", "nous"})
+
+
 def get_picker_providers(*, billing_enabled: bool | None = None) -> list[ProviderEntry]:
     """Return providers shown in ``centurion model`` / setup wizard.
 
-    Hides the subscription portal provider until ``billing.enabled`` is true.
+    OpenRouter and Centurion Subscription (nous) are omitted so first-run
+    focuses on direct / custom API keys. ``billing_enabled`` is accepted for
+    call-site compatibility but no longer controls picker membership.
     """
-    if billing_enabled is None:
-        from centurion_cli.billing import is_billing_enabled
-
-        billing_enabled = is_billing_enabled()
-    if billing_enabled:
-        return list(CANONICAL_PROVIDERS)
-    return [p for p in CANONICAL_PROVIDERS if p.slug != "nous"]
+    del billing_enabled  # reserved for callers; picker is BYOK-first
+    return [p for p in CANONICAL_PROVIDERS if p.slug not in _HIDDEN_FROM_PICKER]
 
 
 # Derived dicts — used throughout the codebase

@@ -730,7 +730,14 @@ def list_remote_options(*, probe: bool = False) -> dict[str, Any]:
 
 
 def _key_configured(key_env: str) -> bool:
-    return bool((os.environ.get(key_env) or "").strip())
+    if bool((os.environ.get(key_env) or "").strip()):
+        return True
+    try:
+        from centurion_cli.config import load_env
+
+        return bool((load_env().get(key_env) or "").strip())
+    except Exception:
+        return False
 
 
 def apply_remote_switch(connector_id: str, *, probe: bool = True) -> ApplyResult:

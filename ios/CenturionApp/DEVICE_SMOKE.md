@@ -78,6 +78,13 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 
 ## Thinking / recovery
 
+- [ ] You → **How Your Sovereign Thinks** → **Choose Thinking Service** opens the fullscreen dial
+- [ ] Dial shows thinking-service families with status (Active / Ready / Needs access / Connecting)
+- [ ] Family without access → wizard: enter access code → pick service if multiple → Connecting on dial
+- [ ] **Update access code** and **Add thinking service** reopen the same wizard
+- [ ] After apply, Crypto Chat uses that thinking service
+- [ ] “Let Sovereign choose” / auto-select works when offered (routing mode)
+- [ ] OpenRouter / Centurion Subscription are not offered as owner picker targets (BYOK families only)
 - [ ] With thinking service healthy, chat succeeds
 - [ ] Thinking recovery sheet opens from chat error path when applicable
 

@@ -21,7 +21,6 @@
 		2F7E908E2D04623D008C6AD2 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2351CEAF04740FE74B5907 /* ConversationStore.swift */; };
 		2F889D54B96241760B114440 /* AppDataMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */; };
 		304D6240A7622851C7C6DA11 /* MissionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B87F6A70291CA9DF47F42EF /* MissionStore.swift */; };
-		32DDB07F96C69611548B0921 /* PlanDiscussChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF42C526968F7BB448CCC29 /* PlanDiscussChat.swift */; };
 		37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */; };
 		3C0683BD8129E24C1216BA70 /* BeneficiaryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79A16D21569AF5135FE2A4CA /* BeneficiaryModels.swift */; };
 		3D094FB251F5AEFD576B70D9 /* ThinkingRecoverySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9193269D351542527FAE36 /* ThinkingRecoverySheet.swift */; };
@@ -118,7 +117,6 @@
 		762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionPortfolioView.swift; sourceTree = "<group>"; };
 		79A16D21569AF5135FE2A4CA /* BeneficiaryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeneficiaryModels.swift; sourceTree = "<group>"; };
 		7E56E1B88AA24364CAD98CA1 /* ThinkingServiceDialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThinkingServiceDialView.swift; sourceTree = "<group>"; };
-		7EF42C526968F7BB448CCC29 /* PlanDiscussChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanDiscussChat.swift; sourceTree = "<group>"; };
 		7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannel.swift; sourceTree = "<group>"; };
 		807258BF5E1D7EADE682EECA /* SwarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmStore.swift; sourceTree = "<group>"; };
 		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -263,7 +261,6 @@
 				2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */,
 				3B87F6A70291CA9DF47F42EF /* MissionStore.swift */,
 				2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */,
-				7EF42C526968F7BB448CCC29 /* PlanDiscussChat.swift */,
 				E2C5078D1657EA32E7464F4E /* PlanStore.swift */,
 				52A6773664B52FEC07930276 /* ProposeFirstChat.swift */,
 				1CCE22A10D4631B96A7DDF54 /* PulseFeedMapper.swift */,
@@ -419,7 +416,6 @@
 				922EFE1700AF8A11F4448081 /* OversightPrefs.swift in Sources */,
 				1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */,
 				60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */,
-				32DDB07F96C69611548B0921 /* PlanDiscussChat.swift in Sources */,
 				8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */,
 				E95C824FF4B08337C20FF13E /* PlanStore.swift in Sources */,
 				37F715A68B19EA516E429B0B /* ProjectDetailView.swift in Sources */,
@@ -513,7 +509,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -596,7 +592,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
