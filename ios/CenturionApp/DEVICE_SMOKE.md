@@ -97,5 +97,5 @@ Date: 2026-07-21
 Device: (physical smoke pending)
 iOS:
 Sovereign:
-Result: Release build SUCCEEDED; Archive 5.0.1 (13) uploaded to App Store Connect (processing). Memory Horizon DEVICE_SMOKE section added. Complete pairing/Crypto Chat/MH gauges on device before promoting TF build.
+Result: Thinking Service dial on main (PR #4). Archive 5.0.1 (18) uploaded to App Store Connect — icon full-bleed + dial What-to-Test. Complete dial DEVICE_SMOKE on device; attach build 18 to ASC version 5.0.1 so Apps list icon updates.
 ```

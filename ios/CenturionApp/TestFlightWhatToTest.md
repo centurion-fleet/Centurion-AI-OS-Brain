@@ -1,23 +1,23 @@
-# Sovereign Remote — TestFlight What to Test (build 13)
+# Sovereign Remote — TestFlight What to Test (build 18)
 
-**Version:** 5.0.1 (13)  
-**Focus:** Memory Horizon in You + Desktop Settings
+**Version:** 5.0.1 (18)  
+**Focus:** Thinking Service dial (connect + switch Brain) + App Store icon
 
 ## Must try
 
 1. Link your Sovereign (or reconnect).
-2. Open **You → Memory Horizon**.
-3. Confirm three cards: Hot Cache / Session Recall / Vault with fill bars and status chips.
-4. Tap each card — guidance sheet + primary Chat action when linked.
-5. With Sovereign disconnected: offline banner; Chat actions disabled.
-6. On Desktop: **Settings → Memory Horizon → View** — same live numbers as the phone.
+2. Open **You → How Your Sovereign Thinks → Choose Thinking Service**.
+3. Confirm the fullscreen dial shows families with status (Active / Ready / Needs access / Connecting).
+4. If a family needs access: **Add access code** → paste key → pick service if offered → wait for Connecting → Active.
+5. Switch to another ready family/service → confirm the Thinking service card updates and **Crypto Chat** replies with that service.
+6. Toggle **Let Sovereign choose** (automatic routing) on/off; confirm the card reflects it.
 
 ## Also smoke
 
-- Crypto Chat send/receive after link
-- Demo banner clears after first successful link
-- Soul / Autonomy still open from You
+- Memory Horizon gauges still load when linked
+- Crypto Chat send/receive after a thinking-service switch
+- App icon on device / TestFlight build list shows the sphere (not a blank grid)
 
 ## Not in this build
 
-Thinking Service dial redesign and Plan Discuss chat polish remain out of scope for build 13.
+Plan Discuss chat polish remains out of scope.

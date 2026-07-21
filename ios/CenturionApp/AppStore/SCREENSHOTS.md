@@ -1,17 +1,29 @@
 # App Store screenshots & icon
 
+## Why the Apps list still shows the grid placeholder
+
+Uploading a TestFlight build is **not enough**. App Store Connect only copies the 1024×1024 marketing icon onto the **Apps** list after you:
+
+1. Wait until the build finishes processing (TestFlight → Builds → status ready).
+2. Open **Personal Centurion AI Remote** → **iOS 5.0.1** (Prepare for Submission).
+3. In the **Build** section, click **+** / **Select a build**, choose the latest build (**18+**), then **Save**.
+4. Hard-refresh the Apps list (or sign out/in). The grid placeholder should become the sphere icon.
+
+Until a build is attached to that version and saved, ASC keeps the template grid — even if the IPA contains a perfect icon.
+
+There is **no** separate Media Manager icon upload for modern iOS apps; the icon comes from the binary’s `ios-marketing` 1024 asset.
+
 ## App Store icon (1024×1024)
 
 Source of truth: [`../Assets.xcassets/AppIcon.appiconset/`](../Assets.xcassets/AppIcon.appiconset/)  
-Export for Media Manager: [`AppStoreIcon-1024.png`](AppStoreIcon-1024.png) (RGB, no alpha, full-bleed square).
+Export copy: [`AppStoreIcon-1024.png`](AppStoreIcon-1024.png) (RGB, no alpha, full-bleed square — no pre-rounded black corners).
 
-If App Store Connect still shows the grid placeholder next to the app name:
+Verify marketing icon is inside an archive before upload:
 
-1. Open **App Information** (or version **5.0.1** → scroll to App Icon if shown).
-2. Upload `AppStoreIcon-1024.png`.
-3. Or attach a processed build that includes the marketing icon (build **14+**), then refresh.
-
-App Store Connect requires real device screenshots. The HTML mockup [`../AppStoreScreenshots.html`](../AppStoreScreenshots.html) is **design reference only** — do not upload it.
+```bash
+APP="build/TestFlight/CenturionApp-5.0.1-18.xcarchive/Products/Applications/CenturionApp.app"
+xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" | rg -n 'marketing|1024|AppIcon' | head
+```
 
 ## Required captures (iPhone)
 
@@ -35,8 +47,12 @@ AppStore/iphone-67-05-privacy.png
 
 Optional iPad if `TARGETED_DEVICE_FAMILY` stays `1,2`.
 
+App Store Connect requires real device screenshots. The HTML mockup [`../AppStoreScreenshots.html`](../AppStoreScreenshots.html) is **design reference only** — do not upload it.
+
 ## Status
 
+- [ ] Build **18+** processed in TestFlight
+- [ ] Build selected on **iOS 5.0.1** and **Saved**
+- [ ] Apps list shows sphere icon (not grid)
 - [ ] Screenshots captured for 6.7"
-- [ ] Uploaded to App Store Connect
-- [ ] Listing preview reviewed on phone
+- [ ] Screenshots uploaded to App Store Connect
