@@ -1,11 +1,13 @@
-# Centurion iOS App
+# CenturionAI Remote (iOS)
 
-Secure, private iPhone connection to your Centurion OS Desktop.
+**Sovereign Remote** — private iPhone companion to your Centurion Sovereign brain.
+
+**Status:** Centurion **v5.0.1** (marketing). TestFlight build number comes from `CURRENT_PROJECT_VERSION` in [`CenturionApp/project.yml`](CenturionApp/project.yml).
 
 ## Security Architecture
 
 ```
-iPhone (SwiftUI) ←→ Encrypted Tunnel ←→ Centurion OS Desktop (Linux)
+iPhone (SwiftUI) ←→ Encrypted Tunnel ←→ Centurion Sovereign (Desktop / brain)
                         │
               ┌─────────┴──────────┐
               │  X25519 Key Exchange │
@@ -15,66 +17,60 @@ iPhone (SwiftUI) ←→ Encrypted Tunnel ←→ Centurion OS Desktop (Linux)
               └────────────────────┘
 ```
 
-**No cloud. No servers. No metadata.**
+Crypto Chat stays between your iPhone and your Sovereign — not Centurion cloud storage.
 
 ## Connection Methods
 
 ### LAN (Home)
 - mDNS/Bonjour discovery (`_centurion._tcp`)
 - Direct TCP connection over local network
-- Zero internet required
-- Physically unreachable from outside
 
 ### Tailscale (Remote)
 - WireGuard tunnel back to home network
-- Same encryption on top of the tunnel
-- No open ports, no VPN configuration
-
-## Dependencies
-
-- **libsodium** (via swift-sodium) — X25519 + XSalsa20-Poly1305
-- **Tailscale SDK** — secure remote tunnel
+- Same app-layer encryption on top of the tunnel
 
 ## Building
 
-Open in Xcode 15+:
-```bash
-open ios/CenturionApp.xcodeproj
-```
-
-Or build via SPM:
 ```bash
 cd ios/CenturionApp
-xcodebuild -scheme CenturionApp -destination 'platform=iOS'
+xcodegen generate   # regenerates CenturionApp.xcodeproj from project.yml
+open CenturionApp.xcodeproj
 ```
 
-## Project Structure
+Release / TestFlight:
+
+```bash
+# Archive in Xcode (Product → Archive), or:
+xcodebuild -scheme CenturionApp -destination 'generic/platform=iOS' \
+  -configuration Release archive \
+  -archivePath build/TestFlight/CenturionApp-5.0.1-<BUILD>.xcarchive
+
+xcodebuild -exportArchive \
+  -archivePath build/TestFlight/CenturionApp-5.0.1-<BUILD>.xcarchive \
+  -exportOptionsPlist ExportOptions.plist \
+  -exportPath build/TestFlight/export
+```
+
+Upload with Organizer or `ExportOptionsUpload.plist` (`destination: upload`).
+
+## Submission
+
+- [`CenturionApp/DEVICE_SMOKE.md`](CenturionApp/DEVICE_SMOKE.md) — device smoke before TestFlight
+- [`CenturionApp/TestFlightWhatToTest.md`](CenturionApp/TestFlightWhatToTest.md) — TF notes for build 13
+- [`CenturionApp/SUBMISSION_CHECKLIST.md`](CenturionApp/SUBMISSION_CHECKLIST.md) — encryption + App Privacy
+- [`CenturionApp/AppStoreDescription.md`](CenturionApp/AppStoreDescription.md) — listing copy
+- [`CenturionApp/AppStore/SCREENSHOTS.md`](CenturionApp/AppStore/SCREENSHOTS.md) — screenshot capture guide
+
+## Project layout
 
 ```
 ios/CenturionApp/
-├── CenturionApp.swift        # App entry point
-├── ContentView.swift         # Main tab view
-├── Info.plist                # Bonjour + networking permissions
-├── Package.swift             # SPM dependencies
+├── CenturionApp.swift
+├── ContentView.swift          # Chat / Home / You tabs
+├── project.yml                # xcodegen + MARKETING_VERSION / build
+├── Views/                     # Chat, Home, You, Memory Horizon, …
+├── Services/                  # ConnectionManager, MessageService, stores
 ├── Models/
-│   ├── Message.swift         # Message + roles
-│   └── Conversation.swift    # Conversations + CenturionDevice
-├── Views/
-│   ├── ChatView.swift        # Chat interface
-│   ├── ConversationListView.swift  # Conversation list
-│   ├── ConnectionView.swift  # Device discovery + connection
-│   └── SettingsView.swift    # Settings + key management
-├── Services/
-│   ├── ConnectionManager.swift  # Network + crypto orchestration
-│   └── MessageService.swift     # Message lifecycle
 ├── Crypto/
-│   ├── KeyAgreement.swift    # X25519 key exchange
-│   └── SecureChannel.swift   # Encrypted message channel
 └── Utils/
-    └── BonjourDiscoverer.swift  # mDNS device discovery
 ```
-
-## Status
-
-**Pre-release (0.1.0).** The architecture and core crypto are implemented.
-Next: Xcode project file generation, actual build testing on device.
