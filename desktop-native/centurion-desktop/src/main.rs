@@ -553,6 +553,16 @@ mod linux {
         soul_row.add_suffix(&soul_button);
         settings_list.append(&soul_row);
 
+        let memory_horizon_row = adw::ActionRow::builder()
+            .title("Memory Horizon")
+            .subtitle("How your Centurion remembers — Hot Cache, Session Recall, Vault")
+            .icon_name("view-grid-symbolic")
+            .build();
+        let memory_horizon_button = gtk::Button::with_label("View");
+        memory_horizon_button.set_valign(gtk::Align::Center);
+        memory_horizon_row.add_suffix(&memory_horizon_button);
+        settings_list.append(&memory_horizon_row);
+
         let oversight_row = adw::ActionRow::builder()
             .title("Reporting & Oversight")
             .subtitle("Report cadence and confirmation preferences")
@@ -698,18 +708,21 @@ mod linux {
         refresh_backup_thinking_services(&backup_thinking_row);
         refresh_autonomy_row(&autonomy_row);
         refresh_soul_row(&soul_row);
+        refresh_memory_horizon_row(&memory_horizon_row);
         refresh_oversight_row(&oversight_row);
         let thinking_poll_detail = thinking_detail.clone();
         let thinking_poll_row = thinking_settings_row.clone();
         let backup_poll_row = backup_thinking_row.clone();
         let autonomy_poll_row = autonomy_row.clone();
         let soul_poll_row = soul_row.clone();
+        let memory_horizon_poll_row = memory_horizon_row.clone();
         let oversight_poll_row = oversight_row.clone();
         glib::timeout_add_seconds_local(30, move || {
             refresh_thinking_status(&thinking_poll_detail, &thinking_poll_row);
             refresh_backup_thinking_services(&backup_poll_row);
             refresh_autonomy_row(&autonomy_poll_row);
             refresh_soul_row(&soul_poll_row);
+            refresh_memory_horizon_row(&memory_horizon_poll_row);
             refresh_oversight_row(&oversight_poll_row);
             glib::ControlFlow::Continue
         });
@@ -748,6 +761,11 @@ mod linux {
             let window = window.clone();
             let soul_row = soul_row.clone();
             move |_| show_soul_dialog(&window, &soul_row)
+        });
+        memory_horizon_button.connect_clicked({
+            let window = window.clone();
+            let memory_horizon_row = memory_horizon_row.clone();
+            move |_| show_memory_horizon_dialog(&window, &memory_horizon_row)
         });
         oversight_button.connect_clicked({
             let window = window.clone();
@@ -1142,6 +1160,162 @@ mod linux {
             let clipped: String = summary.chars().take(72).collect();
             row.set_subtitle(&clipped);
         }
+    }
+
+    fn format_bytes_short(bytes: u64) -> String {
+        const KB: f64 = 1024.0;
+        const MB: f64 = KB * 1024.0;
+        const GB: f64 = MB * 1024.0;
+        let n = bytes as f64;
+        if n >= GB {
+            format!("{:.1} GB", n / GB)
+        } else if n >= MB {
+            format!("{:.0} MB", n / MB)
+        } else if n >= KB {
+            format!("{:.0} KB", n / KB)
+        } else {
+            format!("{bytes} B")
+        }
+    }
+
+    fn refresh_memory_horizon_row(row: &adw::ActionRow) {
+        let Some(payload) = run_bridge_action("memory_horizon_snapshot", serde_json::json!({})) else {
+            row.set_subtitle("Could not read Memory Horizon.");
+            return;
+        };
+        let hot = payload
+            .pointer("/snapshot/hot_cache/fill_ratio")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let sessions = payload
+            .pointer("/snapshot/session_recall/sessions")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let vault_enabled = payload
+            .pointer("/snapshot/vault/enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let vault_init = payload
+            .pointer("/snapshot/vault/initialized")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let vault_label = if !vault_enabled || !vault_init {
+            "Vault off"
+        } else if payload
+            .pointer("/snapshot/vault/unlocked")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            "Vault ready"
+        } else {
+            "Vault locked"
+        };
+        row.set_subtitle(&format!(
+            "Hot Cache {:.0}% · {sessions} conversations · {vault_label}",
+            hot * 100.0
+        ));
+    }
+
+    fn show_memory_horizon_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
+        let snapshot = run_bridge_action("memory_horizon_snapshot", serde_json::json!({}))
+            .and_then(|p| p.get("snapshot").cloned())
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        let hot = snapshot.get("hot_cache").cloned().unwrap_or(serde_json::json!({}));
+        let recall = snapshot
+            .get("session_recall")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+        let vault = snapshot.get("vault").cloned().unwrap_or(serde_json::json!({}));
+
+        let hot_used = hot.get("used_chars").and_then(|v| v.as_u64()).unwrap_or(0);
+        let hot_limit = hot.get("limit_chars").and_then(|v| v.as_u64()).unwrap_or(3575);
+        let hot_fill = hot.get("fill_ratio").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let mem_chars = hot.get("memory_chars").and_then(|v| v.as_u64()).unwrap_or(0);
+        let mem_limit = hot.get("memory_limit").and_then(|v| v.as_u64()).unwrap_or(2200);
+        let user_chars = hot.get("user_chars").and_then(|v| v.as_u64()).unwrap_or(0);
+        let user_limit = hot.get("user_limit").and_then(|v| v.as_u64()).unwrap_or(1375);
+
+        let sessions = recall.get("sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+        let messages = recall.get("messages").and_then(|v| v.as_u64()).unwrap_or(0);
+        let recall_db = recall.get("db_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        let recall_free = recall.get("free_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        let recall_fill = recall.get("fill_ratio").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        let vault_enabled = vault.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        let vault_init = vault
+            .get("initialized")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let vault_unlocked = vault.get("unlocked").and_then(|v| v.as_bool()).unwrap_or(false);
+        let vault_entries = vault
+            .get("total_entries")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let vault_db = vault.get("db_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        let vault_fill = vault.get("fill_ratio").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let core = vault
+            .pointer("/counts/core")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let experiential = vault
+            .pointer("/counts/experiential")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let pattern = vault
+            .pointer("/counts/pattern")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let vault_status = if !vault_enabled || !vault_init {
+            "Off — not set up yet".to_owned()
+        } else if vault_unlocked {
+            format!(
+                "Unlocked · {vault_entries} notes · {} used · Core {core} · Experience {experiential} · Pattern {pattern} · disk fill {:.0}%",
+                format_bytes_short(vault_db),
+                vault_fill * 100.0
+            )
+        } else {
+            format!(
+                "Locked · {vault_entries} notes · {} on disk — unlock on this computer",
+                format_bytes_short(vault_db)
+            )
+        };
+
+        let body = format!(
+            "Three layers on this Sovereign. Hot Cache is a software budget (not hardware RAM). \
+Session Recall and Vault grow with use and share disk space here.\n\n\
+Near · Hot Cache\n\
+{hot_used}/{hot_limit} chars ({:.0}% full)\n\
+MEMORY {mem_chars}/{mem_limit} · YOU {user_chars}/{user_limit}\n\
+To make room: ask your Centurion to curate essentials — not a product upgrade.\n\n\
+Mid · Session Recall\n\
+{sessions} conversations · {messages} messages\n\
+{} used · {} free on this computer ({:.0}% of used+free)\n\
+Grows as you chat. If disk is high, ask about pruning older sessions.\n\n\
+Far · Vault\n\
+{vault_status}\n\
+Grow with durable notes (propose → commit). Passphrase stays on this computer.",
+            hot_fill * 100.0,
+            format_bytes_short(recall_db),
+            format_bytes_short(recall_free),
+            recall_fill * 100.0,
+        );
+
+        let dialog = adw::MessageDialog::builder()
+            .heading("Memory Horizon")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.set_default_response(Some("close"));
+        dialog.set_transient_for(Some(parent));
+        let row = row.clone();
+        dialog.connect_response(None, move |dialog, _| {
+            refresh_memory_horizon_row(&row);
+            dialog.close();
+        });
+        dialog.present();
     }
 
     fn refresh_oversight_row(row: &adw::ActionRow) {

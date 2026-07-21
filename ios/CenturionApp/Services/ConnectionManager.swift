@@ -770,6 +770,10 @@ final class ConnectionManager: ObservableObject {
         try await invokeRemote(action: "oversight_get")
     }
 
+    func fetchMemoryHorizon() async throws -> [String: Any] {
+        try await invokeRemote(action: "memory_horizon_snapshot")
+    }
+
     // MARK: - Plans
 
     func fetchPlans(status: String = "all") async throws -> [PlanArtifact] {
@@ -1081,6 +1085,7 @@ final class ConnectionManager: ObservableObject {
             "oversight_put_response": "oversight_put",
             "soul_get_response": "soul_get",
             "soul_put_response": "soul_put",
+            "memory_horizon_snapshot_response": "memory_horizon_snapshot",
             "plans_list_response": "plans_list",
             "plan_get_response": "plan_get",
             "plan_put_response": "plan_put",

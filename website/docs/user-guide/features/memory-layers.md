@@ -70,6 +70,8 @@ sequenceDiagram
 
 :::tip Day to day
 Most users live on **Hot Cache + Session Recall** without configuring anything. Open **Vault** when you want sealed, offline archives that outgrow the tiny always-on card.
+
+**See levels live:** CenturionAI Remote **You → Memory Horizon**, or Desktop **Settings → Memory Horizon**. Gauges use real software budgets (Hot Cache) and disk headroom on your Sovereign (Session Recall / Vault) — not fake hardware quotas.
 :::
 
 ---

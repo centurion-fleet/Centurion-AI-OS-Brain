@@ -6,7 +6,7 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 
 - [ ] `xcodegen generate` (if used) then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign Remote**; version **5.0.0** / build from `CURRENT_PROJECT_VERSION`
+- [ ] Display name: **Sovereign Remote**; version **5.0.1** / build from `CURRENT_PROJECT_VERSION`
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 
 ## Pairing & Crypto Chat
@@ -33,6 +33,18 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] Changes apply on next conversation (not mid-chat)
 - [ ] Commitment chat frames and sends when connected
 
+## Memory Horizon
+
+- [ ] You → **Memory Horizon** opens three cards (Near Hot Cache / Mid Session Recall / Far Vault)
+- [ ] While linked, gauges show live fill; Hot Cache subtitle shows MEMORY vs YOU split
+- [ ] Session Recall shows conversation count and space on Sovereign (not “RAM full”)
+- [ ] Vault shows Off / Locked / Ready honestly (empty gauge when off)
+- [ ] Tap a card → sheet with how-to-manage copy and one primary Chat action
+- [ ] Primary action seeds Crypto Chat when linked; disabled guidance when offline
+- [ ] Offline / not linked: banner “Link your Sovereign to see live memory levels”
+- [ ] Learn more opens Help Center Memory Horizon article
+- [ ] Desktop Settings → **Memory Horizon** View shows the same live snapshot
+
 ## Plans (Propose first + Host sync)
 
 - [ ] Chat shows **Talk** / **Propose first** chips
@@ -49,6 +61,7 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] Settings → Autonomy Level Adjust changes host preference
 - [ ] Settings → Your Sovereign's Soul View/Edit saves with warning copy
 - [ ] Settings → Reporting & Oversight Adjust saves cadence and toggles
+- [ ] Settings → Memory Horizon View refreshes Hot Cache / Session / Vault summary
 
 ## Adrian (optional help)
 
