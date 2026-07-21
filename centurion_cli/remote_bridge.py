@@ -118,6 +118,8 @@ def handle_request(
         return _handle_plan_template_instantiate(request, request_id)
     if action == "plan_save_template":
         return _handle_plan_save_template(request, request_id)
+    if action == "memory_horizon_snapshot":
+        return _handle_memory_horizon_snapshot(request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -848,6 +850,23 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
         }
     except Exception as exc:
         return _error_response(request_id, action="soul_put", exc=exc)
+
+
+def _handle_memory_horizon_snapshot(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.memory_horizon import build_memory_horizon_snapshot
+
+        snapshot = build_memory_horizon_snapshot()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "memory_horizon_snapshot",
+            "snapshot": snapshot,
+        }
+    except Exception as exc:
+        return _error_response(
+            request_id, action="memory_horizon_snapshot", exc=exc
+        )
 
 
 def _handle_plans_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:

@@ -12,6 +12,7 @@ final class AppServices: ObservableObject {
     let planStore: PlanStore
     let beneficiaryStore: BeneficiaryStore
     let oversightStore: OversightStore
+    let memoryHorizonStore: MemoryHorizonStore
 
     init() {
         let connectionManager = ConnectionManager()
@@ -25,6 +26,7 @@ final class AppServices: ObservableObject {
         self.planStore = PlanStore()
         self.beneficiaryStore = BeneficiaryStore()
         self.oversightStore = OversightStore()
+        self.memoryHorizonStore = MemoryHorizonStore()
         dataMode.update(connectionState: connectionManager.connectionState)
     }
 }

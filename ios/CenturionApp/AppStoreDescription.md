@@ -71,7 +71,8 @@ Buy a Sovereign once and receive free lifetime updates for both the Linux brain 
 **A Sovereign is required.** This app connects to your Sovereign. Visit 1human1ai.com to learn more. Support library: help.1human1ai.com.
 
 ## Keywords
-Crypto Chat, encrypted messenger, privacy, collaboration, life mission, local network, mission control, AI chat, secure messaging, end-to-end encryption, personal AI, Sovereign Remote
+Crypto Chat, privacy, personal AI, Sovereign Remote, life mission, local network
+
 
 ## Support URL
 https://help.1human1ai.com

@@ -12,6 +12,7 @@
 		071CF2E71B6287D295DA0CD0 /* RemoteModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6096C31D013137594862DE99 /* RemoteModelCatalog.swift */; };
 		0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */; };
 		0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */; };
+		182C2907150F78B4272607B9 /* MemoryHorizonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1527EDC6D0DA370FC5DFCD9D /* MemoryHorizonView.swift */; };
 		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
 		1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */; };
 		20A0AA4DC14602E1E56E64AE /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB67ACC37C89A1626725E6 /* AdrianView.swift */; };
@@ -32,6 +33,7 @@
 		58C0162D7BE79027664DC4F1 /* MissionOrb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCFCE375932A009864E2E75 /* MissionOrb.swift */; };
 		5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B41A8FFAEAF213628BF0C11 /* CenturionTheme.swift */; };
 		60E3BC76E2D444FC92AD74C4 /* PlanArtifact.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF00CC4D3F01AD6ED03051A2 /* PlanArtifact.swift */; };
+		63D5B47A8F04E40A3CF66D89 /* MemoryHorizonSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB4B2BA6E06687E7D6C6C2D /* MemoryHorizonSnapshot.swift */; };
 		63F7E1999B2EB04B37513075 /* SwarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 807258BF5E1D7EADE682EECA /* SwarmStore.swift */; };
 		671859331884297D8A3D7437 /* BeneficiaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C989D7F978D178255AA120 /* BeneficiaryStore.swift */; };
 		72AF12B750F36E4AD5A86152 /* GetHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */; };
@@ -55,6 +57,7 @@
 		AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3109FC232D48D3C3445556 /* ConnectionManager.swift */; };
 		B4DD10EF5CA1613CBB608B52 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D36B2A4E190D94E932E69B8 /* ConversationListView.swift */; };
 		BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51401B6F9885163352D34464 /* SoulDocument.swift */; };
+		BBFD20C1FEA35C237CBD04DC /* MemoryHorizonStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */; };
 		BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */; };
 		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
@@ -81,6 +84,7 @@
 		04CB67ACC37C89A1626725E6 /* AdrianView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianView.swift; sourceTree = "<group>"; };
 		0E3C229C48C642E36295368A /* MissionProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionProject.swift; sourceTree = "<group>"; };
 		0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteModelSwitcherView.swift; sourceTree = "<group>"; };
+		1527EDC6D0DA370FC5DFCD9D /* MemoryHorizonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryHorizonView.swift; sourceTree = "<group>"; };
 		15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1608B826ED73D403B7D6D39D /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
 		1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanReviewView.swift; sourceTree = "<group>"; };
@@ -118,6 +122,7 @@
 		8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmConnectSheet.swift; sourceTree = "<group>"; };
 		8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportingOversightView.swift; sourceTree = "<group>"; };
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
+		90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryHorizonStore.swift; sourceTree = "<group>"; };
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
 		A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmDetailSheet.swift; sourceTree = "<group>"; };
@@ -128,6 +133,7 @@
 		B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GetHelpView.swift; sourceTree = "<group>"; };
 		BC5A7EFCA68FAC74D5557EC1 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewer.swift; sourceTree = "<group>"; };
+		BFB4B2BA6E06687E7D6C6C2D /* MemoryHorizonSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryHorizonSnapshot.swift; sourceTree = "<group>"; };
 		C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopVisualizationView.swift; sourceTree = "<group>"; };
 		C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConstellationView.swift; sourceTree = "<group>"; };
 		CE860688EDBD16296174C4F9 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
@@ -175,6 +181,7 @@
 				B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */,
 				B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */,
 				C14F1A75B3D255419B028C42 /* LoopVisualizationView.swift */,
+				1527EDC6D0DA370FC5DFCD9D /* MemoryHorizonView.swift */,
 				5EA204C9AF0DBDF892BA97FB /* MissionDiscoveryView.swift */,
 				DCCFCE375932A009864E2E75 /* MissionOrb.swift */,
 				762DA5E9456712D8BCADE665 /* MissionPortfolioView.swift */,
@@ -223,6 +230,7 @@
 				79A16D21569AF5135FE2A4CA /* BeneficiaryModels.swift */,
 				1608B826ED73D403B7D6D39D /* Conversation.swift */,
 				ED59EEA8A7425DAF5A3593D9 /* LifeMission.swift */,
+				BFB4B2BA6E06687E7D6C6C2D /* MemoryHorizonSnapshot.swift */,
 				2816DC1C66616790651EBA30 /* Message.swift */,
 				0E3C229C48C642E36295368A /* MissionProject.swift */,
 				F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */,
@@ -244,6 +252,7 @@
 				51C989D7F978D178255AA120 /* BeneficiaryStore.swift */,
 				ED3109FC232D48D3C3445556 /* ConnectionManager.swift */,
 				6F2351CEAF04740FE74B5907 /* ConversationStore.swift */,
+				90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */,
 				F5FA050811F918E8D8DFE861 /* MessageError.swift */,
 				715E25DBDBADAB367351854A /* MessageService.swift */,
 				2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */,
@@ -388,6 +397,9 @@
 				D7BB066B71B3E2953377689A /* KeyAgreement.swift in Sources */,
 				92887E02C1C54F5F176B9996 /* LifeMission.swift in Sources */,
 				0B4BC777A96D96DACD486F70 /* LoopVisualizationView.swift in Sources */,
+				63D5B47A8F04E40A3CF66D89 /* MemoryHorizonSnapshot.swift in Sources */,
+				BBFD20C1FEA35C237CBD04DC /* MemoryHorizonStore.swift in Sources */,
+				182C2907150F78B4272607B9 /* MemoryHorizonView.swift in Sources */,
 				D514204DF4E162E34C6756F1 /* Message.swift in Sources */,
 				411F7E170398267292B933B5 /* MessageError.swift in Sources */,
 				CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */,
@@ -493,7 +505,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -576,7 +588,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

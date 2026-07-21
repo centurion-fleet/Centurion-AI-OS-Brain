@@ -77,4 +77,8 @@ enum CenturionHelp {
     static let thinkingService = article(category: "thinking-service", slug: "what-is-a-thinking-service")
     static let troubleshooting = baseURL.appending(path: "docs/troubleshooting")
     static let privacy = baseURL.appending(path: "docs/privacy-and-security")
+    static let memoryHorizon = article(
+        category: "privacy-and-security",
+        slug: "memory-horizon-and-vault"
+    )
 }

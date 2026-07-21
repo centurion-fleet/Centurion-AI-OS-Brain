@@ -8,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
     @EnvironmentObject private var oversightStore: OversightStore
+    @EnvironmentObject private var memoryHorizonStore: MemoryHorizonStore
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @State private var showKeyExport = false
     @State private var showResetConfirmation = false
@@ -39,6 +40,7 @@ struct SettingsView: View {
                     DeviceLinkSection(showPairingSheet: $showPairingSheet)
                     ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                     youSection
+                    memoryHorizonSection
                     reportingOversightSection
                     collaborationsSection
                     privacySection
@@ -157,6 +159,23 @@ struct SettingsView: View {
                     icon: "slider.horizontal.3",
                     title: "Autonomy Level",
                     subtitle: oversightStore.autonomySubtitle
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var memoryHorizonSection: some View {
+        settingsSection(
+            title: "Memory",
+            icon: "circle.hexagongrid",
+            footer: "How your Centurion remembers — a small always-on card, conversation history, and optional sealed notes. Not a hardware meter."
+        ) {
+            NavigationLink(destination: MemoryHorizonView()) {
+                CenturionListRow(
+                    icon: "circle.hexagongrid",
+                    title: "Memory Horizon",
+                    subtitle: memoryHorizonStore.subtitle
                 )
             }
             .buttonStyle(.plain)

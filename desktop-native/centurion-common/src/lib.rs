@@ -319,6 +319,16 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    MemoryHorizonSnapshot {
+        id: Uuid,
+    },
+    MemoryHorizonSnapshotResponse {
+        id: Uuid,
+        ok: bool,
+        snapshot: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
     PlansList {
         id: Uuid,
         #[serde(default, skip_serializing_if = "Option::is_none")]
