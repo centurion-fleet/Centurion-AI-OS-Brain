@@ -61,7 +61,6 @@
 		BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51401B6F9885163352D34464 /* SoulDocument.swift */; };
 		BBFD20C1FEA35C237CBD04DC /* MemoryHorizonStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */; };
 		BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */; };
-		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
 		CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */; };
 		CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */; };
@@ -153,7 +152,6 @@
 		F5FA050811F918E8D8DFE861 /* MessageError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageError.swift; sourceTree = "<group>"; };
 		F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightPrefs.swift; sourceTree = "<group>"; };
 		F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDataMode.swift; sourceTree = "<group>"; };
-		FB5FADFC392151FEFB0301E4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityHubView.swift; sourceTree = "<group>"; };
 		FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmOrb.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -198,7 +196,6 @@
 				15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */,
 				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
 				B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */,
-				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
 				8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */,
 				A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */,
 				FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */,
@@ -434,7 +431,6 @@
 				BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */,
 				CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */,
 				D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */,
-				BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */,
 				D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */,
 				BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */,
 				CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */,
