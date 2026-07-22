@@ -85,6 +85,22 @@ mod linux {
         code: Option<String>,
     }
 
+    #[derive(Debug, Deserialize)]
+    struct UpdateCheckPayload {
+        ok: bool,
+        #[serde(default)]
+        method: Option<String>,
+        status: String,
+        #[serde(default)]
+        behind: u64,
+        #[serde(default)]
+        os_version: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        #[serde(default)]
+        recommended_command: Option<String>,
+    }
+
     impl RemoteSupervisor {
         fn ensure_running(&mut self) -> Result<(), String> {
             if remote_listener_active() {
@@ -493,10 +509,24 @@ mod linux {
         settings_list.append(
             &adw::ActionRow::builder()
                 .title("Version")
-                .subtitle(env!("CARGO_PKG_VERSION"))
+                .subtitle(&format!(
+                    "Desktop app {} — Centurion AI OS updates separately below",
+                    env!("CARGO_PKG_VERSION")
+                ))
                 .icon_name("dialog-information-symbolic")
                 .build(),
         );
+        let update_row = adw::ActionRow::builder()
+            .title("Check for updates")
+            .subtitle("Updates Centurion AI OS on this brain (not this desktop app binary)")
+            .icon_name("software-update-available-symbolic")
+            .build();
+        let update_check_button = gtk::Button::with_label("Check");
+        update_check_button.add_css_class("suggested-action");
+        update_check_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&update_check_button);
+        settings_list.append(&update_row);
+
         let thinking_settings_row = adw::ActionRow::builder()
             .title("Thinking Service")
             .subtitle("Checking thinking service…")
@@ -676,7 +706,7 @@ mod linux {
 
         let window = adw::ApplicationWindow::builder()
             .application(application)
-            .title("Centurion")
+            .title("Sovereign AI Brain")
             .default_width(980)
             .default_height(700)
             .content(&toolbar)
@@ -776,6 +806,11 @@ mod linux {
         health_check_button.connect_clicked({
             let window = window.clone();
             move |_| show_support_health_dialog(&window)
+        });
+        update_check_button.connect_clicked({
+            let window = window.clone();
+            let update_row = update_row.clone();
+            move |_| show_update_check_dialog(&window, &update_row)
         });
         bundle_button.connect_clicked({
             let window = window.clone();
@@ -1066,6 +1101,206 @@ mod linux {
             .ok()
             .filter(|output| output.status.success())?;
         serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_update_check() -> Option<UpdateCheckPayload> {
+        let output = Command::new(centurion_binary())
+            .args(["update", "--check", "--json"])
+            .output()
+            .ok()?;
+        // Parse JSON even when exit status is non-zero (network / unavailable).
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_os_update() -> Result<String, String> {
+        let output = Command::new(centurion_binary())
+            .args(["update", "-y"])
+            .output()
+            .map_err(|error| error.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        if output.status.success() {
+            Ok(if stdout.is_empty() {
+                "Centurion AI OS update finished. Restart this app if the desktop shell looks stale."
+                    .to_owned()
+            } else {
+                stdout
+            })
+        } else {
+            Err(if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "Update failed.".to_owned()
+            })
+        }
+    }
+
+    fn show_update_check_dialog(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        update_row.set_subtitle("Checking for Centurion AI OS updates…");
+        let Some(payload) = run_update_check() else {
+            update_row.set_subtitle("Could not check for updates.");
+            let dialog = adw::MessageDialog::builder()
+                .heading("Check for updates")
+                .body(
+                    "Could not run `centurion update --check --json`.\n\n\
+                     Make sure `centurion` is installed on this brain.",
+                )
+                .close_response("ok")
+                .build();
+            dialog.add_response("ok", "OK");
+            dialog.set_transient_for(Some(parent));
+            dialog.present();
+            return;
+        };
+
+        let os_version = payload
+            .os_version
+            .as_deref()
+            .unwrap_or("unknown");
+        let message = payload
+            .message
+            .clone()
+            .unwrap_or_else(|| "Check complete.".to_owned());
+        let footnote = "This updates Centurion AI OS on this brain — not the Sovereign AI Brain \
+desktop app binary. To rebuild the desktop app, run desktop-native/scripts/install-user.sh \
+(or your Fedora RPM path).";
+
+        match payload.status.as_str() {
+            "up_to_date" => {
+                update_row.set_subtitle(&format!("Centurion AI OS {os_version} — up to date"));
+                let dialog = adw::MessageDialog::builder()
+                    .heading("You're up to date")
+                    .body(&format!("{message}\n\nOS version: {os_version}\n\n{footnote}"))
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.set_transient_for(Some(parent));
+                dialog.present();
+            }
+            "update_available" => {
+                update_row.set_subtitle(&format!(
+                    "Update available for Centurion AI OS {os_version}"
+                ));
+                let body = format!(
+                    "{message}\n\nOS version: {os_version}\n\n\
+                     Updating may take several minutes and can restart services.\n\n{footnote}"
+                );
+                let dialog = adw::MessageDialog::builder()
+                    .heading("Update available")
+                    .body(&body)
+                    .close_response("cancel")
+                    .default_response("update")
+                    .build();
+                dialog.add_response("cancel", "Not now");
+                dialog.add_response("update", "Update now");
+                dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
+                dialog.set_transient_for(Some(parent));
+                let parent = parent.clone();
+                let update_row = update_row.clone();
+                dialog.connect_response(None, move |dialog, response| {
+                    if response != "update" {
+                        dialog.close();
+                        return;
+                    }
+                    dialog.close();
+                    confirm_and_run_os_update(&parent, &update_row);
+                });
+                dialog.present();
+            }
+            _ => {
+                let cmd = payload
+                    .recommended_command
+                    .as_deref()
+                    .unwrap_or("centurion update");
+                update_row.set_subtitle("Updates managed outside this app");
+                let dialog = adw::MessageDialog::builder()
+                    .heading("Cannot update from this app")
+                    .body(&format!("{message}\n\nUse:\n{cmd}\n\n{footnote}"))
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.set_transient_for(Some(parent));
+                dialog.present();
+            }
+        }
+    }
+
+    fn confirm_and_run_os_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        let confirm = adw::MessageDialog::builder()
+            .heading("Update Centurion AI OS?")
+            .body(
+                "This updates Centurion AI OS on this brain and may take several minutes. \
+                 Services such as the gateway may restart.\n\n\
+                 The Sovereign AI Brain desktop app binary is not rebuilt by this action.",
+            )
+            .close_response("cancel")
+            .default_response("confirm")
+            .build();
+        confirm.add_response("cancel", "Cancel");
+        confirm.add_response("confirm", "Update now");
+        confirm.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+        confirm.set_transient_for(Some(parent));
+        let parent = parent.clone();
+        let update_row = update_row.clone();
+        confirm.connect_response(None, move |dialog, response| {
+            if response != "confirm" {
+                dialog.close();
+                return;
+            }
+            dialog.close();
+            update_row.set_subtitle("Updating Centurion AI OS…");
+            let progress = adw::MessageDialog::builder()
+                .heading("Updating…")
+                .body("Please wait. This can take several minutes.")
+                .close_response("ok")
+                .build();
+            progress.add_response("ok", "Hide");
+            progress.set_transient_for(Some(&parent));
+            progress.present();
+
+            let parent_for_result = parent.clone();
+            let update_row_for_result = update_row.clone();
+            let progress_for_result = progress.clone();
+            std::thread::spawn(move || {
+                let result = run_os_update();
+                glib::idle_add_once(move || {
+                    progress_for_result.close();
+                    match result {
+                        Ok(body) => {
+                            update_row_for_result
+                                .set_subtitle("Centurion AI OS update finished");
+                            let done = adw::MessageDialog::builder()
+                                .heading("Update complete")
+                                .body(&format!(
+                                    "{body}\n\n\
+                                     Restart Sovereign AI Brain if the desktop shell looks stale. \
+                                     Rebuild the desktop app with install-user.sh only when you \
+                                     need a new GTK build."
+                                ))
+                                .close_response("ok")
+                                .build();
+                            done.add_response("ok", "OK");
+                            done.set_transient_for(Some(&parent_for_result));
+                            done.present();
+                        }
+                        Err(error) => {
+                            update_row_for_result.set_subtitle("Update failed");
+                            let fail = adw::MessageDialog::builder()
+                                .heading("Update failed")
+                                .body(&error)
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.set_transient_for(Some(&parent_for_result));
+                            fail.present();
+                        }
+                    }
+                });
+            });
+        });
+        confirm.present();
     }
 
     fn run_telegram_summary(args: &[&str]) -> Option<serde_json::Value> {
@@ -2036,5 +2271,5 @@ fn main() {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    eprintln!("Centurion Desktop is a native Linux application.");
+    eprintln!("Sovereign AI Brain is a native Linux application.");
 }

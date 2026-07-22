@@ -106,7 +106,7 @@ if [[ -n "${LOCAL_RPM}" ]]; then
   echo "Installing local RPM: ${LOCAL_RPM}"
   sudo dnf install -y "${LOCAL_RPM}"
 else
-  echo "Installing Centurion Desktop (native GTK shell + encrypted iPhone service)…"
+  echo "Installing Sovereign AI Brain (native GTK shell + encrypted iPhone service)…"
   sudo dnf install -y centurion-desktop
 fi
 
@@ -142,8 +142,8 @@ systemctl --user daemon-reload
 systemctl --user enable --now centurion-remote.service
 
 echo
-echo "Centurion Desktop is installed."
-echo "  • Open Centurion from the application menu"
+echo "Sovereign AI Brain is installed."
+echo "  • Open Sovereign AI Brain from the application menu"
 echo "  • Use Chat for local conversation (embedded centurion --tui)"
 echo "  • Use Devices to approve your iPhone fingerprint"
 echo

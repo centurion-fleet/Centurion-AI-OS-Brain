@@ -152,3 +152,92 @@ def test_invalidate_update_cache_no_profiles_dir(tmp_path):
         _invalidate_update_cache()
 
     assert not (default_home / ".update_check").exists()
+
+
+def test_cmd_update_check_json_up_to_date_git(tmp_path, monkeypatch, capsys):
+    """centurion update --check --json reports up_to_date for a current git install."""
+    from types import SimpleNamespace
+
+    import centurion_cli.main as main_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+
+    def fake_run(cmd, **kwargs):
+        joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        mock = MagicMock()
+        mock.returncode = 0
+        mock.stdout = "0\n"
+        mock.stderr = ""
+        if "rev-list" in joined:
+            mock.stdout = "0\n"
+        return mock
+
+    args = SimpleNamespace(json=True, check=True)
+    with patch("centurion_cli.config.is_managed", return_value=False), \
+         patch("centurion_cli.config.detect_install_method", return_value="git"), \
+         patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run):
+        main_mod._cmd_update_check(args)
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["ok"] is True
+    assert payload["status"] == "up_to_date"
+    assert payload["method"] == "git"
+    assert payload["behind"] == 0
+    assert "os_version" in payload
+    assert payload["recommended_command"] == "centurion update"
+
+
+def test_cmd_update_check_json_update_available_git(tmp_path, monkeypatch, capsys):
+    """centurion update --check --json reports update_available when behind."""
+    from types import SimpleNamespace
+
+    import centurion_cli.main as main_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+
+    def fake_run(cmd, **kwargs):
+        joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        mock = MagicMock(returncode=0, stdout="0\n", stderr="")
+        if "rev-list" in joined:
+            mock.stdout = "3\n"
+        return mock
+
+    args = SimpleNamespace(json=True, check=True)
+    with patch("centurion_cli.config.is_managed", return_value=False), \
+         patch("centurion_cli.config.detect_install_method", return_value="git"), \
+         patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run):
+        main_mod._cmd_update_check(args)
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["status"] == "update_available"
+    assert payload["behind"] == 3
+    assert "3 commits" in payload["message"]
+
+
+def test_cmd_update_check_json_managed(tmp_path, monkeypatch, capsys):
+    """Managed installs return unavailable with the package-manager command."""
+    from types import SimpleNamespace
+
+    import centurion_cli.main as main_mod
+
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", tmp_path)
+    args = SimpleNamespace(json=True, check=True)
+    with patch("centurion_cli.config.is_managed", return_value=True), \
+         patch("centurion_cli.config.detect_install_method", return_value="nixos"), \
+         patch("centurion_cli.config.recommended_update_command", return_value="sudo nixos-rebuild switch"):
+        main_mod._cmd_update_check(args)
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["ok"] is True
+    assert payload["status"] == "unavailable"
+    assert payload["method"] == "nixos"
+    assert payload["recommended_command"] == "sudo nixos-rebuild switch"

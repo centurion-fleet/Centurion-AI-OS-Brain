@@ -14,4 +14,4 @@ fi
 
 systemctl --user stop centurion-remote.service 2>/dev/null || true
 echo "Starting centurion-remote with TERMINAL_CWD=${TERMINAL_CWD}"
-exec "${BIN}" serve --name "Personal Centurion"
+exec "${BIN}" serve --name "Sovereign AI Brain"

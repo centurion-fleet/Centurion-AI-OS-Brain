@@ -33,7 +33,7 @@ enum Command {
             DEFAULT_PORT
         ))]
         bind: SocketAddr,
-        #[arg(long, default_value = "Personal Centurion")]
+        #[arg(long, default_value = "Sovereign AI Brain")]
         name: String,
         #[arg(long)]
         auto_approve: bool,
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Command::Serve {
         bind: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), DEFAULT_PORT),
-        name: "Personal Centurion".to_owned(),
+        name: "Sovereign AI Brain".to_owned(),
         auto_approve: false,
         echo: false,
         python: "python3".to_owned(),
