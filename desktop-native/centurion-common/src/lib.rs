@@ -319,6 +319,30 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    MissionGet {
+        id: Uuid,
+    },
+    MissionGetResponse {
+        id: Uuid,
+        ok: bool,
+        mission: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    MissionPut {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mission: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        markdown: Option<String>,
+    },
+    MissionPutResponse {
+        id: Uuid,
+        ok: bool,
+        mission: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
     MemoryHorizonSnapshot {
         id: Uuid,
     },

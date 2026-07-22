@@ -1,23 +1,23 @@
-# Sovereign Remote — TestFlight What to Test (build 18)
+# Sovereign Remote — TestFlight What to Test (build 21)
 
-**Version:** 5.0.1 (18)  
-**Focus:** Thinking Service dial (connect + switch Brain) + App Store icon
+**Version:** 5.0.1 (21)  
+**Focus:** App Store close-out — Plan Discuss, Life Mission sync, Beneficiary copy, free/customers-only listing
 
 ## Must try
 
 1. Link your Sovereign (or reconnect).
-2. Open **You → How Your Sovereign Thinks → Choose Thinking Service**.
-3. Confirm the fullscreen dial shows families with status (Active / Ready / Needs access / Connecting).
-4. If a family needs access: **Add access code** → paste key → pick service if offered → wait for Connecting → Active.
-5. Switch to another ready family/service → confirm the Thinking service card updates and **Crypto Chat** replies with that service.
-6. Toggle **Let Sovereign choose** (automatic routing) on/off; confirm the card reflects it.
+2. **You → Mission** — set or edit Life Mission → **Sync Life Mission to Sovereign** → start a **new** Crypto Chat and confirm the Sovereign advances that mission without re-pasting it.
+3. **You → Soul / Autonomy** — confirm changes still apply on the next conversation.
+4. Home → open a Plan → **Discuss** → refine → confirm plan updates on Home after a `plan-update` fence.
+5. **You → Family Beneficiary** — confirm copy: one family nominee, four colleague purchases, Pending vs Purchased, ops fulfillment (“team will be in touch”).
+6. **You → Choose Thinking Service** — dial still switches Brain model.
 
 ## Also smoke
 
-- Memory Horizon gauges still load when linked
-- Crypto Chat send/receive after a thinking-service switch
-- App icon on device / TestFlight build list shows the sphere (not a blank grid)
+- Memory Horizon gauges when linked
+- Crypto Chat send/receive
+- App icon sphere on TestFlight / version page
 
 ## Not in this build
 
-Plan Discuss chat polish remains out of scope.
+Beneficiary purchase auto-detection / automatic hardware provisioning.

@@ -60,6 +60,33 @@ final class MessageService: ObservableObject {
         return conversation
     }
 
+    /// Open or resume the stable Discuss thread for a Plan (same conversation anytime).
+    func seedPlanDiscuss(plan: PlanArtifact, kickoffNote: String? = nil) -> Conversation {
+        let context = ConversationContext.plan(id: plan.id, title: plan.title)
+        let conversation = findOrCreateConversation(for: context)
+        // Keep title in sync if the plan was renamed.
+        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+            conversations[index].context = context
+        }
+        let existing = messages(for: conversation.id)
+        guard existing.isEmpty else { return conversation }
+        let detail = kickoffNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body: String
+        if let detail, !detail.isEmpty {
+            body = "Context for this Crypto Chat about this plan:\n\(detail)\n\n\(plan.markdownContent)"
+        } else {
+            body = "Context for this Crypto Chat about this plan:\n\n\(plan.markdownContent)"
+        }
+        appendMessage(
+            Message(
+                conversationId: conversation.id,
+                content: body,
+                role: .system
+            )
+        )
+        return conversation
+    }
+
     /// Call after the view has appeared to seed demo conversations when offline.
     func seedInitialData() {
         guard dataMode.showsDemoContent, conversations.isEmpty else { return }
@@ -91,6 +118,10 @@ final class MessageService: ObservableObject {
         let outboundBody: String
         if proposeFirst {
             outboundBody = ProposeFirstChat.frameOutbound(userText: text)
+        } else if case .plan(let id, _) = context,
+                  let planStore,
+                  let plan = planStore.plan(id: id) {
+            outboundBody = PlanDiscussChat.frameOutbound(userText: text, plan: plan)
         } else if case .commitment(let id, _) = context,
            let missionStore,
            let commitment = missionStore.commitment(with: id) {
@@ -111,12 +142,23 @@ final class MessageService: ObservableObject {
         let rawResponse = try await connectionManager.sendMessage(outbound)
 
         var displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
+        displayResponse = PlanDiscussChat.displayText(strippingUpdateBlockFrom: displayResponse)
         displayResponse = ProposeFirstChat.displayText(strippingArtifactFrom: displayResponse)
 
         if let missionStore,
            let payload = MissionCommitmentChat.parseUpdate(from: rawResponse) {
             missionStore.applyCommitmentUpdate(payload)
             syncConversationTitle(for: conversation.id, missionStore: missionStore)
+        }
+
+        if let planStore,
+           let payload = PlanDiscussChat.parseUpdate(from: rawResponse),
+           planStore.applyDiscussUpdate(payload) {
+            syncPlanConversationTitle(for: conversation.id, planStore: planStore)
+            if let planId = UUID(uuidString: payload.plan_id),
+               let updated = planStore.plan(id: planId) {
+                await planStore.upsertAndSync(updated, connectionManager: connectionManager)
+            }
         }
 
         if proposeFirst, let planStore {
@@ -179,9 +221,26 @@ final class MessageService: ObservableObject {
         conversations[index].context = .commitment(id: id, title: commitment.title)
     }
 
+    private func syncPlanConversationTitle(for conversationID: UUID, planStore: PlanStore) {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }),
+              case .plan(let id, _) = conversations[index].context,
+              let plan = planStore.plan(id: id) else {
+            return
+        }
+        conversations[index].context = .plan(id: id, title: plan.title)
+    }
+
     /// Find a conversation by its context, or create a new one.
     func findOrCreateConversation(for context: ConversationContext) -> Conversation {
-        // Match by context identity (same program ID, target ID, etc.)
+        // Match plan/commitment by stable id so title renames reopen the same thread.
+        if let planID = context.planID,
+           let existing = conversations.first(where: { $0.context.planID == planID }) {
+            return existing
+        }
+        if let commitmentID = context.commitmentID,
+           let existing = conversations.first(where: { $0.context.commitmentID == commitmentID }) {
+            return existing
+        }
         if let existing = conversations.first(where: { $0.context == context }) {
             return existing
         }

@@ -10,6 +10,8 @@ struct MissionView: View {
     @State private var showContextEditor = false
     @State private var chatTarget: ChatSheetTarget?
     @State private var chatError: String?
+    @State private var syncMessage: String?
+    @State private var isSyncing = false
 
     private var profile: HumanProfile { missionStore.mission.profile }
 
@@ -21,6 +23,28 @@ struct MissionView: View {
                 missionDiscoverySection
                 missionTargetsSection
                 aboutYouSection
+
+                Text(missionStore.missionSubtitle)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if missionStore.hasMissionStatement {
+                    Button {
+                        Task { await syncMission() }
+                    } label: {
+                        Text(isSyncing ? "Syncing…" : "Sync Life Mission to Sovereign")
+                    }
+                    .buttonStyle(CenturionSecondaryButtonStyle())
+                    .disabled(isSyncing || connectionManager.connectionState != .connected)
+                }
+
+                if let syncMessage {
+                    Text(syncMessage)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.dimAccent())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding()
         }
@@ -33,15 +57,20 @@ struct MissionView: View {
         )
         .navigationTitle("Mission")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await missionStore.refreshMission(from: connectionManager)
+        }
         .fullScreenCover(isPresented: $isDiscovering) {
             MissionDiscoveryView(initialAnswers: missionStore.discoveryAnswers) { answers in
                 missionStore.completeDiscovery(from: answers)
                 isDiscovering = false
+                Task { await syncMission() }
             }
         }
         .sheet(isPresented: $showContextEditor) {
             HumanContextInterviewView(existingProfile: missionStore.mission.profile) { updated in
                 missionStore.updateProfile(updated)
+                Task { await syncMission() }
             }
         }
         .sheet(item: $chatTarget) { target in
@@ -265,6 +294,14 @@ struct MissionView: View {
             message: "Complete Mission Discovery to define your commitments."
         )
         .centurionCard()
+    }
+
+    private func syncMission() async {
+        isSyncing = true
+        defer { isSyncing = false }
+        syncMessage = await missionStore.syncMissionToSovereign(
+            connectionManager: connectionManager
+        )
     }
 }
 

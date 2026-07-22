@@ -908,6 +908,24 @@ final class ConnectionManager: ObservableObject {
         return payload["soul"] as? [String: Any] ?? [:]
     }
 
+    func fetchMission() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "mission_get")
+        return payload["mission"] as? [String: Any] ?? [:]
+    }
+
+    func putMission(_ fields: [String: Any]) async throws -> [String: Any] {
+        let payload = try await invokeRemote(
+            action: "mission_put",
+            extra: ["mission": fields]
+        )
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not save your Life Mission."
+            )
+        }
+        return payload["mission"] as? [String: Any] ?? [:]
+    }
+
     func setFamilyBeneficiary(firstName: String) async throws -> [String: Any] {
         let payload = try await invokeRemote(
             action: "beneficiary_set_family_member",
@@ -1085,6 +1103,8 @@ final class ConnectionManager: ObservableObject {
             "oversight_put_response": "oversight_put",
             "soul_get_response": "soul_get",
             "soul_put_response": "soul_put",
+            "mission_get_response": "mission_get",
+            "mission_put_response": "mission_put",
             "memory_horizon_snapshot_response": "memory_horizon_snapshot",
             "plans_list_response": "plans_list",
             "plan_get_response": "plan_get",

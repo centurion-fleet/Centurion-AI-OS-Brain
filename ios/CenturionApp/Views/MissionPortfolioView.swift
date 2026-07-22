@@ -185,6 +185,7 @@ struct MissionPortfolioView: View {
                     onProceed: { handlePlanProceed(plan) },
                     onAdjust: { handlePlanAdjust(plan) },
                     onHold: { handlePlanHold(plan) },
+                    onDiscuss: { openPlanDiscuss(plan) },
                     onShare: { reviewerId in
                         Task {
                             _ = await planStore.share(
@@ -348,6 +349,14 @@ struct MissionPortfolioView: View {
         chatTarget = ChatSheetTarget(context: conversation.context)
     }
 
+    /// Opens (or resumes) the stable plan-scoped Discuss thread.
+    private func openPlanDiscuss(_ plan: PlanArtifact, kickoffNote: String? = nil) {
+        Haptics.lightTap()
+        planStore.upsert(plan)
+        let conversation = messageService.seedPlanDiscuss(plan: plan, kickoffNote: kickoffNote)
+        chatTarget = ChatSheetTarget(context: conversation.context)
+    }
+
     private func reloadPulseFeed(forceRefresh: Bool = false) async {
         if connectionManager.connectionState == .connected {
             if forceRefresh || !isDataLoaded {
@@ -443,9 +452,9 @@ struct MissionPortfolioView: View {
             if let signalId = plan.signalId {
                 swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
             } else if connectionManager.connectionState == .connected {
-                openDiscuss(
-                    title: "Proceed: \(plan.title)",
-                    detail: "Please proceed with this plan:\n\n\(plan.markdownContent)"
+                openPlanDiscuss(
+                    plan,
+                    kickoffNote: "Please proceed with this plan."
                 )
             }
             applyPulseFromSwarmStore()
@@ -455,9 +464,9 @@ struct MissionPortfolioView: View {
     private func handlePlanAdjust(_ plan: PlanArtifact) {
         Task {
             await planStore.decide(plan.id, choice: "request_changes", connectionManager: connectionManager)
-            openDiscuss(
-                title: "Adjust plan: \(plan.title)",
-                detail: "Your Sovereign proposes this plan. Please help me adjust it before proceeding.\n\n\(plan.markdownContent)"
+            openPlanDiscuss(
+                plan,
+                kickoffNote: "Please help me adjust this plan before proceeding."
             )
             applyPulseFromSwarmStore()
         }
@@ -1135,40 +1144,57 @@ struct MissionPortfolioView: View {
                 .font(.headline)
                 .foregroundColor(ColorTheme.primaryText())
             ForEach(plans) { plan in
-                Button {
-                    Haptics.mediumTap()
-                    selectedPlan = plan
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(plan.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(ColorTheme.primaryText())
-                                .lineLimit(2)
-                            Spacer()
-                            if let risk = plan.risk {
-                                Text(risk.displayLabel)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundColor(ColorTheme.accent())
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    Button {
+                        Haptics.mediumTap()
+                        selectedPlan = plan
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(plan.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(ColorTheme.primaryText())
+                                    .lineLimit(2)
+                                Spacer()
+                                if let risk = plan.risk {
+                                    Text(risk.displayLabel)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundColor(ColorTheme.accent())
+                                }
                             }
-                        }
-                        Text(plan.status.displayLabel)
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.mutedText())
-                        if !plan.goal.isEmpty {
-                            Text(plan.goal)
+                            Text(plan.status.displayLabel)
                                 .font(.caption)
                                 .foregroundColor(ColorTheme.mutedText())
-                                .lineLimit(2)
+                            if !plan.goal.isEmpty {
+                                Text(plan.goal)
+                                    .font(.caption)
+                                    .foregroundColor(ColorTheme.mutedText())
+                                    .lineLimit(2)
+                            }
+                            Text("\(plan.steps.count) steps")
+                                .font(.caption2)
+                                .foregroundColor(ColorTheme.mutedText())
                         }
-                        Text("\(plan.steps.count) steps")
-                            .font(.caption2)
-                            .foregroundColor(ColorTheme.mutedText())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Spacing.md)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.md)
+                    .buttonStyle(.plain)
+
+                    Button {
+                        openPlanDiscuss(plan)
+                    } label: {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(ColorTheme.accent())
+                            .frame(width: 44, height: 44)
+                            .background(ColorTheme.accent().opacity(0.12))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Discuss \(plan.title)")
+                    .padding(.trailing, Spacing.sm)
+                    .padding(.top, Spacing.sm)
                 }
-                .buttonStyle(.plain)
                 .cardStyle()
             }
         }

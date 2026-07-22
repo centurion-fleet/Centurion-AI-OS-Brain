@@ -133,7 +133,7 @@ struct FamilyBeneficiaryCard: View {
 
             AtmosphericSurface(showRim: true) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text("Introduce four colleagues who buy Sovereign — earn one for someone you love.")
+                    Text("Nominate one family member you are earning for. Then refer four colleagues who buy their own Sovereign — that earns one complimentary Sovereign for your nominee.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(4)
@@ -162,7 +162,7 @@ struct FamilyBeneficiaryCard: View {
                 }
             }
 
-            Text("Refer colleagues who will buy their own Sovereign. Family members are who you're earning for — they can't be counted as referrals.")
+            Text("Refer colleagues (not family). Pending means referred and waiting for their purchase; Purchased means it counts toward your four. When you earn a complimentary Sovereign, our team will be in touch to fulfill it — this app does not provision hardware automatically.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
@@ -177,7 +177,7 @@ struct FamilyBeneficiaryCard: View {
                 Text("Earning a Sovereign for \(beneficiaryStore.beneficiaryFirstName)")
                     .font(.body.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("\(beneficiaryStore.successfulCount) of \(beneficiaryStore.referralsRequired) colleagues")
+                Text("\(beneficiaryStore.successfulCount) of \(beneficiaryStore.referralsRequired) successful colleague purchases")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
             }
