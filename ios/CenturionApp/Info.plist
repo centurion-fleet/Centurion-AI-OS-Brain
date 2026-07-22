@@ -44,8 +44,6 @@
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
-		<key>UIImageName</key>
-		<string>AppMark</string>
 	</dict>
 	<key>UIRequiresFullScreen</key>
 	<true/>

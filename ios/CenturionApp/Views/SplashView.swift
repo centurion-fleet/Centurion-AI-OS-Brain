@@ -3,7 +3,6 @@ import SwiftUI
 /// First-moment experience — matches the system launch screen so the handoff feels instant.
 /// Main app loads underneath during the ~1s splash so the transition feels immediate.
 struct SplashView: View {
-    @State private var phase: SplashPhase = .glow
     @State private var contentOpacity: Double = 1
     @State private var taglineOpacity = 0.0
     @State private var missionHorizonOpacity = 0.0
@@ -11,11 +10,12 @@ struct SplashView: View {
 
     let onComplete: () -> Void
 
-    enum SplashPhase {
-        case glow
-        case globe
-        case title
-        case horizon
+    private var appVersionLabel: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        if short.isEmpty { return "" }
+        if build.isEmpty { return short }
+        return "\(short) (\(build))"
     }
 
     var body: some View {
@@ -25,60 +25,20 @@ struct SplashView: View {
             ColorTheme.atmosphericVeil()
                 .ignoresSafeArea()
 
-            RadialGradient(
-                colors: [
-                    ColorTheme.atmosphereTeal().opacity(0.12),
-                    ColorTheme.accent().opacity(0.06),
-                    .clear,
-                ],
-                center: .center,
-                startRadius: 20,
-                endRadius: 280
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            ColorTheme.accent().opacity(0.22),
-                            ColorTheme.accent().opacity(0.04),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 8,
-                        endRadius: 110
-                    )
-                )
-                .frame(width: 220, height: 220)
-
-            ZStack {
-                MetallicRim(diameter: 160, opacity: phase == .glow ? 0.35 : 0.55)
-                Circle()
-                    .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 1)
-                    .frame(width: 160, height: 160)
-                Circle()
-                    .stroke(ColorTheme.accent().opacity(0.3), lineWidth: 1.5)
-                    .frame(width: 130, height: 130)
-                Circle()
-                    .stroke(ColorTheme.accent().opacity(0.45), lineWidth: 2)
-                    .frame(width: 105, height: 105)
-            }
-            .opacity(phase == .glow ? 0.6 : 1)
-
-            CenturionAppMark(size: 96)
-                .shadow(color: ColorTheme.accent().opacity(0.25), radius: 24, y: 8)
-                .scaleEffect(phase == .glow ? 0.82 : 1.0)
-
             VStack(spacing: 0) {
                 Spacer()
-                    .frame(height: 140)
 
                 Text("CENTURION")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(ColorTheme.mutedText())
                     .tracking(4)
-                    .opacity(phase == .glow ? 0.4 : taglineOpacity)
+                    .opacity(0.85)
+
+                Text("Sovereign AI Remote")
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(ColorTheme.primaryText())
+                    .padding(.top, Spacing.sm)
+                    .opacity(taglineOpacity)
 
                 Text("1 Human 1 AI")
                     .font(.subheadline)
@@ -86,6 +46,14 @@ struct SplashView: View {
                     .tracking(1.5)
                     .opacity(taglineOpacity)
                     .padding(.top, Spacing.sm)
+
+                if !appVersionLabel.isEmpty {
+                    Text(appVersionLabel)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .opacity(taglineOpacity * 0.9)
+                        .padding(.top, Spacing.sm)
+                }
 
                 Rectangle()
                     .fill(
@@ -111,7 +79,10 @@ struct SplashView: View {
                     .foregroundColor(ColorTheme.dimAccent())
                     .opacity(missionHorizonOpacity * 0.9)
                     .padding(.top, 6)
+
+                Spacer()
             }
+            .padding(.horizontal, Spacing.xl)
         }
         .opacity(contentOpacity)
         .onAppear {
@@ -123,18 +94,14 @@ struct SplashView: View {
     }
 
     private func animateThroughPhases() {
-        withAnimation(.easeOut(duration: 0.2)) { phase = .globe }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                phase = .title
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeOut(duration: 0.25)) {
                 taglineOpacity = 1.0
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                phase = .horizon
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeOut(duration: 0.25)) {
                 missionHorizonOpacity = 1.0
             }
         }
