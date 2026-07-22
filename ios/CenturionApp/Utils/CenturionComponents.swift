@@ -78,7 +78,7 @@ struct FullBrandHeader: View {
                 Text("Centurion")
                     .font(.title2.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Sovereign Remote")
+                Text("Sovereign AI Remote")
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(ColorTheme.mutedText())
                 Text("1 Human 1 AI")
@@ -90,7 +90,7 @@ struct FullBrandHeader: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Centurion. Sovereign Remote. 1 Human 1 AI.")
+        .accessibilityLabel("Centurion. Sovereign AI Remote. 1 Human 1 AI.")
     }
 }
 

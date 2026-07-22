@@ -37,12 +37,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "5.0.1"
-        CURRENT_PROJECT_VERSION: "21"
+        MARKETING_VERSION: "5.0.2"
+        CURRENT_PROJECT_VERSION: "22"
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Sovereign Remote
+        CFBundleDisplayName: Sovereign AI Remote
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UIApplicationSceneManifest:
@@ -54,7 +54,7 @@ targets:
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: "Sovereign Remote needs local network access to find your Sovereign on your Wi‑Fi."
+        NSLocalNetworkUsageDescription: "Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi."
         NSBonjourServices:
           - _centurion._tcp
         NSAppTransportSecurity:

@@ -1369,13 +1369,13 @@ struct MissionPortfolioView: View {
                 Image(systemName: "waveform.path.ecg")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent())
-                Text("Sovereign Remote")
+                Text("Sovereign AI Remote")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 Button(action: {
                     openDiscuss(
-                        title: "Sovereign Remote",
+                        title: "Sovereign AI Remote",
                         detail: "General updates stream from your Sovereign."
                     )
                 }) {

@@ -18,7 +18,7 @@ enum ProposeFirstChat {
 
     static func frameOutbound(userText: String) -> String {
         """
-        [Sovereign Remote — Propose first]
+        [Sovereign AI Remote — Propose first]
         The user wants a plan before any consequential action.
 
         For this turn only:

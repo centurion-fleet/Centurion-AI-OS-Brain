@@ -190,7 +190,7 @@ struct SecurityHubView: View {
                 .tint(ColorTheme.accent())
 
                 if showMessagingComparison {
-                    Text("Privacy of the private link — how Sovereign Remote compares to popular messengers.")
+                    Text("Privacy of the private link — how Sovereign AI Remote compares to popular messengers.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                     comparisonTable(
