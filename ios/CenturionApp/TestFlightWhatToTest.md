@@ -1,18 +1,10 @@
-# Sovereign AI Remote — TestFlight What to Test (build 22)
+# Sovereign AI Remote — TestFlight What to Test (build 23)
 
-**Version:** 5.0.2 (22)  
-**Focus:** Rename to Sovereign AI Remote + release bump
+**Version:** 5.0.2 (23)  
+**Focus:** Single system launch wordmark (no app icon, no second splash)
 
 ## Must try
 
-1. Confirm home-screen / under-icon name shows **Sovereign AI Remote**.
-2. Link your Sovereign (or reconnect).
-3. Crypto Chat send/receive.
-4. You → Mission → sync still works; Thinking Service dial still switches Brain.
-5. Plan Discuss still opens from a Plan on Home.
-
-## Also smoke
-
-- Memory Horizon when linked
-- Family Beneficiary copy still clear
-- App icon sphere on TestFlight / version page
+1. Cold launch: one splash — cream/ink + **SOVEREIGN AI REMOTE** / **1 Human 1 AI** (no icon).
+2. Goes straight into Chat (or onboarding) — no second branded splash.
+3. Link / Crypto Chat / Mission sync / Thinking Service dial still work.
