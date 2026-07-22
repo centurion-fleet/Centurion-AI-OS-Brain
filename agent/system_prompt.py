@@ -108,6 +108,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     except Exception:
         pass
 
+    # Life Mission — authoritative north star for performance (cache-safe).
+    try:
+        from centurion_cli.mission_sync import build_mission_guidance
+
+        _mission = build_mission_guidance()
+        if _mission:
+            stable_parts.append(_mission)
+    except Exception:
+        pass
+
     # Pointer to the centurion-os skill + docs for user questions about Centurion itself.
     stable_parts.append(CENTURION_AGENT_HELP_GUIDANCE)
 

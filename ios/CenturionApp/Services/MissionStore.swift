@@ -8,6 +8,7 @@ final class MissionStore: ObservableObject {
     @Published private(set) var mission: LifeMission
     @Published private(set) var soul: SoulDocument
     @Published private(set) var soulSyncedWithSovereign = false
+    @Published private(set) var missionSyncedWithSovereign = false
     @Published var activeTargetIDs: Set<UUID>
 
     private static let missionKey = "centurion.lifeMission.v1"
@@ -88,6 +89,15 @@ final class MissionStore: ObservableObject {
             : "On this phone — link to sync"
     }
 
+    var missionSubtitle: String {
+        if !hasMissionStatement {
+            return "Your north star — syncs to your Sovereign"
+        }
+        return missionSyncedWithSovereign
+            ? "Synced — shapes the next conversation"
+            : "On this phone — link to sync"
+    }
+
     func toggleActiveTarget(_ id: UUID) {
         if activeTargetIDs.contains(id) {
             activeTargetIDs.remove(id)
@@ -141,12 +151,14 @@ final class MissionStore: ObservableObject {
         mission = updated
         persistMission()
         markPersisted()
+        missionSyncedWithSovereign = false
     }
 
     func updateProfile(_ profile: HumanProfile) {
         mission.profile = profile
         persistMission()
         markPersisted()
+        missionSyncedWithSovereign = false
     }
 
     func commitment(with id: UUID) -> LifeMissionTarget? {
@@ -179,6 +191,7 @@ final class MissionStore: ObservableObject {
 
         persistMission()
         markPersisted()
+        missionSyncedWithSovereign = false
         return true
     }
 
@@ -240,6 +253,136 @@ final class MissionStore: ObservableObject {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    /// Pull host LIFE_MISSION.md into the local LifeMission when linked.
+    func refreshMission(from connectionManager: ConnectionManager) async {
+        guard connectionManager.connectionState == .connected else { return }
+        do {
+            let payload = try await connectionManager.fetchMission()
+            if let merged = Self.lifeMission(fromHost: payload) {
+                if !hasMissionStatement || Self.hostMissionLooksRicher(payload, than: mission) {
+                    mission = merged
+                    persistMission()
+                    markPersisted()
+                }
+                missionSyncedWithSovereign = true
+            }
+        } catch {
+            // Offline / bridge failure — keep local cache.
+        }
+    }
+
+    /// Push local Life Mission to the Sovereign (LIFE_MISSION.md + USER.md).
+    @discardableResult
+    func syncMissionToSovereign(connectionManager: ConnectionManager) async -> String? {
+        guard connectionManager.connectionState == .connected else {
+            return "Saved on this phone. Link your Sovereign to sync."
+        }
+        guard hasMissionStatement else {
+            return "Set a Life Mission statement before syncing."
+        }
+        do {
+            let fields = missionPayloadDictionary()
+            let payload = try await connectionManager.putMission(fields)
+            if let merged = Self.lifeMission(fromHost: payload) {
+                mission = merged
+                persistMission()
+            }
+            missionSyncedWithSovereign = true
+            markPersisted()
+            return "Saved. Life Mission shapes the next conversation."
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func missionPayloadDictionary() -> [String: Any] {
+        let profile = mission.profile
+        return [
+            "id": mission.id.uuidString,
+            "statement": mission.statement,
+            "targets": mission.targets.map { target -> [String: Any] in
+                [
+                    "id": target.id.uuidString,
+                    "title": target.title,
+                    "description": target.description,
+                ]
+            },
+            "profile": [
+                "whyThisMission": profile.whyThisMission,
+                "areasOfFocus": profile.areasOfFocus,
+                "yourStory": profile.yourStory,
+                "yourValues": profile.yourValues,
+                "yourPersonality": profile.yourPersonality,
+                "yourStrengths": profile.yourStrengths,
+                "vitalStatName": profile.vitalStatName,
+                "vitalStatCurrent": profile.vitalStatCurrent,
+                "vitalStatTarget": profile.vitalStatTarget,
+                "workStyle": profile.workStyle,
+                "decisionStyle": profile.decisionStyle,
+                "timezone": profile.timezone,
+                "workHours": profile.workHours,
+                "challenges": profile.challenges,
+                "keyRelationships": profile.keyRelationships,
+                "toolsYouUse": profile.toolsYouUse,
+                "delegatePreferences": profile.delegatePreferences,
+                "currentProjects": profile.currentProjects,
+            ] as [String: Any],
+        ]
+    }
+
+    private static func lifeMission(fromHost payload: [String: Any]) -> LifeMission? {
+        let statement = (payload["statement"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let idString = payload["id"] as? String ?? ""
+        let id = UUID(uuidString: idString) ?? UUID()
+        var profile = HumanProfile()
+        if let p = payload["profile"] as? [String: Any] {
+            profile.whyThisMission = p["whyThisMission"] as? String ?? ""
+            profile.areasOfFocus = p["areasOfFocus"] as? [String] ?? []
+            profile.yourStory = p["yourStory"] as? String ?? ""
+            profile.yourValues = p["yourValues"] as? [String] ?? []
+            profile.yourPersonality = p["yourPersonality"] as? String ?? ""
+            profile.yourStrengths = p["yourStrengths"] as? [String] ?? []
+            profile.workStyle = p["workStyle"] as? String ?? ""
+            profile.decisionStyle = p["decisionStyle"] as? String ?? ""
+            profile.challenges = p["challenges"] as? [String] ?? []
+            profile.keyRelationships = p["keyRelationships"] as? [String] ?? []
+            profile.toolsYouUse = p["toolsYouUse"] as? [String] ?? []
+            profile.delegatePreferences = p["delegatePreferences"] as? [String] ?? []
+            profile.currentProjects = p["currentProjects"] as? [String] ?? []
+            profile.timezone = p["timezone"] as? String ?? ""
+            profile.workHours = p["workHours"] as? String ?? ""
+            profile.vitalStatName = p["vitalStatName"] as? String ?? ""
+            if let v = p["vitalStatCurrent"] as? Double { profile.vitalStatCurrent = v }
+            if let v = p["vitalStatTarget"] as? Double { profile.vitalStatTarget = v }
+        }
+        var targets: [LifeMissionTarget] = []
+        if let raw = payload["targets"] as? [[String: Any]] {
+            for item in raw {
+                let title = (item["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { continue }
+                let tid = UUID(uuidString: item["id"] as? String ?? "") ?? UUID()
+                targets.append(
+                    LifeMissionTarget(
+                        id: tid,
+                        title: title,
+                        description: item["description"] as? String ?? ""
+                    )
+                )
+            }
+        }
+        if statement.isEmpty && targets.isEmpty && !profile.hasContext {
+            return nil
+        }
+        return LifeMission(id: id, statement: statement, targets: targets, profile: profile)
+    }
+
+    private static func hostMissionLooksRicher(_ payload: [String: Any], than local: LifeMission) -> Bool {
+        let hostStatement = (payload["statement"] as? String ?? "").count
+        let hostTargets = (payload["targets"] as? [[String: Any]] ?? []).count
+        let localScore = local.statement.count + local.targets.count
+        return (hostStatement + hostTargets * 20) > localScore
     }
 
     private static func soulDocument(fromHost payload: [String: Any]) -> SoulDocument? {

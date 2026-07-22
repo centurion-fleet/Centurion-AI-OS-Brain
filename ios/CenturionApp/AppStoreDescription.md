@@ -3,38 +3,39 @@
 ## App Name
 Sovereign Remote
 
+*(In App Store Connect → App Information, set the listing name to **Sovereign Remote** if it still shows “Personal Centurion AI Remote”.)*
+
 ## Subtitle
 Your Sovereign in Your Pocket
 
+## Price
+**Free** — companion app for Centurion customers. A Centurion Sovereign (hardware you own) is required; the app is not useful without a linked Sovereign on your network. No in-app subscription for the Remote itself.
+
 ## Description
 
-**Sovereign Remote is the communication interface to your Sovereign — a private AI that lives on your desk, knows your mission, and helps you live it. Every conversation advances what matters.**
+**Free for Centurion customers.** Sovereign Remote is the iPhone companion to your Sovereign — a private AI that lives on your desk, knows your Life Mission, and helps you live it. Download is free; you need a Centurion Sovereign to use it.
 
-Not a chatbot. Not a project manager with messaging. Your Sovereign is a dedicated AI that belongs to you alone — no public multi-tenant AI account, no subscription trap, no one else's data mixed into your private counsel. It runs on hardware you own, on your network. This iPhone app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
+Not a public chatbot. Not a multi-tenant agent marketplace. Your Sovereign belongs to you alone — no shared cloud AI account, no one else’s data mixed into your private counsel. It runs on hardware you own, on your network. This app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
 
 **CRYPTO CHAT**
 
-Crypto Chat is the end-to-end encrypted link between your iPhone and your Sovereign on your network. Your words stay between you and your Sovereign — not routed through a public AI product. A point of difference cloud chatbots cannot match.
+Crypto Chat is the end-to-end encrypted link between your iPhone and your Sovereign on your network. Your words stay between you and your Sovereign — not routed through a public AI product.
+
+**LIFE MISSION, SOUL & AUTONOMY**
+
+Set your Life Mission, shape how your Sovereign speaks (Soul), and choose Autonomy Level on the phone. When linked, those settings sync to your Sovereign and shape how it thinks and acts on the next conversation.
+
+**THINKING SERVICE**
+
+Choose which thinking service your Sovereign uses (BYOK families). Access codes stay on your Sovereign — never on this iPhone.
 
 **COLLABORATIONS**
 
-While you are away from the desk, your Sovereigns can work toward your Life Mission. Open Remote to **orient** (constellation of collaborations), **decide** when something needs your choice, and **receive** finished work marked Ready for you — over the same private channel. This is mission-centered collaboration on hardware you own — not a multi-tenant agent marketplace and not jargon about swarms or boards.
+While you are away from the desk, your Sovereigns can work toward your Life Mission. Open Remote to orient, decide when something needs your choice, and receive finished work marked Ready for you — over the same private channel.
 
 **ADRIAN (OPTIONAL HELP)**
 
-Adrian is an optional online help guide for setup and support questions. Adrian works over the internet via the Centurion Help Center and does **not** see your Crypto Chat history or private mission counsel. Crypto Chat with your Sovereign and Adrian help are separate connections with different privacy boundaries.
-
-**CHAT IS THE INTERFACE**
-
-Every program, target, and task in Mission Control has a 💬 button. Tap it — you're talking to your Sovereign about that specific mission element, with full context preserved. The Sovereign knows what you were looking at and responds accordingly.
-
-**THE UNIFIED STREAM**
-
-All messages — from every mission context — appear in one chronological "All Chat" feed. Each message carries a context badge so you always know where it belongs: Program, Target, Task, or Standalone. Nothing is hidden in sub-menus. This is your complete dialogue with your Sovereign.
-
-**CONVERSATIONS THAT ORGANIZE THEMSELVES**
-
-No folders. No tags. No manual organisation. Conversations auto-group by mission context because that's how humans think: "What did my Sovereign say about Q3 Go-to-Market?" → find it under Active Missions.
+Adrian is an optional online help guide for setup and support. Adrian works via the Centurion Help Center and does **not** see your Crypto Chat history. Crypto Chat and Adrian help are separate connections.
 
 **STRONG ENCRYPTION**
 
@@ -43,36 +44,18 @@ No folders. No tags. No manual organisation. Conversations auto-group by mission
 - Per-session keys for Crypto Chat between your iPhone and your Sovereign
 - Built with Apple frameworks plus the open-source libsodium cryptography library (swift-sodium)
 
-**APPLE-NATIVE REMOTE**
-
-Built on Apple frameworks for discovery (Bonjour/mDNS), transport (Network framework), identity (Keychain), and interface (SwiftUI), with libsodium for Crypto Chat. Your Crypto Chat stays between your iPhone and your Sovereign. Optional Adrian help uses the Centurion Help Center only for support guidance.
-
-**MISSION CONTROL**
-
-- Life Mission statement — your north star
-- Vital statistic — the one number that matters
-- Contextual AI thoughts — not just reactive answers
-- Focus Today — what moves your mission forward
-- Drag-reorderable programs with inline targets and tasks
-- Three-dot amber status system (Things 3 inspired)
-
-**DESIGNED FOR DELIGHT**
-
-Spring physics on every message. Haptic feedback on every interaction. Flat frosted glass chrome. Dark and light themes, each with its own palette. Custom bubble shapes with tailored corners. Typography that means something.
-
 **PRIVACY IS THE PRODUCT**
 
-Your Sovereign has no company backdoor into Crypto Chat. Centurion Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream.
+Centurion Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream.
 
 **OWN IT ONCE**
 
-Buy a Sovereign once and receive free lifetime updates for both the Linux brain and this iPhone Remote. No monthly fees for the Sovereign platform — unlike public AI subscriptions. Owners are invited to the weekly Sunday night AI Owners training session.
+Buy a Sovereign once and receive free lifetime updates for the Linux brain and this iPhone Remote. No monthly fees for the Sovereign platform.
 
-**A Sovereign is required.** This app connects to your Sovereign. Visit 1human1ai.com to learn more. Support library: help.1human1ai.com.
+**A Sovereign is required.** Visit 1human1ai.com to learn more. Support: help.1human1ai.com.
 
 ## Keywords
 Crypto Chat, privacy, personal AI, Sovereign Remote, life mission, local network
-
 
 ## Support URL
 https://help.1human1ai.com
@@ -84,7 +67,16 @@ https://www.1human1ai.com
 https://www.1human1ai.com/privacy
 
 ## Promotional Text
-Your Sovereign in your pocket. Crypto Chat stays private. Collaborations advance your Life Mission while you are away — you decide, then receive Ready for you.
+Free for Centurion customers. Link your Sovereign for private Crypto Chat, Life Mission, and collaborations — nothing works without your own Sovereign on your network.
+
+## App Review Notes (paste into ASC)
+
+Sovereign Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
+
+- There is **no cloud login** and **no demo account**. The app discovers a Sovereign on the owner’s local network (Bonjour) and pairs with owner approval.
+- Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design.
+- TestFlight / Review: use a device on the same LAN as a running Sovereign with `centurion-remote` enabled, or contact the developer for a review pairing window.
+- Price: Free. No IAP for core Remote features.
 
 ## App Privacy notes (App Store Connect)
 

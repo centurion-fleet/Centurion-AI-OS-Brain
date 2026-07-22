@@ -483,6 +483,11 @@ struct ChatView: View {
             Ask to rename this commitment, sharpen its description, or turn it off on Home. \
             When your Sovereign applies a change, it updates here automatically.
             """
+        } else if case .plan = context {
+            message = """
+            Continue this plan anytime — refine steps, ask questions, or decide what to do next. \
+            When your Sovereign updates the plan, Home stays in sync.
+            """
         } else {
             message = "Messages here appear in the full chat stream too."
         }

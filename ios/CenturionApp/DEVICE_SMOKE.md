@@ -25,6 +25,8 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 ## Mission / Soul / Autonomy / Oversight
 
 - [ ] Open Mission; edit or view Life Mission
+- [ ] While linked: **Sync Life Mission to Sovereign** succeeds; subtitle shows synced
+- [ ] Start a **new** Crypto Chat after sync — Sovereign advances the Life Mission without re-pasting it
 - [ ] You → **Your Sovereign's Soul** opens; subtitle reflects sync state when linked
 - [ ] Shape Your Sovereign shows save warning; note about next-conversation effect
 - [ ] After save while linked, Soul syncs to Sovereign `SOUL.md`
@@ -50,7 +52,8 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] Chat shows **Talk** / **Propose first** chips
 - [ ] Propose first drafts a plan; Home **Plans** / Needs your choice / Documents show it
 - [ ] Live may show “Drafting a plan…” while planning
-- [ ] Plan review: **Proceed** / **Adjust** / **Hold** work; Proceed syncs to host when linked
+- [ ] Plan review: **Proceed** / **Adjust** / **Hold** / **Discuss** work; Proceed syncs to host when linked
+- [ ] **Discuss** opens (or resumes) the stable plan-scoped Crypto Chat; refinements can update the plan via `plan-update`
 - [ ] Risk badge appears when host classifies the plan
 - [ ] **Templates** under Home → Plans instantiate a reviewable plan when linked
 - [ ] **Share for review** accepts a reviewer customer id and records reviewers on the plan
@@ -88,14 +91,22 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] With thinking service healthy, chat succeeds
 - [ ] Thinking recovery sheet opens from chat error path when applicable
 
+## Family Beneficiary
+
+- [ ] You sales hero shows Family Beneficiary card
+- [ ] Copy: one family nominee; progress = four successful colleague purchases
+- [ ] Nominate first name; refer colleague with non-family attestation
+- [ ] Status shows Pending (awaiting purchase) vs Purchased (counted)
+- [ ] Footer explains ops fulfillment (“team will be in touch”) — no auto-provision claim
+
 ## Regression notes
 
 Record device model, iOS version, Sovereign hostname, and pass/fail date here when run:
 
 ```
-Date: 2026-07-21
+Date: 2026-07-22
 Device: (physical smoke pending)
 iOS:
 Sovereign:
-Result: Thinking Service dial on main (PR #4). Archive 5.0.1 (18) uploaded to App Store Connect — icon full-bleed + dial What-to-Test. Complete dial DEVICE_SMOKE on device; attach build 18 to ASC version 5.0.1 so Apps list icon updates.
+Result: App Store close-out — Mission→Brain sync, Plan Discuss, Beneficiary copy, listing drafts. TF 5.0.1 (21) upload. ASC listing name → Sovereign Remote; attach build 21 after processing; capture 6.7" screenshots before Submit.
 ```

@@ -100,6 +100,10 @@ def handle_request(
         return _handle_soul_get(request_id)
     if action == "soul_put":
         return _handle_soul_put(request, request_id)
+    if action == "mission_get":
+        return _handle_mission_get(request_id)
+    if action == "mission_put":
+        return _handle_mission_put(request, request_id)
     if action == "plans_list":
         return _handle_plans_list(request, request_id)
     if action == "plan_get":
@@ -850,6 +854,54 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
         }
     except Exception as exc:
         return _error_response(request_id, action="soul_put", exc=exc)
+
+
+def _handle_mission_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.mission_sync import read_mission
+
+        mission = read_mission()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "mission_get",
+            "mission": mission,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="mission_get", exc=exc)
+
+
+def _handle_mission_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.mission_sync import write_mission
+
+        fields = request.get("mission")
+        if not isinstance(fields, dict):
+            fields = request.get("fields")
+        markdown = request.get("markdown")
+        if not isinstance(fields, dict) and not isinstance(markdown, str):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "mission_put",
+                "code": "INVALID_REQUEST",
+                "error": "Mission fields or markdown are required.",
+                "message": "Mission fields or markdown are required.",
+                "retryable": False,
+            }
+        mission = write_mission(
+            fields if isinstance(fields, dict) else None,
+            markdown=markdown if isinstance(markdown, str) else None,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "mission_put",
+            "mission": mission,
+            "message": "Saved. Life Mission changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="mission_put", exc=exc)
 
 
 def _handle_memory_horizon_snapshot(request_id: str) -> dict[str, Any]:

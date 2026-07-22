@@ -878,6 +878,72 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::MissionGet { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "mission_get", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::MissionGetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        mission: payload
+                            .get("mission")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::MissionPut {
+                id,
+                mission,
+                markdown,
+            } => {
+                let mut body = serde_json::Map::new();
+                if let Some(mission) = mission {
+                    body.insert("mission".to_owned(), mission);
+                }
+                if let Some(markdown) = markdown {
+                    body.insert(
+                        "markdown".to_owned(),
+                        serde_json::Value::String(markdown),
+                    );
+                }
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "mission_put",
+                        serde_json::Value::Object(body),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::MissionPutResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        mission: payload
+                            .get("mission")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             RemoteMessage::MemoryHorizonSnapshot { id } => {
                 match state
                     .bridge

@@ -16,6 +16,8 @@ enum ConversationContext: Codable, Equatable, Hashable {
     case task(id: UUID, name: String, targetName: String, programName: String)
     /// A living commitment from the user's life mission (Mission → Active Commitments).
     case commitment(id: UUID, title: String)
+    /// A reviewable Plan from Home — same thread reopens anytime via Discuss.
+    case plan(id: UUID, title: String)
     case standalone(title: String)
 
     var displayTitle: String {
@@ -24,6 +26,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .target(_, let name, _): return name
         case .task(_, let name, _, _): return name
         case .commitment(_, let title): return title
+        case .plan(_, let title): return title
         case .standalone(let title): return title
         }
     }
@@ -34,6 +37,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .target(_, let name, let program): return "\(program) > \(name)"
         case .task(_, let name, let target, let program): return "\(program) > \(target) > \(name)"
         case .commitment(_, let title): return "Commitment · \(title)"
+        case .plan(_, let title): return "Plan · \(title)"
         case .standalone: return "Chat"
         }
     }
@@ -44,6 +48,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .target: return "arrow.triangle.branch"
         case .task: return "checkmark.circle"
         case .commitment: return "target"
+        case .plan: return "list.clipboard"
         case .standalone: return "message.fill"
         }
     }
@@ -59,6 +64,8 @@ enum ConversationContext: Codable, Equatable, Hashable {
             return ("\(program) > \(target) > \(name)", ColorTheme.dimAccent())
         case .commitment(_, let title):
             return ("Commitment · \(title)", ColorTheme.accent())
+        case .plan(_, let title):
+            return ("Plan · \(title)", ColorTheme.accent())
         case .standalone:
             return ("Chat", ColorTheme.mutedText())
         }
@@ -66,6 +73,11 @@ enum ConversationContext: Codable, Equatable, Hashable {
 
     var commitmentID: UUID? {
         if case .commitment(let id, _) = self { return id }
+        return nil
+    }
+
+    var planID: UUID? {
+        if case .plan(let id, _) = self { return id }
         return nil
     }
 
@@ -97,6 +109,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
             let id = try container.decode(UUID.self, forKey: .id)
             let title = try container.decode(String.self, forKey: .title)
             self = .commitment(id: id, title: title)
+        case "plan":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let title = try container.decode(String.self, forKey: .title)
+            self = .plan(id: id, title: title)
         case "standalone":
             let title = try container.decode(String.self, forKey: .title)
             self = .standalone(title: title)
@@ -125,6 +141,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
             try container.encode(programName, forKey: .programName)
         case .commitment(let id, let title):
             try container.encode("commitment", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(title, forKey: .title)
+        case .plan(let id, let title):
+            try container.encode("plan", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(title, forKey: .title)
         case .standalone(let title):

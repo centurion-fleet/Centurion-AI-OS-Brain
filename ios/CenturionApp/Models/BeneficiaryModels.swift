@@ -6,8 +6,8 @@ enum ColleagueReferralStatus: String, Codable {
 
     var displayLabel: String {
         switch self {
-        case .pending: return "Pending"
-        case .successful: return "Purchased"
+        case .pending: return "Pending — awaiting purchase"
+        case .successful: return "Purchased — counted"
         }
     }
 }

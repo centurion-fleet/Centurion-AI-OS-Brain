@@ -46,6 +46,59 @@ final class PlanStore: ObservableObject {
         persist()
     }
 
+    /// Apply a `plan-update` fence from Plan Discuss chat; returns true if applied.
+    @discardableResult
+    func applyDiscussUpdate(_ payload: PlanDiscussChat.UpdatePayload) -> Bool {
+        guard let id = UUID(uuidString: payload.plan_id),
+              var plan = plan(id: id) else {
+            return false
+        }
+        if let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            plan.title = title
+        }
+        if let goal = payload.goal {
+            plan.goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let steps = payload.steps {
+            plan.steps = steps
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let risks = payload.risks {
+            plan.risks = risks
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let questions = payload.open_questions {
+            plan.openQuestions = questions
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let summary = payload.summary {
+            plan.summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let statusRaw = payload.status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           !statusRaw.isEmpty {
+            plan.status = PlanArtifact.PlanStatus(rawValue: statusRaw)
+                ?? decodeStatusAlias(statusRaw)
+                ?? plan.status
+        }
+        upsert(plan)
+        return true
+    }
+
+    private func decodeStatusAlias(_ raw: String) -> PlanArtifact.PlanStatus? {
+        switch raw {
+        case "pending_review", "proposed", "pending": return .pendingReview
+        case "proceeded", "in_progress", "active": return .proceeded
+        case "held", "paused": return .held
+        case "adjusted": return .adjusted
+        case "completed": return .completed
+        case "rejected": return .rejected
+        default: return nil
+        }
+    }
+
     func markStatus(_ id: UUID, status: PlanArtifact.PlanStatus) {
         guard let index = plans.firstIndex(where: { $0.id == id }) else { return }
         plans[index].status = status
