@@ -49,6 +49,7 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
           UIColorName: LaunchBackground
+          UIImageName: LaunchWordmark
         UIApplicationSupportsAllInterfaceOrientations: true
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
