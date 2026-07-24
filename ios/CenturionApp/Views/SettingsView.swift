@@ -414,7 +414,7 @@ struct SettingsView: View {
                 Text("Centurion")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Sovereign Remote")
+                Text("Sovereign AI Remote")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                 Text("1 Human 1 AI")

@@ -626,7 +626,7 @@ final class MissionStore: ObservableObject {
     }
 
     static func discoveryShareMessage(answers: [String: String], questions: [MissionQuestion]) -> String {
-        var lines = ["I've completed my Mission Discovery on Sovereign Remote.", ""]
+        var lines = ["I've completed my Mission Discovery on Sovereign AI Remote.", ""]
         for question in questions {
             guard let answer = answers[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !answer.isEmpty else { continue }

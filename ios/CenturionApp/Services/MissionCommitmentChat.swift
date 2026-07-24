@@ -21,7 +21,7 @@ enum MissionCommitmentChat {
             ? "(not set yet)"
             : statement
         return """
-        [Sovereign Remote — Living Commitment chat]
+        [Sovereign AI Remote — Living Commitment chat]
         Life mission: \(missionLine)
         Commitment: \(commitment.title)
         Description: \(commitment.description)

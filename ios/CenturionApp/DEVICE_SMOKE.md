@@ -1,4 +1,4 @@
-# Sovereign Remote — device smoke checklist
+# Sovereign AI Remote — device smoke checklist
 
 Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against a live Sovereign before TestFlight.
 
@@ -6,7 +6,7 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 
 - [ ] `xcodegen generate` (if used) then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign Remote**; version **5.0.1** / build from `CURRENT_PROJECT_VERSION`
+- [ ] Display name: **Sovereign AI Remote**; version **5.0.2** / build **22**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 
 ## Pairing & Crypto Chat
@@ -109,5 +109,5 @@ Date: 2026-07-22
 Device: (physical smoke pending)
 iOS:
 Sovereign:
-Result: App Store close-out — Mission→Brain sync, Plan Discuss, Beneficiary copy, listing drafts. TF 5.0.1 (21) upload. ASC listing name → Sovereign Remote; attach build 21 after processing; capture 6.7" screenshots before Submit.
+Result: TF **5.0.2 (22)** — display/listing name **Sovereign AI Remote**. Attach build 22 to ASC version 5.0.2 after processing; rename ASC App Information to Sovereign AI Remote.
 ```

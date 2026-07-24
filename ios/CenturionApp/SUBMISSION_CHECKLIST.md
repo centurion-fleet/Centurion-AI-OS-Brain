@@ -1,10 +1,10 @@
-# Sovereign Remote — App Store submission checklist
+# Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.0.1**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.0.2**). Complete before App Store submit.
 
 ## Listing name & price
 
-- [ ] ASC **App Information** name = **Sovereign Remote** (not “Personal Centurion AI Remote”)
+- [ ] ASC **App Information** name = **Sovereign AI Remote**
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md

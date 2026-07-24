@@ -2,7 +2,7 @@
 
 ## Apps list icon
 
-After a processed build is **selected** on version **5.0.1** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
+After a processed build is **selected** on version **5.0.2** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
 
 ## App Store icon (1024×1024)
 
@@ -32,7 +32,7 @@ xcrun simctl io booted screenshot ios/CenturionApp/AppStore/iphone-67-0N-NAME.pn
 
 ## Status
 
-- [x] Build selected on **iOS 5.0.1** (sphere on build row)
+- [ ] Build selected on **iOS 5.0.2** (sphere on build row)
 - [ ] Screenshots captured for 6.7" (operator — five PNGs above)
 - [ ] Screenshots uploaded to App Store Connect
 - [ ] Listing preview reviewed

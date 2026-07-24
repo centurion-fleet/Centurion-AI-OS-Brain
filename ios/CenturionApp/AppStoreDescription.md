@@ -1,9 +1,9 @@
-# Sovereign Remote — App Store Submission
+# Sovereign AI Remote — App Store Submission
 
 ## App Name
-Sovereign Remote
+Sovereign AI Remote
 
-*(In App Store Connect → App Information, set the listing name to **Sovereign Remote** if it still shows “Personal Centurion AI Remote”.)*
+*(In App Store Connect → App Information, set the listing name to **Sovereign AI Remote**.)*
 
 ## Subtitle
 Your Sovereign in Your Pocket
@@ -13,7 +13,7 @@ Your Sovereign in Your Pocket
 
 ## Description
 
-**Free for Centurion customers.** Sovereign Remote is the iPhone companion to your Sovereign — a private AI that lives on your desk, knows your Life Mission, and helps you live it. Download is free; you need a Centurion Sovereign to use it.
+**Free for Centurion customers.** Sovereign AI Remote is the iPhone companion to your Sovereign — a private AI that lives on your desk, knows your Life Mission, and helps you live it. Download is free; you need a Centurion Sovereign to use it.
 
 Not a public chatbot. Not a multi-tenant agent marketplace. Your Sovereign belongs to you alone — no shared cloud AI account, no one else’s data mixed into your private counsel. It runs on hardware you own, on your network. This app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
 
@@ -55,7 +55,7 @@ Buy a Sovereign once and receive free lifetime updates for the Linux brain and t
 **A Sovereign is required.** Visit 1human1ai.com to learn more. Support: help.1human1ai.com.
 
 ## Keywords
-Crypto Chat, privacy, personal AI, Sovereign Remote, life mission, local network
+Crypto Chat, privacy, personal AI, Sovereign AI Remote, life mission, local
 
 ## Support URL
 https://help.1human1ai.com
@@ -71,7 +71,7 @@ Free for Centurion customers. Link your Sovereign for private Crypto Chat, Life 
 
 ## App Review Notes (paste into ASC)
 
-Sovereign Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
+Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
 
 - There is **no cloud login** and **no demo account**. The app discovers a Sovereign on the owner’s local network (Bonjour) and pairs with owner approval.
 - Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design.

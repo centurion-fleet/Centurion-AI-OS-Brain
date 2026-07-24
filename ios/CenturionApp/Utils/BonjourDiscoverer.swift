@@ -34,7 +34,7 @@ final class BonjourDiscoverer {
             if case .failed(let error) = state {
                 self?.browser?.cancel()
                 self?.delegate?.didFailDiscovery(
-                    message: "We couldn't search your network. Allow local network access for Sovereign Remote in Settings."
+                    message: "We couldn't search your network. Allow local network access for Sovereign AI Remote in Settings."
                 )
                 print("[Bonjour] Discovery failed: \(error)")
             }

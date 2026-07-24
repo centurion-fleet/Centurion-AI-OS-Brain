@@ -46,6 +46,7 @@
 		79327A346B13F76541E0524B /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A427BD838F46B4F357B51D9 /* ConnectionView.swift */; };
 		7B6E3A4535648BC3F269D364 /* CenturionShowcaseSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */; };
 		807F405D012F1890317AF5EA /* ReportingOversightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F50B898010E3972744D0CC4 /* ReportingOversightView.swift */; };
+		8B55CFB47612322CEFCFCEF1 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A145FAA4803248CF8FB7088 /* LaunchScreen.storyboard */; };
 		8C7405BB6CCB45ACE352184A /* HumanContextInterviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B609AFC224EB9B01A3DA5179 /* HumanContextInterviewView.swift */; };
 		8E2645290F4B414B89504216 /* ThinkingServiceDialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E56E1B88AA24364CAD98CA1 /* ThinkingServiceDialView.swift */; };
 		8E8DEADDFB03FA7E74535761 /* PlanReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1870F13DF49D6E8CCC93EC63 /* PlanReviewView.swift */; };
@@ -61,7 +62,6 @@
 		BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51401B6F9885163352D34464 /* SoulDocument.swift */; };
 		BBFD20C1FEA35C237CBD04DC /* MemoryHorizonStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */; };
 		BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */; };
-		BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5FADFC392151FEFB0301E4 /* SplashView.swift */; };
 		CD4E86BAAB96969B8681E461 /* MessageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715E25DBDBADAB367351854A /* MessageService.swift */; };
 		CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */; };
 		CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D24467066D97EFFBDD9FBF6D /* SwarmModels.swift */; };
@@ -95,6 +95,7 @@
 		1FE7DA4FA608AA25FCAE719E /* MissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionView.swift; sourceTree = "<group>"; };
 		2071591E29C56A8269256D1F /* MissionCommitmentChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionCommitmentChat.swift; sourceTree = "<group>"; };
 		2816DC1C66616790651EBA30 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		2A145FAA4803248CF8FB7088 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightStore.swift; sourceTree = "<group>"; };
 		3B87F6A70291CA9DF47F42EF /* MissionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionStore.swift; sourceTree = "<group>"; };
 		3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingView.swift; sourceTree = "<group>"; };
@@ -153,7 +154,6 @@
 		F5FA050811F918E8D8DFE861 /* MessageError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageError.swift; sourceTree = "<group>"; };
 		F63EC6A61FAB0391BF4707B9 /* OversightPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OversightPrefs.swift; sourceTree = "<group>"; };
 		F98DBAB4066B050509EBAEB6 /* AppDataMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDataMode.swift; sourceTree = "<group>"; };
-		FB5FADFC392151FEFB0301E4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		FCCA01BB2FFE10C73B60CEE6 /* SecurityHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityHubView.swift; sourceTree = "<group>"; };
 		FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmOrb.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -198,7 +198,6 @@
 				15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */,
 				9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */,
 				B0CDFB3567420CF3DFCDD0A9 /* SoulInterviewView.swift */,
-				FB5FADFC392151FEFB0301E4 /* SplashView.swift */,
 				8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */,
 				A30C03F19DC53F1DEC3CF4A2 /* SwarmDetailSheet.swift */,
 				FE1A131E59FCC04F03011B29 /* SwarmOrb.swift */,
@@ -287,6 +286,7 @@
 				F3EB8CBC62F6B85A9E156AD4 /* Assets.xcassets */,
 				9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */,
 				D967220CE7E18782E047ACD2 /* ContentView.swift */,
+				2A145FAA4803248CF8FB7088 /* LaunchScreen.storyboard */,
 				A80D40A15B92264F4AFAD3FC /* PrivacyInfo.xcprivacy */,
 				D9FADF2360B2D39B2A4B587F /* Crypto */,
 				B3EFDD1F9B1D190735AFF511 /* Models */,
@@ -363,6 +363,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA23A53972A91D17B2626DB5 /* Assets.xcassets in Resources */,
+				8B55CFB47612322CEFCFCEF1 /* LaunchScreen.storyboard in Resources */,
 				E23F76E5AC6117269C7E4130 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -434,7 +435,6 @@
 				BA99F80653F2F30840CB1EC3 /* SoulDocument.swift in Sources */,
 				CD69BDCAE42234F28ECD55A7 /* SoulDocumentView.swift in Sources */,
 				D119BBED8FECEDA1A7ED61EC /* SoulInterviewView.swift in Sources */,
-				BF807D7EC85B3F5BE58AE3C0 /* SplashView.swift in Sources */,
 				D9EB9FB8DB5CB2D5608C1BAE /* SwarmConnectSheet.swift in Sources */,
 				BE9C9889972E5C27B3C4E007 /* SwarmDetailSheet.swift in Sources */,
 				CE40F4DBF910104191D6E68E /* SwarmModels.swift in Sources */,
@@ -513,13 +513,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 24;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.0.1;
+				MARKETING_VERSION = 5.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -596,13 +596,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 24;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.0.1;
+				MARKETING_VERSION = 5.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

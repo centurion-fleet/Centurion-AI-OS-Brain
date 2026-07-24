@@ -5,11 +5,15 @@ struct CenturionApp: App {
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @AppStorage("centurion.hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showSplash = true
-    @State private var showOnboarding = false
+    @State private var showOnboarding: Bool
     @State private var services = AppServices()
     @State private var clearedDemoForConnection = false
     @State private var didAttemptAutoReconnect = false
+
+    init() {
+        // Skip the old in-app splash — system launch screen is enough.
+        _showOnboarding = State(initialValue: !UserDefaults.standard.bool(forKey: "centurion.hasCompletedOnboarding"))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -28,20 +32,8 @@ struct CenturionApp: App {
                     .environmentObject(services.beneficiaryStore)
                     .environmentObject(services.oversightStore)
                     .environmentObject(services.memoryHorizonStore)
-                    .opacity(showSplash || showOnboarding ? 0 : 1)
-                    .allowsHitTesting(!showSplash && !showOnboarding)
-
-                if showSplash {
-                    SplashView {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            showSplash = false
-                            showOnboarding = !hasCompletedOnboarding
-                        }
-                        attemptAutoReconnectIfNeeded()
-                    }
-                    .transition(.opacity)
-                    .zIndex(2)
-                }
+                    .opacity(showOnboarding ? 0 : 1)
+                    .allowsHitTesting(!showOnboarding)
 
                 if showOnboarding {
                     WelcomeOnboardingView {
@@ -53,10 +45,12 @@ struct CenturionApp: App {
                     .environmentObject(services.connectionManager)
                     .environmentObject(services.missionStore)
                     .transition(.opacity)
-                    .zIndex(1)
                 }
             }
             .preferredColorScheme(appearanceMode.colorScheme)
+            .onAppear {
+                attemptAutoReconnectIfNeeded()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     attemptAutoReconnectIfNeeded(force: true)
@@ -87,7 +81,7 @@ struct CenturionApp: App {
     }
 
     private func attemptAutoReconnectIfNeeded(force: Bool = false) {
-        guard !showSplash else { return }
+        guard !showOnboarding else { return }
         if !force && didAttemptAutoReconnect { return }
         didAttemptAutoReconnect = true
         services.connectionManager.attemptAutoReconnect()

@@ -28,7 +28,7 @@ enum PlanDiscussChat {
             : plan.openQuestions.map { "- \($0)" }.joined(separator: "\n")
 
         return """
-        [Sovereign Remote — Plan discuss]
+        [Sovereign AI Remote — Plan discuss]
         The user is continuing Crypto Chat about this reviewable Plan (not their life Mission).
 
         Plan ID: \(plan.id.uuidString)

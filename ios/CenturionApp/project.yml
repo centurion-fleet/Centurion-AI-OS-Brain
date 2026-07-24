@@ -22,6 +22,7 @@ targets:
     platform: iOS
     sources:
       - path: Assets.xcassets
+      - path: LaunchScreen.storyboard
       - path: PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: CenturionApp.swift
@@ -42,19 +43,17 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Sovereign Remote
+        CFBundleDisplayName: Sovereign AI Remote
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        UILaunchScreen:
-          UIColorName: LaunchBackground
-          UIImageName: AppMark
+        UILaunchStoryboardName: LaunchScreen
         UIApplicationSupportsAllInterfaceOrientations: true
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: "Sovereign Remote needs local network access to find your Sovereign on your Wi‑Fi."
+        NSLocalNetworkUsageDescription: "Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi."
         NSBonjourServices:
           - _centurion._tcp
         NSAppTransportSecurity:
