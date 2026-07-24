@@ -10035,6 +10035,7 @@ def _coalesce_session_name_args(argv: list) -> list:
         "doctor",
         "config",
         "pairing",
+        "remote",
         "skills",
         "tools",
         "mcp",
@@ -10887,6 +10888,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "fleet", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "platform", "plugins", "portal", "postinstall", "profile", "provider", "proxy",
+        "remote",
         "support", "swarm",
         "send", "sessions", "setup",
         "skills", "slack", "status", "telegram", "tools", "uninstall", "update",
@@ -12509,6 +12511,61 @@ Examples:
         pairing_command(args)
 
     pairing_parser.set_defaults(func=cmd_pairing)
+
+    # =========================================================================
+    # remote command — iPhone remote pairing tokens (centurion-remote)
+    # =========================================================================
+    remote_parser = subparsers.add_parser(
+        "remote",
+        help="Manage remote pairing tokens for CenturionAI Remote",
+        description=(
+            "Mint and manage long-lived pairing codes so an iPhone can link "
+            "to this Centurion over the public internet (no Tailscale required)."
+        ),
+    )
+    remote_sub = remote_parser.add_subparsers(dest="remote_action")
+
+    remote_pair = remote_sub.add_parser(
+        "pair",
+        help="Generate a remote pairing connection string",
+    )
+    remote_pair.add_argument(
+        "--host",
+        help="Public hostname or IP to embed (tunnel / DNS name recommended)",
+    )
+    remote_pair.add_argument(
+        "--label",
+        default="iPhone",
+        help="Label for this pairing token (default: iPhone)",
+    )
+    remote_pair.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON including the one-time secret",
+    )
+
+    remote_tokens = remote_sub.add_parser(
+        "tokens",
+        help="List remote pairing tokens",
+    )
+    remote_tokens.add_argument(
+        "--json",
+        action="store_true",
+        help="Print JSON",
+    )
+
+    remote_revoke = remote_sub.add_parser(
+        "revoke",
+        help="Revoke a remote pairing token by id or prefix",
+    )
+    remote_revoke.add_argument("token_id", help="Token id or unique prefix")
+
+    def cmd_remote(args):
+        from centurion_cli.remote_cli import remote_command
+
+        raise SystemExit(remote_command(args))
+
+    remote_parser.set_defaults(func=cmd_remote)
 
     # =========================================================================
     # skills command

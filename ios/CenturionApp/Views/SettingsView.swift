@@ -512,7 +512,7 @@ struct KeyExportView: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Your iPhone Security Code",
-                    subtitle: "Approve this code on your Sovereign computer when pairing for the first time (for example: centurion-remote approve <code>)."
+                    subtitle: "For remote pairing, paste the token:…@host:9119 code from your Centurion. On the same Wi‑Fi without a token, you can still approve with: centurion-remote approve <code>."
                 )
 
                 Image(systemName: "key.fill")

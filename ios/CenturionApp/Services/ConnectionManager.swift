@@ -3,14 +3,15 @@ import Network
 
 /// Manages the encrypted connection between iPhone and Sovereign.
 ///
-/// Connection priority (Tailscale-first for stability):
-/// 1. Tailscale MagicDNS / Tailscale IP — preferred at home and away
-/// 2. LAN (Bonjour / LAN IP) — only when Tailscale is unavailable
+/// Connection priority (remote-first):
+/// 1. Saved remote pairing endpoint — preferred at home and away
+/// 2. LAN (same Wi‑Fi / Bonjour) — bonus when on the same network
+/// 3. Tailscale — optional legacy mesh if previously saved
 ///
 /// Encryption flow:
-/// 1. Reach Centurion via Tailscale (or LAN fallback)
+/// 1. Reach Centurion via remote host (or LAN / Tailscale fallback)
 /// 2. Exchange X25519 public keys for key agreement
-/// 3. Establish directional session keys
+/// 3. If PairRequired: send encrypted pairing token, then Ready
 /// 4. All messages encrypted with XSalsa20-Poly1305
 
 @MainActor
@@ -36,18 +37,23 @@ final class ConnectionManager: ObservableObject {
         connectionState == .connected && currentSessionKey != nil
     }
 
-    /// "Tailscale" or "Wi‑Fi" when linked; empty otherwise.
+    /// "Remote", "Tailscale", or "Wi‑Fi" when linked; empty otherwise.
     var linkPathBadge: String {
         guard connectionState == .connected,
               let device = connectedDevice ?? pendingDevice else { return "" }
+        if device.isRemotePath {
+            return CenturionDevice.ConnectionMethod.remote.linkBadge
+        }
         return device.isTailscalePath
             ? CenturionDevice.ConnectionMethod.tailscale.linkBadge
             : CenturionDevice.ConnectionMethod.lan.linkBadge
     }
 
-    /// True when a previous Tailscale or LAN endpoint was saved for reconnect.
+    /// True when a previous remote, Tailscale, or LAN endpoint was saved for reconnect.
     var hasPersistedLink: Bool {
-        loadLastDevice() != nil || loadLastLanDevice() != nil
+        loadLastRemoteDevice() != nil
+            || loadLastDevice() != nil
+            || loadLastLanDevice() != nil
     }
 
     private let bonjourDiscoverer = BonjourDiscoverer()
@@ -56,20 +62,23 @@ final class ConnectionManager: ObservableObject {
     private var currentSessionKey: SessionKey?
     private var connection: NWConnection?
     private var pendingDevice: CenturionDevice?
+    /// Pairing token for the in-flight remote connect (also persisted in Keychain).
+    private var pendingPairingToken: String?
     private var keepaliveTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
     private var approvalRetryTask: Task<Void, Never>?
     private var pathMonitor: NWPathMonitor?
     private var pathDebounceTask: Task<Void, Never>?
-    /// When a Tailscale attempt fails, allow one LAN fallback for this reconnect cycle.
+    /// When a primary attempt fails, allow one LAN fallback for this reconnect cycle.
     private var allowLanFallback = true
-    /// After a Tailscale→LAN cascade, surface Tailscale-first recovery if LAN also fails.
-    private var recoveryPrefersTailscale = false
+    /// After a primary→LAN cascade, surface primary-path recovery if LAN also fails.
+    private var recoveryPrefersPrimary = false
     private let remoteIO = RemoteIOPipeline()
     private let maximumFrameSize = 8 * 1024 * 1024
     private let handshakeTimeoutSeconds: TimeInterval = 15
     private static let lastDeviceKey = "centurion.remote.lastDevice"
     private static let lastLanDeviceKey = "centurion.remote.lastLanDevice"
+    private static let lastRemoteDeviceKey = "centurion.remote.lastRemoteDevice"
 
     private let chatTimeoutSeconds: TimeInterval = 180
 
@@ -112,10 +121,18 @@ final class ConnectionManager: ObservableObject {
         reconnectPending(stopApprovalLoop: true)
     }
 
-    /// One-tap reconnect: Tailscale first, then LAN.
+    /// Return the pairing sheet to a clean form after a failed attempt.
+    func resetPairingAttempt() {
+        stopApprovalRetryLoop()
+        softTearDown(clearPending: false)
+        connectionState = .disconnected
+        activeConnectionTarget = nil
+    }
+
+    /// One-tap reconnect: remote first, then LAN, then legacy Tailscale.
     func reconnect() {
         allowLanFallback = true
-        recoveryPrefersTailscale = false
+        recoveryPrefersPrimary = false
         reconnectWithPriority(stopApprovalLoop: true)
     }
 
@@ -124,7 +141,7 @@ final class ConnectionManager: ObservableObject {
         reconnectWithPriority(stopApprovalLoop: stopApprovalLoop)
     }
 
-    /// Prefer Tailscale saved endpoint; LAN only if mesh is unavailable.
+    /// Prefer saved remote endpoint; LAN next; Tailscale only as legacy.
     private func reconnectWithPriority(stopApprovalLoop: Bool) {
         if stopApprovalLoop {
             stopApprovalRetryLoop()
@@ -135,6 +152,26 @@ final class ConnectionManager: ObservableObject {
             bonjourDiscoverer.startDiscovery()
         }
 
+        if let pending = pendingDevice, pending.isRemotePath {
+            pendingPairingToken = RemotePairingTokenStore.load()
+            connect(to: pending, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let remote = loadLastRemoteDevice() {
+            pendingDevice = remote
+            pendingPairingToken = RemotePairingTokenStore.load()
+            connect(to: remote, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let pending = pendingDevice, !pending.isTailscalePath {
+            connect(to: pending, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
+        if let lan = loadLastLanDevice() {
+            pendingDevice = lan
+            connect(to: lan, stopApprovalLoop: stopApprovalLoop)
+            return
+        }
         if let pending = pendingDevice, pending.isTailscalePath {
             connect(to: pending, stopApprovalLoop: stopApprovalLoop)
             return
@@ -142,15 +179,6 @@ final class ConnectionManager: ObservableObject {
         if let saved = loadLastDevice(), saved.isTailscalePath {
             pendingDevice = saved
             connect(to: saved, stopApprovalLoop: stopApprovalLoop)
-            return
-        }
-        if let pending = pendingDevice {
-            connect(to: pending, stopApprovalLoop: stopApprovalLoop)
-            return
-        }
-        if let lan = loadLastLanDevice() {
-            pendingDevice = lan
-            connect(to: lan, stopApprovalLoop: stopApprovalLoop)
             return
         }
         if let saved = loadLastDevice() {
@@ -165,10 +193,10 @@ final class ConnectionManager: ObservableObject {
         startDiscovery()
     }
 
-    /// After splash / on enter foreground: Tailscale first, Bonjour only as fallback.
+    /// After splash / on enter foreground: remote first, then LAN / Tailscale.
     func attemptAutoReconnect() {
         guard connectionState == .disconnected || isErrorState else { return }
-        guard loadLastDevice() != nil || loadLastLanDevice() != nil else { return }
+        guard hasPersistedLink else { return }
         allowLanFallback = true
         reconnectWithPriority(stopApprovalLoop: true)
     }
@@ -178,7 +206,46 @@ final class ConnectionManager: ObservableObject {
         return false
     }
 
-    /// Manual Tailscale / IP connect. Tailscale hosts are tagged as the preferred path.
+    /// Link using a remote pairing connection string (`token:…@host:port`).
+    func connectRemote(connectionString: String) {
+        guard let components = RemoteConnectionString.parse(connectionString) else {
+            connectionState = .error(
+                "That pairing code looks incomplete. Paste the full code from your Centurion (it starts with token:)."
+            )
+            return
+        }
+        connectRemote(token: components.token, host: components.host, port: components.port)
+    }
+
+    /// Link to a remote host with an authenticated pairing token.
+    func connectRemote(token: String, host: String, port: Int = 9119, name: String = "Sovereign") {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHost.isEmpty, !trimmedToken.isEmpty else {
+            connectionState = .error("Enter the pairing code from your Centurion.")
+            return
+        }
+        RemotePairingTokenStore.save(trimmedToken)
+        pendingPairingToken = trimmedToken
+        let device = CenturionDevice(
+            id: UUID(),
+            name: name,
+            hostname: trimmedHost.contains(where: \.isLetter) ? trimmedHost : "",
+            ipAddress: trimmedHost.contains(where: \.isLetter) ? "" : trimmedHost,
+            port: port > 0 ? port : 9119,
+            serviceName: nil,
+            serviceType: nil,
+            serviceDomain: nil,
+            publicKey: nil,
+            isConnected: false,
+            connectionMethod: .remote,
+            lastSeen: Date()
+        )
+        allowLanFallback = true
+        connect(to: device)
+    }
+
+    /// Manual host / IP connect. Remote hosts use `.lan` unless Tailscale is detected.
     func connect(host: String, port: Int = 9119, name: String = "Sovereign") {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -211,8 +278,8 @@ final class ConnectionManager: ObservableObject {
         let port = NWEndpoint.Port(rawValue: UInt16(device.port))
             ?? NWEndpoint.Port(integerLiteral: 9119)
 
-        // Prefer hostname for Tailscale MagicDNS so the mesh path stays stable.
-        if device.isTailscalePath, !device.hostname.isEmpty {
+        // Prefer hostname for remote / Tailscale MagicDNS so the path stays stable.
+        if (device.isRemotePath || device.isTailscalePath), !device.hostname.isEmpty {
             return .hostPort(host: NWEndpoint.Host(device.hostname), port: port)
         }
 
@@ -280,8 +347,11 @@ final class ConnectionManager: ObservableObject {
         bonjourDiscoverer.stopDiscovery()
         clearLastDevice()
         clearLastLanDevice()
+        clearLastRemoteDevice()
+        RemotePairingTokenStore.clear()
+        pendingPairingToken = nil
         allowLanFallback = true
-        recoveryPrefersTailscale = false
+        recoveryPrefersPrimary = false
         connectionState = .disconnected
         markDiscoveredDevicesDisconnected()
     }
@@ -330,17 +400,38 @@ final class ConnectionManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.lastLanDeviceKey)
     }
 
-    /// Persist Tailscale as primary when possible; keep a separate LAN fallback.
+    private func persistLastRemoteDevice(_ device: CenturionDevice) {
+        guard let data = try? JSONEncoder().encode(device) else { return }
+        UserDefaults.standard.set(data, forKey: Self.lastRemoteDeviceKey)
+    }
+
+    private func loadLastRemoteDevice() -> CenturionDevice? {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastRemoteDeviceKey) else { return nil }
+        return try? JSONDecoder().decode(CenturionDevice.self, from: data)
+    }
+
+    private func clearLastRemoteDevice() {
+        UserDefaults.standard.removeObject(forKey: Self.lastRemoteDeviceKey)
+    }
+
+    /// Persist remote as primary when possible; keep LAN / Tailscale as secondary.
     private func persistLinkedDevice(_ linked: CenturionDevice) {
+        if linked.isRemotePath {
+            persistLastRemoteDevice(linked)
+            persistLastDevice(linked)
+            return
+        }
         if linked.isTailscalePath {
             persistLastDevice(linked)
-        } else {
-            persistLastLanDevice(linked)
-            if let primary = loadLastDevice(), primary.isTailscalePath {
-                // Keep MagicDNS / Tailscale as the preferred reconnect target.
-            } else {
-                persistLastDevice(linked)
-            }
+            return
+        }
+        persistLastLanDevice(linked)
+        if loadLastRemoteDevice() == nil,
+           let primary = loadLastDevice(),
+           primary.isTailscalePath || primary.isRemotePath {
+            // Keep remote / Tailscale as the preferred reconnect target.
+        } else if loadLastRemoteDevice() == nil {
+            persistLastDevice(linked)
         }
     }
 
@@ -361,20 +452,21 @@ final class ConnectionManager: ObservableObject {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard let self, !Task.isCancelled else { return }
 
-            // Prefer mesh whenever Tailscale is known — upgrade off LAN fallback.
+            // Prefer saved remote whenever available — upgrade off LAN fallback.
             if self.connectionState == .connected,
-               let current = self.connectedDevice, !current.isTailscalePath,
-               let mesh = self.loadLastDevice(), mesh.isTailscalePath {
+               let current = self.connectedDevice, !current.isRemotePath,
+               let remote = self.loadLastRemoteDevice() {
                 self.allowLanFallback = true
-                self.recoveryPrefersTailscale = false
-                self.connect(to: mesh, stopApprovalLoop: true)
+                self.recoveryPrefersPrimary = false
+                self.pendingPairingToken = RemotePairingTokenStore.load()
+                self.connect(to: remote, stopApprovalLoop: true)
                 return
             }
 
             guard self.connectionState == .disconnected || self.isErrorState else { return }
-            guard self.loadLastDevice() != nil || self.loadLastLanDevice() != nil else { return }
+            guard self.hasPersistedLink else { return }
             self.allowLanFallback = true
-            self.recoveryPrefersTailscale = false
+            self.recoveryPrefersPrimary = false
             self.reconnectWithPriority(stopApprovalLoop: true)
         }
     }
@@ -572,19 +664,32 @@ final class ConnectionManager: ObservableObject {
     }
 
     /// Load the built-in model list and merge live routing + active model from the Mac.
+    /// When the live catalog RPC fails, do **not** force “Needs access” on every row —
+    /// infer configured key families from the host thinking status.
     func loadFallbackThinkingCatalog() async -> RemoteModelCatalog {
         thinkingCatalogUsedFallback = true
         await refreshThinkingStatus()
         await refreshRoutingMode()
         let activeID: String?
+        var configuredKeyEnvs = Set<String>()
         if let status = thinkingStatus, !status.model.isEmpty {
             activeID = RemoteModelCatalog.connectorID(provider: status.provider, model: status.model)
+            if let activeID,
+               let row = RemoteModelCatalog.bundled().allConnectors.first(where: { $0.id == activeID }) {
+                configuredKeyEnvs.insert(row.keyEnv)
+            }
         } else {
             activeID = remoteCatalog?.activeConnectorId
+            if let previous = remoteCatalog {
+                for row in previous.allConnectors where row.configured {
+                    configuredKeyEnvs.insert(row.keyEnv)
+                }
+            }
         }
         let catalog = RemoteModelCatalog.bundled(
             activeConnectorId: activeID,
-            routingMode: routingMode
+            routingMode: routingMode,
+            configuredKeyEnvs: configuredKeyEnvs
         )
         remoteCatalog = catalog
         return catalog
@@ -1252,7 +1357,37 @@ final class ConnectionManager: ObservableObject {
             maximumFrameSize: maximumFrameSize
         )
         let statusData = try secureChannel.decrypt(statusFrame, using: sessionKey)
-        let status = try JSONDecoder().decode(RemoteEnvelope.self, from: statusData)
+        var status = try JSONDecoder().decode(RemoteEnvelope.self, from: statusData)
+
+        if status.type == "pair_required" {
+            let token = pendingPairingToken ?? RemotePairingTokenStore.load()
+            guard let token, !token.isEmpty else {
+                throw ConnectionError.serverRejected(
+                    "Your Centurion needs a pairing code. Paste the code from Remote pairing on your computer."
+                )
+            }
+            let pairRequest = RemoteEnvelope(type: "pair", token: token)
+            let pairPlain = try JSONEncoder().encode(pairRequest)
+            let pairResponseData = try await remoteIO.exchange(
+                connection: connection,
+                secureChannel: secureChannel,
+                sessionKey: sessionKey,
+                maximumFrameSize: maximumFrameSize,
+                plaintext: pairPlain
+            )
+            status = try JSONDecoder().decode(RemoteEnvelope.self, from: pairResponseData)
+            if status.type == "pair_rejected" {
+                throw ConnectionError.serverRejected(
+                    status.message ?? "That pairing code could not be verified."
+                )
+            }
+            if status.type == "error" {
+                throw ConnectionError.serverRejected(
+                    status.message ?? "That pairing code could not be verified."
+                )
+            }
+        }
+
         if status.type == "error" {
             if status.code == "PAIRING_APPROVAL_REQUIRED" {
                 clearConnectionTimeout()
@@ -1296,13 +1431,14 @@ final class ConnectionManager: ObservableObject {
                 publicKey: serverPublicKey,
                 hostname: pendingDevice.hostname.nilIfEmpty,
                 port: pendingDevice.port > 0 ? pendingDevice.port : 9119,
-                ipAddress: resolvedIP
+                ipAddress: resolvedIP,
+                connectionMethod: pendingDevice.connectionMethod
             )
             connectedDevice = linked
             persistLinkedDevice(linked)
             markDiscoveredDeviceConnected(pendingDevice.id)
             allowLanFallback = true
-            recoveryPrefersTailscale = false
+            recoveryPrefersPrimary = false
         }
         connectionState = .connected
         activeConnectionTarget = nil
@@ -1390,31 +1526,44 @@ final class ConnectionManager: ObservableObject {
         markDiscoveredDevicesDisconnected()
         activeConnectionTarget = nil
 
-        let tailscaleRecovery = """
-        Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
-        and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
-        use Find my Sovereign on Wi‑Fi.
+        let remoteRecovery = """
+        Couldn’t reach your Centurion remotely. Check that TCP 9119 is reachable \
+        (tunnel, reverse proxy, or firewall), then tap Reconnect. On the same Wi‑Fi, \
+        use Find my Sovereign.
         """
 
-        // Tailscale-first: if mesh failed, try LAN once before surfacing an error.
-        if allowLanFallback, pendingDevice?.isTailscalePath == true {
+        // If remote/Tailscale failed, try LAN once before surfacing an error.
+        if allowLanFallback,
+           pendingDevice?.isRemotePath == true || pendingDevice?.isTailscalePath == true {
             allowLanFallback = false
             if let lan = loadLastLanDevice()
-                ?? discoveredDevices.first(where: { !$0.isTailscalePath })
+                ?? discoveredDevices.first(where: { !$0.isTailscalePath && !$0.isRemotePath })
                 ?? discoveredDevices.first {
-                recoveryPrefersTailscale = true
+                recoveryPrefersPrimary = true
                 pendingDevice = lan
                 connect(to: lan, stopApprovalLoop: false)
                 return
             }
-            recoveryPrefersTailscale = false
-            connectionState = .error(tailscaleRecovery)
+            recoveryPrefersPrimary = false
+            connectionState = .error(
+                pendingDevice?.isRemotePath == true ? remoteRecovery : """
+                Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
+                and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
+                use Find my Sovereign on Wi‑Fi.
+                """
+            )
             return
         }
 
-        if recoveryPrefersTailscale {
-            recoveryPrefersTailscale = false
-            connectionState = .error(tailscaleRecovery)
+        if recoveryPrefersPrimary {
+            recoveryPrefersPrimary = false
+            connectionState = .error(
+                loadLastRemoteDevice() != nil ? remoteRecovery : """
+                Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
+                and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
+                use Find my Sovereign on Wi‑Fi.
+                """
+            )
             return
         }
 
@@ -1604,9 +1753,10 @@ private struct RemoteEnvelope: Codable {
     let options: [String: AnyCodable]?
     let result: [String: AnyCodable]?
     let restored: Bool?
+    let token: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, id, text, code, message, retryable, recovered, ok, status, options, result, restored
+        case type, id, text, code, message, retryable, recovered, ok, status, options, result, restored, token
         case routedDisplayName = "routed_display_name"
     }
 
@@ -1631,7 +1781,7 @@ private struct RemoteEnvelope: Codable {
         return nil
     }
 
-    init(type: String, id: UUID? = nil, text: String? = nil) {
+    init(type: String, id: UUID? = nil, text: String? = nil, token: String? = nil) {
         self.type = type
         self.id = id
         self.text = text
@@ -1645,6 +1795,7 @@ private struct RemoteEnvelope: Codable {
         options = nil
         result = nil
         restored = nil
+        self.token = token
     }
 }
 

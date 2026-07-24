@@ -163,7 +163,7 @@ def _handle_chat(
         if get_routing_mode() == "phoenix":
             from centurion_cli.phoenix_router import describe_route, resolve as phoenix_resolve
 
-            routed_connector_id = phoenix_resolve(text.strip())
+            routed_connector_id = phoenix_resolve(text.strip(), categories={"text"})
             if routed_connector_id:
                 switch = apply_remote_switch(routed_connector_id, probe=False)
                 if switch.ok:
@@ -589,14 +589,21 @@ def _handle_remote_model_save_key(request: dict[str, Any], request_id: str) -> d
     key = str(request.get("key") or "")
     try:
         result = save_remote_api_key(connector_id, key)
+        # Never echo the access code — only safe status fields.
+        safe = {
+            "ok": bool(result.get("ok")),
+            "connector_id": result.get("connector_id"),
+            "configured": result.get("configured"),
+            "message": result.get("message"),
+        }
         payload = {
             "id": request_id,
-            "ok": bool(result.get("ok")),
+            "ok": safe["ok"],
             "action": "remote_model_save_key",
-            "result": result,
+            "result": safe,
         }
-        if not result.get("ok"):
-            payload["message"] = result.get("message", "Could not save API key.")
+        if not safe["ok"]:
+            payload["message"] = safe.get("message") or "Could not save access code."
         return payload
     except Exception as exc:
         return _error_response(request_id, action="remote_model_save_key", exc=exc)

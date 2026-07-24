@@ -237,8 +237,14 @@ struct ThinkingServiceDialView: View {
                 .onChange(of: isAutoSelectEnabled) { _, enabled in
                     Task {
                         let mode = enabled ? "phoenix" : "manual"
-                        _ = await connectionManager.setRoutingMode(mode)
-                        connectionManager.routingMode = mode
+                        let ok = await connectionManager.setRoutingMode(mode)
+                        if ok {
+                            connectionManager.routingMode = mode
+                        } else {
+                            // Revert toggle to host truth on failure.
+                            isAutoSelectEnabled = connectionManager.routingMode == "phoenix"
+                            actionMessage = "Could not update automatic choice. Check your link and try again."
+                        }
                     }
                 }
             }
@@ -546,7 +552,7 @@ struct ThinkingServiceWizardView: View {
         case .pickFamily:
             return "Pick the thinking service family you want to use."
         case .enterCode:
-            return "Paste the access code from your provider. It is saved only on your Sovereign."
+            return "Paste the access code from your thinking-service account. It is saved only on your Sovereign — not kept on this iPhone."
         case .pickService:
             return "Choose the exact thinking service for this family."
         case .connecting:

@@ -21,13 +21,19 @@ Crypto Chat stays between your iPhone and your Sovereign — not Centurion cloud
 
 ## Connection Methods
 
-### LAN (Home)
-- mDNS/Bonjour discovery (`_centurion._tcp`)
-- Direct TCP connection over local network
+### Remote pairing (primary)
+- On your Centurion, generate a pairing code (`centurion remote pair` or desktop **Remote pairing**).
+- Paste `token:…@host:9119` into CenturionAI Remote.
+- First link binds the code to this iPhone’s fingerprint; later launches reconnect automatically.
+- Expose TCP **9119** for away access (Cloudflare Tunnel, reverse proxy, or firewall port-forward). Same Wi‑Fi still works without exposing the port.
 
-### Tailscale (Remote)
-- WireGuard tunnel back to home network
-- Same app-layer encryption on top of the tunnel
+### Same Wi‑Fi (bonus)
+- Optional discovery on the local network (`_centurion._tcp`)
+- Useful at home when you have not set up remote reachability yet
+
+### Tailscale (optional legacy)
+- Still supported if you already use a mesh VPN
+- Not required for normal remote use
 
 ## Building
 

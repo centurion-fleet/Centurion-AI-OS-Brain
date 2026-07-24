@@ -1,3 +1,5 @@
+import json
+
 from centurion_cli.remote_bridge import handle_request
 
 
@@ -79,3 +81,31 @@ def test_remote_bridge_main_stdout_is_parseable_json():
     parsed = json.loads(completed.stdout.strip())
     assert parsed["id"] == "request-4"
     assert "ok" in parsed
+
+
+def test_remote_bridge_save_key_does_not_echo_secret(monkeypatch):
+    secret = "sk-bridge-secret-echo-check"
+
+    monkeypatch.setattr(
+        "centurion_cli.remote_bridge.save_remote_api_key",
+        lambda connector_id, key: {
+            "ok": True,
+            "connector_id": connector_id,
+            "configured": True,
+            "message": "Saved access code for Claude Sonnet 4.6 on your Centurion.",
+            # Deliberately include a bad field to ensure the handler strips it.
+            "key": key,
+        },
+    )
+    result = handle_request(
+        {
+            "id": "save-1",
+            "action": "remote_model_save_key",
+            "connector_id": "anthropic-sonnet-5",
+            "key": secret,
+        }
+    )
+    assert result["ok"] is True
+    blob = json.dumps(result)
+    assert secret not in blob
+    assert "key" not in result.get("result", {})

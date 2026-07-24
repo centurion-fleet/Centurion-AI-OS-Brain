@@ -62,7 +62,7 @@ struct ConnectionView: View {
 
     private var trustStatement: some View {
         VStack(spacing: Spacing.xs) {
-            Text("Your Sovereign stays reliable when your iPhone is linked — Tailscale first, Wi‑Fi as fallback.")
+            Text("Your Sovereign stays with you anywhere — link once with a remote pairing code. Same Wi‑Fi is a bonus when you’re home.")
                 .font(.system(.subheadline, design: .serif).weight(.medium))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
@@ -117,26 +117,26 @@ struct ConnectionView: View {
                         Text("Reconnect")
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())
-                    .accessibilityLabel("Reconnect to your Sovereign")
+                    .accessibilityLabel("Reconnect to your Centurion")
 
                     Button {
                         Haptics.lightTap()
                         showPairingSheet = true
                     } label: {
-                        Text("Find my Sovereign")
+                        Text("Link to your Centurion")
                     }
                     .buttonStyle(CenturionGhostButtonStyle())
-                    .accessibilityLabel("Find my Sovereign")
+                    .accessibilityLabel("Link to your Centurion")
                 }
             } else {
                 Button {
                     Haptics.lightTap()
                     showPairingSheet = true
                 } label: {
-                    Text("Find my Sovereign")
+                    Text("Link to your Centurion")
                 }
                 .buttonStyle(CenturionPrimaryButtonStyle())
-                .accessibilityLabel("Find my Sovereign")
+                .accessibilityLabel("Link to your Centurion")
             }
         } else if connectionManager.llmHealth.needsAttention {
             Button {
@@ -155,7 +155,7 @@ struct ConnectionView: View {
                 Text("Reconnect")
             }
             .buttonStyle(CenturionGhostButtonStyle())
-            .accessibilityLabel("Reconnect to your Sovereign")
+            .accessibilityLabel("Reconnect to your Centurion")
         }
     }
 
@@ -185,7 +185,7 @@ struct ConnectionView: View {
         AtmosphericSurface {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 CenturionSectionHeader(title: "Your Privacy", icon: "lock.shield")
-                Text("Crypto Chat keeps conversations between you and your Sovereign on your private mesh — encrypted end to end. Public AIs have no equivalent.")
+                Text("Crypto Chat keeps conversations between you and your Sovereign — encrypted end to end. Public AIs have no equivalent.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)
@@ -212,20 +212,20 @@ struct ConnectionView: View {
                 let base = connectionManager.isChannelEncrypted
                     ? "Crypto Chat on — linked to \(device.name)"
                     : "Linked to \(device.name)"
-                if !device.isTailscalePath {
-                    return "\(base). Turn on Tailscale for a steadier link."
+                if device.isRemotePath || device.isTailscalePath {
+                    return base
                 }
-                return base
+                return "\(base). Remote pairing keeps you linked away from home."
             }
             return connectionManager.isChannelEncrypted
                 ? "Crypto Chat on — linked to your Sovereign"
                 : "Linked to your Sovereign"
         case .discovering:
-            return "Looking for your Sovereign — Tailscale first, then Wi‑Fi"
+            return "Looking for your Sovereign on this network…"
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link over Tailscale when you can — Wi‑Fi works as a fallback"
+            return "Paste a remote pairing code from your Centurion — or find it on the same Wi‑Fi"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -294,7 +294,7 @@ struct DeviceLinkSection: View {
                                     Haptics.lightTap()
                                     showPairingSheet = true
                                 } label: {
-                                    Text("Find my Sovereign")
+                                    Text("Link to your Centurion")
                                 }
                                 .buttonStyle(CenturionGhostButtonStyle())
                             } else {
@@ -302,7 +302,7 @@ struct DeviceLinkSection: View {
                                     Haptics.lightTap()
                                     showPairingSheet = true
                                 } label: {
-                                    Text("Find my Sovereign")
+                                    Text("Link to your Centurion")
                                 }
                                 .buttonStyle(CenturionPrimaryButtonStyle())
                             }
@@ -332,7 +332,7 @@ struct DeviceLinkSection: View {
                         }
                     }
 
-                    Text("Tailscale keeps you linked at home and away. Same Wi‑Fi is a fallback when Tailscale is off.")
+                    Text("Link once with a remote pairing code from your Centurion. Same Wi‑Fi still works when you’re home.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -367,20 +367,20 @@ struct DeviceLinkSection: View {
                 let base = connectionManager.isChannelEncrypted
                     ? "Crypto Chat on — linked to \(device.name)"
                     : "Linked to \(device.name)"
-                if !device.isTailscalePath {
-                    return "\(base). Turn on Tailscale for a steadier link."
+                if device.isRemotePath || device.isTailscalePath {
+                    return base
                 }
-                return base
+                return "\(base). Remote pairing keeps you linked away from home."
             }
             return connectionManager.isChannelEncrypted
                 ? "Crypto Chat on — linked to your Sovereign"
                 : "Linked to your Sovereign"
         case .discovering:
-            return "Looking for your Sovereign — Tailscale first, then Wi‑Fi"
+            return "Looking for your Sovereign on this network…"
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Link over Tailscale when you can — Wi‑Fi works as a fallback"
+            return "Paste a remote pairing code from your Centurion — or find it on the same Wi‑Fi"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -492,7 +492,9 @@ struct ThinkingServiceSection: View {
 struct ConnectionPairingSheet: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @Environment(\.dismiss) private var dismiss
+    @State private var connectionString = ""
     @State private var showManualEntry = false
+    @State private var showNetworkFind = false
     @State private var manualHost = ""
     @State private var manualPort = "9119"
 
@@ -508,14 +510,8 @@ struct ConnectionPairingSheet: View {
                     connectingState
                 case .error(let message):
                     errorState(message: message)
-                case .discovering where connectionManager.discoveredDevices.isEmpty:
-                    searchingState
                 default:
-                    if connectionManager.discoveredDevices.isEmpty {
-                        searchingState
-                    } else {
-                        deviceList
-                    }
+                    pairingForm
                 }
             }
             .background(ColorTheme.background())
@@ -525,11 +521,6 @@ struct ConnectionPairingSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                         .foregroundColor(ColorTheme.accent())
-                }
-            }
-            .onAppear {
-                if connectionManager.connectionState != .connected {
-                    connectionManager.startDiscovery()
                 }
             }
             .onChange(of: connectionManager.connectionState) { _, newState in
@@ -546,6 +537,79 @@ struct ConnectionPairingSheet: View {
         }
     }
 
+    private var pairingForm: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.lg) {
+                SheetHeader(
+                    title: "Link to your Centurion",
+                    subtitle: "Paste the remote pairing code from your Centurion computer. It looks like token:…@host:9119."
+                )
+
+                TextField("token:…@host:9119", text: $connectionString, axis: .vertical)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(2...4)
+                    .padding(Spacing.sm)
+                    .background(ColorTheme.surface())
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                Button("Link Remotely") {
+                    Haptics.lightTap()
+                    connectionManager.connectRemote(connectionString: connectionString)
+                }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .disabled(
+                    connectionString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+                .accessibilityLabel("Link Remotely")
+
+                Text("On your Centurion: generate a code under Remote pairing, expose TCP 9119 if you’re away from home, then paste it here.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineSpacing(3)
+
+                Divider()
+
+                Button {
+                    showNetworkFind.toggle()
+                    if showNetworkFind {
+                        connectionManager.startDiscovery()
+                    }
+                } label: {
+                    Text(showNetworkFind ? "Hide same-network find" : "Find on this Wi‑Fi")
+                }
+                .buttonStyle(CenturionGhostButtonStyle())
+
+                if showNetworkFind {
+                    if connectionManager.discoveredDevices.isEmpty {
+                        Text("Looking for your Sovereign on this network…")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                    } else {
+                        ForEach(connectionManager.discoveredDevices) { device in
+                            Button {
+                                Haptics.lightTap()
+                                connectionManager.connect(to: device)
+                            } label: {
+                                CenturionListRow(
+                                    icon: "desktopcomputer",
+                                    title: device.name,
+                                    subtitle: device.hostname.isEmpty ? "On your network" : device.hostname,
+                                    showChevron: false
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(connectionManager.connectionState == .connecting)
+                        }
+                    }
+                }
+
+                manualConnectSection
+            }
+            .padding()
+        }
+    }
+
     private var connectingState: some View {
         VStack(spacing: Spacing.lg) {
             LoadingState(
@@ -553,7 +617,7 @@ struct ConnectionPairingSheet: View {
                     "Linking to \($0)…"
                 } ?? "Setting up Crypto Chat…"
             )
-            Text("Keep this screen open. Your Sovereign may ask you to approve this iPhone.")
+            Text("Keep this screen open while Crypto Chat finishes linking.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .multilineTextAlignment(.center)
@@ -570,12 +634,10 @@ struct ConnectionPairingSheet: View {
                 retryTitle: "Reconnect",
                 onRetry: { connectionManager.reconnect() }
             )
-            if !connectionManager.discoveredDevices.isEmpty {
-                Button("Back to device list") {
-                    connectionManager.startDiscovery()
-                }
-                .buttonStyle(CenturionGhostButtonStyle())
+            Button("Back") {
+                connectionManager.resetPairingAttempt()
             }
+            .buttonStyle(CenturionGhostButtonStyle())
         }
         .padding()
     }
@@ -602,7 +664,7 @@ struct ConnectionPairingSheet: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Approve on your Sovereign",
-                subtitle: "Your iPhone found your Sovereign. Approve it once on the computer, then this screen will finish linking automatically."
+                subtitle: "Your iPhone found your Sovereign on this network. Approve it once on the computer, then this screen will finish linking automatically."
             )
             Image(systemName: "hourglass.circle.fill")
                 .font(.system(size: 48))
@@ -627,7 +689,7 @@ struct ConnectionPairingSheet: View {
                         }
                         .buttonStyle(CenturionGhostButtonStyle())
                     }
-                    Text("We retry automatically after you approve. While testing, you can also start with --auto-approve.")
+                    Text("We retry automatically after you approve.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(3)
@@ -648,68 +710,17 @@ struct ConnectionPairingSheet: View {
         .padding()
     }
 
-    private var searchingState: some View {
-        VStack(spacing: Spacing.lg) {
-            LoadingState(message: "Looking for your Sovereign…")
-            Text("Prefer Tailscale: enter the MagicDNS name or Tailscale IP from your Sovereign. Same Wi‑Fi discovery is a fallback.")
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            manualConnectSection
-        }
-        .padding()
-    }
-
-    private var deviceList: some View {
-        List {
-            Section {
-                Text("Tap your Sovereign below for Wi‑Fi discovery, or enter a Tailscale MagicDNS name / IP for the preferred link.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .listRowBackground(Color.clear)
-            }
-            ForEach(connectionManager.discoveredDevices) { device in
-                Button {
-                    Haptics.lightTap()
-                    connectionManager.connect(to: device)
-                } label: {
-                    CenturionListRow(
-                        icon: "desktopcomputer",
-                        title: device.name,
-                        subtitle: device.hostname.isEmpty ? "On your network" : device.hostname,
-                        showChevron: false
-                    )
-                    .overlay(alignment: .trailing) {
-                        if device.isConnected {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(ColorTheme.success())
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(connectionManager.connectionState == .connecting)
-            }
-            Section {
-                manualConnectSection
-                    .listRowBackground(Color.clear)
-            }
-        }
-        .scrollContentBackground(.hidden)
-    }
-
     private var manualConnectSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Button {
                 showManualEntry.toggle()
             } label: {
-                Text(showManualEntry ? "Hide manual address" : "Enter address manually")
+                Text(showManualEntry ? "Hide host entry" : "Enter host and port")
             }
             .buttonStyle(CenturionGhostButtonStyle())
 
             if showManualEntry {
-                TextField("Tailscale MagicDNS or IP", text: $manualHost)
+                TextField("Hostname or IP", text: $manualHost)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)

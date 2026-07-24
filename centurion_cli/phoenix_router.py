@@ -18,15 +18,23 @@ _RULES: list[tuple[Pattern[str], str]] = [
 ]
 
 
-def resolve(user_message: str) -> str | None:
-    """Return a catalog connector id for *user_message*, or None to keep manual selection."""
+def resolve(user_message: str, *, categories: set[str] | None = None) -> str | None:
+    """Return a catalog connector id for *user_message*, or None to keep manual selection.
+
+    When *categories* is set (e.g. ``{"text"}`` for Crypto Chat), creative
+    connectors are skipped so chat routing never switches to image/video/tts.
+    """
     text = (user_message or "").strip()
     if not text:
         return None
     for pattern, connector_id in _RULES:
         if pattern.search(text):
-            if get_connector(connector_id) is not None:
-                return connector_id
+            connector = get_connector(connector_id)
+            if connector is None:
+                continue
+            if categories is not None and connector.category not in categories:
+                continue
+            return connector_id
     return None
 
 

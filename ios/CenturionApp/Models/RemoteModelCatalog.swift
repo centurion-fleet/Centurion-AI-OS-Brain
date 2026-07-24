@@ -20,12 +20,27 @@ struct RemoteModelCatalog: Codable, Equatable {
 
     /// Built-in list mirrored from ``centurion_cli/remote_model_catalog.py``.
     /// Used when the live catalog cannot be fetched from the linked Centurion.
+    ///
+    /// - ``activeConnectorId`` marks the live thinking service from host status.
+    /// - ``configuredKeyEnvs`` marks families that already have access on the host
+    ///   so fallback does not falsely show “Needs access” for every row.
     static func bundled(
         activeConnectorId: String? = nil,
-        routingMode: String = "manual"
+        routingMode: String = "manual",
+        configuredKeyEnvs: Set<String> = []
     ) -> RemoteModelCatalog {
-        let text = bundledTextModels.map { $0.markingActive($0.id == activeConnectorId) }
-        let creative = bundledCreativeModels.map { $0.markingActive($0.id == activeConnectorId) }
+        let text = bundledTextModels.map {
+            $0.withFallbackFlags(
+                activeId: activeConnectorId,
+                configuredKeyEnvs: configuredKeyEnvs
+            )
+        }
+        let creative = bundledCreativeModels.map {
+            $0.withFallbackFlags(
+                activeId: activeConnectorId,
+                configuredKeyEnvs: configuredKeyEnvs
+            )
+        }
         return RemoteModelCatalog(
             textModels: text,
             creativeModels: creative,
@@ -241,6 +256,28 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
             needsKey: needsKey,
             active: active,
             healthy: healthy
+        )
+    }
+
+    /// Offline/fallback flags: never invent “Needs access” for a key env we
+    /// already know is live on the Sovereign (active thinking service).
+    func withFallbackFlags(activeId: String?, configuredKeyEnvs: Set<String>) -> RemoteConnectorRow {
+        let isActive = id == activeId
+        let knownConfigured = configuredKeyEnvs.contains(keyEnv) || isActive
+        return RemoteConnectorRow(
+            id: id,
+            displayName: displayName,
+            provider: provider,
+            model: model,
+            category: category,
+            keyEnv: keyEnv,
+            baseURL: baseURL,
+            bestFor: bestFor,
+            creativeKind: creativeKind,
+            configured: knownConfigured,
+            needsKey: !knownConfigured,
+            active: isActive,
+            healthy: nil
         )
     }
 }

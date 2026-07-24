@@ -39,6 +39,7 @@ mod linux {
     use serde::Deserialize;
     use std::cell::RefCell;
     use std::io::Write;
+    use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
 
@@ -80,9 +81,23 @@ mod linux {
         ok: bool,
         status: Option<ProviderStatusPayload>,
         options: Option<serde_json::Value>,
+        #[serde(default)]
+        catalog: Option<serde_json::Value>,
         result: Option<serde_json::Value>,
         message: Option<String>,
         code: Option<String>,
+        #[serde(default)]
+        configured: Option<bool>,
+        #[serde(default)]
+        connector_id: Option<String>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct ThinkingConnectorOption {
+        id: String,
+        display_name: String,
+        needs_key: bool,
+        best_for: String,
     }
 
     #[derive(Debug, Deserialize)]
@@ -308,6 +323,45 @@ mod linux {
         row
     }
 
+    fn centurion_remote_bin() -> String {
+        std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{home}/.local/bin/centurion-remote"))
+            .filter(|path| PathBuf::from(path).is_file())
+            .unwrap_or_else(|| "centurion-remote".to_owned())
+    }
+
+    fn mint_remote_pairing_string() -> Result<String, String> {
+        let addresses = discover_link_addresses();
+        let host = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .or_else(|| addresses.lan_ips.first().cloned())
+            .or_else(|| addresses.magic_dns.clone())
+            .or_else(|| addresses.tailscale_ip.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_owned());
+
+        let output = Command::new(centurion_remote_bin())
+            .args(["remote-pair", "--host", &host, "--json"])
+            .output()
+            .map_err(|error| format!("Could not run centurion-remote: {error}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "centurion-remote remote-pair failed: {}",
+                stderr.trim()
+            ));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .map_err(|error| format!("Invalid remote-pair JSON: {error}"))?;
+        value
+            .get("connection_string")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())
+    }
+
     fn refresh_link_addresses(container: &gtk::Box) {
         while let Some(child) = container.first_child() {
             container.remove(&child);
@@ -315,70 +369,108 @@ mod linux {
 
         container.append(
             &gtk::Label::builder()
-                .label("iPhone link address")
+                .label("Remote pairing")
                 .css_classes(["title-4"])
                 .xalign(0.0)
                 .build(),
         );
 
-        let addresses = discover_link_addresses();
-        let mut showed_primary = false;
+        container.append(
+            &gtk::Label::builder()
+                .label(
+                    "Generate a pairing code for CenturionAI Remote. Paste it on your iPhone to link permanently — works from anywhere once TCP 9119 is reachable (Cloudflare Tunnel, reverse proxy, or firewall).",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
 
-        if let Some(dns) = addresses.magic_dns.as_deref() {
-            container.append(&build_link_address_row(
-                "Tailscale (preferred)",
-                dns,
-                true,
-            ));
-            showed_primary = true;
-        } else if let Some(ip) = addresses.tailscale_ip.as_deref() {
-            container.append(&build_link_address_row(
-                "Tailscale (preferred)",
-                ip,
-                true,
-            ));
-            showed_primary = true;
-        }
+        let pairing_row = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        pairing_row.set_margin_top(4);
+        let pairing_value = gtk::Label::builder()
+            .label("No pairing code yet — tap Generate.")
+            .selectable(true)
+            .wrap(true)
+            .xalign(0.0)
+            .build();
+        let pairing_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let generate = gtk::Button::with_label("Generate pairing code");
+        generate.add_css_class("suggested-action");
+        let copy = gtk::Button::with_label("Copy");
+        copy.add_css_class("flat");
+        copy.set_sensitive(false);
+        pairing_actions.append(&generate);
+        pairing_actions.append(&copy);
+        pairing_row.append(&pairing_value);
+        pairing_row.append(&pairing_actions);
+        container.append(&pairing_row);
 
-        if showed_primary {
-            if let (Some(dns), Some(ip)) = (
-                addresses.magic_dns.as_deref(),
-                addresses.tailscale_ip.as_deref(),
-            ) {
-                if dns != ip {
-                    container.append(&build_link_address_row("Tailscale IP", ip, false));
-                }
+        let pairing_value_gen = pairing_value.clone();
+        let copy_gen = copy.clone();
+        generate.connect_clicked(move |_| match mint_remote_pairing_string() {
+            Ok(connection) => {
+                pairing_value_gen.set_label(&connection);
+                copy_gen.set_sensitive(true);
+                copy_to_clipboard(&connection);
             }
-        } else {
+            Err(error) => {
+                pairing_value_gen.set_label(&error);
+                copy_gen.set_sensitive(false);
+            }
+        });
+        let pairing_value_copy = pairing_value.clone();
+        copy.connect_clicked(move |_| {
+            let text = pairing_value_copy.label();
+            if text.starts_with("token:") {
+                copy_to_clipboard(&text);
+            }
+        });
+
+        let addresses = discover_link_addresses();
+        if let Some(lan) = addresses.lan_ips.first() {
             container.append(
                 &gtk::Label::builder()
-                    .label(
-                        "Tailscale is not detected. Install and sign in on this Centurion for the preferred iPhone link.",
-                    )
-                    .wrap(true)
+                    .label("Same network (optional)")
+                    .css_classes(["title-4"])
                     .xalign(0.0)
-                    .css_classes(["dim-label"])
+                    .margin_top(12)
                     .build(),
             );
-        }
-
-        if let Some(lan) = addresses.lan_ips.first() {
             container.append(&build_link_address_row(
-                "Wi‑Fi fallback",
+                "Wi‑Fi",
                 &format!("{lan}:9119"),
                 false,
             ));
         }
 
+        let has_mesh = addresses.magic_dns.is_some() || addresses.tailscale_ip.is_some();
+        if has_mesh {
+            container.append(
+                &gtk::Label::builder()
+                    .label("Advanced — optional mesh")
+                    .css_classes(["title-4"])
+                    .xalign(0.0)
+                    .margin_top(12)
+                    .build(),
+            );
+            if let Some(dns) = addresses.magic_dns.as_deref() {
+                container.append(&build_link_address_row("Tailscale MagicDNS", dns, false));
+            }
+            if let Some(ip) = addresses.tailscale_ip.as_deref() {
+                container.append(&build_link_address_row("Tailscale IP", ip, false));
+            }
+        }
+
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Allow TCP 9119 on the Tailscale interface (firewall). Crypto Chat stays on your private mesh — not a company relay.",
+                    "Expose TCP 9119 securely for away access. Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion — not a company relay.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
-                .margin_top(4)
+                .margin_top(8)
                 .build(),
         );
     }
@@ -499,9 +591,9 @@ mod linux {
         settings_list.add_css_class("boxed-list");
         settings_list.append(
             &adw::ActionRow::builder()
-                .title("Private mesh")
+                .title("Remote pairing")
                 .subtitle(
-                    "Prefer Tailscale MagicDNS for iPhone linking. Same Wi‑Fi is a local fallback only.",
+                    "Link your iPhone with a remote pairing code. Same Wi‑Fi is a local bonus; Tailscale mesh is optional.",
                 )
                 .icon_name("network-wireless-symbolic")
                 .build(),
@@ -721,7 +813,7 @@ mod linux {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "Copy the Tailscale address below into CenturionAI Remote, or use Find my Centurion on Wi‑Fi as a fallback.",
+                        "Generate a remote pairing code below and paste it into CenturionAI Remote. Same Wi‑Fi still works as a local bonus.",
                     );
                     refresh_link_addresses(&link_addresses);
                 }
@@ -851,7 +943,7 @@ mod linux {
                     Ok(()) => {
                         status_title.set_label("Your Centurion is ready");
                         status_detail.set_label(
-                            "The private iPhone connection has restarted. Prefer the Tailscale address below.",
+                            "The private iPhone connection has restarted. Generate or reuse a remote pairing code below.",
                         );
                         refresh_link_addresses(&link_addresses);
                     }
@@ -1087,8 +1179,24 @@ mod linux {
         let output = Command::new(centurion_binary())
             .args(command_args)
             .output()
-            .ok()
-            .filter(|output| output.status.success())?;
+            .ok()?;
+        // Parse JSON even when exit status is non-zero so callers can show
+        // structured failure messages (e.g. blocked OpenRouter, missing key).
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_provider_save_key(connector_id: &str, access_code: &str) -> Option<ProviderCliResponse> {
+        let mut child = Command::new(centurion_binary())
+            .args(["provider", "save-key", connector_id, "-", "--json"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .ok()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(access_code.as_bytes());
+        }
+        let output = child.wait_with_output().ok()?;
         serde_json::from_slice(&output.stdout).ok()
     }
 
@@ -2023,26 +2131,144 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         settings_row: &adw::ActionRow,
         detail: &gtk::Label,
     ) {
+        let connectors: Vec<ThinkingConnectorOption> =
+            run_provider_command(&["catalog", "--json"])
+                .and_then(|response| response.catalog)
+                .and_then(|catalog| {
+                    catalog
+                        .get("text_models")
+                        .and_then(|value| value.as_array())
+                        .cloned()
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|row| {
+                    let id = row.get("id")?.as_str()?.to_owned();
+                    let display_name = row
+                        .get("display_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(id.as_str())
+                        .to_owned();
+                    let needs_key = row
+                        .get("needs_key")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+                    let best_for = row
+                        .get("best_for")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    Some(ThinkingConnectorOption {
+                        id,
+                        display_name,
+                        needs_key,
+                        best_for,
+                    })
+                })
+                .collect();
+
+        if connectors.is_empty() {
+            let dialog = adw::MessageDialog::builder()
+                .heading("Change thinking service")
+                .body("Could not load the curated thinking-service catalog. Is Centurion AI OS installed?")
+                .close_response("ok")
+                .build();
+            dialog.add_response("ok", "OK");
+            dialog.set_transient_for(Some(parent));
+            dialog.present();
+            return;
+        }
+
+        let labels: Vec<&str> = connectors
+            .iter()
+            .map(|connector| connector.display_name.as_str())
+            .collect();
+        let service_drop = gtk::DropDown::from_strings(&labels);
+        let mut initial = 0_u32;
+        for (index, connector) in connectors.iter().enumerate() {
+            // Prefer a row that already has an access code configured.
+            if !connector.needs_key {
+                initial = index as u32;
+                break;
+            }
+        }
+        service_drop.set_selected(initial);
+
+        let hint = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["dim-label"])
+            .build();
+        let key_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("Access code from your thinking-service account")
+            .show_peek_icon(true)
+            .build();
+        let key_label = gtk::Label::builder()
+            .label("Access code")
+            .xalign(0.0)
+            .build();
+
+        let update_hint = {
+            let hint = hint.clone();
+            let key_entry = key_entry.clone();
+            let connectors = connectors.clone();
+            Rc::new(move |selected: u32| {
+                let Some(connector) = connectors.get(selected as usize) else {
+                    return;
+                };
+                if connector.needs_key {
+                    key_entry.set_placeholder_text(
+                        Some("Access code from your thinking-service account"),
+                    );
+                    if connector.best_for.is_empty() {
+                        hint.set_label(
+                            "This service needs an access code saved on this brain.",
+                        );
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — paste the access code below (saved only on this brain).",
+                            connector.best_for
+                        ));
+                    }
+                } else {
+                    key_entry.set_placeholder_text(Some(
+                        "Optional — paste a new access code to update",
+                    ));
+                    if connector.best_for.is_empty() {
+                        hint.set_label("Access code already saved on this brain.");
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — access code already on this brain.",
+                            connector.best_for
+                        ));
+                    }
+                }
+            })
+        };
+        update_hint(initial);
+        service_drop.connect_selected_notify({
+            let update_hint = Rc::clone(&update_hint);
+            move |dropdown| update_hint(dropdown.selected())
+        });
+
         let dialog = adw::MessageDialog::builder()
             .heading("Change thinking service")
-            .body("Enter a provider slug and model id. Centurion validates before applying.")
+            .body(
+                "Pick a curated thinking service. Access codes are saved only on this brain — never kept on your iPhone.",
+            )
             .close_response("cancel")
             .default_response("apply")
             .build();
         dialog.add_response("cancel", "Cancel");
-        dialog.add_response("apply", "Validate and apply");
+        dialog.add_response("apply", "Apply");
         dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
 
-        let provider_entry = gtk::Entry::builder().placeholder_text("openrouter").build();
-        let model_entry = gtk::Entry::builder()
-            .placeholder_text("anthropic/claude-sonnet-4")
-            .build();
-
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        extra.append(&gtk::Label::builder().label("Provider").xalign(0.0).build());
-        extra.append(&provider_entry);
-        extra.append(&gtk::Label::builder().label("Model").xalign(0.0).build());
-        extra.append(&model_entry);
+        extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
+        extra.append(&service_drop);
+        extra.append(&hint);
+        extra.append(&key_label);
+        extra.append(&key_entry);
         dialog.set_extra_child(Some(&extra));
         dialog.set_transient_for(Some(parent));
         dialog.present();
@@ -2054,25 +2280,60 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 dialog.close();
                 return;
             }
-            let provider = provider_entry.text().to_string();
-            let model = model_entry.text().to_string();
-            if provider.trim().is_empty() || model.trim().is_empty() {
-                settings_row.set_subtitle("Provider and model are required.");
+            let selected = service_drop.selected() as usize;
+            let Some(connector) = connectors.get(selected) else {
+                settings_row.set_subtitle("Pick a thinking service.");
+                dialog.close();
+                return;
+            };
+            let access_code = key_entry.text().to_string();
+            if connector.needs_key && access_code.trim().is_empty() {
+                settings_row.set_subtitle("Access code is required for this thinking service.");
                 dialog.close();
                 return;
             }
-            if let Some(response) = run_provider_command(&["set", &provider, &model, "--json"]) {
-                let message = response
-                    .result
-                    .and_then(|value| {
-                        value
-                            .get("message")
-                            .and_then(|m| m.as_str())
-                            .map(str::to_owned)
+            if !access_code.trim().is_empty() {
+                match run_provider_save_key(&connector.id, access_code.trim()) {
+                    Some(save_response) if save_response.ok => {}
+                    Some(save_response) => {
+                        let message = save_response
+                            .message
+                            .unwrap_or_else(|| "Could not save access code.".to_owned());
+                        settings_row.set_subtitle(&message);
+                        dialog.close();
+                        return;
+                    }
+                    None => {
+                        settings_row.set_subtitle("Could not save access code.");
+                        dialog.close();
+                        return;
+                    }
+                }
+            }
+            if let Some(apply_response) =
+                run_provider_command(&["apply-connector", &connector.id, "--json"])
+            {
+                let message = apply_response
+                    .message
+                    .or_else(|| {
+                        apply_response.result.and_then(|value| {
+                            value
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .map(str::to_owned)
+                        })
                     })
-                    .unwrap_or_else(|| "Thinking service updated.".to_owned());
+                    .unwrap_or_else(|| {
+                        if apply_response.ok {
+                            "Thinking service updated.".to_owned()
+                        } else {
+                            "Could not apply thinking service change.".to_owned()
+                        }
+                    });
                 settings_row.set_subtitle(&message);
-                refresh_thinking_status(&detail, &settings_row);
+                if apply_response.ok {
+                    refresh_thinking_status(&detail, &settings_row);
+                }
             } else {
                 settings_row.set_subtitle("Could not apply thinking service change.");
             }

@@ -317,12 +317,26 @@ def _looks_anthropic(base_url: str, provider: str) -> bool:
 
 
 def validate_switch(provider: str, model: str, *, probe: bool = True) -> ValidationResult:
+    from centurion_cli.remote_model_catalog import is_openrouter_blocked
+
     provider = (provider or "").strip()
     model = (model or "").strip()
     if not provider or not model:
         return ValidationResult(
             ok=False,
             message="Provider and model are required.",
+            code=LLM_CONFIG_INVALID,
+        )
+
+    if is_openrouter_blocked(provider):
+        return ValidationResult(
+            ok=False,
+            provider=provider,
+            model=model,
+            message=(
+                "OpenRouter and subscription remaps are not available for Centurion "
+                "Remote / Sovereign BYOK. Use a direct thinking-service family."
+            ),
             code=LLM_CONFIG_INVALID,
         )
 
@@ -430,6 +444,21 @@ def commit_switch_result(result, *, probe: bool = True) -> ApplyResult:
 
 
 def apply_switch(provider: str, model: str, *, probe: bool = True) -> ApplyResult:
+    from centurion_cli.remote_model_catalog import is_openrouter_blocked
+
+    if is_openrouter_blocked(provider):
+        return ApplyResult(
+            ok=False,
+            provider=provider,
+            model=model,
+            message=(
+                "OpenRouter and subscription remaps are not available for Centurion "
+                "Remote / Sovereign BYOK. Use a direct thinking-service family "
+                "(OpenAI API, Anthropic, Gemini, …)."
+            ),
+            code=LLM_CONFIG_INVALID,
+        )
+
     result = _resolve_switch(provider, model)
     if not result.success:
         code, message = classify_llm_error(RuntimeError(result.error_message or "switch failed"))
@@ -812,7 +841,7 @@ def _apply_creative_connector(connector) -> ApplyResult:
 
 
 def save_remote_api_key(connector_id: str, key: str) -> dict[str, Any]:
-    from centurion_cli.config import save_env_value
+    from centurion_cli.config import is_managed, save_env_value
     from centurion_cli.remote_model_catalog import get_connector
 
     connector = get_connector(connector_id)
@@ -820,14 +849,22 @@ def save_remote_api_key(connector_id: str, key: str) -> dict[str, Any]:
         return {"ok": False, "message": "Unknown thinking service."}
     value = (key or "").strip()
     if not value:
-        return {"ok": False, "message": "API key is required."}
+        return {"ok": False, "message": "Access code is required."}
+    if is_managed():
+        return {
+            "ok": False,
+            "message": (
+                "This Centurion install is managed by a package manager. "
+                "Set access codes through your package config, not from Remote."
+            ),
+        }
     save_env_value(connector.key_env, value)
     os.environ[connector.key_env] = value
     return {
         "ok": True,
         "connector_id": connector.id,
         "configured": True,
-        "message": f"Saved key for {connector.display_name} on your Centurion.",
+        "message": f"Saved access code for {connector.display_name} on your Centurion.",
     }
 
 

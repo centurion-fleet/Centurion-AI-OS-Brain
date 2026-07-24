@@ -51,15 +51,36 @@ Run the service in explicit development pairing mode:
 cargo run -p centurion-remote -- serve --auto-approve --echo
 ```
 
-Production mode requires approval:
+Production mode requires approval (LAN) or a remote pairing token:
 
 ```bash
 cargo run -p centurion-remote -- serve
+cargo run -p centurion-remote -- remote-pair --host your.public.hostname
+# → prints token:…@your.public.hostname:9119 for the iPhone
+
 cargo run -p centurion-remote -- devices
 cargo run -p centurion-remote -- approve <fingerprint> --name "Adrian's iPhone"
 ```
 
-The native desktop performs the same approval action from its Devices page.
+Or via the Python CLI wrapper (same binary under the hood):
+
+```bash
+centurion remote pair --host your.public.hostname
+centurion remote tokens
+centurion remote revoke <id>
+```
+
+### Exposing TCP 9119 for away access
+
+Remote pairing works over any reachable TCP path. Common options:
+
+1. **Cloudflare Tunnel** — `cloudflared tunnel` TCP to `localhost:9119`, use the tunnel hostname in `--host`.
+2. **Reverse proxy** — TCP pass-through (nginx stream / Caddy) to `127.0.0.1:9119`.
+3. **Firewall / port-forward** — allow inbound TCP 9119 to the brain and use your public IP or DNS name.
+
+Crypto Chat stays end-to-end encrypted (X25519 + XSalsa20-Poly1305) between iPhone and this Centurion. Opening the port only makes the encrypted listener reachable; pair tokens gate new devices.
+
+The native desktop **Remote pairing** panel mints the same connection string.
 
 ## Local chat
 

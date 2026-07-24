@@ -13,5 +13,13 @@ def test_phoenix_routes_video_to_runway():
     assert resolve("generate video for a 30-second ad") == "runway-gen-4"
 
 
+def test_phoenix_text_only_skips_creative_routes():
+    assert resolve("generate video for a 30-second ad", categories={"text"}) is None
+    assert (
+        resolve("Please draft email copy for the newsletter", categories={"text"})
+        == "anthropic-sonnet-5"
+    )
+
+
 def test_phoenix_returns_none_for_unmatched():
     assert resolve("hello there") is None

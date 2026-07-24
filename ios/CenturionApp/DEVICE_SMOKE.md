@@ -11,10 +11,11 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 
 ## Pairing & Crypto Chat
 
-- [ ] Find Sovereign on home Wi‑Fi (Bonjour)
-- [ ] Approve device on Sovereign; link succeeds
+- [ ] **Remote:** On Centurion, generate pairing code; paste `token:…@host:9119` in the app; link succeeds without Tailscale
+- [ ] Kill app and reopen away from home Wi‑Fi; reconnects to saved remote endpoint
+- [ ] Find Sovereign on home Wi‑Fi (optional same-network path)
+- [ ] LAN approve path still works when no remote tokens exist
 - [ ] Send Crypto Chat message; receive reply
-- [ ] Kill app and reopen; reconnects to saved endpoint
 - [ ] Disconnect / revoke shows clear offline state (no fake “live” success)
 
 ## Demo data
