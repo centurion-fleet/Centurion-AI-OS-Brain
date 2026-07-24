@@ -61,7 +61,45 @@ final class ConversationStore: ObservableObject {
 
     func restore(into messageService: MessageService) {
         guard let snapshot = loadSnapshot(), !snapshot.conversations.isEmpty else { return }
-        let messages = snapshot.messages.map {
+        let liveConversations = snapshot.conversations.filter { !$0.isDemoSeed }
+        guard !liveConversations.isEmpty else {
+            removeDemoContent()
+            return
+        }
+        let liveIds = Set(liveConversations.map(\.id))
+        let messages = snapshot.messages
+            .filter { liveIds.contains($0.conversationId) }
+            .map {
+                Message(
+                    id: $0.id,
+                    conversationId: $0.conversationId,
+                    content: $0.content,
+                    role: $0.role,
+                    timestamp: $0.timestamp,
+                    attachments: $0.attachments
+                )
+            }
+        messageService.applySnapshot(
+            conversations: liveConversations,
+            messages: messages
+        )
+    }
+
+    /// Drop offline marketing sample threads from disk; keep live Crypto Chat.
+    func removeDemoContent() {
+        guard let snapshot = loadSnapshot() else {
+            hasPersistedData = false
+            return
+        }
+        let liveConversations = snapshot.conversations.filter { !$0.isDemoSeed }
+        if liveConversations.isEmpty {
+            try? fileManager.removeItem(at: storageURL)
+            hasPersistedData = false
+            return
+        }
+        let liveIds = Set(liveConversations.map(\.id))
+        let liveMessages = snapshot.messages.filter { liveIds.contains($0.conversationId) }
+        save(conversations: liveConversations, messages: liveMessages.map {
             Message(
                 id: $0.id,
                 conversationId: $0.conversationId,
@@ -70,10 +108,6 @@ final class ConversationStore: ObservableObject {
                 timestamp: $0.timestamp,
                 attachments: $0.attachments
             )
-        }
-        messageService.applySnapshot(
-            conversations: snapshot.conversations,
-            messages: messages
-        )
+        })
     }
 }

@@ -542,10 +542,10 @@ struct ConnectionPairingSheet: View {
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Link to your Centurion",
-                    subtitle: "Paste the remote pairing code from your Centurion computer. It looks like token:…@host:9119."
+                    subtitle: "Paste the pairing code from your Centurion computer. Sovereign AI Remote saves it securely and finishes linking."
                 )
 
-                TextField("token:…@host:9119", text: $connectionString, axis: .vertical)
+                TextField("Paste pairing code", text: $connectionString, axis: .vertical)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .lineLimit(2...4)
@@ -553,7 +553,7 @@ struct ConnectionPairingSheet: View {
                     .background(ColorTheme.surface())
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                Button("Link Remotely") {
+                Button("Link") {
                     Haptics.lightTap()
                     connectionManager.connectRemote(connectionString: connectionString)
                 }
@@ -561,9 +561,9 @@ struct ConnectionPairingSheet: View {
                 .disabled(
                     connectionString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
-                .accessibilityLabel("Link Remotely")
+                .accessibilityLabel("Link with pairing code")
 
-                Text("On your Centurion: generate a code under Remote pairing, expose TCP 9119 if you’re away from home, then paste it here.")
+                Text("On your Centurion computer: open Sovereign AI Brain → generate a remote pairing code → paste it here.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
@@ -576,13 +576,13 @@ struct ConnectionPairingSheet: View {
                         connectionManager.startDiscovery()
                     }
                 } label: {
-                    Text(showNetworkFind ? "Hide same-network find" : "Find on this Wi‑Fi")
+                    Text(showNetworkFind ? "Hide same-network find" : "Optional: find on this Wi‑Fi")
                 }
                 .buttonStyle(CenturionGhostButtonStyle())
 
                 if showNetworkFind {
                     if connectionManager.discoveredDevices.isEmpty {
-                        Text("Looking for your Sovereign on this network…")
+                        Text("Looking for your Centurion on this network…")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                     } else {
@@ -604,7 +604,34 @@ struct ConnectionPairingSheet: View {
                     }
                 }
 
-                manualConnectSection
+                DisclosureGroup("Advanced", isExpanded: $showManualEntry) {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        Text("Host and port are only needed if you are not using a pairing code.")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                        TextField("Hostname or IP", text: $manualHost)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .padding(Spacing.sm)
+                            .background(ColorTheme.surface())
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        TextField("Port", text: $manualPort)
+                            .keyboardType(.numberPad)
+                            .padding(Spacing.sm)
+                            .background(ColorTheme.surface())
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        Button("Connect") {
+                            let port = Int(manualPort) ?? 9119
+                            connectionManager.connect(host: manualHost, port: port)
+                        }
+                        .buttonStyle(CenturionPrimaryButtonStyle())
+                        .disabled(manualHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(.top, Spacing.sm)
+                }
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
             }
             .padding()
         }
@@ -663,8 +690,8 @@ struct ConnectionPairingSheet: View {
     private func awaitingApprovalState(message: String) -> some View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
-                title: "Approve on your Sovereign",
-                subtitle: "Your iPhone found your Sovereign on this network. Approve it once on the computer, then this screen will finish linking automatically."
+                title: "Approve on your Centurion",
+                subtitle: "Your iPhone is waiting. On your Centurion computer, open Devices and approve this iPhone once — then this screen finishes linking automatically."
             )
             Image(systemName: "hourglass.circle.fill")
                 .font(.system(size: 48))
@@ -675,17 +702,17 @@ struct ConnectionPairingSheet: View {
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.primaryText())
                     if let fingerprint = connectionManager.clientFingerprint, !fingerprint.isEmpty {
-                        Text("On your Sovereign computer, run:")
+                        Text("Security code")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
-                        Text("centurion-remote approve \(fingerprint)")
+                        Text(String(fingerprint.prefix(12)) + "…")
                             .font(.system(.caption, design: .monospaced))
                             .foregroundColor(ColorTheme.primaryText())
                             .textSelection(.enabled)
-                        Button("Copy approve command") {
-                            UIPasteboard.general.string =
-                                "centurion-remote approve \(fingerprint)"
-                            Haptics.success()
+                        NavigationLink {
+                            KeyExportView()
+                        } label: {
+                            Text("Show full iPhone security code")
                         }
                         .buttonStyle(CenturionGhostButtonStyle())
                     }
@@ -700,46 +727,11 @@ struct ConnectionPairingSheet: View {
                 connectionManager.retryConnection()
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
-            NavigationLink {
-                KeyExportView()
-            } label: {
-                Text("Show iPhone security code")
-            }
-            .buttonStyle(CenturionGhostButtonStyle())
         }
         .padding()
     }
 
     private var manualConnectSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Button {
-                showManualEntry.toggle()
-            } label: {
-                Text(showManualEntry ? "Hide host entry" : "Enter host and port")
-            }
-            .buttonStyle(CenturionGhostButtonStyle())
-
-            if showManualEntry {
-                TextField("Hostname or IP", text: $manualHost)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .padding(Spacing.sm)
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                TextField("Port", text: $manualPort)
-                    .keyboardType(.numberPad)
-                    .padding(Spacing.sm)
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                Button("Connect") {
-                    let port = Int(manualPort) ?? 9119
-                    connectionManager.connect(host: manualHost, port: port)
-                }
-                .buttonStyle(CenturionPrimaryButtonStyle())
-                .disabled(manualHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        EmptyView()
     }
 }

@@ -316,6 +316,29 @@ struct Conversation: Identifiable, Codable, Equatable {
     var contextPath: String { context.contextPath }
     var icon: String { context.icon }
     var missionBadge: (name: String, color: Color) { context.missionBadge }
+
+    /// Offline marketing sample used before a live Sovereign link.
+    var isDemoSeed: Bool {
+        let markers: Set<String> = [
+            "Morning Briefing",
+            "Pipeline Review",
+            "Q3 Go-to-Market",
+            "Partner Onboarding",
+            "Design visual assets",
+        ]
+        switch context {
+        case .standalone(let title):
+            return markers.contains(title)
+        case .program(_, let name):
+            return markers.contains(name)
+        case .target(_, let name, _):
+            return markers.contains(name)
+        case .task(_, let name, _, _):
+            return markers.contains(name)
+        default:
+            return false
+        }
+    }
 }
 
 extension ConversationContext {

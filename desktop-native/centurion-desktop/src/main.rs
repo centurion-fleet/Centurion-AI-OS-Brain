@@ -378,7 +378,7 @@ mod linux {
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Generate a pairing code for CenturionAI Remote. Paste it on your iPhone to link permanently — works from anywhere once TCP 9119 is reachable (Cloudflare Tunnel, reverse proxy, or firewall).",
+                    "1. Generate a pairing code  ·  2. Paste it in Sovereign AI Remote  ·  3. Approve the iPhone under Devices.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -413,9 +413,15 @@ mod linux {
                 pairing_value_gen.set_label(&connection);
                 copy_gen.set_sensitive(true);
                 copy_to_clipboard(&connection);
+                pairing_value_gen.set_tooltip_text(Some("Copied to clipboard"));
             }
             Err(error) => {
-                pairing_value_gen.set_label(&error);
+                let plain = if error.contains("not found") {
+                    "Could not create a pairing code. Is Centurion installed on this brain?".to_owned()
+                } else {
+                    "Could not create a pairing code. Try again in a moment.".to_owned()
+                };
+                pairing_value_gen.set_label(&plain);
                 copy_gen.set_sensitive(false);
             }
         });
@@ -465,7 +471,7 @@ mod linux {
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Expose TCP 9119 securely for away access. Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion — not a company relay.",
+                    "Away from home: make this brain reachable (secure tunnel or firewall rule). Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -562,13 +568,17 @@ mod linux {
         devices.append(
             &gtk::Label::builder()
                 .label(
-                    "Approved iPhones will appear here. You can review or revoke them at any time.",
+                    "Link flow: generate a pairing code on Home → paste in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
                 .build(),
         );
+        let go_to_pairing = gtk::Button::with_label("Go to pairing");
+        go_to_pairing.add_css_class("suggested-action");
+        go_to_pairing.set_halign(gtk::Align::Start);
+        devices.append(&go_to_pairing);
         let device_list = gtk::ListBox::new();
         device_list.add_css_class("boxed-list");
         refresh_devices(&device_list);
@@ -589,15 +599,15 @@ mod linux {
         );
         let settings_list = gtk::ListBox::new();
         settings_list.add_css_class("boxed-list");
-        settings_list.append(
-            &adw::ActionRow::builder()
-                .title("Remote pairing")
-                .subtitle(
-                    "Link your iPhone with a remote pairing code. Same Wi‑Fi is a local bonus; Tailscale mesh is optional.",
-                )
-                .icon_name("network-wireless-symbolic")
-                .build(),
-        );
+        let pairing_settings_row = adw::ActionRow::builder()
+            .title("Remote pairing")
+            .subtitle(
+                "Generate a code on Home, paste it in Sovereign AI Remote, then approve the iPhone under Devices.",
+            )
+            .icon_name("network-wireless-symbolic")
+            .activatable(true)
+            .build();
+        settings_list.append(&pairing_settings_row);
         settings_list.append(
             &adw::ActionRow::builder()
                 .title("Version")
@@ -813,7 +823,7 @@ mod linux {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "Generate a remote pairing code below and paste it into CenturionAI Remote. Same Wi‑Fi still works as a local bonus.",
+                        "Generate a remote pairing code below and paste it into Sovereign AI Remote.",
                     );
                     refresh_link_addresses(&link_addresses);
                 }
@@ -872,6 +882,18 @@ mod linux {
             let thinking_detail = thinking_detail.clone();
             let window = window.clone();
             move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        pairing_settings_row.connect_activated({
+            let stack = stack.clone();
+            move |_| {
+                stack.set_visible_child_name("home");
+            }
+        });
+        go_to_pairing.connect_clicked({
+            let stack = stack.clone();
+            move |_| {
+                stack.set_visible_child_name("home");
+            }
         });
         autonomy_button.connect_clicked({
             let window = window.clone();
@@ -1074,12 +1096,18 @@ mod linux {
             && approved.iter().all(|device| !device.connected);
 
         for device in pending {
+            let short_id = if device.fingerprint.len() > 10 {
+                format!(
+                    "{}…{}",
+                    &device.fingerprint[..6],
+                    &device.fingerprint[device.fingerprint.len().saturating_sub(4)..]
+                )
+            } else {
+                device.fingerprint.clone()
+            };
             let row = adw::ActionRow::builder()
                 .title(&device.name)
-                .subtitle(format!(
-                    "Waiting for your approval · {}",
-                    device.fingerprint
-                ))
+                .subtitle(format!("Waiting for your approval · {short_id}"))
                 .icon_name("phone-symbolic")
                 .build();
             let approve = gtk::Button::with_label("Approve");
@@ -1106,14 +1134,22 @@ mod linux {
         }
 
         for device in approved {
-            let subtitle = if device.connected {
+            let short_id = if device.fingerprint.len() > 10 {
                 format!(
-                    "Connected · {} · {}",
-                    device.peer.as_deref().unwrap_or("unknown"),
-                    device.fingerprint
+                    "{}…{}",
+                    &device.fingerprint[..6],
+                    &device.fingerprint[device.fingerprint.len().saturating_sub(4)..]
                 )
             } else {
-                format!("Approved · {}", device.fingerprint)
+                device.fingerprint.clone()
+            };
+            let subtitle = if device.connected {
+                format!(
+                    "Online · {}",
+                    device.peer.as_deref().unwrap_or(&short_id)
+                )
+            } else {
+                format!("Approved · {short_id}")
             };
             let row = adw::ActionRow::builder()
                 .title(&device.name)
@@ -1128,19 +1164,60 @@ mod linux {
             revoke.add_css_class("destructive-action");
             revoke.set_valign(gtk::Align::Center);
             let fingerprint = device.fingerprint;
+            let device_name = device.name.clone();
             let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
-                button.set_sensitive(false);
-                let revoked = Command::new(&remote)
-                    .args(["revoke", &fingerprint])
-                    .status()
-                    .is_ok_and(|status| status.success());
-                if revoked {
-                    refresh_devices(&list_refresh);
-                } else {
-                    button.set_sensitive(true);
+                let confirm = adw::MessageDialog::builder()
+                    .heading("Remove this iPhone?")
+                    .body(&format!(
+                        "Remove {device_name}? They’ll need a new pairing code to link again."
+                    ))
+                    .close_response("cancel")
+                    .default_response("revoke")
+                    .build();
+                confirm.add_response("cancel", "Cancel");
+                confirm.add_response("revoke", "Remove");
+                confirm.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
+                if let Some(root) = button.root() {
+                    if let Ok(window) = root.downcast::<gtk::Window>() {
+                        confirm.set_transient_for(Some(&window));
+                    }
                 }
+                let button = button.clone();
+                let fingerprint = fingerprint.clone();
+                let list_refresh = list_refresh.clone();
+                let remote = remote.clone();
+                confirm.connect_response(None, move |dialog, response| {
+                    if response != "revoke" {
+                        dialog.close();
+                        return;
+                    }
+                    button.set_sensitive(false);
+                    let revoked = Command::new(&remote)
+                        .args(["revoke", &fingerprint])
+                        .status()
+                        .is_ok_and(|status| status.success());
+                    if revoked {
+                        refresh_devices(&list_refresh);
+                        if let Some(root) = button.root() {
+                            if let Ok(window) = root.downcast::<gtk::Window>() {
+                                let done = adw::MessageDialog::builder()
+                                    .heading("iPhone removed")
+                                    .body("They’ll need a new pairing code to link again.")
+                                    .close_response("ok")
+                                    .build();
+                                done.add_response("ok", "OK");
+                                done.set_transient_for(Some(&window));
+                                done.present();
+                            }
+                        }
+                    } else {
+                        button.set_sensitive(true);
+                    }
+                    dialog.close();
+                });
+                confirm.present();
             });
             row.add_suffix(&revoke);
             list.append(&row);
@@ -1149,8 +1226,8 @@ mod linux {
         if show_no_devices {
             list.append(
                 &adw::ActionRow::builder()
-                    .title("No iPhones connected")
-                    .subtitle("Open Connect in CenturionAI Remote on the same network.")
+                    .title("No iPhones linked yet")
+                    .subtitle("On Home: generate a pairing code → paste in Sovereign AI Remote → approve here.")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -1158,7 +1235,7 @@ mod linux {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones connected right now")
-                    .subtitle("Approved devices will appear here when they link from your iPhone.")
+                    .subtitle("Approved devices appear here when Sovereign AI Remote links again.")
                     .icon_name("phone-disabled-symbolic")
                     .build(),
             );
@@ -1252,8 +1329,8 @@ mod linux {
             let dialog = adw::MessageDialog::builder()
                 .heading("Check for updates")
                 .body(
-                    "Could not run `centurion update --check --json`.\n\n\
-                     Make sure `centurion` is installed on this brain.",
+                    "Could not check for Centurion AI OS updates on this brain.\n\n\
+                     Make sure Centurion is installed, then try again.",
                 )
                 .close_response("ok")
                 .build();
@@ -1271,16 +1348,15 @@ mod linux {
             .message
             .clone()
             .unwrap_or_else(|| "Check complete.".to_owned());
-        let footnote = "This updates Centurion AI OS on this brain — not the Sovereign AI Brain \
-desktop app binary. To rebuild the desktop app, run desktop-native/scripts/install-user.sh \
-(or your Fedora RPM path).";
 
         match payload.status.as_str() {
             "up_to_date" => {
                 update_row.set_subtitle(&format!("Centurion AI OS {os_version} — up to date"));
                 let dialog = adw::MessageDialog::builder()
                     .heading("You're up to date")
-                    .body(&format!("{message}\n\nOS version: {os_version}\n\n{footnote}"))
+                    .body(&format!(
+                        "Your brain software is current (v{os_version}).\n\n{message}"
+                    ))
                     .close_response("ok")
                     .build();
                 dialog.add_response("ok", "OK");
@@ -1292,8 +1368,8 @@ desktop app binary. To rebuild the desktop app, run desktop-native/scripts/insta
                     "Update available for Centurion AI OS {os_version}"
                 ));
                 let body = format!(
-                    "{message}\n\nOS version: {os_version}\n\n\
-                     Updating may take several minutes and can restart services.\n\n{footnote}"
+                    "{message}\n\nAn update is available. It may take a few minutes; \
+                     Sovereign AI Remote may briefly disconnect while services restart."
                 );
                 let dialog = adw::MessageDialog::builder()
                     .heading("Update available")
@@ -1318,14 +1394,12 @@ desktop app binary. To rebuild the desktop app, run desktop-native/scripts/insta
                 dialog.present();
             }
             _ => {
-                let cmd = payload
-                    .recommended_command
-                    .as_deref()
-                    .unwrap_or("centurion update");
                 update_row.set_subtitle("Updates managed outside this app");
                 let dialog = adw::MessageDialog::builder()
                     .heading("Cannot update from this app")
-                    .body(&format!("{message}\n\nUse:\n{cmd}\n\n{footnote}"))
+                    .body(&format!(
+                        "{message}\n\nAsk your advisor if updates are managed for this brain."
+                    ))
                     .close_response("ok")
                     .build();
                 dialog.add_response("ok", "OK");
@@ -1382,10 +1456,8 @@ desktop app binary. To rebuild the desktop app, run desktop-native/scripts/insta
                             let done = adw::MessageDialog::builder()
                                 .heading("Update complete")
                                 .body(&format!(
-                                    "{body}\n\n\
-                                     Restart Sovereign AI Brain if the desktop shell looks stale. \
-                                     Rebuild the desktop app with install-user.sh only when you \
-                                     need a new GTK build."
+                                    "{body}\n\nYour brain software was updated. \
+                                     Sovereign AI Remote may reconnect automatically."
                                 ))
                                 .close_response("ok")
                                 .build();
@@ -2264,11 +2336,19 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let error_label = gtk::Label::builder()
+            .label("")
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["error"])
+            .visible(false)
+            .build();
         extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
         extra.append(&service_drop);
         extra.append(&hint);
         extra.append(&key_label);
         extra.append(&key_entry);
+        extra.append(&error_label);
         dialog.set_extra_child(Some(&extra));
         dialog.set_transient_for(Some(parent));
         dialog.present();
@@ -2282,14 +2362,14 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             }
             let selected = service_drop.selected() as usize;
             let Some(connector) = connectors.get(selected) else {
-                settings_row.set_subtitle("Pick a thinking service.");
-                dialog.close();
+                error_label.set_label("Pick a thinking service.");
+                error_label.set_visible(true);
                 return;
             };
             let access_code = key_entry.text().to_string();
             if connector.needs_key && access_code.trim().is_empty() {
-                settings_row.set_subtitle("Access code is required for this thinking service.");
-                dialog.close();
+                error_label.set_label("Access code is required for this thinking service.");
+                error_label.set_visible(true);
                 return;
             }
             if !access_code.trim().is_empty() {
@@ -2299,13 +2379,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         let message = save_response
                             .message
                             .unwrap_or_else(|| "Could not save access code.".to_owned());
-                        settings_row.set_subtitle(&message);
-                        dialog.close();
+                        error_label.set_label(&message);
+                        error_label.set_visible(true);
                         return;
                     }
                     None => {
-                        settings_row.set_subtitle("Could not save access code.");
-                        dialog.close();
+                        error_label.set_label("Could not save access code.");
+                        error_label.set_visible(true);
                         return;
                     }
                 }
@@ -2330,14 +2410,18 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                             "Could not apply thinking service change.".to_owned()
                         }
                     });
-                settings_row.set_subtitle(&message);
                 if apply_response.ok {
+                    settings_row.set_subtitle(&message);
                     refresh_thinking_status(&detail, &settings_row);
+                    dialog.close();
+                } else {
+                    error_label.set_label(&message);
+                    error_label.set_visible(true);
                 }
             } else {
-                settings_row.set_subtitle("Could not apply thinking service change.");
+                error_label.set_label("Could not apply thinking service change.");
+                error_label.set_visible(true);
             }
-            dialog.close();
         });
     }
 

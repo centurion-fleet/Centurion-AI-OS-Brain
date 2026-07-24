@@ -33,10 +33,13 @@ final class MessageService: ObservableObject {
     }
 
     /// Remove seeded preview conversations once a live Centurion link is active.
+    /// Purges demo threads from disk without wiping live Crypto Chat history.
     func clearDemoData() {
         allMessages = []
         conversations = []
         currentConversation = nil
+        ConversationStore.shared.removeDemoContent()
+        UserDefaults.standard.set(false, forKey: "centurion.chatDemoActive")
     }
 
     /// Restore a full multi-conversation snapshot (live Crypto Chat + imports).
@@ -340,5 +343,6 @@ final class MessageService: ObservableObject {
 
         // Sort all messages chronologically
         allMessages.sort { $0.timestamp < $1.timestamp }
+        UserDefaults.standard.set(true, forKey: "centurion.chatDemoActive")
     }
 }
