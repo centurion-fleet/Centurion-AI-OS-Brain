@@ -8407,35 +8407,125 @@ def _finalize_update_output(state):
             pass
 
 
-def _cmd_update_check():
-    """Implement ``centurion update --check``: fetch and report without installing."""
-    from centurion_cli.config import detect_install_method
+def _cmd_update_check(args=None):
+    """Implement ``centurion update --check``: fetch and report without installing.
+
+    With ``--json``, print a single JSON object for desktop / automation clients:
+    ``ok``, ``method``, ``status`` (up_to_date | update_available | unavailable),
+    ``behind``, ``os_version``, ``message``, ``recommended_command``.
+    """
+    as_json = bool(args is not None and getattr(args, "json", False))
+    from centurion_cli.config import (
+        detect_install_method,
+        is_managed,
+        recommended_update_command,
+    )
+
+    def emit(payload: dict, exit_code: int = 0) -> None:
+        if as_json:
+            print(json.dumps(payload))
+            sys.stdout.flush()
+            if exit_code:
+                sys.exit(exit_code)
+            return
+        message = payload.get("message") or ""
+        status = payload.get("status")
+        if status == "up_to_date":
+            print("✓ Already up to date.")
+        elif status == "update_available":
+            print(f"⚕ {message}" if message else "⚕ Update available.")
+            cmd = payload.get("recommended_command")
+            if cmd:
+                print(f"  Run '{cmd}' to install.")
+        else:
+            # unavailable / error
+            prefix = "✗ " if exit_code else "⚠ "
+            print(f"{prefix}{message}" if message else f"{prefix}Cannot check for updates.")
+            cmd = payload.get("recommended_command")
+            if cmd and status == "unavailable":
+                print(f"  Use: {cmd}")
+        if exit_code:
+            sys.exit(exit_code)
+
+    base = {
+        "ok": True,
+        "behind": 0,
+        "os_version": __version__,
+        "recommended_command": recommended_update_command(),
+    }
+
+    if is_managed():
+        emit(
+            {
+                **base,
+                "method": detect_install_method(PROJECT_ROOT),
+                "status": "unavailable",
+                "message": (
+                    "This Centurion AI OS install is managed by a package manager. "
+                    "Update with the command below instead of the Brain app."
+                ),
+            }
+        )
+        return
+
     method = detect_install_method(PROJECT_ROOT)
     if method == "pip":
-        from centurion_cli.config import recommended_update_command
         from centurion_cli.banner import check_via_pypi
+
         result = check_via_pypi()
         if result is None:
-            print("✗ Could not reach PyPI to check for updates.")
-            sys.exit(1)
-        elif result == 0:
-            print("✓ Already up to date.")
+            emit(
+                {
+                    **base,
+                    "ok": False,
+                    "method": "pip",
+                    "status": "unavailable",
+                    "message": "Could not reach PyPI to check for updates.",
+                },
+                exit_code=1,
+            )
+            return
+        if result == 0:
+            emit(
+                {
+                    **base,
+                    "method": "pip",
+                    "status": "up_to_date",
+                    "message": "Already up to date.",
+                }
+            )
         else:
-            print("⚕ Update available on PyPI.")
-            print(f"  Run '{recommended_update_command()}' to install.")
+            emit(
+                {
+                    **base,
+                    "method": "pip",
+                    "status": "update_available",
+                    "behind": int(result) if result > 0 else 1,
+                    "message": "Update available on PyPI.",
+                }
+            )
         return
 
     git_dir = PROJECT_ROOT / ".git"
     if not git_dir.exists():
-        print("✗ Not a git repository — cannot check for updates.")
-        sys.exit(1)
+        emit(
+            {
+                **base,
+                "ok": False,
+                "method": method,
+                "status": "unavailable",
+                "message": "Not a git repository — cannot check for updates.",
+            },
+            exit_code=1,
+        )
+        return
 
     git_cmd = ["git"]
     if sys.platform == "win32":
         git_cmd = ["git", "-c", "windows.appendAtomically=false"]
 
-    # Fetch both origin and upstream; prefer upstream as the canonical reference
-    print("→ Fetching from upstream...")
+    if not as_json:
+        print("→ Fetching from upstream...")
     fetch_result = subprocess.run(
         git_cmd + ["fetch", "upstream"],
         cwd=PROJECT_ROOT,
@@ -8443,31 +8533,39 @@ def _cmd_update_check():
         text=True,
     )
     if fetch_result.returncode != 0:
-        # Fallback to origin if upstream doesn't exist
-        print("→ Fetching from origin...")
+        if not as_json:
+            print("→ Fetching from origin...")
         fetch_result = subprocess.run(
             git_cmd + ["fetch", "origin"],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
         )
-        upstream_exists = False
         compare_branch = "origin/main"
     else:
-        upstream_exists = True
         compare_branch = "upstream/main"
 
     if fetch_result.returncode != 0:
         stderr = fetch_result.stderr.strip()
         if "Could not resolve host" in stderr or "unable to access" in stderr:
-            print("✗ Network error — cannot reach the remote repository.")
+            message = "Network error — cannot reach the remote repository."
         elif "Authentication failed" in stderr or "could not read Username" in stderr:
-            print("✗ Authentication failed — check your git credentials or SSH key.")
+            message = "Authentication failed — check your git credentials or SSH key."
         else:
-            print("✗ Failed to fetch.")
+            message = "Failed to fetch."
             if stderr:
-                print(f"  {stderr.splitlines()[0]}")
-        sys.exit(1)
+                message = f"{message} {stderr.splitlines()[0]}"
+        emit(
+            {
+                **base,
+                "ok": False,
+                "method": "git",
+                "status": "unavailable",
+                "message": message,
+            },
+            exit_code=1,
+        )
+        return
 
     rev_result = subprocess.run(
         git_cmd + ["rev-list", f"HEAD..{compare_branch}", "--count"],
@@ -8479,13 +8577,26 @@ def _cmd_update_check():
     behind = int(rev_result.stdout.strip())
 
     if behind == 0:
-        print("✓ Already up to date.")
+        emit(
+            {
+                **base,
+                "method": "git",
+                "status": "up_to_date",
+                "behind": 0,
+                "message": "Already up to date.",
+            }
+        )
     else:
         commits_word = "commit" if behind == 1 else "commits"
-        print(f"⚕ Update available: {behind} {commits_word} behind {compare_branch}.")
-        from centurion_cli.config import recommended_update_command
-
-        print(f"  Run '{recommended_update_command()}' to install.")
+        emit(
+            {
+                **base,
+                "method": "git",
+                "status": "update_available",
+                "behind": behind,
+                "message": f"Update available: {behind} {commits_word} behind {compare_branch}.",
+            }
+        )
 
 
 def _ensure_fhs_path_guard() -> None:
@@ -8682,12 +8793,14 @@ def cmd_update(args):
     """
     from centurion_cli.config import is_managed, managed_error
 
-    if is_managed():
-        managed_error("update Centurion AI OS")
+    # Allow --check (including --json) on managed installs so clients can
+    # surface the package-manager upgrade command instead of failing hard.
+    if getattr(args, "check", False):
+        _cmd_update_check(args)
         return
 
-    if getattr(args, "check", False):
-        _cmd_update_check()
+    if is_managed():
+        managed_error("update Centurion AI OS")
         return
 
     gateway_mode = getattr(args, "gateway", False)
@@ -9922,6 +10035,7 @@ def _coalesce_session_name_args(argv: list) -> list:
         "doctor",
         "config",
         "pairing",
+        "remote",
         "skills",
         "tools",
         "mcp",
@@ -10774,6 +10888,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "fleet", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "platform", "plugins", "portal", "postinstall", "profile", "provider", "proxy",
+        "remote",
         "support", "swarm",
         "send", "sessions", "setup",
         "skills", "slack", "status", "telegram", "tools", "uninstall", "update",
@@ -12398,6 +12513,61 @@ Examples:
     pairing_parser.set_defaults(func=cmd_pairing)
 
     # =========================================================================
+    # remote command — iPhone remote pairing tokens (centurion-remote)
+    # =========================================================================
+    remote_parser = subparsers.add_parser(
+        "remote",
+        help="Manage remote pairing tokens for CenturionAI Remote",
+        description=(
+            "Mint and manage long-lived pairing codes so an iPhone can link "
+            "to this Centurion over the public internet (no Tailscale required)."
+        ),
+    )
+    remote_sub = remote_parser.add_subparsers(dest="remote_action")
+
+    remote_pair = remote_sub.add_parser(
+        "pair",
+        help="Generate a remote pairing connection string",
+    )
+    remote_pair.add_argument(
+        "--host",
+        help="Public hostname or IP to embed (tunnel / DNS name recommended)",
+    )
+    remote_pair.add_argument(
+        "--label",
+        default="iPhone",
+        help="Label for this pairing token (default: iPhone)",
+    )
+    remote_pair.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON including the one-time secret",
+    )
+
+    remote_tokens = remote_sub.add_parser(
+        "tokens",
+        help="List remote pairing tokens",
+    )
+    remote_tokens.add_argument(
+        "--json",
+        action="store_true",
+        help="Print JSON",
+    )
+
+    remote_revoke = remote_sub.add_parser(
+        "revoke",
+        help="Revoke a remote pairing token by id or prefix",
+    )
+    remote_revoke.add_argument("token_id", help="Token id or unique prefix")
+
+    def cmd_remote(args):
+        from centurion_cli.remote_cli import remote_command
+
+        raise SystemExit(remote_command(args))
+
+    remote_parser.set_defaults(func=cmd_remote)
+
+    # =========================================================================
     # skills command
     # =========================================================================
     skills_parser = subparsers.add_parser(
@@ -13486,6 +13656,12 @@ Examples:
         action="store_true",
         default=False,
         help="Check whether an update is available without installing anything",
+    )
+    update_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="With --check: print machine-readable JSON instead of human text",
     )
     update_parser.add_argument(
         "--no-backup",

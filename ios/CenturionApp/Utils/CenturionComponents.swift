@@ -44,27 +44,29 @@ enum Typography {
 
 // MARK: - Compact Brand Header
 
-/// Main tab header — mark + CENTURION brand wordmark. Minimal, premium.
+/// Main tab header — mark + Sovereign AI Remote product wordmark.
 struct CompactBrandHeader: View {
     var body: some View {
         HStack(spacing: Spacing.sm) {
             CenturionAppMark(size: 28)
-            Text("CENTURION")
+            Text("SOVEREIGN AI REMOTE")
                 .font(Typography.brandWordmark)
                 .foregroundColor(ColorTheme.mutedText())
-                .tracking(2.5)
+                .tracking(1.2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Centurion")
+        .accessibilityLabel("Sovereign AI Remote")
     }
 }
 
 // MARK: - Full Brand Header
 
-/// Secondary screens — mark, brand, product name, tagline.
+/// Secondary screens — product name, company, tagline.
 struct FullBrandHeader: View {
     var body: some View {
         VStack(spacing: Spacing.sm) {
@@ -75,10 +77,10 @@ struct FullBrandHeader: View {
                 CenturionAppMark(size: 56)
             }
             VStack(spacing: 4) {
-                Text("Centurion")
+                Text("Sovereign AI Remote")
                     .font(.title2.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Sovereign AI Remote")
+                Text("by Centurion")
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(ColorTheme.mutedText())
                 Text("1 Human 1 AI")
@@ -90,7 +92,7 @@ struct FullBrandHeader: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.md)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Centurion. Sovereign AI Remote. 1 Human 1 AI.")
+        .accessibilityLabel("Sovereign AI Remote by Centurion. 1 Human 1 AI.")
     }
 }
 

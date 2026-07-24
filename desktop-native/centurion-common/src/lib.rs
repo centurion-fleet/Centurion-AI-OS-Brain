@@ -470,6 +470,17 @@ pub enum RemoteMessage {
         message: Option<String>,
     },
     Ready,
+    /// Server → client: remote pairing token required before Ready.
+    PairRequired,
+    /// Client → server: present a remote pairing token (encrypted channel).
+    Pair {
+        token: String,
+    },
+    /// Server → client: pairing token was rejected.
+    PairRejected {
+        code: String,
+        message: String,
+    },
     Ping,
     Pong,
     Error {
@@ -621,5 +632,27 @@ mod tests {
         };
         let encoded = message.to_json().expect("serialize");
         assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), message);
+    }
+
+    #[test]
+    fn pair_messages_json_round_trip() {
+        let pair = RemoteMessage::Pair {
+            token: "secret-token".to_owned(),
+        };
+        let encoded = pair.to_json().expect("serialize");
+        assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), pair);
+        let json = String::from_utf8(encoded).expect("utf8");
+        assert!(json.contains(r#""type":"pair""#));
+
+        let required = RemoteMessage::PairRequired;
+        let encoded = required.to_json().expect("serialize");
+        assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), required);
+
+        let rejected = RemoteMessage::PairRejected {
+            code: "INVALID_TOKEN".to_owned(),
+            message: "bad token".to_owned(),
+        };
+        let encoded = rejected.to_json().expect("serialize");
+        assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), rejected);
     }
 }

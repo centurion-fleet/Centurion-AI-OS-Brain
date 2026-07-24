@@ -39,6 +39,7 @@ mod linux {
     use serde::Deserialize;
     use std::cell::RefCell;
     use std::io::Write;
+    use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
 
@@ -80,9 +81,39 @@ mod linux {
         ok: bool,
         status: Option<ProviderStatusPayload>,
         options: Option<serde_json::Value>,
+        #[serde(default)]
+        catalog: Option<serde_json::Value>,
         result: Option<serde_json::Value>,
         message: Option<String>,
         code: Option<String>,
+        #[serde(default)]
+        configured: Option<bool>,
+        #[serde(default)]
+        connector_id: Option<String>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct ThinkingConnectorOption {
+        id: String,
+        display_name: String,
+        needs_key: bool,
+        best_for: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct UpdateCheckPayload {
+        ok: bool,
+        #[serde(default)]
+        method: Option<String>,
+        status: String,
+        #[serde(default)]
+        behind: u64,
+        #[serde(default)]
+        os_version: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        #[serde(default)]
+        recommended_command: Option<String>,
     }
 
     impl RemoteSupervisor {
@@ -292,6 +323,45 @@ mod linux {
         row
     }
 
+    fn centurion_remote_bin() -> String {
+        std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{home}/.local/bin/centurion-remote"))
+            .filter(|path| PathBuf::from(path).is_file())
+            .unwrap_or_else(|| "centurion-remote".to_owned())
+    }
+
+    fn mint_remote_pairing_string() -> Result<String, String> {
+        let addresses = discover_link_addresses();
+        let host = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .or_else(|| addresses.lan_ips.first().cloned())
+            .or_else(|| addresses.magic_dns.clone())
+            .or_else(|| addresses.tailscale_ip.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_owned());
+
+        let output = Command::new(centurion_remote_bin())
+            .args(["remote-pair", "--host", &host, "--json"])
+            .output()
+            .map_err(|error| format!("Could not run centurion-remote: {error}"))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "centurion-remote remote-pair failed: {}",
+                stderr.trim()
+            ));
+        }
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .map_err(|error| format!("Invalid remote-pair JSON: {error}"))?;
+        value
+            .get("connection_string")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())
+    }
+
     fn refresh_link_addresses(container: &gtk::Box) {
         while let Some(child) = container.first_child() {
             container.remove(&child);
@@ -299,70 +369,114 @@ mod linux {
 
         container.append(
             &gtk::Label::builder()
-                .label("iPhone link address")
+                .label("Remote pairing")
                 .css_classes(["title-4"])
                 .xalign(0.0)
                 .build(),
         );
 
-        let addresses = discover_link_addresses();
-        let mut showed_primary = false;
+        container.append(
+            &gtk::Label::builder()
+                .label(
+                    "1. Generate a pairing code  ·  2. Paste it in Sovereign AI Remote  ·  3. Approve the iPhone under Devices.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
 
-        if let Some(dns) = addresses.magic_dns.as_deref() {
-            container.append(&build_link_address_row(
-                "Tailscale (preferred)",
-                dns,
-                true,
-            ));
-            showed_primary = true;
-        } else if let Some(ip) = addresses.tailscale_ip.as_deref() {
-            container.append(&build_link_address_row(
-                "Tailscale (preferred)",
-                ip,
-                true,
-            ));
-            showed_primary = true;
-        }
+        let pairing_row = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        pairing_row.set_margin_top(4);
+        let pairing_value = gtk::Label::builder()
+            .label("No pairing code yet — tap Generate.")
+            .selectable(true)
+            .wrap(true)
+            .xalign(0.0)
+            .build();
+        let pairing_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let generate = gtk::Button::with_label("Generate pairing code");
+        generate.add_css_class("suggested-action");
+        let copy = gtk::Button::with_label("Copy");
+        copy.add_css_class("flat");
+        copy.set_sensitive(false);
+        pairing_actions.append(&generate);
+        pairing_actions.append(&copy);
+        pairing_row.append(&pairing_value);
+        pairing_row.append(&pairing_actions);
+        container.append(&pairing_row);
 
-        if showed_primary {
-            if let (Some(dns), Some(ip)) = (
-                addresses.magic_dns.as_deref(),
-                addresses.tailscale_ip.as_deref(),
-            ) {
-                if dns != ip {
-                    container.append(&build_link_address_row("Tailscale IP", ip, false));
-                }
+        let pairing_value_gen = pairing_value.clone();
+        let copy_gen = copy.clone();
+        generate.connect_clicked(move |_| match mint_remote_pairing_string() {
+            Ok(connection) => {
+                pairing_value_gen.set_label(&connection);
+                copy_gen.set_sensitive(true);
+                copy_to_clipboard(&connection);
+                pairing_value_gen.set_tooltip_text(Some("Copied to clipboard"));
             }
-        } else {
+            Err(error) => {
+                let plain = if error.contains("not found") {
+                    "Could not create a pairing code. Is Centurion installed on this brain?".to_owned()
+                } else {
+                    "Could not create a pairing code. Try again in a moment.".to_owned()
+                };
+                pairing_value_gen.set_label(&plain);
+                copy_gen.set_sensitive(false);
+            }
+        });
+        let pairing_value_copy = pairing_value.clone();
+        copy.connect_clicked(move |_| {
+            let text = pairing_value_copy.label();
+            if text.starts_with("token:") {
+                copy_to_clipboard(&text);
+            }
+        });
+
+        let addresses = discover_link_addresses();
+        if let Some(lan) = addresses.lan_ips.first() {
             container.append(
                 &gtk::Label::builder()
-                    .label(
-                        "Tailscale is not detected. Install and sign in on this Centurion for the preferred iPhone link.",
-                    )
-                    .wrap(true)
+                    .label("Same network (optional)")
+                    .css_classes(["title-4"])
                     .xalign(0.0)
-                    .css_classes(["dim-label"])
+                    .margin_top(12)
                     .build(),
             );
-        }
-
-        if let Some(lan) = addresses.lan_ips.first() {
             container.append(&build_link_address_row(
-                "Wi‑Fi fallback",
+                "Wi‑Fi",
                 &format!("{lan}:9119"),
                 false,
             ));
         }
 
+        let has_mesh = addresses.magic_dns.is_some() || addresses.tailscale_ip.is_some();
+        if has_mesh {
+            container.append(
+                &gtk::Label::builder()
+                    .label("Advanced — optional mesh")
+                    .css_classes(["title-4"])
+                    .xalign(0.0)
+                    .margin_top(12)
+                    .build(),
+            );
+            if let Some(dns) = addresses.magic_dns.as_deref() {
+                container.append(&build_link_address_row("Tailscale MagicDNS", dns, false));
+            }
+            if let Some(ip) = addresses.tailscale_ip.as_deref() {
+                container.append(&build_link_address_row("Tailscale IP", ip, false));
+            }
+        }
+
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Allow TCP 9119 on the Tailscale interface (firewall). Crypto Chat stays on your private mesh — not a company relay.",
+                    "Away from home: make this brain reachable (secure tunnel or firewall rule). Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
-                .margin_top(4)
+                .margin_top(8)
                 .build(),
         );
     }
@@ -454,13 +568,17 @@ mod linux {
         devices.append(
             &gtk::Label::builder()
                 .label(
-                    "Approved iPhones will appear here. You can review or revoke them at any time.",
+                    "Link flow: generate a pairing code on Home → paste in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
                 .build(),
         );
+        let go_to_pairing = gtk::Button::with_label("Go to pairing");
+        go_to_pairing.add_css_class("suggested-action");
+        go_to_pairing.set_halign(gtk::Align::Start);
+        devices.append(&go_to_pairing);
         let device_list = gtk::ListBox::new();
         device_list.add_css_class("boxed-list");
         refresh_devices(&device_list);
@@ -481,22 +599,36 @@ mod linux {
         );
         let settings_list = gtk::ListBox::new();
         settings_list.add_css_class("boxed-list");
-        settings_list.append(
-            &adw::ActionRow::builder()
-                .title("Private mesh")
-                .subtitle(
-                    "Prefer Tailscale MagicDNS for iPhone linking. Same Wi‑Fi is a local fallback only.",
-                )
-                .icon_name("network-wireless-symbolic")
-                .build(),
-        );
+        let pairing_settings_row = adw::ActionRow::builder()
+            .title("Remote pairing")
+            .subtitle(
+                "Generate a code on Home, paste it in Sovereign AI Remote, then approve the iPhone under Devices.",
+            )
+            .icon_name("network-wireless-symbolic")
+            .activatable(true)
+            .build();
+        settings_list.append(&pairing_settings_row);
         settings_list.append(
             &adw::ActionRow::builder()
                 .title("Version")
-                .subtitle(env!("CARGO_PKG_VERSION"))
+                .subtitle(&format!(
+                    "Desktop app {} — Centurion AI OS updates separately below",
+                    env!("CARGO_PKG_VERSION")
+                ))
                 .icon_name("dialog-information-symbolic")
                 .build(),
         );
+        let update_row = adw::ActionRow::builder()
+            .title("Check for updates")
+            .subtitle("Updates Centurion AI OS on this brain (not this desktop app binary)")
+            .icon_name("software-update-available-symbolic")
+            .build();
+        let update_check_button = gtk::Button::with_label("Check");
+        update_check_button.add_css_class("suggested-action");
+        update_check_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&update_check_button);
+        settings_list.append(&update_row);
+
         let thinking_settings_row = adw::ActionRow::builder()
             .title("Thinking Service")
             .subtitle("Checking thinking service…")
@@ -676,7 +808,7 @@ mod linux {
 
         let window = adw::ApplicationWindow::builder()
             .application(application)
-            .title("Centurion")
+            .title("Sovereign AI Brain")
             .default_width(980)
             .default_height(700)
             .content(&toolbar)
@@ -691,7 +823,7 @@ mod linux {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "Copy the Tailscale address below into CenturionAI Remote, or use Find my Centurion on Wi‑Fi as a fallback.",
+                        "Generate a remote pairing code below and paste it into Sovereign AI Remote.",
                     );
                     refresh_link_addresses(&link_addresses);
                 }
@@ -751,6 +883,18 @@ mod linux {
             let window = window.clone();
             move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
         });
+        pairing_settings_row.connect_activated({
+            let stack = stack.clone();
+            move |_| {
+                stack.set_visible_child_name("home");
+            }
+        });
+        go_to_pairing.connect_clicked({
+            let stack = stack.clone();
+            move |_| {
+                stack.set_visible_child_name("home");
+            }
+        });
         autonomy_button.connect_clicked({
             let window = window.clone();
             let autonomy_row = autonomy_row.clone();
@@ -776,6 +920,11 @@ mod linux {
         health_check_button.connect_clicked({
             let window = window.clone();
             move |_| show_support_health_dialog(&window)
+        });
+        update_check_button.connect_clicked({
+            let window = window.clone();
+            let update_row = update_row.clone();
+            move |_| show_update_check_dialog(&window, &update_row)
         });
         bundle_button.connect_clicked({
             let window = window.clone();
@@ -816,7 +965,7 @@ mod linux {
                     Ok(()) => {
                         status_title.set_label("Your Centurion is ready");
                         status_detail.set_label(
-                            "The private iPhone connection has restarted. Prefer the Tailscale address below.",
+                            "The private iPhone connection has restarted. Generate or reuse a remote pairing code below.",
                         );
                         refresh_link_addresses(&link_addresses);
                     }
@@ -947,12 +1096,18 @@ mod linux {
             && approved.iter().all(|device| !device.connected);
 
         for device in pending {
+            let short_id = if device.fingerprint.len() > 10 {
+                format!(
+                    "{}…{}",
+                    &device.fingerprint[..6],
+                    &device.fingerprint[device.fingerprint.len().saturating_sub(4)..]
+                )
+            } else {
+                device.fingerprint.clone()
+            };
             let row = adw::ActionRow::builder()
                 .title(&device.name)
-                .subtitle(format!(
-                    "Waiting for your approval · {}",
-                    device.fingerprint
-                ))
+                .subtitle(format!("Waiting for your approval · {short_id}"))
                 .icon_name("phone-symbolic")
                 .build();
             let approve = gtk::Button::with_label("Approve");
@@ -979,14 +1134,22 @@ mod linux {
         }
 
         for device in approved {
-            let subtitle = if device.connected {
+            let short_id = if device.fingerprint.len() > 10 {
                 format!(
-                    "Connected · {} · {}",
-                    device.peer.as_deref().unwrap_or("unknown"),
-                    device.fingerprint
+                    "{}…{}",
+                    &device.fingerprint[..6],
+                    &device.fingerprint[device.fingerprint.len().saturating_sub(4)..]
                 )
             } else {
-                format!("Approved · {}", device.fingerprint)
+                device.fingerprint.clone()
+            };
+            let subtitle = if device.connected {
+                format!(
+                    "Online · {}",
+                    device.peer.as_deref().unwrap_or(&short_id)
+                )
+            } else {
+                format!("Approved · {short_id}")
             };
             let row = adw::ActionRow::builder()
                 .title(&device.name)
@@ -1001,19 +1164,60 @@ mod linux {
             revoke.add_css_class("destructive-action");
             revoke.set_valign(gtk::Align::Center);
             let fingerprint = device.fingerprint;
+            let device_name = device.name.clone();
             let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
-                button.set_sensitive(false);
-                let revoked = Command::new(&remote)
-                    .args(["revoke", &fingerprint])
-                    .status()
-                    .is_ok_and(|status| status.success());
-                if revoked {
-                    refresh_devices(&list_refresh);
-                } else {
-                    button.set_sensitive(true);
+                let confirm = adw::MessageDialog::builder()
+                    .heading("Remove this iPhone?")
+                    .body(&format!(
+                        "Remove {device_name}? They’ll need a new pairing code to link again."
+                    ))
+                    .close_response("cancel")
+                    .default_response("revoke")
+                    .build();
+                confirm.add_response("cancel", "Cancel");
+                confirm.add_response("revoke", "Remove");
+                confirm.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
+                if let Some(root) = button.root() {
+                    if let Ok(window) = root.downcast::<gtk::Window>() {
+                        confirm.set_transient_for(Some(&window));
+                    }
                 }
+                let button = button.clone();
+                let fingerprint = fingerprint.clone();
+                let list_refresh = list_refresh.clone();
+                let remote = remote.clone();
+                confirm.connect_response(None, move |dialog, response| {
+                    if response != "revoke" {
+                        dialog.close();
+                        return;
+                    }
+                    button.set_sensitive(false);
+                    let revoked = Command::new(&remote)
+                        .args(["revoke", &fingerprint])
+                        .status()
+                        .is_ok_and(|status| status.success());
+                    if revoked {
+                        refresh_devices(&list_refresh);
+                        if let Some(root) = button.root() {
+                            if let Ok(window) = root.downcast::<gtk::Window>() {
+                                let done = adw::MessageDialog::builder()
+                                    .heading("iPhone removed")
+                                    .body("They’ll need a new pairing code to link again.")
+                                    .close_response("ok")
+                                    .build();
+                                done.add_response("ok", "OK");
+                                done.set_transient_for(Some(&window));
+                                done.present();
+                            }
+                        }
+                    } else {
+                        button.set_sensitive(true);
+                    }
+                    dialog.close();
+                });
+                confirm.present();
             });
             row.add_suffix(&revoke);
             list.append(&row);
@@ -1022,8 +1226,8 @@ mod linux {
         if show_no_devices {
             list.append(
                 &adw::ActionRow::builder()
-                    .title("No iPhones connected")
-                    .subtitle("Open Connect in CenturionAI Remote on the same network.")
+                    .title("No iPhones linked yet")
+                    .subtitle("On Home: generate a pairing code → paste in Sovereign AI Remote → approve here.")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -1031,7 +1235,7 @@ mod linux {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones connected right now")
-                    .subtitle("Approved devices will appear here when they link from your iPhone.")
+                    .subtitle("Approved devices appear here when Sovereign AI Remote links again.")
                     .icon_name("phone-disabled-symbolic")
                     .build(),
             );
@@ -1052,8 +1256,24 @@ mod linux {
         let output = Command::new(centurion_binary())
             .args(command_args)
             .output()
-            .ok()
-            .filter(|output| output.status.success())?;
+            .ok()?;
+        // Parse JSON even when exit status is non-zero so callers can show
+        // structured failure messages (e.g. blocked OpenRouter, missing key).
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_provider_save_key(connector_id: &str, access_code: &str) -> Option<ProviderCliResponse> {
+        let mut child = Command::new(centurion_binary())
+            .args(["provider", "save-key", connector_id, "-", "--json"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .ok()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(access_code.as_bytes());
+        }
+        let output = child.wait_with_output().ok()?;
         serde_json::from_slice(&output.stdout).ok()
     }
 
@@ -1066,6 +1286,201 @@ mod linux {
             .ok()
             .filter(|output| output.status.success())?;
         serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_update_check() -> Option<UpdateCheckPayload> {
+        let output = Command::new(centurion_binary())
+            .args(["update", "--check", "--json"])
+            .output()
+            .ok()?;
+        // Parse JSON even when exit status is non-zero (network / unavailable).
+        serde_json::from_slice(&output.stdout).ok()
+    }
+
+    fn run_os_update() -> Result<String, String> {
+        let output = Command::new(centurion_binary())
+            .args(["update", "-y"])
+            .output()
+            .map_err(|error| error.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        if output.status.success() {
+            Ok(if stdout.is_empty() {
+                "Centurion AI OS update finished. Restart this app if the desktop shell looks stale."
+                    .to_owned()
+            } else {
+                stdout
+            })
+        } else {
+            Err(if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "Update failed.".to_owned()
+            })
+        }
+    }
+
+    fn show_update_check_dialog(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        update_row.set_subtitle("Checking for Centurion AI OS updates…");
+        let Some(payload) = run_update_check() else {
+            update_row.set_subtitle("Could not check for updates.");
+            let dialog = adw::MessageDialog::builder()
+                .heading("Check for updates")
+                .body(
+                    "Could not check for Centurion AI OS updates on this brain.\n\n\
+                     Make sure Centurion is installed, then try again.",
+                )
+                .close_response("ok")
+                .build();
+            dialog.add_response("ok", "OK");
+            dialog.set_transient_for(Some(parent));
+            dialog.present();
+            return;
+        };
+
+        let os_version = payload
+            .os_version
+            .as_deref()
+            .unwrap_or("unknown");
+        let message = payload
+            .message
+            .clone()
+            .unwrap_or_else(|| "Check complete.".to_owned());
+
+        match payload.status.as_str() {
+            "up_to_date" => {
+                update_row.set_subtitle(&format!("Centurion AI OS {os_version} — up to date"));
+                let dialog = adw::MessageDialog::builder()
+                    .heading("You're up to date")
+                    .body(&format!(
+                        "Your brain software is current (v{os_version}).\n\n{message}"
+                    ))
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.set_transient_for(Some(parent));
+                dialog.present();
+            }
+            "update_available" => {
+                update_row.set_subtitle(&format!(
+                    "Update available for Centurion AI OS {os_version}"
+                ));
+                let body = format!(
+                    "{message}\n\nAn update is available. It may take a few minutes; \
+                     Sovereign AI Remote may briefly disconnect while services restart."
+                );
+                let dialog = adw::MessageDialog::builder()
+                    .heading("Update available")
+                    .body(&body)
+                    .close_response("cancel")
+                    .default_response("update")
+                    .build();
+                dialog.add_response("cancel", "Not now");
+                dialog.add_response("update", "Update now");
+                dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
+                dialog.set_transient_for(Some(parent));
+                let parent = parent.clone();
+                let update_row = update_row.clone();
+                dialog.connect_response(None, move |dialog, response| {
+                    if response != "update" {
+                        dialog.close();
+                        return;
+                    }
+                    dialog.close();
+                    confirm_and_run_os_update(&parent, &update_row);
+                });
+                dialog.present();
+            }
+            _ => {
+                update_row.set_subtitle("Updates managed outside this app");
+                let dialog = adw::MessageDialog::builder()
+                    .heading("Cannot update from this app")
+                    .body(&format!(
+                        "{message}\n\nAsk your advisor if updates are managed for this brain."
+                    ))
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.set_transient_for(Some(parent));
+                dialog.present();
+            }
+        }
+    }
+
+    fn confirm_and_run_os_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        let confirm = adw::MessageDialog::builder()
+            .heading("Update Centurion AI OS?")
+            .body(
+                "This updates Centurion AI OS on this brain and may take several minutes. \
+                 Services such as the gateway may restart.\n\n\
+                 The Sovereign AI Brain desktop app binary is not rebuilt by this action.",
+            )
+            .close_response("cancel")
+            .default_response("confirm")
+            .build();
+        confirm.add_response("cancel", "Cancel");
+        confirm.add_response("confirm", "Update now");
+        confirm.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+        confirm.set_transient_for(Some(parent));
+        let parent = parent.clone();
+        let update_row = update_row.clone();
+        confirm.connect_response(None, move |dialog, response| {
+            if response != "confirm" {
+                dialog.close();
+                return;
+            }
+            dialog.close();
+            update_row.set_subtitle("Updating Centurion AI OS…");
+            let progress = adw::MessageDialog::builder()
+                .heading("Updating…")
+                .body("Please wait. This can take several minutes.")
+                .close_response("ok")
+                .build();
+            progress.add_response("ok", "Hide");
+            progress.set_transient_for(Some(&parent));
+            progress.present();
+
+            let parent_for_result = parent.clone();
+            let update_row_for_result = update_row.clone();
+            let progress_for_result = progress.clone();
+            std::thread::spawn(move || {
+                let result = run_os_update();
+                glib::idle_add_once(move || {
+                    progress_for_result.close();
+                    match result {
+                        Ok(body) => {
+                            update_row_for_result
+                                .set_subtitle("Centurion AI OS update finished");
+                            let done = adw::MessageDialog::builder()
+                                .heading("Update complete")
+                                .body(&format!(
+                                    "{body}\n\nYour brain software was updated. \
+                                     Sovereign AI Remote may reconnect automatically."
+                                ))
+                                .close_response("ok")
+                                .build();
+                            done.add_response("ok", "OK");
+                            done.set_transient_for(Some(&parent_for_result));
+                            done.present();
+                        }
+                        Err(error) => {
+                            update_row_for_result.set_subtitle("Update failed");
+                            let fail = adw::MessageDialog::builder()
+                                .heading("Update failed")
+                                .body(&error)
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.set_transient_for(Some(&parent_for_result));
+                            fail.present();
+                        }
+                    }
+                });
+            });
+        });
+        confirm.present();
     }
 
     fn run_telegram_summary(args: &[&str]) -> Option<serde_json::Value> {
@@ -1788,26 +2203,152 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         settings_row: &adw::ActionRow,
         detail: &gtk::Label,
     ) {
+        let connectors: Vec<ThinkingConnectorOption> =
+            run_provider_command(&["catalog", "--json"])
+                .and_then(|response| response.catalog)
+                .and_then(|catalog| {
+                    catalog
+                        .get("text_models")
+                        .and_then(|value| value.as_array())
+                        .cloned()
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|row| {
+                    let id = row.get("id")?.as_str()?.to_owned();
+                    let display_name = row
+                        .get("display_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(id.as_str())
+                        .to_owned();
+                    let needs_key = row
+                        .get("needs_key")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+                    let best_for = row
+                        .get("best_for")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    Some(ThinkingConnectorOption {
+                        id,
+                        display_name,
+                        needs_key,
+                        best_for,
+                    })
+                })
+                .collect();
+
+        if connectors.is_empty() {
+            let dialog = adw::MessageDialog::builder()
+                .heading("Change thinking service")
+                .body("Could not load the curated thinking-service catalog. Is Centurion AI OS installed?")
+                .close_response("ok")
+                .build();
+            dialog.add_response("ok", "OK");
+            dialog.set_transient_for(Some(parent));
+            dialog.present();
+            return;
+        }
+
+        let labels: Vec<&str> = connectors
+            .iter()
+            .map(|connector| connector.display_name.as_str())
+            .collect();
+        let service_drop = gtk::DropDown::from_strings(&labels);
+        let mut initial = 0_u32;
+        for (index, connector) in connectors.iter().enumerate() {
+            // Prefer a row that already has an access code configured.
+            if !connector.needs_key {
+                initial = index as u32;
+                break;
+            }
+        }
+        service_drop.set_selected(initial);
+
+        let hint = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["dim-label"])
+            .build();
+        let key_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("Access code from your thinking-service account")
+            .show_peek_icon(true)
+            .build();
+        let key_label = gtk::Label::builder()
+            .label("Access code")
+            .xalign(0.0)
+            .build();
+
+        let update_hint = {
+            let hint = hint.clone();
+            let key_entry = key_entry.clone();
+            let connectors = connectors.clone();
+            Rc::new(move |selected: u32| {
+                let Some(connector) = connectors.get(selected as usize) else {
+                    return;
+                };
+                if connector.needs_key {
+                    key_entry.set_placeholder_text(
+                        Some("Access code from your thinking-service account"),
+                    );
+                    if connector.best_for.is_empty() {
+                        hint.set_label(
+                            "This service needs an access code saved on this brain.",
+                        );
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — paste the access code below (saved only on this brain).",
+                            connector.best_for
+                        ));
+                    }
+                } else {
+                    key_entry.set_placeholder_text(Some(
+                        "Optional — paste a new access code to update",
+                    ));
+                    if connector.best_for.is_empty() {
+                        hint.set_label("Access code already saved on this brain.");
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — access code already on this brain.",
+                            connector.best_for
+                        ));
+                    }
+                }
+            })
+        };
+        update_hint(initial);
+        service_drop.connect_selected_notify({
+            let update_hint = Rc::clone(&update_hint);
+            move |dropdown| update_hint(dropdown.selected())
+        });
+
         let dialog = adw::MessageDialog::builder()
             .heading("Change thinking service")
-            .body("Enter a provider slug and model id. Centurion validates before applying.")
+            .body(
+                "Pick a curated thinking service. Access codes are saved only on this brain — never kept on your iPhone.",
+            )
             .close_response("cancel")
             .default_response("apply")
             .build();
         dialog.add_response("cancel", "Cancel");
-        dialog.add_response("apply", "Validate and apply");
+        dialog.add_response("apply", "Apply");
         dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
 
-        let provider_entry = gtk::Entry::builder().placeholder_text("openrouter").build();
-        let model_entry = gtk::Entry::builder()
-            .placeholder_text("anthropic/claude-sonnet-4")
-            .build();
-
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        extra.append(&gtk::Label::builder().label("Provider").xalign(0.0).build());
-        extra.append(&provider_entry);
-        extra.append(&gtk::Label::builder().label("Model").xalign(0.0).build());
-        extra.append(&model_entry);
+        let error_label = gtk::Label::builder()
+            .label("")
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["error"])
+            .visible(false)
+            .build();
+        extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
+        extra.append(&service_drop);
+        extra.append(&hint);
+        extra.append(&key_label);
+        extra.append(&key_entry);
+        extra.append(&error_label);
         dialog.set_extra_child(Some(&extra));
         dialog.set_transient_for(Some(parent));
         dialog.present();
@@ -1819,29 +2360,68 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 dialog.close();
                 return;
             }
-            let provider = provider_entry.text().to_string();
-            let model = model_entry.text().to_string();
-            if provider.trim().is_empty() || model.trim().is_empty() {
-                settings_row.set_subtitle("Provider and model are required.");
-                dialog.close();
+            let selected = service_drop.selected() as usize;
+            let Some(connector) = connectors.get(selected) else {
+                error_label.set_label("Pick a thinking service.");
+                error_label.set_visible(true);
+                return;
+            };
+            let access_code = key_entry.text().to_string();
+            if connector.needs_key && access_code.trim().is_empty() {
+                error_label.set_label("Access code is required for this thinking service.");
+                error_label.set_visible(true);
                 return;
             }
-            if let Some(response) = run_provider_command(&["set", &provider, &model, "--json"]) {
-                let message = response
-                    .result
-                    .and_then(|value| {
-                        value
-                            .get("message")
-                            .and_then(|m| m.as_str())
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "Thinking service updated.".to_owned());
-                settings_row.set_subtitle(&message);
-                refresh_thinking_status(&detail, &settings_row);
-            } else {
-                settings_row.set_subtitle("Could not apply thinking service change.");
+            if !access_code.trim().is_empty() {
+                match run_provider_save_key(&connector.id, access_code.trim()) {
+                    Some(save_response) if save_response.ok => {}
+                    Some(save_response) => {
+                        let message = save_response
+                            .message
+                            .unwrap_or_else(|| "Could not save access code.".to_owned());
+                        error_label.set_label(&message);
+                        error_label.set_visible(true);
+                        return;
+                    }
+                    None => {
+                        error_label.set_label("Could not save access code.");
+                        error_label.set_visible(true);
+                        return;
+                    }
+                }
             }
-            dialog.close();
+            if let Some(apply_response) =
+                run_provider_command(&["apply-connector", &connector.id, "--json"])
+            {
+                let message = apply_response
+                    .message
+                    .or_else(|| {
+                        apply_response.result.and_then(|value| {
+                            value
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .map(str::to_owned)
+                        })
+                    })
+                    .unwrap_or_else(|| {
+                        if apply_response.ok {
+                            "Thinking service updated.".to_owned()
+                        } else {
+                            "Could not apply thinking service change.".to_owned()
+                        }
+                    });
+                if apply_response.ok {
+                    settings_row.set_subtitle(&message);
+                    refresh_thinking_status(&detail, &settings_row);
+                    dialog.close();
+                } else {
+                    error_label.set_label(&message);
+                    error_label.set_visible(true);
+                }
+            } else {
+                error_label.set_label("Could not apply thinking service change.");
+                error_label.set_visible(true);
+            }
         });
     }
 
@@ -2036,5 +2616,5 @@ fn main() {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    eprintln!("Centurion Desktop is a native Linux application.");
+    eprintln!("Sovereign AI Brain is a native Linux application.");
 }

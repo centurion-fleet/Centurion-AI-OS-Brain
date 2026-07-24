@@ -396,21 +396,36 @@ struct ChatView: View {
     // MARK: - Status Banners
 
     private var offlineBanner: some View {
-        AtmosphericSurface {
-            HStack(alignment: .top, spacing: Spacing.sm) {
-                Image(systemName: "wifi.slash")
-                    .font(.subheadline)
-                    .foregroundColor(ColorTheme.mutedText())
-                Text("Not connected — link your Sovereign in You to send messages.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
+        Button {
+            NotificationCenter.default.post(name: .centurionSelectTab, object: 2)
+        } label: {
+            AtmosphericSurface {
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    Image(systemName: "wifi.slash")
+                        .font(.subheadline)
+                        .foregroundColor(ColorTheme.mutedText())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Not linked")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ColorTheme.primaryText())
+                        Text("Open You to paste a pairing code and start Crypto Chat.")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.xs)
+        .accessibilityLabel("Not linked. Open You to paste a pairing code.")
     }
 
     private func llmErrorBanner(_ message: String) -> some View {
@@ -464,13 +479,23 @@ struct ChatView: View {
     private var emptyState: some View {
         VStack {
             Spacer()
-            EmptyState(
-                icon: "lock.shield",
-                title: "Crypto Chat",
-                message: connectionManager.connectionState == .connected
-                    ? "Your unified stream starts here. Context badges show which mission thread each message belongs to."
-                    : "Link your Sovereign in You to start Crypto Chat — a private encrypted conversation public AIs do not offer."
-            )
+            if connectionManager.connectionState == .connected {
+                EmptyState(
+                    icon: "lock.shield",
+                    title: "Crypto Chat",
+                    message: "Your private encrypted conversation starts here. Send a message when you’re ready."
+                )
+            } else {
+                EmptyState(
+                    icon: "lock.shield",
+                    title: "Crypto Chat",
+                    message: "Link your Centurion in You to start Crypto Chat — a private encrypted conversation public AIs do not offer.",
+                    actionTitle: "Link Centurion",
+                    action: {
+                        NotificationCenter.default.post(name: .centurionSelectTab, object: 2)
+                    }
+                )
+            }
             Spacer()
         }
         .frame(maxWidth: 428)
@@ -493,7 +518,7 @@ struct ChatView: View {
         }
         var subtitle = ""
         if connectionManager.routingMode == "phoenix" {
-            subtitle = "Auto-select will pick an LLM when you send a message."
+            subtitle = "Auto-select will choose a thinking service when you send a message."
         } else if let routed = connectionManager.lastRoutedDisplayName {
             subtitle = "Last routed to \(routed)."
         }

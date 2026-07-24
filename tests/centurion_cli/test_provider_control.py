@@ -69,11 +69,11 @@ def test_validate_switch_failure(monkeypatch):
 def test_apply_switch_persists_and_saves_lkg(monkeypatch, centurion_home):
     switch_result = ModelSwitchResult(
         success=True,
-        new_model="anthropic/claude-sonnet-4",
-        target_provider="openrouter",
+        new_model="claude-sonnet-4-6",
+        target_provider="anthropic",
         provider_changed=True,
         api_key="test-key",
-        base_url="https://openrouter.ai/api/v1",
+        base_url="https://api.anthropic.com",
         api_mode="chat_completions",
     )
 
@@ -84,15 +84,69 @@ def test_apply_switch_persists_and_saves_lkg(monkeypatch, centurion_home):
         lambda **_kw: (True, "", 15),
     )
 
-    result = pc.apply_switch("openrouter", "anthropic/claude-sonnet-4", probe=True)
+    result = pc.apply_switch("anthropic", "claude-sonnet-4-6", probe=True)
     assert result.ok
-    assert result.provider == "openrouter"
-    assert result.model == "anthropic/claude-sonnet-4"
+    assert result.provider == "anthropic"
+    assert result.model == "claude-sonnet-4-6"
 
     cfg = yaml.safe_load((centurion_home / "config.yaml").read_text(encoding="utf-8"))
-    assert cfg["model"]["provider"] == "openrouter"
-    assert cfg["model"]["default"] == "anthropic/claude-sonnet-4"
+    assert cfg["model"]["provider"] == "anthropic"
+    assert cfg["model"]["default"] == "claude-sonnet-4-6"
     assert pc.load_last_known_good() is not None
+
+
+def test_apply_switch_blocks_openrouter():
+    result = pc.apply_switch("openrouter", "anthropic/claude-sonnet-4", probe=False)
+    assert not result.ok
+    assert result.code == pc.LLM_CONFIG_INVALID
+    assert "OpenRouter" in result.message
+
+
+def test_validate_switch_blocks_openrouter():
+    result = pc.validate_switch("openrouter", "anthropic/claude-sonnet-4", probe=False)
+    assert not result.ok
+    assert result.code == pc.LLM_CONFIG_INVALID
+
+
+def test_save_remote_api_key_persists_without_echo(monkeypatch, centurion_home):
+    saved: dict[str, str] = {}
+
+    def _fake_save(key: str, value: str) -> None:
+        saved[key] = value
+
+    monkeypatch.setattr("centurion_cli.config.is_managed", lambda: False)
+    monkeypatch.setattr("centurion_cli.config.save_env_value", _fake_save)
+
+    secret = "sk-test-secret-do-not-echo"
+    result = pc.save_remote_api_key("anthropic-sonnet-5", secret)
+    assert result["ok"] is True
+    assert result["configured"] is True
+    assert saved.get("ANTHROPIC_API_KEY") == secret
+    blob = json.dumps(result)
+    assert secret not in blob
+    assert "sk-test" not in blob
+
+
+def test_provider_cli_save_key_json_redacts_secret(monkeypatch, centurion_home, capsys):
+    from centurion_cli import provider_cli
+
+    monkeypatch.setattr("centurion_cli.config.is_managed", lambda: False)
+    monkeypatch.setattr(
+        "centurion_cli.config.save_env_value",
+        lambda _k, _v: None,
+    )
+    args = type(
+        "Args",
+        (),
+        {"connector_id": "anthropic-sonnet-5", "key": "sk-never-print-me", "json": True},
+    )()
+    code = provider_cli._cmd_save_key(args)
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "sk-never-print-me" not in out
+    payload = json.loads(out)
+    assert payload["ok"] is True
+    assert "key" not in payload
 
 
 def test_restore_last_known_good_without_snapshot(centurion_home):

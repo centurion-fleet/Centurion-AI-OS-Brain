@@ -98,10 +98,10 @@ struct ThinkingServiceDialView: View {
 
     private var introCopy: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Turn the dial to choose how your Sovereign thinks.")
+            Text("Turn the dial to choose how your Centurion thinks.")
                 .font(.system(size: 15, weight: .medium, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
-            Text("Access codes stay on your Sovereign — never on this iPhone.")
+            Text("Access codes stay on your Centurion — never on this iPhone.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
         }
@@ -109,7 +109,7 @@ struct ThinkingServiceDialView: View {
 
     private var fallbackNotice: some View {
         AtmosphericSurface {
-            Text("Showing the built-in list. Status may be outdated until your Sovereign responds — restart centurion-remote on your Mac if this persists.")
+            Text("Showing the built-in list. Status may be outdated until your Centurion responds — reopen Thinking Service in a moment if this persists.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(3)
@@ -237,8 +237,14 @@ struct ThinkingServiceDialView: View {
                 .onChange(of: isAutoSelectEnabled) { _, enabled in
                     Task {
                         let mode = enabled ? "phoenix" : "manual"
-                        _ = await connectionManager.setRoutingMode(mode)
-                        connectionManager.routingMode = mode
+                        let ok = await connectionManager.setRoutingMode(mode)
+                        if ok {
+                            connectionManager.routingMode = mode
+                        } else {
+                            // Revert toggle to host truth on failure.
+                            isAutoSelectEnabled = connectionManager.routingMode == "phoenix"
+                            actionMessage = "Could not update automatic choice. Check your link and try again."
+                        }
                     }
                 }
             }
@@ -355,75 +361,195 @@ struct ThinkingServiceFamilyDial: View {
     let connectingFamilyID: String?
     let onSelect: (ThinkingServiceFamily) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dragRotation: Double = 0
+    @State private var baseRotation: Double = 0
+
+    private var selectedIndex: Int {
+        guard let selectedFamilyID else { return 0 }
+        return families.firstIndex(where: { $0.id == selectedFamilyID }) ?? 0
+    }
+
+    private var stepDegrees: Double {
+        guard !families.isEmpty else { return 360 }
+        return 360.0 / Double(families.count)
+    }
+
     var body: some View {
-        VStack(spacing: Spacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(families) { family in
-                        let isSelected = family.id == selectedFamilyID
-                        let status = family.status(isConnecting: connectingFamilyID == family.id)
-                        Button {
-                            withAnimation(Motion.standard) {
-                                selectedFamilyID = family.id
-                            }
-                            onSelect(family)
-                        } label: {
-                            VStack(spacing: Spacing.xs) {
-                                ZStack {
-                                    Circle()
-                                        .fill(status.color)
-                                        .frame(width: 10, height: 10)
-                                    if isSelected || status == .connecting {
-                                        Circle()
-                                            .stroke(status.color.opacity(0.35), lineWidth: 3)
-                                            .frame(width: 18, height: 18)
-                                    }
-                                }
-                                .frame(height: 22)
+        Group {
+            if reduceMotion || families.count <= 1 {
+                listFallback
+            } else {
+                circularDial
+            }
+        }
+    }
 
-                                Text(family.displayName)
-                                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                                    .foregroundColor(isSelected ? ColorTheme.primaryText() : ColorTheme.mutedText())
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-
-                                Text(status.label)
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(status.color)
-                                    .lineLimit(1)
-                            }
-                            .frame(width: 88)
-                            .padding(.vertical, Spacing.sm)
-                            .background(
-                                isSelected
-                                    ? ColorTheme.accent().opacity(0.08)
-                                    : Color.clear
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+    private var listFallback: some View {
+        VStack(spacing: Spacing.xs) {
+            ForEach(Array(families.enumerated()), id: \.element.id) { _, family in
+                let isSelected = family.id == selectedFamilyID
+                let status = family.status(isConnecting: connectingFamilyID == family.id)
+                Button {
+                    selectedFamilyID = family.id
+                    onSelect(family)
+                } label: {
+                    HStack {
+                        Circle()
+                            .fill(status.color)
+                            .frame(width: 10, height: 10)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(family.displayName)
+                                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                                .foregroundColor(ColorTheme.primaryText())
+                            Text(status.label)
+                                .font(.caption)
+                                .foregroundColor(status.color)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(family.displayName), \(status.label)")
+                        Spacer()
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(ColorTheme.accent())
+                        }
+                    }
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.vertical, Spacing.sm)
+                    .background(isSelected ? ColorTheme.accent().opacity(0.08) : ColorTheme.surface())
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(family.displayName), \(status.label)")
+            }
+        }
+    }
+
+    private var circularDial: some View {
+        VStack(spacing: Spacing.md) {
+            ZStack {
+                Circle()
+                    .stroke(ColorTheme.border().opacity(0.55), lineWidth: 14)
+                    .frame(width: 220, height: 220)
+
+                Circle()
+                    .fill(ColorTheme.surface())
+                    .frame(width: 150, height: 150)
+                    .shadow(color: Color.black.opacity(0.06), radius: 10, y: 4)
+
+                // Tick marks + family labels around the ring
+                ForEach(Array(families.enumerated()), id: \.element.id) { index, family in
+                    let angle = Angle(degrees: Double(index) * stepDegrees + baseRotation + dragRotation - 90)
+                    let isSelected = family.id == selectedFamilyID
+                    let status = family.status(isConnecting: connectingFamilyID == family.id)
+                    VStack(spacing: 4) {
+                        Circle()
+                            .fill(isSelected ? status.color : ColorTheme.mutedText().opacity(0.45))
+                            .frame(width: isSelected ? 12 : 8, height: isSelected ? 12 : 8)
+                        Text(shortLabel(family.displayName))
+                            .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                            .foregroundColor(isSelected ? ColorTheme.primaryText() : ColorTheme.mutedText())
+                            .lineLimit(1)
+                            .frame(width: 64)
+                    }
+                    .offset(y: -98)
+                    .rotationEffect(angle)
+                }
+
+                // Center readout
+                VStack(spacing: 6) {
+                    Image(systemName: "dial.low.fill")
+                        .font(.title2)
+                        .foregroundColor(ColorTheme.accent())
+                    if let selected = families[safe: selectedIndex] {
+                        Text(selected.displayName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ColorTheme.primaryText())
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .frame(maxWidth: 120)
+                        Text(selected.status(isConnecting: connectingFamilyID == selected.id).label)
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(selected.status(isConnecting: connectingFamilyID == selected.id).color)
                     }
                 }
-                .padding(4)
             }
-            .background(ColorTheme.surface())
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                    .stroke(ColorTheme.border().opacity(0.6), lineWidth: 1)
+            .frame(height: 240)
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        let delta = Double(value.translation.width + value.translation.height) * 0.35
+                        dragRotation = delta
+                    }
+                    .onEnded { _ in
+                        let total = baseRotation + dragRotation
+                        let snappedIndex = snappedFamilyIndex(for: total)
+                        let target = -Double(snappedIndex) * stepDegrees
+                        withAnimation(Motion.standard) {
+                            baseRotation = target
+                            dragRotation = 0
+                        }
+                        let family = families[snappedIndex]
+                        if selectedFamilyID != family.id {
+                            selectedFamilyID = family.id
+                            Haptics.lightTap()
+                            onSelect(family)
+                        }
+                    }
             )
-
-            HStack(spacing: 0) {
-                ForEach(families) { family in
-                    Rectangle()
-                        .fill(family.id == selectedFamilyID ? ColorTheme.accent() : Color.clear)
-                        .frame(height: 2)
-                        .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Thinking service dial")
+            .accessibilityValue(families[safe: selectedIndex]?.displayName ?? "")
+            .accessibilityAdjustableAction { direction in
+                guard !families.isEmpty else { return }
+                var idx = selectedIndex
+                switch direction {
+                case .increment: idx = (idx + 1) % families.count
+                case .decrement: idx = (idx - 1 + families.count) % families.count
+                @unknown default: break
+                }
+                selectedFamilyID = families[idx].id
+                baseRotation = -Double(idx) * stepDegrees
+                onSelect(families[idx])
+                Haptics.lightTap()
+            }
+            .onAppear {
+                baseRotation = -Double(selectedIndex) * stepDegrees
+            }
+            .onChange(of: selectedFamilyID) { _, _ in
+                withAnimation(Motion.standard) {
+                    baseRotation = -Double(selectedIndex) * stepDegrees
+                    dragRotation = 0
                 }
             }
-            .padding(.horizontal, Spacing.md)
+
+            Text("Drag the dial — or use VoiceOver to step through services.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+
+    private func snappedFamilyIndex(for rotation: Double) -> Int {
+        guard !families.isEmpty else { return 0 }
+        // Rotation maps family 0 to top when rotation == 0; dragging positive rotates labels.
+        let normalized = ((-rotation / stepDegrees).rounded()
+            .truncatingRemainder(dividingBy: Double(families.count)) + Double(families.count))
+            .truncatingRemainder(dividingBy: Double(families.count))
+        return Int(normalized)
+    }
+
+    private func shortLabel(_ name: String) -> String {
+        let parts = name.split(separator: " ")
+        if parts.count >= 2 {
+            return String(parts.prefix(2).joined(separator: " "))
+        }
+        return name
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -503,7 +629,7 @@ struct ThinkingServiceWizardView: View {
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.caption)
-                        .foregroundColor(Color(red: 0.75, green: 0.35, blue: 0.28))
+                        .foregroundColor(ColorTheme.error())
                 }
                 Spacer(minLength: 0)
                 bottomActions
@@ -546,7 +672,7 @@ struct ThinkingServiceWizardView: View {
         case .pickFamily:
             return "Pick the thinking service family you want to use."
         case .enterCode:
-            return "Paste the access code from your provider. It is saved only on your Sovereign."
+            return "Paste the access code from your thinking-service account. It is saved only on your Sovereign — not kept on this iPhone."
         case .pickService:
             return "Choose the exact thinking service for this family."
         case .connecting:
