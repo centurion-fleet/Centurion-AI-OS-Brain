@@ -63,7 +63,7 @@ final class ConversationStore: ObservableObject {
         guard let snapshot = loadSnapshot(), !snapshot.conversations.isEmpty else { return }
         let liveConversations = snapshot.conversations.filter { !$0.isDemoSeed }
         guard !liveConversations.isEmpty else {
-            removeDemoContent()
+            removeDemoContent(includeLegacyTitleSeeds: false)
             return
         }
         let liveIds = Set(liveConversations.map(\.id))
@@ -86,12 +86,18 @@ final class ConversationStore: ObservableObject {
     }
 
     /// Drop offline marketing sample threads from disk; keep live Crypto Chat.
-    func removeDemoContent() {
+    /// - Parameter includeLegacyTitleSeeds: When a demo session was active, also drop
+    ///   pre-flag samples that only match known demo titles (never when linking over live data alone).
+    func removeDemoContent(includeLegacyTitleSeeds: Bool = false) {
         guard let snapshot = loadSnapshot() else {
             hasPersistedData = false
             return
         }
-        let liveConversations = snapshot.conversations.filter { !$0.isDemoSeed }
+        let liveConversations = snapshot.conversations.filter { conversation in
+            if conversation.isDemoSeed { return false }
+            if includeLegacyTitleSeeds && conversation.matchesLegacyDemoTitle { return false }
+            return true
+        }
         if liveConversations.isEmpty {
             try? fileManager.removeItem(at: storageURL)
             hasPersistedData = false

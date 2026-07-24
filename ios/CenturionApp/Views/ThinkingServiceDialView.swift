@@ -362,6 +362,7 @@ struct ThinkingServiceFamilyDial: View {
     let onSelect: (ThinkingServiceFamily) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var dragRotation: Double = 0
     @State private var baseRotation: Double = 0
 
@@ -375,9 +376,13 @@ struct ThinkingServiceFamilyDial: View {
         return 360.0 / Double(families.count)
     }
 
+    private var prefersListFallback: Bool {
+        reduceMotion || voiceOverEnabled || families.count <= 1
+    }
+
     var body: some View {
         Group {
-            if reduceMotion || families.count <= 1 {
+            if prefersListFallback {
                 listFallback
             } else {
                 circularDial

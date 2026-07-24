@@ -2203,6 +2203,15 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         settings_row: &adw::ActionRow,
         detail: &gtk::Label,
     ) {
+        show_change_thinking_dialog_inner(parent, settings_row, detail, None);
+    }
+
+    fn show_change_thinking_dialog_inner(
+        parent: &adw::ApplicationWindow,
+        settings_row: &adw::ActionRow,
+        detail: &gtk::Label,
+        initial_error: Option<String>,
+    ) {
         let connectors: Vec<ThinkingConnectorOption> =
             run_provider_command(&["catalog", "--json"])
                 .and_then(|response| response.catalog)
@@ -2337,11 +2346,11 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
         let error_label = gtk::Label::builder()
-            .label("")
+            .label(initial_error.as_deref().unwrap_or(""))
             .xalign(0.0)
             .wrap(true)
             .css_classes(["error"])
-            .visible(false)
+            .visible(initial_error.is_some())
             .build();
         extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
         extra.append(&service_drop);
@@ -2355,21 +2364,40 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
 
         let settings_row = settings_row.clone();
         let detail = detail.clone();
+        let parent = parent.clone();
         dialog.connect_response(None, move |dialog, response| {
             if response != "apply" {
                 dialog.close();
                 return;
             }
+            // AdwMessageDialog always closes after a response — on failure, reopen
+            // with the error so the owner can correct the access code without hunting Settings.
+            let reopen_with_error = {
+                let parent = parent.clone();
+                let settings_row = settings_row.clone();
+                let detail = detail.clone();
+                move |message: String| {
+                    glib::idle_add_local_once(move || {
+                        show_change_thinking_dialog_inner(
+                            &parent,
+                            &settings_row,
+                            &detail,
+                            Some(message),
+                        );
+                    });
+                }
+            };
+
             let selected = service_drop.selected() as usize;
             let Some(connector) = connectors.get(selected) else {
-                error_label.set_label("Pick a thinking service.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Pick a thinking service.".to_owned());
                 return;
             };
             let access_code = key_entry.text().to_string();
             if connector.needs_key && access_code.trim().is_empty() {
-                error_label.set_label("Access code is required for this thinking service.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Access code is required for this thinking service.".to_owned());
                 return;
             }
             if !access_code.trim().is_empty() {
@@ -2379,13 +2407,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         let message = save_response
                             .message
                             .unwrap_or_else(|| "Could not save access code.".to_owned());
-                        error_label.set_label(&message);
-                        error_label.set_visible(true);
+                        dialog.close();
+                        reopen_with_error(message);
                         return;
                     }
                     None => {
-                        error_label.set_label("Could not save access code.");
-                        error_label.set_visible(true);
+                        dialog.close();
+                        reopen_with_error("Could not save access code.".to_owned());
                         return;
                     }
                 }
@@ -2415,12 +2443,12 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     refresh_thinking_status(&detail, &settings_row);
                     dialog.close();
                 } else {
-                    error_label.set_label(&message);
-                    error_label.set_visible(true);
+                    dialog.close();
+                    reopen_with_error(message);
                 }
             } else {
-                error_label.set_label("Could not apply thinking service change.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Could not apply thinking service change.".to_owned());
             }
         });
     }

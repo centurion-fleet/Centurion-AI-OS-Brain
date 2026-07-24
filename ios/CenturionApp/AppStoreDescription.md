@@ -73,10 +73,11 @@ Free for Centurion customers. Link your Sovereign for private Crypto Chat, Life 
 
 Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
 
-- There is **no cloud login** and **no demo account**. The app discovers a Sovereign on the owner’s local network (Bonjour) and pairs with owner approval.
-- Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design.
-- TestFlight / Review: use a device on the same LAN as a running Sovereign with `centurion-remote` enabled, or contact the developer for a review pairing window.
+- There is **no cloud login** and **no demo account**. Pairing uses an owner-generated **remote pairing code** from Sovereign AI Brain (or LAN discovery on the same Wi‑Fi). The owner must approve the iPhone on the brain.
+- Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design. Offline demo chats clear as soon as a live link succeeds.
+- **App Review:** Please contact the developer for a time-boxed review pairing window (pairing code + reachable brain). Same-LAN Bonjour discovery also works when both devices share Wi‑Fi.
 - Price: Free. No IAP for core Remote features.
+- Encryption: standard TLS for optional Help (Adrian); Crypto Chat uses publicly available algorithms (X25519 + XSalsa20-Poly1305 via libsodium) between the owner’s iPhone and their own Sovereign. `ITSAppUsesNonExemptEncryption = false` (exemption).
 
 ## App Privacy notes (App Store Connect)
 

@@ -35,10 +35,11 @@ final class MessageService: ObservableObject {
     /// Remove seeded preview conversations once a live Centurion link is active.
     /// Purges demo threads from disk without wiping live Crypto Chat history.
     func clearDemoData() {
+        let hadDemoSession = UserDefaults.standard.bool(forKey: "centurion.chatDemoActive")
         allMessages = []
         conversations = []
         currentConversation = nil
-        ConversationStore.shared.removeDemoContent()
+        ConversationStore.shared.removeDemoContent(includeLegacyTitleSeeds: hadDemoSession)
         UserDefaults.standard.set(false, forKey: "centurion.chatDemoActive")
     }
 
@@ -297,11 +298,11 @@ final class MessageService: ObservableObject {
         let targetContext = ConversationContext.target(id: partnerTargetId, name: "Partner Onboarding", programName: "Q3 Go-to-Market")
         let taskContext = ConversationContext.task(id: taskId, name: "Design visual assets", targetName: "Content Strategy", programName: "Q3 Go-to-Market")
 
-        let programConv = Conversation(id: UUID(), context: programContext, lastActive: Date().addingTimeInterval(-3600))
-        let targetConv = Conversation(id: UUID(), context: targetContext, lastActive: Date().addingTimeInterval(-86400))
-        let taskConv = Conversation(id: UUID(), context: taskContext, lastActive: Date().addingTimeInterval(-86400 * 2))
-        let standaloneConv = Conversation(id: UUID(), context: .standalone(title: "Morning Briefing"), lastActive: Date().addingTimeInterval(-7200))
-        let pipelineConv = Conversation(id: UUID(), context: .standalone(title: "Pipeline Review"), lastActive: Date().addingTimeInterval(-86400 * 5))
+        let programConv = Conversation(id: UUID(), context: programContext, lastActive: Date().addingTimeInterval(-3600), isDemoSeed: true)
+        let targetConv = Conversation(id: UUID(), context: targetContext, lastActive: Date().addingTimeInterval(-86400), isDemoSeed: true)
+        let taskConv = Conversation(id: UUID(), context: taskContext, lastActive: Date().addingTimeInterval(-86400 * 2), isDemoSeed: true)
+        let standaloneConv = Conversation(id: UUID(), context: .standalone(title: "Morning Briefing"), lastActive: Date().addingTimeInterval(-7200), isDemoSeed: true)
+        let pipelineConv = Conversation(id: UUID(), context: .standalone(title: "Pipeline Review"), lastActive: Date().addingTimeInterval(-86400 * 5), isDemoSeed: true)
 
         conversations = [programConv, standaloneConv, pipelineConv, targetConv, taskConv]
 

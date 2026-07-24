@@ -311,33 +311,59 @@ struct Conversation: Identifiable, Codable, Equatable {
     let id: UUID
     var context: ConversationContext
     var lastActive: Date
+    /// Set only by offline sample seeding — never inferred from titles
+    /// (live Crypto Chat can reuse the same names).
+    var isDemoSeed: Bool
 
     var displayTitle: String { context.displayTitle }
     var contextPath: String { context.contextPath }
     var icon: String { context.icon }
     var missionBadge: (name: String, color: Color) { context.missionBadge }
 
-    /// Offline marketing sample used before a live Sovereign link.
-    var isDemoSeed: Bool {
-        let markers: Set<String> = [
-            "Morning Briefing",
-            "Pipeline Review",
-            "Q3 Go-to-Market",
-            "Partner Onboarding",
-            "Design visual assets",
-        ]
-        switch context {
-        case .standalone(let title):
-            return markers.contains(title)
-        case .program(_, let name):
-            return markers.contains(name)
-        case .target(_, let name, _):
-            return markers.contains(name)
-        case .task(_, let name, _, _):
-            return markers.contains(name)
-        default:
-            return false
-        }
+    init(
+        id: UUID,
+        context: ConversationContext,
+        lastActive: Date,
+        isDemoSeed: Bool = false
+    ) {
+        self.id = id
+        self.context = context
+        self.lastActive = lastActive
+        self.isDemoSeed = isDemoSeed
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, context, lastActive, isDemoSeed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        context = try container.decode(ConversationContext.self, forKey: .context)
+        lastActive = try container.decode(Date.self, forKey: .lastActive)
+        isDemoSeed = try container.decodeIfPresent(Bool.self, forKey: .isDemoSeed) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(context, forKey: .context)
+        try container.encode(lastActive, forKey: .lastActive)
+        try container.encode(isDemoSeed, forKey: .isDemoSeed)
+    }
+
+    /// Titles used by historical offline samples (pre-`isDemoSeed` field).
+    /// Only applied when the demo-session flag is still set — never for live chats.
+    static let legacyDemoTitleMarkers: Set<String> = [
+        "Morning Briefing",
+        "Pipeline Review",
+        "Q3 Go-to-Market",
+        "Partner Onboarding",
+        "Design visual assets",
+    ]
+
+    var matchesLegacyDemoTitle: Bool {
+        Self.legacyDemoTitleMarkers.contains(displayTitle)
     }
 }
 

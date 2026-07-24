@@ -610,7 +610,7 @@ final class ConnectionManager: ObservableObject {
             if let routed = lastRoutedDisplayName, !routed.isEmpty {
                 return "Auto-select · last used \(routed)"
             }
-            return "Picks an LLM based on your message"
+            return "Picks a thinking service based on your message"
         }
         if let status = thinkingStatus, !status.model.isEmpty {
             return status.healthMessage.isEmpty
@@ -1527,8 +1527,8 @@ final class ConnectionManager: ObservableObject {
         activeConnectionTarget = nil
 
         let remoteRecovery = """
-        Couldn’t reach your Centurion remotely. Check that TCP 9119 is reachable \
-        (tunnel, reverse proxy, or firewall), then tap Reconnect. On the same Wi‑Fi, \
+        Couldn’t reach your Centurion remotely. Make sure this brain is reachable \
+        away from home (secure tunnel or firewall), then tap Reconnect. On the same Wi‑Fi, \
         use Find my Sovereign.
         """
 

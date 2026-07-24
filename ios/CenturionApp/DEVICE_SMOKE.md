@@ -6,7 +6,7 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 
 - [ ] `xcodegen generate` (if used) then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.0.2** / build **22**
+- [ ] Display name: **Sovereign AI Remote**; version **5.0.2** / build **25**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 
 ## Pairing & Crypto Chat
