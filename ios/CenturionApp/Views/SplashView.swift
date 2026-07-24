@@ -74,10 +74,10 @@ struct SplashView: View {
                 Spacer()
                     .frame(height: 140)
 
-                Text("CENTURION")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("SOVEREIGN AI REMOTE")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(ColorTheme.mutedText())
-                    .tracking(4)
+                    .tracking(2)
                     .opacity(phase == .glow ? 0.4 : taglineOpacity)
 
                 Text("1 Human 1 AI")

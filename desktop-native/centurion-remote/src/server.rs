@@ -1,5 +1,6 @@
 use crate::bridge::{AgentBridge, BridgeError};
 use crate::crypto::{ServerIdentity, ServerSession};
+use crate::pairing::{PairingTokenStore, PairingValidationError};
 use crate::registry::DeviceRegistry;
 use crate::session_registry::{SessionGuard, SessionRegistry};
 use centurion_common::{
@@ -19,6 +20,7 @@ use tracing::{info, warn};
 pub struct ServerState {
     pub bridge: Arc<dyn AgentBridge>,
     pub registry: Arc<Mutex<DeviceRegistry>>,
+    pub pairing: Arc<Mutex<PairingTokenStore>>,
     pub sessions: Arc<SessionRegistry>,
     pub identity: Arc<ServerIdentity>,
     pub auto_approve: bool,
@@ -58,21 +60,33 @@ async fn handle_connection(
         let name = format!("iPhone {}", &fingerprint[..8]);
         state.registry.lock().await.approve(&fingerprint, name)?;
     } else if !approved {
-        state
-            .registry
-            .lock()
-            .await
-            .note_pending(fingerprint.clone(), format!("iPhone {}", &fingerprint[..8]))?;
-        let message = RemoteMessage::Error {
-            id: None,
-            code: "PAIRING_APPROVAL_REQUIRED".to_owned(),
-            message: format!(
-                "Approve device fingerprint {fingerprint} on your Centurion, then try again."
-            ),
-            retryable: true,
+        let requires_pair = {
+            let mut pairing = state.pairing.lock().await;
+            pairing
+                .reload_from_disk()
+                .map_err(|error| SessionError::Registry(error.to_string()))?;
+            pairing.requires_pair_for_new_devices()
         };
-        write_message(&mut stream, &session, &message).await?;
-        return Err(SessionError::ApprovalRequired(fingerprint));
+
+        if requires_pair {
+            complete_remote_pair(&mut stream, &session, &state, &fingerprint).await?;
+        } else {
+            state
+                .registry
+                .lock()
+                .await
+                .note_pending(fingerprint.clone(), format!("iPhone {}", &fingerprint[..8]))?;
+            let message = RemoteMessage::Error {
+                id: None,
+                code: "PAIRING_APPROVAL_REQUIRED".to_owned(),
+                message: format!(
+                    "Approve device fingerprint {fingerprint} on your Centurion, then try again."
+                ),
+                retryable: true,
+            };
+            write_message(&mut stream, &session, &message).await?;
+            return Err(SessionError::ApprovalRequired(fingerprint));
+        }
     }
 
     state.registry.lock().await.touch(&fingerprint)?;
@@ -1285,6 +1299,82 @@ async fn send_revoked(stream: &mut TcpStream, session: &ServerSession) -> Result
     write_message(stream, session, &message).await
 }
 
+/// Challenge for a remote pairing token, validate, approve + bind fingerprint.
+async fn complete_remote_pair(
+    stream: &mut TcpStream,
+    session: &ServerSession,
+    state: &ServerState,
+    fingerprint: &str,
+) -> Result<(), SessionError> {
+    write_message(stream, session, &RemoteMessage::PairRequired).await?;
+
+    let encrypted = tokio::time::timeout(Duration::from_secs(30), read_frame(stream))
+        .await
+        .map_err(|_| SessionError::PairTimeout)??;
+    let plaintext = session.decrypt(&encrypted)?;
+    let message = RemoteMessage::from_json(&plaintext)?;
+
+    let token = match message {
+        RemoteMessage::Pair { token } => token,
+        _ => {
+            let rejected = RemoteMessage::PairRejected {
+                code: "EXPECTED_PAIR".to_owned(),
+                message: "Expected a pairing token message.".to_owned(),
+            };
+            write_message(stream, session, &rejected).await?;
+            return Err(SessionError::PairRejected);
+        }
+    };
+
+    let bind_result = {
+        let mut pairing = state.pairing.lock().await;
+        pairing
+            .reload_from_disk()
+            .map_err(|error| SessionError::Registry(error.to_string()))?;
+        pairing.validate_and_bind(&token, fingerprint)
+    };
+
+    match bind_result {
+        Ok(()) => {
+            let name = format!("iPhone {}", &fingerprint[..8.min(fingerprint.len())]);
+            state
+                .registry
+                .lock()
+                .await
+                .approve(fingerprint, name)
+                .map_err(|error| SessionError::Registry(error.to_string()))?;
+            info!(%fingerprint, "iPhone paired via remote token");
+            Ok(())
+        }
+        Err(error) => {
+            let (code, message) = match error {
+                PairingValidationError::InvalidToken => (
+                    "INVALID_TOKEN",
+                    "That pairing code is not valid. Generate a new one on your Centurion.",
+                ),
+                PairingValidationError::TokenRevoked => (
+                    "TOKEN_REVOKED",
+                    "That pairing code was revoked. Generate a new one on your Centurion.",
+                ),
+                PairingValidationError::BoundToOtherDevice => (
+                    "TOKEN_BOUND",
+                    "That pairing code is already linked to another iPhone.",
+                ),
+            };
+            write_message(
+                stream,
+                session,
+                &RemoteMessage::PairRejected {
+                    code: code.to_owned(),
+                    message: message.to_owned(),
+                },
+            )
+            .await?;
+            Err(SessionError::PairRejected)
+        }
+    }
+}
+
 fn bridge_error_response(id: Option<uuid::Uuid>, error: BridgeError) -> RemoteMessage {
     match error {
         BridgeError::Agent {
@@ -1355,6 +1445,10 @@ enum SessionError {
     Crypto(#[from] crate::crypto::CryptoError),
     #[error("device approval is required for {0}")]
     ApprovalRequired(String),
+    #[error("pairing token rejected")]
+    PairRejected,
+    #[error("timed out waiting for pairing token")]
+    PairTimeout,
     #[error("device registry error: {0}")]
     Registry(String),
     #[error("encrypted frame length {0} exceeds the maximum")]

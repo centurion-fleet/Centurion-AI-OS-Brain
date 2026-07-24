@@ -10,9 +10,19 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
 
+    /// Badge only for real recovery — not for first-run “not linked yet”.
     private var showYouAttentionBadge: Bool {
-        if connectionManager.connectionState != .connected { return true }
-        return connectionManager.llmHealth.needsAttention
+        if connectionManager.connectionState == .connected {
+            return connectionManager.llmHealth.needsAttention
+        }
+        if case .error = connectionManager.connectionState {
+            return true
+        }
+        // Had a prior link / saved pairing but is offline now.
+        if connectionManager.connectedDevice != nil {
+            return true
+        }
+        return false
     }
 
     var body: some View {

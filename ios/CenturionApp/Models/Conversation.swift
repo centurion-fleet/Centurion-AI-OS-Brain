@@ -226,12 +226,14 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
     }
 
     enum ConnectionMethod: String, Codable {
-        case lan      // Local network (mDNS) — fallback only
-        case tailscale // Tailscale mesh — preferred path
+        case lan      // Local network (mDNS) — same-network bonus
+        case remote   // Authenticated remote pairing — primary path
+        case tailscale // Tailscale mesh — optional legacy
 
         var icon: String {
             switch self {
             case .lan: return "wifi"
+            case .remote: return "network"
             case .tailscale: return "shield.fill"
             }
         }
@@ -240,15 +242,21 @@ struct CenturionDevice: Identifiable, Codable, Equatable {
         var linkBadge: String {
             switch self {
             case .lan: return "Wi‑Fi"
+            case .remote: return "Remote"
             case .tailscale: return "Tailscale"
             }
         }
     }
 
-    /// True when this device should be reached over Tailscale first.
+    /// True when this device should be reached over Tailscale.
     var isTailscalePath: Bool {
         connectionMethod == .tailscale
             || Self.isTailscaleEndpoint(hostname: hostname, ipAddress: ipAddress)
+    }
+
+    /// True when this device was linked via remote pairing token.
+    var isRemotePath: Bool {
+        connectionMethod == .remote
     }
 
     static func isTailscaleEndpoint(hostname: String, ipAddress: String) -> Bool {
@@ -308,6 +316,29 @@ struct Conversation: Identifiable, Codable, Equatable {
     var contextPath: String { context.contextPath }
     var icon: String { context.icon }
     var missionBadge: (name: String, color: Color) { context.missionBadge }
+
+    /// Offline marketing sample used before a live Sovereign link.
+    var isDemoSeed: Bool {
+        let markers: Set<String> = [
+            "Morning Briefing",
+            "Pipeline Review",
+            "Q3 Go-to-Market",
+            "Partner Onboarding",
+            "Design visual assets",
+        ]
+        switch context {
+        case .standalone(let title):
+            return markers.contains(title)
+        case .program(_, let name):
+            return markers.contains(name)
+        case .target(_, let name, _):
+            return markers.contains(name)
+        case .task(_, let name, _, _):
+            return markers.contains(name)
+        default:
+            return false
+        }
+    }
 }
 
 extension ConversationContext {

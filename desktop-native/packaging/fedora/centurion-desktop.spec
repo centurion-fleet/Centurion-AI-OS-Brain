@@ -1,7 +1,7 @@
 Name:           centurion-desktop
 Version:        0.14.0
 Release:        1%{?dist}
-Summary:        Native Personal Centurion desktop and iPhone service
+Summary:        Native Sovereign AI Brain desktop and iPhone service
 License:        MIT
 URL:            https://github.com/NousResearch/Centurion-AI-OS
 Source0:        %{name}-%{version}.tar.gz
@@ -19,9 +19,9 @@ Requires:       firewalld
 Requires:       vte291-gtk4
 
 %description
-Native GTK4/libadwaita desktop application and encrypted LAN service for a
-Personal Centurion. The service allows CenturionAI Remote on iPhone to discover
-and communicate with this Centurion over the local network.
+Native GTK4/libadwaita Sovereign AI Brain desktop application and encrypted LAN
+service for a Centurion Sovereign. The service allows Sovereign AI Remote on
+iPhone to discover and communicate with this brain over the local network.
 
 %prep
 %autosetup

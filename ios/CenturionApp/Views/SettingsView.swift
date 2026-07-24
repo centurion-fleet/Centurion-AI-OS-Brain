@@ -36,9 +36,20 @@ struct SettingsView: View {
         TabPageChrome(title: "You") {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
-                    CenturionShowcaseSection()
-                    DeviceLinkSection(showPairingSheet: $showPairingSheet)
-                    ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                    if connectionManager.connectionState != .connected {
+                        linkHeroSection
+                        DeviceLinkSection(showPairingSheet: $showPairingSheet)
+                        ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                        DisclosureGroup("Why Sovereign is different") {
+                            CenturionShowcaseSection()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(ColorTheme.primaryText())
+                    } else {
+                        CenturionShowcaseSection()
+                        DeviceLinkSection(showPairingSheet: $showPairingSheet)
+                        ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                    }
                     youSection
                     memoryHorizonSection
                     reportingOversightSection
@@ -127,6 +138,26 @@ struct SettingsView: View {
     }
 
     // MARK: - Sections
+
+    private var linkHeroSection: some View {
+        AtmosphericSurface(elevated: true) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                Text("Link your Centurion")
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(ColorTheme.primaryText())
+                Text("Paste a pairing code from Sovereign AI Brain on your computer. That unlocks Crypto Chat and Thinking Service on this iPhone.")
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineSpacing(3)
+                Button("Paste pairing code") {
+                    showPairingSheet = true
+                    Haptics.lightTap()
+                }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     private var youSection: some View {
         settingsSection(title: "You", icon: "sparkles") {
@@ -512,7 +543,7 @@ struct KeyExportView: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Your iPhone Security Code",
-                    subtitle: "Approve this code on your Sovereign computer when pairing for the first time (for example: centurion-remote approve <code>)."
+                    subtitle: "For remote pairing, paste the token:…@host:9119 code from your Centurion. On the same Wi‑Fi without a token, you can still approve with: centurion-remote approve <code>."
                 )
 
                 Image(systemName: "key.fill")

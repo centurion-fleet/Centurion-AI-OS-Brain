@@ -58,7 +58,7 @@ struct ThinkingRecoverySheet: View {
 
                     HelpCenterLink(url: CenturionHelp.thinkingService)
 
-                    Text("API keys and deeper changes are made on your Sovereign brain, not on this iPhone.")
+                    Text("Access codes stay on your Sovereign. You can enter them from this iPhone dial; they are not kept on the phone.")
                         .font(.caption)
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)

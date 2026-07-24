@@ -4,6 +4,7 @@ use centurion_common::{
 use centurion_remote::admin::{self, AdminState};
 use centurion_remote::bridge::EchoBridge;
 use centurion_remote::crypto::ServerIdentity;
+use centurion_remote::pairing::PairingTokenStore;
 use centurion_remote::registry::DeviceRegistry;
 use centurion_remote::server::{self, ServerState};
 use centurion_remote::session_registry::SessionRegistry;
@@ -14,6 +15,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+fn empty_pairing() -> Arc<Mutex<PairingTokenStore>> {
+    let path = std::env::temp_dir().join(format!("centurion-pairing-{}.json", Uuid::new_v4()));
+    Arc::new(Mutex::new(
+        PairingTokenStore::load(&path).expect("pairing store"),
+    ))
+}
 
 #[tokio::test]
 async fn encrypted_chat_round_trip_over_tcp() {
@@ -34,6 +42,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
         ServerState {
             bridge: Arc::new(EchoBridge),
             registry: Arc::new(Mutex::new(registry)),
+            pairing: empty_pairing(),
             sessions,
             identity: Arc::new(ServerIdentity::generate().expect("identity")),
             auto_approve: true,
@@ -115,6 +124,7 @@ async fn revoked_device_receives_error_on_next_message() {
         ServerState {
             bridge: Arc::new(EchoBridge),
             registry: Arc::new(Mutex::new(registry)),
+            pairing: empty_pairing(),
             sessions,
             identity: Arc::new(ServerIdentity::generate().expect("identity")),
             auto_approve: true,
@@ -179,6 +189,102 @@ async fn revoked_device_receives_error_on_next_message() {
 
     server.abort();
     let _ = std::fs::remove_file(registry_path);
+}
+
+#[tokio::test]
+async fn remote_pair_token_approves_and_ready() {
+    sodiumoxide::init().expect("sodium");
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let registry_path =
+        std::env::temp_dir().join(format!("centurion-loopback-pair-{}.json", Uuid::new_v4()));
+    let pairing_path =
+        std::env::temp_dir().join(format!("centurion-loopback-pair-tok-{}.json", Uuid::new_v4()));
+    let registry = DeviceRegistry::load(&registry_path).expect("registry");
+    let mut pairing_store = PairingTokenStore::load(&pairing_path).expect("pairing");
+    let (_record, secret) = pairing_store
+        .create_token("test".to_owned())
+        .expect("token");
+    let sessions = SessionRegistry::new();
+    let server = tokio::spawn(server::run(
+        listener,
+        ServerState {
+            bridge: Arc::new(EchoBridge),
+            registry: Arc::new(Mutex::new(registry)),
+            pairing: Arc::new(Mutex::new(pairing_store)),
+            sessions,
+            identity: Arc::new(ServerIdentity::generate().expect("identity")),
+            auto_approve: false,
+        },
+    ));
+
+    let (client_public, client_secret) = kx::gen_keypair();
+    let mut stream = TcpStream::connect(address).await.expect("connect");
+    stream
+        .write_all(&encode_key_exchange(client_public.as_ref()).expect("handshake"))
+        .await
+        .expect("send handshake");
+
+    let mut server_handshake = [0_u8; KEY_EXCHANGE_FRAME_BYTES];
+    stream
+        .read_exact(&mut server_handshake)
+        .await
+        .expect("server handshake");
+    let server_public =
+        kx::PublicKey::from_slice(&decode_key_exchange(&server_handshake).expect("public key"))
+            .expect("server public key");
+    let (receive, transmit) =
+        kx::client_session_keys(&client_public, &client_secret, &server_public)
+            .expect("session keys");
+    let receive = secretbox::Key::from_slice(receive.as_ref()).expect("receive key");
+    let transmit = secretbox::Key::from_slice(transmit.as_ref()).expect("transmit key");
+
+    assert_eq!(
+        read_message(&mut stream, &receive).await,
+        RemoteMessage::PairRequired
+    );
+
+    let pair = RemoteMessage::Pair {
+        token: secret.clone(),
+    }
+    .to_json()
+    .expect("pair JSON");
+    let nonce = secretbox::gen_nonce();
+    let mut encrypted = nonce.as_ref().to_vec();
+    encrypted.extend(secretbox::seal(&pair, &nonce, &transmit));
+    stream
+        .write_all(&encode_frame(&encrypted).expect("frame"))
+        .await
+        .expect("send pair");
+
+    assert_eq!(
+        read_message(&mut stream, &receive).await,
+        RemoteMessage::Ready
+    );
+
+    // Reconnect should get Ready without Pair (fingerprint approved).
+    let mut stream2 = TcpStream::connect(address).await.expect("reconnect");
+    stream2
+        .write_all(&encode_key_exchange(client_public.as_ref()).expect("handshake"))
+        .await
+        .expect("send handshake");
+    let mut server_handshake2 = [0_u8; KEY_EXCHANGE_FRAME_BYTES];
+    stream2
+        .read_exact(&mut server_handshake2)
+        .await
+        .expect("server handshake");
+    let (receive2, _transmit2) =
+        kx::client_session_keys(&client_public, &client_secret, &server_public)
+            .expect("session keys");
+    let receive2 = secretbox::Key::from_slice(receive2.as_ref()).expect("receive key");
+    assert_eq!(
+        read_message(&mut stream2, &receive2).await,
+        RemoteMessage::Ready
+    );
+
+    server.abort();
+    let _ = std::fs::remove_file(registry_path);
+    let _ = std::fs::remove_file(pairing_path);
 }
 
 #[tokio::test]

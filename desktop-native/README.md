@@ -1,11 +1,11 @@
-# Centurion Desktop for Linux
+# Sovereign AI Brain (Linux)
 
 Native GTK4/libadwaita desktop application and encrypted iPhone service for
 Fedora-based Personal Centurion hardware.
 
 ## Components
 
-- `centurion-desktop`: native Linux window and pairing controls
+- `centurion-desktop`: native Linux window (**Sovereign AI Brain**) and pairing controls
 - `centurion-remote`: mDNS discovery, encrypted TCP sessions, and Python bridge
 - `centurion-common`: versioned wire messages and framing
 
@@ -23,6 +23,12 @@ desktop-native/scripts/install-user.sh
 This builds `centurion-remote` and `centurion-desktop`, installs both to
 `~/.local/bin`, replaces any stale Tauri `centurion-desktop.desktop` launcher,
 installs icons, and enables the user `centurion-remote` systemd unit.
+
+The application menu name is **Sovereign AI Brain**. Settings → **Check for updates**
+runs `centurion update --check --json` and can apply Centurion AI OS updates
+(`centurion update -y`). That path updates the Python brain, not the GTK binary —
+rebuild the desktop app with `install-user.sh` (or the Fedora RPM) when you need
+a new shell build.
 
 If an old menu entry pointed at `desktop/launch.sh`, remove it or let the
 installer replace it.
@@ -45,15 +51,36 @@ Run the service in explicit development pairing mode:
 cargo run -p centurion-remote -- serve --auto-approve --echo
 ```
 
-Production mode requires approval:
+Production mode requires approval (LAN) or a remote pairing token:
 
 ```bash
 cargo run -p centurion-remote -- serve
+cargo run -p centurion-remote -- remote-pair --host your.public.hostname
+# → prints token:…@your.public.hostname:9119 for the iPhone
+
 cargo run -p centurion-remote -- devices
 cargo run -p centurion-remote -- approve <fingerprint> --name "Adrian's iPhone"
 ```
 
-The native desktop performs the same approval action from its Devices page.
+Or via the Python CLI wrapper (same binary under the hood):
+
+```bash
+centurion remote pair --host your.public.hostname
+centurion remote tokens
+centurion remote revoke <id>
+```
+
+### Exposing TCP 9119 for away access
+
+Remote pairing works over any reachable TCP path. Common options:
+
+1. **Cloudflare Tunnel** — `cloudflared tunnel` TCP to `localhost:9119`, use the tunnel hostname in `--host`.
+2. **Reverse proxy** — TCP pass-through (nginx stream / Caddy) to `127.0.0.1:9119`.
+3. **Firewall / port-forward** — allow inbound TCP 9119 to the brain and use your public IP or DNS name.
+
+Crypto Chat stays end-to-end encrypted (X25519 + XSalsa20-Poly1305) between iPhone and this Centurion. Opening the port only makes the encrypted listener reachable; pair tokens gate new devices.
+
+The native desktop **Remote pairing** panel mints the same connection string.
 
 ## Local chat
 
@@ -91,15 +118,16 @@ interface to that zone.
 1. On Fedora: `git pull` on this tree, then
    `desktop-native/scripts/install-user.sh` (or `provision-centurion.sh`).
 2. Confirm `systemctl --user status centurion-remote` is active and Bonjour
-   advertises the host.
+   advertises **Sovereign AI Brain**.
 3. On iPhone (TestFlight build): same Wi‑Fi, Connect → pair → approve on GTK
    Devices.
 4. Crypto Chat: send one message and confirm a real model reply.
-5. Pulse: confirm live feed updates (not sample/static activity).
-6. Swarm: connect and confirm status reflects the host session.
-7. Get Help: generate a support code on phone; look it up under GTK
+5. Settings → Check for updates: confirm status dialog; Update now when behind.
+6. Pulse: confirm live feed updates (not sample/static activity).
+7. Swarm: connect and confirm status reflects the host session.
+8. Get Help: generate a support code on phone; look it up under GTK
    Settings → Support Tools.
-8. Early Centurions only: GTK Settings → Transition → Bring over Telegram
+9. Early Centurions only: GTK Settings → Transition → Bring over Telegram
    history (not on iPhone).
 
 ## Security notes
