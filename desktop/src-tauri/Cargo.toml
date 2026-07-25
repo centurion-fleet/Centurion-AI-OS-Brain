@@ -1,6 +1,6 @@
 [package]
 name = "centurion-desktop"
-version = "5.0.2"
+version = "5.1.0"
 description = "Centurion OS Desktop - Native Linux App"
 authors = ["Centurion AI Ltd"]
 edition = "2021"

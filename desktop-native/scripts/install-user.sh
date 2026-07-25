@@ -47,17 +47,56 @@ fi
 
 echo "Installing user systemd unit for centurion-remote…"
 mkdir -p "${SYSTEMD_DIR}"
+
+# Prefer Centurion venv python so the remote bridge can import centurion_cli.
+PYTHON_BIN="python3"
+for candidate in \
+  "${ROOT}/.venv/bin/python" \
+  "${ROOT}/venv/bin/python" \
+  "${HOME}/.centurion/Centurion-AI-OS/venv/bin/python" \
+  "${HOME}/.centurion/venv/bin/python"
+do
+  if [[ -x "${candidate}" ]]; then
+    PYTHON_BIN="${candidate}"
+    break
+  fi
+done
+
 {
   sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
     "${DESKTOP_NATIVE}/packaging/systemd/centurion-remote.service"
   printf 'WorkingDirectory=%s\n' "${ROOT}"
   printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
+  printf 'Environment=CENTURION_AI_REPO=%s\n' "${ROOT}"
+  printf 'ReadWritePaths=%s\n' "${ROOT}"
+  # Away-from-home: advertise a public/tunnel host when set.
+  if [[ -n "${CENTURION_REMOTE_ADVERTISE_HOST:-}" ]]; then
+    printf 'Environment=CENTURION_REMOTE_ADVERTISE_HOST=%s\n' "${CENTURION_REMOTE_ADVERTISE_HOST}"
+  fi
+  printf 'ExecStart=\n'
+  printf 'ExecStart=%%h/.local/bin/centurion-remote serve --name "Sovereign AI Brain" --python %s\n' "${PYTHON_BIN}"
 } > "${SYSTEMD_DIR}/centurion-remote.service"
+
+# Fail fast if the bridge module is missing on the chosen interpreter.
+if ! "${PYTHON_BIN}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
+  echo "ERROR: ${PYTHON_BIN} cannot import centurion_cli.remote_bridge." >&2
+  echo "Install Centurion AI OS into this interpreter, then re-run install-user.sh." >&2
+  exit 1
+fi
 
 export PATH="${BIN_DIR}:${PATH}"
 systemctl --user daemon-reload
 systemctl --user enable --now centurion-remote.service
 
+echo
+echo "Away-from-home pairing (required for iPhone Remote):"
+echo "  export CENTURION_REMOTE_ADVERTISE_HOST=<public-or-tunnel-hostname>"
+echo "  centurion remote pair --host \"\$CENTURION_REMOTE_ADVERTISE_HOST\""
+echo "  # Prints a QR (TTY) + token:…@host:9119 — scan in Sovereign AI Remote"
+echo "  # Or open Sovereign AI Brain → Link iPhone — show QR"
+echo "Expose TCP 9119 via Cloudflare Tunnel / reverse proxy / port-forward."
+echo "See desktop-native/docs/EXPOSE_9119.md"
+echo
 if [[ ! -x "${BIN_DIR}/centurion-desktop" ]]; then
   echo "ERROR: ${BIN_DIR}/centurion-desktop was not built." >&2
   exit 1
@@ -68,6 +107,7 @@ echo "Installed:"
 echo "  ${BIN_DIR}/centurion-remote"
 echo "  ${BIN_DIR}/centurion-desktop"
 echo "  ${APP_DIR}/com.centurion.desktop.desktop"
+echo "  Python bridge: ${PYTHON_BIN}"
 echo
 echo "Launch GUI:"
 echo "  ${BIN_DIR}/centurion-desktop"

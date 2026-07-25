@@ -244,6 +244,15 @@ def load_centurion_dotenv(
 
     _apply_external_secret_sources(home_path)
 
+    # Aggregator is retired — never use it for inference or aux, even if a
+    # leftover OPENROUTER_API_KEY is still present in .env.
+    try:
+        from centurion_cli.openrouter_retired import enforce_openrouter_disabled
+
+        enforce_openrouter_disabled()
+    except Exception:
+        os.environ["CENTURION_DISABLE_OPENROUTER"] = "1"
+
     return loaded
 
 

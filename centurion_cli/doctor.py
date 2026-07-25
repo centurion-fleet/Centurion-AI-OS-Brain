@@ -26,12 +26,10 @@ load_centurion_dotenv(centurion_home=_env_path.parent, project_env=PROJECT_ROOT 
 from centurion_cli.colors import Colors, color
 from centurion_cli.models import _CENTURION_USER_AGENT
 from centurion_cli.vercel_auth import describe_vercel_auth
-from centurion_constants import OPENROUTER_MODELS_URL
 from utils import base_url_host_matches
 
 
 _PROVIDER_ENV_HINTS = (
-    "OPENROUTER_API_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_TOKEN",
@@ -350,7 +348,7 @@ def _build_apikey_providers_list() -> list:
     # API-key loop (with custom headers/auth). Skip their pluggable profiles
     # here so the generic Bearer-auth loop doesn't run a duplicate, broken
     # check (e.g. Anthropic native API requires x-api-key, not Bearer).
-    _dedicated_canonical = {"anthropic", "openrouter", "bedrock"}
+    _dedicated_canonical = {"anthropic", "bedrock"}
     _known_canonical.update(_dedicated_canonical)
     try:
         from providers import list_providers
@@ -603,7 +601,7 @@ def run_doctor(args):
                     PROVIDER_REGISTRY,
                     resolve_provider as _resolve_auth_provider,
                 )
-                known_providers = set(PROVIDER_REGISTRY.keys()) | {"openrouter", "custom", "auto"}
+                known_providers = set(PROVIDER_REGISTRY.keys()) | {"custom", "auto"}
             except Exception:
                 _resolve_auth_provider = None
                 pass
@@ -668,7 +666,23 @@ def run_doctor(args):
                     provider_ids_to_accept.add(catalog_provider)
 
             if provider and provider != "auto":
-                if catalog_provider is None or (
+                from centurion_cli.openrouter_retired import (
+                    is_openrouter_provider,
+                    retired_provider_message,
+                )
+
+                if is_openrouter_provider(provider) or is_openrouter_provider(runtime_provider):
+                    _fail_and_issue(
+                        "model.provider points at a retired aggregator",
+                        "(switch to a direct API provider)",
+                        (
+                            retired_provider_message()
+                            + " Fix: centurion config set model.provider anthropic"
+                            "  # or openai-api, deepseek, gemini, …"
+                        ),
+                        issues,
+                    )
+                elif catalog_provider is None or (
                     known_providers
                     and not (provider_ids_to_accept & valid_provider_ids)
                 ):
@@ -687,7 +701,6 @@ def run_doctor(args):
             # Warn if model is set to a provider-prefixed name on a provider that doesn't use them
             provider_for_policy = runtime_provider or catalog_provider
             providers_accepting_vendor_slugs = {
-                "openrouter",
                 "custom",
                 "auto",
                 "ai-gateway",
@@ -705,11 +718,12 @@ def run_doctor(args):
             ):
                 check_warn(
                     f"model.default '{default_model}' uses a vendor/model slug but provider is '{provider_raw}'",
-                    "(vendor-prefixed slugs belong to aggregators like openrouter)",
+                    "(drop the vendor prefix for direct API providers)",
                 )
                 issues.append(
                     f"model.default '{default_model}' is vendor-prefixed but model.provider is '{provider_raw}'. "
-                    "Either set model.provider to 'openrouter', or drop the vendor prefix."
+                    "Drop the vendor prefix, or switch to a provider that accepts slugs "
+                    "(ai-gateway, huggingface, custom)."
                 )
 
             # Check credentials for the configured provider.
@@ -720,25 +734,17 @@ def run_doctor(args):
             # which would produce false positives.
             if runtime_provider and runtime_provider not in ("auto", "custom"):
                 try:
-                    if runtime_provider == "openrouter":
-                        from centurion_cli.config import get_env_value
+                    from centurion_cli.auth import PROVIDER_REGISTRY, get_auth_status
 
+                    pconfig = PROVIDER_REGISTRY.get(runtime_provider)
+                    configured = True
+                    if pconfig and getattr(pconfig, "auth_type", "") == "api_key":
+                        status = get_auth_status(runtime_provider) or {}
                         configured = bool(
-                            str(get_env_value("OPENROUTER_API_KEY") or "").strip()
-                            or str(get_env_value("OPENAI_API_KEY") or "").strip()
+                            status.get("configured")
+                            or status.get("logged_in")
+                            or status.get("api_key")
                         )
-                    else:
-                        from centurion_cli.auth import PROVIDER_REGISTRY, get_auth_status
-
-                        pconfig = PROVIDER_REGISTRY.get(runtime_provider)
-                        configured = True
-                        if pconfig and getattr(pconfig, "auth_type", "") == "api_key":
-                            status = get_auth_status(runtime_provider) or {}
-                            configured = bool(
-                                status.get("configured")
-                                or status.get("logged_in")
-                                or status.get("api_key")
-                            )
                     if not configured:
                         _fail_and_issue(
                             f"model.provider '{runtime_provider}' is set but no API key is configured",
@@ -1473,67 +1479,6 @@ def run_doctor(args):
     )
     _probes: list = []  # list of (label, callable) submitted in display order
 
-    def _probe_openrouter() -> _ConnectivityResult:
-        key = os.getenv("OPENROUTER_API_KEY")
-        if not key:
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("⚠", Colors.YELLOW), "OpenRouter API",
-                  color("(not configured)", Colors.DIM))],
-                [],
-            )
-        try:
-            import httpx
-            r = httpx.get(
-                OPENROUTER_MODELS_URL,
-                headers={"Authorization": f"Bearer {key}"},
-                timeout=10,
-            )
-            if r.status_code == 200:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✓", Colors.GREEN), "OpenRouter API", "")],
-                    [],
-                )
-            if r.status_code == 401:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(invalid API key)", Colors.DIM))],
-                    ["Check OPENROUTER_API_KEY in .env"],
-                )
-            if r.status_code == 402:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(out of credits — payment required)", Colors.DIM))],
-                    ["OpenRouter account has insufficient credits. "
-                     "Fix: run 'centurion config set model.provider <provider>' "
-                     "to switch providers, or fund your OpenRouter account "
-                     "at https://openrouter.ai/settings/credits"],
-                )
-            if r.status_code == 429:
-                return _ConnectivityResult(
-                    "OpenRouter API",
-                    [(color("✗", Colors.RED), "OpenRouter API",
-                      color("(rate limited)", Colors.DIM))],
-                    ["OpenRouter rate limit hit — consider switching to "
-                     "a different provider or waiting"],
-                )
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("✗", Colors.RED), "OpenRouter API",
-                  color(f"(HTTP {r.status_code})", Colors.DIM))],
-                [],
-            )
-        except Exception as e:
-            return _ConnectivityResult(
-                "OpenRouter API",
-                [(color("✗", Colors.RED), "OpenRouter API",
-                  color(f"({e})", Colors.DIM))],
-                ["Check network connectivity"],
-            )
-
     def _probe_anthropic() -> _ConnectivityResult:
         from centurion_cli.auth import get_anthropic_key
         key = get_anthropic_key()
@@ -1821,7 +1766,6 @@ def run_doctor(args):
         )
 
     # Build the probe submission list in display order
-    _probes.append(("OpenRouter API", _probe_openrouter))
     _probes.append(("Anthropic API", _probe_anthropic))
 
     global _APIKEY_PROVIDERS_CACHE

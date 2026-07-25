@@ -40,6 +40,7 @@ struct SettingsView: View {
                         linkHeroSection
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                        GatewayControlSection()
                         DisclosureGroup("Why Sovereign is different") {
                             CenturionShowcaseSection()
                         }
@@ -49,6 +50,7 @@ struct SettingsView: View {
                         CenturionShowcaseSection()
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                        GatewayControlSection()
                     }
                     youSection
                     memoryHorizonSection

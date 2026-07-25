@@ -1412,11 +1412,17 @@ def resolve_provider(
 
     Priority (when requested="auto" or None):
     1. active_provider in auth.json with valid credentials
-    2. Explicit CLI api_key/base_url -> "openrouter"
-    3. OPENAI_API_KEY or OPENROUTER_API_KEY env vars -> "openrouter"
+    2. Explicit CLI api_key/base_url -> custom / openai-api (never aggregators)
+    3. OPENAI_API_KEY env var -> openai-api
     4. Provider-specific API keys (GLM, Kimi, MiniMax) -> that provider
-    5. Fallback: "openrouter"
+    5. Error if nothing is configured
     """
+    from centurion_cli.openrouter_retired import (
+        is_openrouter_base_url,
+        is_openrouter_provider,
+        retired_provider_message,
+    )
+
     normalized = (requested or "auto").strip().lower()
 
     # Normalize provider aliases
@@ -1454,6 +1460,7 @@ def resolve_provider(
         "ollama": "custom", "ollama_cloud": "ollama-cloud",
         "vllm": "custom", "llamacpp": "custom",
         "llama.cpp": "custom", "llama-cpp": "custom",
+        "openai": "openai-api",
     }
     # Extend with aliases declared in plugins/model-providers/<name>/ that aren't already mapped.
     # This keeps providers/ as the single source for new aliases while the
@@ -1468,8 +1475,12 @@ def resolve_provider(
         pass
     normalized = _PROVIDER_ALIASES.get(normalized, normalized)
 
-    if normalized == "openrouter":
-        return "openrouter"
+    if is_openrouter_provider(normalized):
+        raise AuthError(
+            retired_provider_message(),
+            provider="openrouter",
+            code="provider_retired",
+        )
     if normalized == "custom":
         return "custom"
     if normalized in PROVIDER_REGISTRY:
@@ -1495,9 +1506,17 @@ def resolve_provider(
             msg += " Check 'centurion model' for available providers, or run 'centurion doctor' to diagnose config issues."
         raise AuthError(msg, code="invalid_provider")
 
-    # Explicit one-off CLI creds always mean openrouter/custom
+    # Explicit one-off CLI creds — never route through retired aggregators.
     if explicit_api_key or explicit_base_url:
-        return "openrouter"
+        if is_openrouter_base_url(explicit_base_url):
+            raise AuthError(
+                retired_provider_message(),
+                provider="openrouter",
+                code="provider_retired",
+            )
+        if explicit_base_url:
+            return "custom"
+        return "openai-api"
 
     # Check auth store for an active OAuth provider
     try:
@@ -1508,6 +1527,8 @@ def resolve_provider(
 
             if not is_billing_enabled():
                 active = None
+        if active and is_openrouter_provider(str(active)):
+            active = None
         if active and active in PROVIDER_REGISTRY:
             status = get_auth_status(active)
             if status.get("logged_in"):
@@ -1515,8 +1536,8 @@ def resolve_provider(
     except Exception as e:
         logger.debug("Could not detect active auth provider: %s", e)
 
-    if has_usable_secret(os.getenv("OPENAI_API_KEY")) or has_usable_secret(os.getenv("OPENROUTER_API_KEY")):
-        return "openrouter"
+    if has_usable_secret(os.getenv("OPENAI_API_KEY")):
+        return "openai-api"
 
     # Auto-detect API-key providers by checking their env vars
     for pid, pconfig in PROVIDER_REGISTRY.items():
@@ -1529,6 +1550,8 @@ def resolve_provider(
         # offline, and the no-auth setup uses a placeholder value), so it
         # also requires explicit selection.
         if pid in {"copilot", "lmstudio"}:
+            continue
+        if is_openrouter_provider(pid):
             continue
         for env_var in pconfig.api_key_env_vars:
             if has_usable_secret(os.getenv(env_var, "")):
@@ -1545,7 +1568,7 @@ def resolve_provider(
 
     raise AuthError(
         "No inference provider configured. Run 'centurion model' to choose a "
-        "provider and model, or set an API key (OPENROUTER_API_KEY, "
+        "provider and model, or set an API key (ANTHROPIC_API_KEY, "
         "OPENAI_API_KEY, etc.) in ~/.centurion/.env.",
         code="no_provider_configured",
     )

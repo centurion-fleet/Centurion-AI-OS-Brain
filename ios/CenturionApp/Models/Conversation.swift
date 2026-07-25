@@ -314,6 +314,8 @@ struct Conversation: Identifiable, Codable, Equatable {
     /// Set only by offline sample seeding — never inferred from titles
     /// (live Crypto Chat can reuse the same names).
     var isDemoSeed: Bool
+    /// Host SessionDB id when linked to the Sovereign (durable multi-session).
+    var hostSessionId: String?
 
     var displayTitle: String { context.displayTitle }
     var contextPath: String { context.contextPath }
@@ -324,16 +326,18 @@ struct Conversation: Identifiable, Codable, Equatable {
         id: UUID,
         context: ConversationContext,
         lastActive: Date,
-        isDemoSeed: Bool = false
+        isDemoSeed: Bool = false,
+        hostSessionId: String? = nil
     ) {
         self.id = id
         self.context = context
         self.lastActive = lastActive
         self.isDemoSeed = isDemoSeed
+        self.hostSessionId = hostSessionId
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, context, lastActive, isDemoSeed
+        case id, context, lastActive, isDemoSeed, hostSessionId
     }
 
     init(from decoder: Decoder) throws {
@@ -342,6 +346,7 @@ struct Conversation: Identifiable, Codable, Equatable {
         context = try container.decode(ConversationContext.self, forKey: .context)
         lastActive = try container.decode(Date.self, forKey: .lastActive)
         isDemoSeed = try container.decodeIfPresent(Bool.self, forKey: .isDemoSeed) ?? false
+        hostSessionId = try container.decodeIfPresent(String.self, forKey: .hostSessionId)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -350,6 +355,7 @@ struct Conversation: Identifiable, Codable, Equatable {
         try container.encode(context, forKey: .context)
         try container.encode(lastActive, forKey: .lastActive)
         try container.encode(isDemoSeed, forKey: .isDemoSeed)
+        try container.encodeIfPresent(hostSessionId, forKey: .hostSessionId)
     }
 
     /// Titles used by historical offline samples (pre-`isDemoSeed` field).

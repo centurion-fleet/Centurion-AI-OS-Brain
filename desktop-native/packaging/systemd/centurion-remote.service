@@ -1,5 +1,5 @@
 [Unit]
-Description=Centurion encrypted iPhone service
+Description=Centurion encrypted iPhone service (away-from-home TCP 9119)
 Documentation=https://github.com/NousResearch/Centurion-AI-OS
 After=network-online.target
 Wants=network-online.target
@@ -7,7 +7,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=CENTURION_HOME=%h/.centurion
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Prefer the Centurion venv when present so `python -m centurion_cli.remote_bridge` resolves.
+Environment=PATH=%h/.centurion/Centurion-AI-OS/venv/bin:%h/.centurion/venv/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Override with the Centurion interpreter if install scripts detect one.
+# Environment=CENTURION_REMOTE_PYTHON=%h/.centurion/Centurion-AI-OS/venv/bin/python
 ExecStart=/usr/bin/centurion-remote serve --name "Sovereign AI Brain"
 Restart=on-failure
 RestartSec=3
@@ -16,7 +19,10 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%h/.centurion %h/.centurion/profiles
+# CENTURION_HOME plus common tool workdirs. Install scripts append TERMINAL_CWD.
+ReadWritePaths=%h/.centurion %h/.centurion/profiles %h/.cache %t
+# Allow reading the Centurion checkout / venv under the home tree.
+ReadOnlyPaths=%h/.local
 
 [Install]
 WantedBy=default.target

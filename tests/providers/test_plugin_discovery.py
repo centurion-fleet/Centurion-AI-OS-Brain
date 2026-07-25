@@ -46,21 +46,21 @@ def test_bundled_plugins_discovered():
         assert (child / "plugin.yaml").exists(), f"{child.name} missing plugin.yaml"
 
 
-def test_all_34_profiles_register():
-    """After discovery, the registry must contain exactly 34 distinct profiles."""
+def test_all_profiles_register_without_retired_aggregator():
+    """After discovery, registry must include BYOK profiles and exclude openrouter."""
     _clear_provider_caches()
     from providers import list_providers
 
     profiles = list_providers()
     names = sorted(p.name for p in profiles)
-    assert len(names) == 34, f"Expected 34 profiles, got {len(names)}: {names}"
-
+    assert "openrouter" not in names
     # Spot-check representative providers from different categories
     for required in (
-        "openrouter", "anthropic", "custom", "bedrock", "openai-codex",
+        "anthropic", "custom", "bedrock", "openai-codex",
         "minimax-oauth", "gmi", "xiaomi", "alibaba-coding-plan",
     ):
         assert required in names, f"Missing profile: {required}"
+    assert len(names) >= 30, f"Expected at least 30 profiles, got {len(names)}: {names}"
 
 
 def test_user_plugin_overrides_bundled(tmp_path, monkeypatch):

@@ -19,9 +19,9 @@ Capture on device or Simulator (iPhone 15/16 Pro Max). Do **not** upload HTML mo
 | `iphone-67-02-chat.png` | Crypto Chat — conversation with Sovereign (no secrets) |
 | `iphone-67-03-memory-horizon.png` | You → Memory Horizon — three cards with fill bars |
 | `iphone-67-04-mission-or-soul.png` | You → Mission or Soul |
-| `iphone-67-05-privacy.png` | Link / Privacy & Trust |
+| `iphone-67-05-privacy.png` | Connect — **Scan QR** primary (paste secondary); Privacy & Trust OK as alternate |
 
-Optional iPad if `TARGETED_DEVICE_FAMILY` stays `1,2`.
+Optional: Brain-side QR pairing screen for support docs (not ASC phone slot).
 
 ### Capture helper (Simulator)
 
@@ -32,7 +32,7 @@ xcrun simctl io booted screenshot ios/CenturionApp/AppStore/iphone-67-0N-NAME.pn
 
 ## Status
 
-- [ ] Build selected on **iOS 5.0.2** (sphere on build row)
-- [ ] Screenshots captured for 6.7" (operator — five PNGs above)
+- [ ] Build selected on **iOS 5.1.0** (build 28+)
+- [ ] Screenshots captured for 6.7" (operator — five PNGs above, include QR Connect)
 - [ ] Screenshots uploaded to App Store Connect
 - [ ] Listing preview reviewed

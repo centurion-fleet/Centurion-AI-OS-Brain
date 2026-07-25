@@ -143,11 +143,26 @@ final class MessageService: ObservableObject {
             conversationID: conversation.id
         )
 
-        let rawResponse = try await connectionManager.sendMessage(outbound)
+        let rawResult = try await connectionManager.sendMessage(
+            outbound,
+            sessionId: conversation.hostSessionId
+        )
+        let rawResponse = rawResult.text
+        if let hostSessionId = rawResult.sessionId, !hostSessionId.isEmpty {
+            if let idx = conversations.firstIndex(where: { $0.id == conversation.id }) {
+                conversations[idx].hostSessionId = hostSessionId
+                persistIfLive()
+            }
+        }
 
         var displayResponse = MissionCommitmentChat.displayText(strippingUpdateBlockFrom: rawResponse)
         displayResponse = PlanDiscussChat.displayText(strippingUpdateBlockFrom: displayResponse)
         displayResponse = ProposeFirstChat.displayText(strippingArtifactFrom: displayResponse)
+
+        if displayResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && rawResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw MessageError.emptyResponse
+        }
 
         if let missionStore,
            let payload = MissionCommitmentChat.parseUpdate(from: rawResponse) {

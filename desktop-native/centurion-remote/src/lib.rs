@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod discovery;
 pub mod listing;
 pub mod pairing;
+pub mod qr;
 pub mod registry;
 pub mod server;
 pub mod session_registry;

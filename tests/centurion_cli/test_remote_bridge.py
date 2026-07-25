@@ -109,3 +109,67 @@ def test_remote_bridge_save_key_does_not_echo_secret(monkeypatch):
     blob = json.dumps(result)
     assert secret not in blob
     assert "key" not in result.get("result", {})
+
+
+def test_remote_bridge_gateway_status_action(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "centurion_cli.gateway.get_gateway_runtime_snapshot",
+        lambda: SimpleNamespace(
+            running=True,
+            service_running=True,
+            service_installed=True,
+            manager="systemd (user)",
+            gateway_pids=(1234,),
+        ),
+    )
+    monkeypatch.setattr(
+        "gateway.status.read_runtime_status",
+        lambda: {"gateway_state": "running", "platforms": {"telegram": {"connected": True}}},
+    )
+    monkeypatch.setattr(
+        "gateway.config.load_gateway_config",
+        lambda: SimpleNamespace(
+            platforms={
+                SimpleNamespace(value="telegram"): SimpleNamespace(enabled=True),
+            }
+        ),
+    )
+
+    result = handle_request({"id": "gw-1", "action": "gateway_status"})
+    assert result["ok"] is True
+    assert result["status"]["running"] is True
+    assert result["status"]["platforms"]
+
+
+def test_remote_bridge_session_new_and_list(tmp_path, monkeypatch):
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    created = handle_request({"id": "s-1", "action": "session_new", "title": "Phone"})
+    assert created["ok"] is True
+    assert created["session_id"].startswith("remote_")
+
+    listed = handle_request({"id": "s-2", "action": "session_list", "source": "remote"})
+    assert listed["ok"] is True
+    assert any(row["id"] == created["session_id"] for row in listed["sessions"])
+
+
+def test_remote_bridge_approval_respond_action(monkeypatch):
+    calls = []
+
+    def fake_resolve(session_key, choice, resolve_all=False):
+        calls.append((session_key, choice, resolve_all))
+        return 1
+
+    monkeypatch.setattr("tools.approval.resolve_gateway_approval", fake_resolve)
+    result = handle_request(
+        {
+            "id": "a-1",
+            "action": "approval_respond",
+            "session_key": "remote:req",
+            "choice": "once",
+        }
+    )
+    assert result["ok"] is True
+    assert result["resolved"] == 1
+    assert calls == [("remote:req", "once", False)]

@@ -5,12 +5,15 @@ use centurion_remote::crypto::ServerIdentity;
 use centurion_remote::discovery::Advertisement;
 use centurion_remote::listing::build_device_listing;
 use centurion_remote::pairing::{PairingTokenStore, format_connection_string};
+use centurion_remote::qr::{encode_ascii, encode_png};
 use centurion_remote::registry::DeviceRegistry;
 use centurion_remote::server::{self, ServerState};
 use centurion_remote::session_registry::SessionRegistry;
 use clap::{Parser, Subcommand};
 use std::error::Error;
+use std::io::{self, IsTerminal, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
@@ -70,6 +73,18 @@ enum Command {
         port: u16,
         #[arg(long)]
         json: bool,
+        /// Force ASCII QR output (default when stdout is a TTY and not --json).
+        #[arg(long, overrides_with = "no_qr")]
+        qr: bool,
+        /// Suppress ASCII QR output.
+        #[arg(long, overrides_with = "qr")]
+        no_qr: bool,
+        /// Write a PNG QR of the connection string to PATH.
+        #[arg(long, value_name = "PATH")]
+        qr_png: Option<PathBuf>,
+        /// Include `qr_png_base64` in JSON output (implies PNG encode).
+        #[arg(long)]
+        include_qr: bool,
     },
     /// List remote pairing tokens (hashes only; secrets are never stored).
     RemoteTokens {
@@ -177,35 +192,70 @@ async fn main() -> Result<(), Box<dyn Error>> {
             host,
             port,
             json,
+            qr,
+            no_qr,
+            qr_png,
+            include_qr,
         } => {
             let advertise_host = host.unwrap_or_else(default_advertise_host);
             let mut store = PairingTokenStore::load(PairingTokenStore::default_path()?)?;
             let (record, secret) = store.create_token(label)?;
             let connection = format_connection_string(&secret, &advertise_host, port);
+
+            let show_ascii = !json && !no_qr && (qr || io::stdout().is_terminal());
+            let png_bytes = if qr_png.is_some() || (json && include_qr) {
+                Some(encode_png(&connection, 512)?)
+            } else {
+                None
+            };
+
+            if let Some(path) = qr_png.as_ref() {
+                let bytes = png_bytes.as_ref().expect("png requested");
+                std::fs::write(path, bytes)?;
+            }
+
             if json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "id": record.id,
-                        "label": record.label,
-                        "created_at": record.created_at,
-                        "host": advertise_host,
-                        "port": port,
-                        "connection_string": connection,
-                        "token": secret,
-                    })
-                );
+                let mut payload = serde_json::json!({
+                    "id": record.id,
+                    "label": record.label,
+                    "created_at": record.created_at,
+                    "host": advertise_host,
+                    "port": port,
+                    "connection_string": connection,
+                    "token": secret,
+                });
+                if let Some(bytes) = png_bytes {
+                    payload["qr_png_base64"] = serde_json::Value::String(base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        bytes,
+                    ));
+                }
+                println!("{payload}");
             } else {
                 println!("Remote pairing token created (id {}).", record.id);
                 println!();
+                if show_ascii {
+                    match encode_ascii(&connection) {
+                        Ok(art) => {
+                            println!("{art}");
+                            println!();
+                        }
+                        Err(error) => {
+                            eprintln!("warning: could not render QR: {error}");
+                        }
+                    }
+                }
                 println!("{connection}");
                 println!();
                 println!(
-                    "Paste this into CenturionAI Remote on your iPhone.\n\
+                    "Scan this QR in Sovereign AI Remote (or paste the line above).\n\
                      Expose TCP {port} on this host (Cloudflare Tunnel, reverse proxy, or firewall) \
                      so the phone can reach you away from home.\n\
                      The secret is shown once; only a hash is stored on disk."
                 );
+                if let Some(path) = qr_png.as_ref() {
+                    println!("QR PNG written to {}.", path.display());
+                }
                 if is_private_or_local_host(&advertise_host) {
                     println!();
                     println!(
@@ -214,6 +264,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
             }
+            let _ = io::stdout().flush();
         }
         Command::RemoteTokens { json } => {
             let store = PairingTokenStore::load(PairingTokenStore::default_path()?)?;
@@ -278,10 +329,20 @@ async fn serve(
             tracing::warn!("admin socket stopped: {error}");
         }
     });
+    let python = if let Ok(override_python) = std::env::var("CENTURION_REMOTE_PYTHON") {
+        let trimmed = override_python.trim().to_owned();
+        if trimmed.is_empty() {
+            python.to_owned()
+        } else {
+            trimmed
+        }
+    } else {
+        python.to_owned()
+    };
     let bridge: Arc<dyn AgentBridge> = if echo {
         Arc::new(EchoBridge)
     } else {
-        Arc::new(PythonBridge::new(python))
+        Arc::new(PythonBridge::new(&python))
     };
 
     info!(

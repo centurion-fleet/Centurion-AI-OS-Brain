@@ -16,6 +16,8 @@ pub enum RemoteMessage {
     Chat {
         id: Uuid,
         text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
     },
     ChatResponse {
         id: Uuid,
@@ -26,6 +28,8 @@ pub enum RemoteMessage {
         recovery_message: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         routed_display_name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
     },
     ProviderStatus {
         id: Uuid,
@@ -483,6 +487,118 @@ pub enum RemoteMessage {
     },
     Ping,
     Pong,
+    GatewayStatus {
+        id: Uuid,
+    },
+    GatewayStatusResponse {
+        id: Uuid,
+        ok: bool,
+        status: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    GatewayStart {
+        id: Uuid,
+    },
+    GatewayStop {
+        id: Uuid,
+    },
+    GatewayRestart {
+        id: Uuid,
+    },
+    GatewayLifecycleResponse {
+        id: Uuid,
+        ok: bool,
+        status: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    GatewayPlatformSet {
+        id: Uuid,
+        platform: String,
+        enabled: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restart: Option<bool>,
+    },
+    GatewayPlatformSetResponse {
+        id: Uuid,
+        ok: bool,
+        status: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restarted: Option<bool>,
+    },
+    SessionList {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+    },
+    SessionListResponse {
+        id: Uuid,
+        ok: bool,
+        sessions: serde_json::Value,
+    },
+    SessionNew {
+        id: Uuid,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+    SessionNewResponse {
+        id: Uuid,
+        ok: bool,
+        session_id: String,
+    },
+    SessionResume {
+        id: Uuid,
+        session_id: String,
+    },
+    SessionResumeResponse {
+        id: Uuid,
+        ok: bool,
+        session_id: String,
+        messages: serde_json::Value,
+    },
+    SessionHistory {
+        id: Uuid,
+        session_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+    },
+    SessionHistoryResponse {
+        id: Uuid,
+        ok: bool,
+        session_id: String,
+        messages: serde_json::Value,
+    },
+    /// Brain → phone: dangerous tool needs owner approval mid-turn.
+    ApprovalRequest {
+        id: Uuid,
+        approval_id: String,
+        session_key: String,
+        command: String,
+        description: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pattern_key: Option<String>,
+        choices: Vec<String>,
+    },
+    /// Phone → Brain: resolve a pending approval.
+    ApprovalRespond {
+        id: Uuid,
+        approval_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_key: Option<String>,
+        choice: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        all: Option<bool>,
+    },
+    ApprovalRespondResponse {
+        id: Uuid,
+        ok: bool,
+        resolved: u32,
+    },
     Error {
         id: Option<Uuid>,
         code: String,
@@ -629,6 +745,7 @@ mod tests {
         let message = RemoteMessage::Chat {
             id: Uuid::new_v4(),
             text: "Hello".to_owned(),
+            session_id: Some("remote_abc".to_owned()),
         };
         let encoded = message.to_json().expect("serialize");
         assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), message);

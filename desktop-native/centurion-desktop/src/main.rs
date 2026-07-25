@@ -208,12 +208,10 @@ mod linux {
 
     #[derive(Debug, Default, Clone)]
     struct LinkAddresses {
-        magic_dns: Option<String>,
-        tailscale_ip: Option<String>,
         lan_ips: Vec<String>,
     }
 
-    fn is_tailscale_ip(ip: &str) -> bool {
+    fn is_tailscale_cgnat(ip: &str) -> bool {
         let parts: Vec<u8> = ip
             .split('.')
             .filter_map(|part| part.parse().ok())
@@ -221,61 +219,15 @@ mod linux {
         parts.len() == 4 && parts[0] == 100 && (64..=127).contains(&parts[1])
     }
 
+    /// LAN-only discovery. Away access uses remote pairing codes — not Tailscale MagicDNS.
     fn discover_link_addresses() -> LinkAddresses {
         let mut addresses = LinkAddresses::default();
-
-        if let Ok(output) = Command::new("tailscale").args(["ip", "-4"]).output() {
-            if output.status.success() {
-                let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                if !ip.is_empty() {
-                    addresses.tailscale_ip = Some(ip);
-                }
-            }
-        }
-
-        if let Ok(output) = Command::new("tailscale")
-            .args(["status", "--json"])
-            .output()
-        {
-            if output.status.success() {
-                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                    if addresses.magic_dns.is_none() {
-                        if let Some(dns) = value
-                            .get("Self")
-                            .and_then(|self_node| self_node.get("DNSName"))
-                            .and_then(|v| v.as_str())
-                        {
-                            let trimmed = dns.trim_end_matches('.').to_owned();
-                            if !trimmed.is_empty() {
-                                addresses.magic_dns = Some(trimmed);
-                            }
-                        }
-                    }
-                    if addresses.tailscale_ip.is_none() {
-                        if let Some(ip) = value
-                            .get("Self")
-                            .and_then(|self_node| self_node.get("TailscaleIPs"))
-                            .and_then(|ips| ips.as_array())
-                            .and_then(|ips| ips.first())
-                            .and_then(|v| v.as_str())
-                        {
-                            addresses.tailscale_ip = Some(ip.to_owned());
-                        }
-                    }
-                }
-            }
-        }
 
         if let Ok(output) = Command::new("hostname").args(["-I"]).output() {
             if output.status.success() {
                 for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
-                    if token.contains(':') || token.starts_with("127.") {
-                        continue;
-                    }
-                    if is_tailscale_ip(token) {
-                        if addresses.tailscale_ip.is_none() {
-                            addresses.tailscale_ip = Some(token.to_owned());
-                        }
+                    if token.contains(':') || token.starts_with("127.") || is_tailscale_cgnat(token)
+                    {
                         continue;
                     }
                     if !addresses.lan_ips.iter().any(|existing| existing == token) {
@@ -331,19 +283,24 @@ mod linux {
             .unwrap_or_else(|| "centurion-remote".to_owned())
     }
 
-    fn mint_remote_pairing_string() -> Result<String, String> {
+    #[derive(Debug, Clone)]
+    struct MintedPairing {
+        id: String,
+        connection_string: String,
+        qr_png: Vec<u8>,
+    }
+
+    fn mint_remote_pairing() -> Result<MintedPairing, String> {
         let addresses = discover_link_addresses();
         let host = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST")
             .ok()
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
             .or_else(|| addresses.lan_ips.first().cloned())
-            .or_else(|| addresses.magic_dns.clone())
-            .or_else(|| addresses.tailscale_ip.clone())
             .unwrap_or_else(|| "127.0.0.1".to_owned());
 
         let output = Command::new(centurion_remote_bin())
-            .args(["remote-pair", "--host", &host, "--json"])
+            .args(["remote-pair", "--host", &host, "--json", "--include-qr"])
             .output()
             .map_err(|error| format!("Could not run centurion-remote: {error}"))?;
         if !output.status.success() {
@@ -355,14 +312,238 @@ mod linux {
         }
         let value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("Invalid remote-pair JSON: {error}"))?;
-        value
+        let connection = value
             .get("connection_string")
             .and_then(|v| v.as_str())
             .map(str::to_owned)
-            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())
+            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())?;
+        let id = value
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let qr_b64 = value
+            .get("qr_png_base64")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "remote-pair response missing qr_png_base64".to_owned())?;
+        let qr_png = glib::base64_decode(qr_b64);
+        if qr_png.is_empty() {
+            return Err("Could not decode QR PNG from remote-pair".to_owned());
+        }
+        Ok(MintedPairing {
+            id,
+            connection_string: connection,
+            qr_png,
+        })
     }
 
-    fn refresh_link_addresses(container: &gtk::Box) {
+    fn revoke_remote_pairing_token(id: &str) {
+        if id.is_empty() {
+            return;
+        }
+        let _ = Command::new(centurion_remote_bin())
+            .args(["remote-revoke", id])
+            .output();
+    }
+
+    fn qr_image_from_png(png: &[u8], pixel_size: i32) -> gtk::Image {
+        let bytes = glib::Bytes::from(png.to_vec());
+        match gtk::gdk::Texture::from_bytes(&bytes) {
+            Ok(texture) => {
+                let image = gtk::Image::from_paintable(Some(&texture));
+                image.set_pixel_size(pixel_size);
+                image
+            }
+            Err(_) => gtk::Image::from_icon_name("image-missing"),
+        }
+    }
+
+    /// Full-screen QR pairing page: scan-first UX with auto-rotated tokens.
+    fn show_pairing_qr_window(parent: &adw::ApplicationWindow) {
+        let window = adw::Window::builder()
+            .title("Link iPhone")
+            .transient_for(parent)
+            .modal(true)
+            .default_width(720)
+            .default_height(960)
+            .build();
+
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        content.set_margin_top(40);
+        content.set_margin_bottom(40);
+        content.set_margin_start(40);
+        content.set_margin_end(40);
+        content.set_halign(gtk::Align::Center);
+        content.set_valign(gtk::Align::Center);
+
+        content.append(
+            &gtk::Label::builder()
+                .label("Link your iPhone")
+                .css_classes(["title-1"])
+                .build(),
+        );
+        content.append(
+            &gtk::Label::builder()
+                .label("Open Sovereign AI Remote → Scan this code")
+                .css_classes(["title-3"])
+                .wrap(true)
+                .justify(gtk::Justification::Center)
+                .build(),
+        );
+
+        let qr_holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        qr_holder.set_halign(gtk::Align::Center);
+        content.append(&qr_holder);
+
+        let status = gtk::Label::builder()
+            .label("Preparing pairing code…")
+            .css_classes(["dim-label"])
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .build();
+        content.append(&status);
+
+        let text_reveal = gtk::Label::builder()
+            .label("")
+            .selectable(true)
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .visible(false)
+            .build();
+        content.append(&text_reveal);
+
+        let actions = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        actions.set_halign(gtk::Align::Center);
+        let copy = gtk::Button::with_label("Copy code");
+        copy.add_css_class("flat");
+        let show_text = gtk::Button::with_label("Show text");
+        show_text.add_css_class("flat");
+        let refresh = gtk::Button::with_label("Refresh code");
+        refresh.add_css_class("suggested-action");
+        let done = gtk::Button::with_label("Done");
+        actions.append(&copy);
+        actions.append(&show_text);
+        actions.append(&refresh);
+        actions.append(&done);
+        content.append(&actions);
+
+        content.append(
+            &gtk::Label::builder()
+                .label(
+                    "The code refreshes every few minutes. Paste remains available if the camera cannot be used.",
+                )
+                .css_classes(["dim-label"])
+                .wrap(true)
+                .justify(gtk::Justification::Center)
+                .build(),
+        );
+
+        let header = adw::HeaderBar::new();
+        let toolbar = adw::ToolbarView::new();
+        toolbar.add_top_bar(&header);
+        toolbar.set_content(Some(&content));
+        window.set_content(Some(&toolbar));
+
+        let token_id = Rc::new(RefCell::new(String::new()));
+        let connection = Rc::new(RefCell::new(String::new()));
+
+        let apply_mint: Rc<dyn Fn()> = Rc::new({
+            let qr_holder = qr_holder.clone();
+            let status = status.clone();
+            let text_reveal = text_reveal.clone();
+            let token_id = token_id.clone();
+            let connection = connection.clone();
+            move || match mint_remote_pairing() {
+                Ok(minted) => {
+                    let previous = token_id.borrow().clone();
+                    if !previous.is_empty() && previous != minted.id {
+                        revoke_remote_pairing_token(&previous);
+                    }
+                    *token_id.borrow_mut() = minted.id;
+                    *connection.borrow_mut() = minted.connection_string.clone();
+                    while let Some(child) = qr_holder.first_child() {
+                        qr_holder.remove(&child);
+                    }
+                    qr_holder.append(&qr_image_from_png(&minted.qr_png, 360));
+                    status.set_label("Point your iPhone camera at this QR code");
+                    if text_reveal.is_visible() {
+                        text_reveal.set_label(&minted.connection_string);
+                    }
+                }
+                Err(error) => {
+                    let plain = if error.contains("not found") {
+                        "Could not create a pairing code. Is Centurion installed on this brain?"
+                            .to_owned()
+                    } else {
+                        "Could not create a pairing code. Try again in a moment.".to_owned()
+                    };
+                    status.set_label(&plain);
+                }
+            }
+        });
+
+        apply_mint();
+
+        copy.connect_clicked({
+            let connection = connection.clone();
+            move |_| {
+                let text = connection.borrow().clone();
+                if text.starts_with("token:") {
+                    copy_to_clipboard(&text);
+                }
+            }
+        });
+        show_text.connect_clicked({
+            let text_reveal = text_reveal.clone();
+            let connection = connection.clone();
+            move |button| {
+                if text_reveal.is_visible() {
+                    text_reveal.set_visible(false);
+                    button.set_label("Show text");
+                } else {
+                    text_reveal.set_label(&connection.borrow());
+                    text_reveal.set_visible(true);
+                    button.set_label("Hide text");
+                }
+            }
+        });
+        refresh.connect_clicked({
+            let apply_mint = apply_mint.clone();
+            move |_| apply_mint()
+        });
+        done.connect_clicked({
+            let window = window.clone();
+            move |_| window.close()
+        });
+
+        // Rotate every 3 minutes so unused display tokens expire from the QR.
+        glib::timeout_add_seconds_local(180, {
+            let window = window.clone();
+            let apply_mint = apply_mint.clone();
+            move || {
+                if !window.is_visible() {
+                    return glib::ControlFlow::Break;
+                }
+                apply_mint();
+                glib::ControlFlow::Continue
+            }
+        });
+
+        window.connect_close_request({
+            let token_id = token_id.clone();
+            move |_| {
+                // Keep the latest token so a phone that just scanned can still bind;
+                // only rotated-away tokens were revoked above.
+                let _ = token_id;
+                glib::Propagation::Proceed
+            }
+        });
+
+        window.fullscreen();
+        window.present();
+    }
+
+    fn refresh_link_addresses(container: &gtk::Box, parent: Option<&adw::ApplicationWindow>) {
         while let Some(child) = container.first_child() {
             container.remove(&child);
         }
@@ -378,7 +559,7 @@ mod linux {
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "1. Generate a pairing code  ·  2. Paste it in Sovereign AI Remote  ·  3. Approve the iPhone under Devices.",
+                    "Show a QR code on this screen, then scan it in Sovereign AI Remote. Approve the iPhone under Devices if prompted.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -386,52 +567,16 @@ mod linux {
                 .build(),
         );
 
-        let pairing_row = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        pairing_row.set_margin_top(4);
-        let pairing_value = gtk::Label::builder()
-            .label("No pairing code yet — tap Generate.")
-            .selectable(true)
-            .wrap(true)
-            .xalign(0.0)
-            .build();
-        let pairing_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let generate = gtk::Button::with_label("Generate pairing code");
-        generate.add_css_class("suggested-action");
-        let copy = gtk::Button::with_label("Copy");
-        copy.add_css_class("flat");
-        copy.set_sensitive(false);
-        pairing_actions.append(&generate);
-        pairing_actions.append(&copy);
-        pairing_row.append(&pairing_value);
-        pairing_row.append(&pairing_actions);
-        container.append(&pairing_row);
-
-        let pairing_value_gen = pairing_value.clone();
-        let copy_gen = copy.clone();
-        generate.connect_clicked(move |_| match mint_remote_pairing_string() {
-            Ok(connection) => {
-                pairing_value_gen.set_label(&connection);
-                copy_gen.set_sensitive(true);
-                copy_to_clipboard(&connection);
-                pairing_value_gen.set_tooltip_text(Some("Copied to clipboard"));
-            }
-            Err(error) => {
-                let plain = if error.contains("not found") {
-                    "Could not create a pairing code. Is Centurion installed on this brain?".to_owned()
-                } else {
-                    "Could not create a pairing code. Try again in a moment.".to_owned()
-                };
-                pairing_value_gen.set_label(&plain);
-                copy_gen.set_sensitive(false);
-            }
-        });
-        let pairing_value_copy = pairing_value.clone();
-        copy.connect_clicked(move |_| {
-            let text = pairing_value_copy.label();
-            if text.starts_with("token:") {
-                copy_to_clipboard(&text);
-            }
-        });
+        let link = gtk::Button::with_label("Link iPhone — show QR");
+        link.add_css_class("suggested-action");
+        link.set_margin_top(4);
+        if let Some(parent) = parent {
+            let parent = parent.clone();
+            link.connect_clicked(move |_| show_pairing_qr_window(&parent));
+        } else {
+            link.set_sensitive(false);
+        }
+        container.append(&link);
 
         let addresses = discover_link_addresses();
         if let Some(lan) = addresses.lan_ips.first() {
@@ -450,28 +595,10 @@ mod linux {
             ));
         }
 
-        let has_mesh = addresses.magic_dns.is_some() || addresses.tailscale_ip.is_some();
-        if has_mesh {
-            container.append(
-                &gtk::Label::builder()
-                    .label("Advanced — optional mesh")
-                    .css_classes(["title-4"])
-                    .xalign(0.0)
-                    .margin_top(12)
-                    .build(),
-            );
-            if let Some(dns) = addresses.magic_dns.as_deref() {
-                container.append(&build_link_address_row("Tailscale MagicDNS", dns, false));
-            }
-            if let Some(ip) = addresses.tailscale_ip.as_deref() {
-                container.append(&build_link_address_row("Tailscale IP", ip, false));
-            }
-        }
-
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Away from home: make this brain reachable (secure tunnel or firewall rule). Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion.",
+                    "Away from home: set CENTURION_REMOTE_ADVERTISE_HOST to your tunnel hostname and expose TCP 9119. Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -517,7 +644,7 @@ mod linux {
 
         let link_addresses = gtk::Box::new(gtk::Orientation::Vertical, 8);
         link_addresses.set_margin_top(8);
-        refresh_link_addresses(&link_addresses);
+        refresh_link_addresses(&link_addresses, None);
         status_card.append(&link_addresses);
 
         status_card.append(&thinking_title);
@@ -818,19 +945,20 @@ mod linux {
             let status_title = status_title.clone();
             let status_detail = status_detail.clone();
             let link_addresses = link_addresses.clone();
+            let window = window.clone();
             let supervisor = supervisor.clone();
             move || match supervisor.borrow_mut().ensure_running() {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "Generate a remote pairing code below and paste it into Sovereign AI Remote.",
+                        "Tap Link iPhone to show a QR code, then scan it in Sovereign AI Remote.",
                     );
-                    refresh_link_addresses(&link_addresses);
+                    refresh_link_addresses(&link_addresses, Some(&window));
                 }
                 Err(error) => {
                     status_title.set_label("Your Centurion needs attention");
                     status_detail.set_label(&error);
-                    refresh_link_addresses(&link_addresses);
+                    refresh_link_addresses(&link_addresses, Some(&window));
                 }
             }
         };
@@ -959,20 +1087,21 @@ mod linux {
         });
         restart.connect_clicked({
             let link_addresses = link_addresses.clone();
+            let window = window.clone();
             move |_| {
                 let result = supervisor.borrow_mut().restart();
                 match result {
                     Ok(()) => {
                         status_title.set_label("Your Centurion is ready");
                         status_detail.set_label(
-                            "The private iPhone connection has restarted. Generate or reuse a remote pairing code below.",
+                            "The private iPhone connection has restarted. Tap Link iPhone to show a fresh QR code.",
                         );
-                        refresh_link_addresses(&link_addresses);
+                        refresh_link_addresses(&link_addresses, Some(&window));
                     }
                     Err(error) => {
                         status_title.set_label("Restart did not complete");
                         status_detail.set_label(&error);
-                        refresh_link_addresses(&link_addresses);
+                        refresh_link_addresses(&link_addresses, Some(&window));
                     }
                 }
             }

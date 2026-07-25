@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.0.2**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.1.0**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -64,8 +64,13 @@ Capture checklist:
 - [ ] `iphone-67-02-chat.png` — Crypto Chat
 - [ ] `iphone-67-03-memory-horizon.png` — Memory Horizon
 - [ ] `iphone-67-04-mission-or-soul.png` — Mission or Soul
-- [ ] `iphone-67-05-privacy.png` — Link / Privacy
+- [ ] `iphone-67-05-privacy.png` — Link / Connect (prefer **Scan QR** surface)
 - [ ] Uploaded to ASC Media Manager (6.7")
+
+## Camera / QR pairing disclosure
+
+- [`NSCameraUsageDescription`](project.yml) — camera used **only** to scan the pairing QR on the Centurion screen.
+- Review notes should mention: away-reachable Brain on TCP 9119 + QR link (paste fallback available).
 
 ## Features intentionally not shipped as unfinished
 

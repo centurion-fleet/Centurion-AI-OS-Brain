@@ -132,9 +132,16 @@ struct ChatView: View {
                 }
             }
 
+            if let approval = connectionManager.pendingToolApproval {
+                toolApprovalCard(approval)
+            }
             inputBar
         }
         .background(ColorTheme.background())
+        .task(id: connectionManager.connectionState) {
+            guard connectionManager.connectionState == .connected else { return }
+            await connectionManager.refreshThinkingStatus()
+        }
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(initialMessage: sendError ?? "Your Sovereign's thinking service needs attention.")
                 .environmentObject(connectionManager)
@@ -200,7 +207,8 @@ struct ChatView: View {
 
                     StatusDot(
                         isConnected: true,
-                        isEncrypted: connectionManager.isChannelEncrypted
+                        isEncrypted: connectionManager.isChannelEncrypted,
+                        needsAttention: connectionManager.llmHealth.needsAttention
                     )
                 }
             }
@@ -408,7 +416,7 @@ struct ChatView: View {
                         Text("Not linked")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(ColorTheme.primaryText())
-                        Text("Open You to paste a pairing code and start Crypto Chat.")
+                        Text("Open You to scan the pairing QR and start Crypto Chat.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
                             .lineSpacing(3)
@@ -425,7 +433,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.xs)
-        .accessibilityLabel("Not linked. Open You to paste a pairing code.")
+        .accessibilityLabel("Not linked. Open You to scan the pairing QR.")
     }
 
     private func llmErrorBanner(_ message: String) -> some View {
@@ -563,6 +571,41 @@ struct ChatView: View {
 
     // MARK: - Input Bar
 
+    private func toolApprovalCard(_ approval: PendingToolApproval) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Your Sovereign needs approval")
+                .font(.subheadline.weight(.semibold))
+            Text(approval.description)
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+            if !approval.command.isEmpty {
+                Text(approval.command)
+                    .font(.caption.monospaced())
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ColorTheme.surfaceElevated())
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            HStack(spacing: Spacing.sm) {
+                ForEach(["once", "session", "always", "deny"], id: \.self) { choice in
+                    if approval.choices.contains(choice) {
+                        Button(choice == "deny" ? "Deny" : choice.capitalized) {
+                            Task {
+                                try? await connectionManager.respondToToolApproval(choice: choice)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(choice == "deny" ? ColorTheme.error() : ColorTheme.accent())
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(ColorTheme.surface())
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal)
+    }
+
     private var inputBar: some View {
         VStack(spacing: Spacing.xs) {
             chatIntentPicker
@@ -599,6 +642,7 @@ struct ChatView: View {
                             .tint(ColorTheme.accent())
                             .scaleEffect(0.8)
                             .frame(width: 40, height: 40)
+                            .accessibilityLabel("Waiting for your Sovereign")
                     } else {
                         Button(action: sendMessage) {
                             Image(systemName: "arrow.up.circle.fill")
@@ -616,6 +660,24 @@ struct ChatView: View {
             }
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
+
+            if isSending {
+                Text("Waiting on your Centurion — this can take up to a few minutes.")
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .padding(.horizontal, Spacing.md)
+            } else if connectionManager.connectionState == .connected,
+                      connectionManager.llmHealth.needsAttention {
+                Button {
+                    showRecoverySheet = true
+                } label: {
+                    Text("Thinking needs attention — tap to check")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(ColorTheme.warning())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, Spacing.md)
+            }
         }
         .padding(.bottom, Spacing.lg)
     }

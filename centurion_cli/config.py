@@ -2007,15 +2007,6 @@ OPTIONAL_ENV_VARS = {
         "category": "provider",
         "advanced": True,
     },
-    "OPENROUTER_API_KEY": {
-        "description": "OpenRouter API key (for vision, web scraping helpers, and MoA)",
-        "prompt": "OpenRouter API key",
-        "url": "https://openrouter.ai/keys",
-        "password": True,
-        "tools": ["vision_analyze", "mixture_of_agents"],
-        "category": "provider",
-        "advanced": True,
-    },
     "GOOGLE_API_KEY": {
         "description": "Google AI Studio API key (also recognized as GEMINI_API_KEY)",
         "prompt": "Google AI Studio API key",
@@ -3605,7 +3596,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
                         issues.append(ConfigIssue(
                             "warning",
                             f"fallback_model[{i}] is missing 'provider' field",
-                            "Add: provider: openrouter (or another provider)",
+                            "Add: provider: anthropic (or openai-api, deepseek, …)",
                         ))
                     if not entry.get("model"):
                         issues.append(ConfigIssue(
@@ -3619,15 +3610,15 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
                 f"fallback_model should be a dict with 'provider' and 'model', got {type(fb).__name__}",
                 "Change to:\n"
                 "  fallback_model:\n"
-                "    provider: openrouter\n"
-                "    model: anthropic/claude-sonnet-4",
+                "    provider: anthropic\n"
+                "    model: claude-sonnet-4",
             ))
         elif fb:
             if not fb.get("provider"):
                 issues.append(ConfigIssue(
                     "warning",
                     "fallback_model is missing 'provider' field — fallback will be disabled",
-                    "Add: provider: openrouter (or another provider)",
+                    "Add: provider: anthropic (or openai-api, deepseek, …)",
                 ))
             if not fb.get("model"):
                 issues.append(ConfigIssue(
@@ -5236,7 +5227,6 @@ def show_config():
     print(color("◆ API Keys", Colors.CYAN, Colors.BOLD))
     
     keys = [
-        ("OPENROUTER_API_KEY", "OpenRouter"),
         ("VOICE_TOOLS_OPENAI_KEY", "OpenAI (STT/TTS)"),
         ("EXA_API_KEY", "Exa"),
         ("PARALLEL_API_KEY", "Parallel"),
@@ -5432,7 +5422,7 @@ def set_config_value(key: str, value: str):
         return
     # Check if it's an API key (goes to .env)
     api_keys = [
-        'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VOICE_TOOLS_OPENAI_KEY',
+        'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VOICE_TOOLS_OPENAI_KEY',
         'EXA_API_KEY', 'PARALLEL_API_KEY', 'FIRECRAWL_API_KEY', 'FIRECRAWL_API_URL',
         'FIRECRAWL_GATEWAY_URL', 'TOOL_GATEWAY_DOMAIN', 'TOOL_GATEWAY_SCHEME',
         'TOOL_GATEWAY_USER_TOKEN', 'TAVILY_API_KEY',
@@ -5535,7 +5525,7 @@ def config_command(args):
             print("Examples:")
             print("  centurion config set model anthropic/claude-sonnet-4")
             print("  centurion config set terminal.backend docker")
-            print("  centurion config set OPENROUTER_API_KEY sk-or-...")
+            print("  centurion config set ANTHROPIC_API_KEY sk-ant-...")
             sys.exit(1)
         set_config_value(key, value)
     

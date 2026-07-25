@@ -44,12 +44,6 @@ class CenturionOverlay:
 
 
 CENTURION_OVERLAYS: Dict[str, CenturionOverlay] = {
-    "openrouter": CenturionOverlay(
-        transport="openai_chat",
-        is_aggregator=True,
-        extra_env_vars=("OPENAI_API_KEY",),
-        base_url_env_var="OPENROUTER_BASE_URL",
-    ),
     "nous": CenturionOverlay(
         transport="openai_chat",
         auth_type="oauth_device_code",
@@ -243,8 +237,8 @@ class ProviderDef:
 # Uses models.dev IDs where possible.
 
 ALIASES: Dict[str, str] = {
-    # openrouter
-    "openai": "openrouter",     # bare "openai" → route through aggregator
+    # Direct OpenAI API (not an aggregator)
+    "openai": "openai-api",
 
     # zai
     "glm": "zai",

@@ -12543,6 +12543,26 @@ Examples:
         action="store_true",
         help="Print machine-readable JSON including the one-time secret",
     )
+    remote_pair.add_argument(
+        "--qr",
+        action="store_true",
+        help="Force ASCII QR output (default on TTY when not --json)",
+    )
+    remote_pair.add_argument(
+        "--no-qr",
+        action="store_true",
+        help="Suppress ASCII QR output",
+    )
+    remote_pair.add_argument(
+        "--qr-png",
+        metavar="PATH",
+        help="Write a PNG QR of the connection string to PATH",
+    )
+    remote_pair.add_argument(
+        "--include-qr",
+        action="store_true",
+        help="Include qr_png_base64 in --json output",
+    )
 
     remote_tokens = remote_sub.add_parser(
         "tokens",

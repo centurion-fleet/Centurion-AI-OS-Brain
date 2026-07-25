@@ -31,6 +31,8 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var activeConnectionTarget: String?
     /// SHA256 fingerprint of this iPhone’s identity key (for host `approve`).
     @Published private(set) var clientFingerprint: String?
+    /// Dangerous-tool approval waiting for the owner during an in-flight Crypto Chat turn.
+    @Published var pendingToolApproval: PendingToolApproval?
 
     /// Live session is up and messages are secretboxed.
     var isChannelEncrypted: Bool {
@@ -497,15 +499,22 @@ final class ConnectionManager: ObservableObject {
         approvalRetryTask = nil
     }
 
-    func sendMessage(_ text: String) async throws -> String {
+    func sendMessage(_ text: String, sessionId: String? = nil) async throws -> (text: String, sessionId: String?) {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
             throw ConnectionError.notConnected
         }
 
         let requestID = UUID()
-        let request = RemoteEnvelope(type: "chat", id: requestID, text: text)
-        let plaintext = try JSONEncoder().encode(request)
+        var body: [String: Any] = [
+            "type": "chat",
+            "id": requestID.uuidString,
+            "text": text,
+        ]
+        if let sessionId, !sessionId.isEmpty {
+            body["session_id"] = sessionId
+        }
+        let plaintext = try JSONSerialization.data(withJSONObject: body)
 
         let responseData: Data
         do {
@@ -515,49 +524,147 @@ final class ConnectionManager: ObservableObject {
                     secureChannel: self.secureChannel,
                     sessionKey: sessionKey,
                     maximumFrameSize: self.maximumFrameSize,
-                    plaintext: plaintext
+                    plaintext: plaintext,
+                    onPush: { [weak self] push in
+                        await MainActor.run {
+                            self?.handlePushedRemoteMessage(push)
+                        }
+                    }
                 )
             }
         } catch is TimeoutError {
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
+            pendingToolApproval = nil
             throw ConnectionError.serverRejected(message)
         }
-        let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
+        pendingToolApproval = nil
+        guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let responseType = json["type"] as? String else {
+            throw ConnectionError.invalidResponse
+        }
 
-        if response.type == "chat_response",
-           response.id == requestID,
-           let responseText = response.text {
+        if responseType == "chat_response",
+           let responseText = json["text"] as? String {
+            let responseId = (json["id"] as? String).flatMap(UUID.init(uuidString:))
+            if let responseId, responseId != requestID {
+                throw ConnectionError.invalidResponse
+            }
             llmHealth = .healthy
             lastLLMError = nil
-            if let routed = response.routedDisplayName, !routed.isEmpty {
+            if let routed = json["routed_display_name"] as? String, !routed.isEmpty {
                 lastRoutedDisplayName = routed
             }
-            if response.recovered == true {
+            if json["recovered"] as? Bool == true {
                 await refreshThinkingStatus()
             }
-            return responseText
+            let hostSession = json["session_id"] as? String
+            return (responseText, hostSession)
         }
-        if response.type == "error" {
-            if response.code == "DEVICE_REVOKED" {
-                handleDeviceRevoked(
-                    response.message
-                        ?? "This iPhone is no longer approved on your Sovereign."
-                )
-                throw ConnectionError.serverRejected(
-                    response.message
-                        ?? "This iPhone is no longer approved on your Sovereign."
-                )
+        if responseType == "error" {
+            let code = json["code"] as? String
+            if code == "DEVICE_REVOKED" {
+                let message = (json["message"] as? String)
+                    ?? "This iPhone is no longer approved on your Sovereign."
+                handleDeviceRevoked(message)
+                throw ConnectionError.serverRejected(message)
             }
-            let message = response.message ?? "Your Sovereign could not complete that request."
-            let code = response.code
-            let retryable = response.retryable ?? true
+            let message = (json["message"] as? String)
+                ?? "Your Sovereign could not complete that request."
+            let retryable = json["retryable"] as? Bool ?? true
             lastLLMError = (message, code, retryable)
             llmHealth = .broken(message, code: code, retryable: retryable)
             throw ConnectionError.serverRejected(message)
         }
         throw ConnectionError.invalidResponse
+    }
+
+    @MainActor
+    private func handlePushedRemoteMessage(_ push: [String: Any]) {
+        guard let type = push["type"] as? String, type == "approval_request" else { return }
+        pendingToolApproval = PendingToolApproval(
+            approvalId: (push["approval_id"] as? String) ?? "",
+            sessionKey: (push["session_key"] as? String) ?? "",
+            command: (push["command"] as? String) ?? "",
+            description: (push["description"] as? String) ?? "This action needs your approval.",
+            patternKey: push["pattern_key"] as? String,
+            choices: (push["choices"] as? [String]) ?? ["once", "session", "always", "deny"]
+        )
+    }
+
+    func respondToToolApproval(choice: String, resolveAll: Bool = false) async throws {
+        guard let pending = pendingToolApproval else { return }
+        _ = try await invokeRemote(
+            action: "approval_respond",
+            extra: [
+                "approval_id": pending.approvalId,
+                "session_key": pending.sessionKey.isEmpty ? pending.approvalId : pending.sessionKey,
+                "choice": choice,
+                "all": resolveAll,
+            ],
+            timeoutSeconds: 30
+        )
+        if choice == "deny" {
+            pendingToolApproval = nil
+        }
+    }
+
+    func refreshGatewayStatus() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "gateway_status")
+        return (payload["status"] as? [String: Any]) ?? payload
+    }
+
+    func gatewayStart() async throws -> [String: Any] {
+        try await invokeRemote(action: "gateway_start", timeoutSeconds: 60)
+    }
+
+    func gatewayStop() async throws -> [String: Any] {
+        try await invokeRemote(action: "gateway_stop", timeoutSeconds: 60)
+    }
+
+    func gatewayRestart() async throws -> [String: Any] {
+        try await invokeRemote(action: "gateway_restart", timeoutSeconds: 90)
+    }
+
+    func gatewayPlatformSet(platform: String, enabled: Bool, restart: Bool = true) async throws -> [String: Any] {
+        try await invokeRemote(
+            action: "gateway_platform_set",
+            extra: [
+                "platform": platform,
+                "enabled": enabled,
+                "restart": restart,
+            ],
+            timeoutSeconds: 90
+        )
+    }
+
+    func listHostSessions(limit: Int = 20) async throws -> [[String: Any]] {
+        let payload = try await invokeRemote(
+            action: "session_list",
+            extra: ["limit": limit, "source": "remote"]
+        )
+        return (payload["sessions"] as? [[String: Any]]) ?? []
+    }
+
+    func createHostSession(title: String? = nil) async throws -> String {
+        var extra: [String: Any] = [:]
+        if let title, !title.isEmpty { extra["title"] = title }
+        let payload = try await invokeRemote(action: "session_new", extra: extra)
+        guard let sessionId = payload["session_id"] as? String, !sessionId.isEmpty else {
+            throw ConnectionError.invalidResponse
+        }
+        return sessionId
+    }
+
+    func resumeHostSession(_ sessionId: String) async throws -> (sessionId: String, messages: [[String: Any]]) {
+        let payload = try await invokeRemote(
+            action: "session_resume",
+            extra: ["session_id": sessionId]
+        )
+        let tip = (payload["session_id"] as? String) ?? sessionId
+        let messages = (payload["messages"] as? [[String: Any]]) ?? []
+        return (tip, messages)
     }
 
     func refreshThinkingStatus() async {
@@ -1220,9 +1327,22 @@ final class ConnectionManager: ObservableObject {
             "plan_templates_list_response": "plan_templates_list",
             "plan_template_instantiate_response": "plan_template_instantiate",
             "plan_save_template_response": "plan_save_template",
+            "gateway_status_response": "gateway_status",
+            "gateway_lifecycle_response": "gateway_start",
+            "gateway_platform_set_response": "gateway_platform_set",
+            "session_list_response": "session_list",
+            "session_new_response": "session_new",
+            "session_resume_response": "session_resume",
+            "session_history_response": "session_history",
+            "approval_respond_response": "approval_respond",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {
+            return json
+        }
+        // Lifecycle start/stop/restart share one response type.
+        if responseType == "gateway_lifecycle_response",
+           ["gateway_start", "gateway_stop", "gateway_restart"].contains(action) {
             return json
         }
 
@@ -1635,7 +1755,8 @@ private actor RemoteIOPipeline {
         secureChannel: SecureChannel,
         sessionKey: SessionKey,
         maximumFrameSize: Int,
-        plaintext: Data
+        plaintext: Data,
+        onPush: (([String: Any]) async -> Void)? = nil
     ) async throws -> Data {
         let encrypted = try secureChannel.encrypt(plaintext, using: sessionKey)
         try await RemoteFrameIO.sendFrame(
@@ -1643,11 +1764,22 @@ private actor RemoteIOPipeline {
             over: connection,
             maximumFrameSize: maximumFrameSize
         )
-        let responseFrame = try await RemoteFrameIO.receiveFrame(
-            over: connection,
-            maximumFrameSize: maximumFrameSize
-        )
-        return try secureChannel.decrypt(responseFrame, using: sessionKey)
+        while true {
+            let responseFrame = try await RemoteFrameIO.receiveFrame(
+                over: connection,
+                maximumFrameSize: maximumFrameSize
+            )
+            let decrypted = try secureChannel.decrypt(responseFrame, using: sessionKey)
+            if let json = try? JSONSerialization.jsonObject(with: decrypted) as? [String: Any],
+               let type = json["type"] as? String,
+               type == "approval_request" {
+                if let onPush {
+                    await onPush(json)
+                }
+                continue
+            }
+            return decrypted
+        }
     }
 }
 
@@ -1865,6 +1997,16 @@ private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
+}
+
+struct PendingToolApproval: Equatable, Identifiable {
+    var id: String { approvalId.isEmpty ? sessionKey : approvalId }
+    let approvalId: String
+    let sessionKey: String
+    let command: String
+    let description: String
+    let patternKey: String?
+    let choices: [String]
 }
 
 enum ConnectionError: Error, LocalizedError {

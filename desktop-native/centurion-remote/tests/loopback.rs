@@ -83,6 +83,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "Hello".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -102,6 +103,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
             recovered: None,
             recovery_message: None,
             routed_display_name: None,
+            session_id: None,
         }
     );
 
@@ -166,6 +168,7 @@ async fn revoked_device_receives_error_on_next_message() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "After revoke".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -324,6 +327,7 @@ async fn smoke_bind_echo_round_trip() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "Smoke".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -343,6 +347,7 @@ async fn smoke_bind_echo_round_trip() {
             recovered: None,
             recovery_message: None,
             routed_display_name: None,
+            session_id: None,
         }
     );
 }

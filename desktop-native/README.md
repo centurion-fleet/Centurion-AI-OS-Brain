@@ -3,6 +3,11 @@
 Native GTK4/libadwaita desktop application and encrypted iPhone service for
 Fedora-based Personal Centurion hardware.
 
+**Away-from-home is the assumed path.** Pair with a public or tunnel hostname
+(`centurion remote pair --host your.tunnel.example`) and expose TCP **9119**.
+Same-LAN Bonjour is optional convenience only — do not require it for shipping
+or App Review.
+
 ## Components
 
 - `centurion-desktop`: native Linux window (**Sovereign AI Brain**) and pairing controls
@@ -56,7 +61,7 @@ Production mode requires approval (LAN) or a remote pairing token:
 ```bash
 cargo run -p centurion-remote -- serve
 cargo run -p centurion-remote -- remote-pair --host your.public.hostname
-# → prints token:…@your.public.hostname:9119 for the iPhone
+# → ASCII QR (TTY) + token:…@your.public.hostname:9119 for the iPhone
 
 cargo run -p centurion-remote -- devices
 cargo run -p centurion-remote -- approve <fingerprint> --name "Adrian's iPhone"
@@ -66,11 +71,15 @@ Or via the Python CLI wrapper (same binary under the hood):
 
 ```bash
 centurion remote pair --host your.public.hostname
+# Flags: --qr / --no-qr, --qr-png PATH, --json --include-qr
 centurion remote tokens
 centurion remote revoke <id>
 ```
 
 ### Exposing TCP 9119 for away access
+
+See **[docs/EXPOSE_9119.md](docs/EXPOSE_9119.md)** for Cloudflare Tunnel / proxy /
+port-forward steps and the advertise-host checklist.
 
 Remote pairing works over any reachable TCP path. Common options:
 
@@ -80,7 +89,7 @@ Remote pairing works over any reachable TCP path. Common options:
 
 Crypto Chat stays end-to-end encrypted (X25519 + XSalsa20-Poly1305) between iPhone and this Centurion. Opening the port only makes the encrypted listener reachable; pair tokens gate new devices.
 
-The native desktop **Remote pairing** panel mints the same connection string.
+The native desktop **Link iPhone — show QR** panel mints the same connection string as a full-screen QR (auto-refreshes every few minutes).
 
 ## Local chat
 
@@ -117,10 +126,10 @@ interface to that zone.
 
 1. On Fedora: `git pull` on this tree, then
    `desktop-native/scripts/install-user.sh` (or `provision-centurion.sh`).
-2. Confirm `systemctl --user status centurion-remote` is active and Bonjour
-   advertises **Sovereign AI Brain**.
-3. On iPhone (TestFlight build): same Wi‑Fi, Connect → pair → approve on GTK
-   Devices.
+2. Confirm `systemctl --user status centurion-remote` is active; expose TCP 9119
+   (see `docs/EXPOSE_9119.md`) with a public/tunnel hostname.
+3. On iPhone (TestFlight, **cellular**): Connect → **Scan QR** on Brain screen
+   (or terminal QR from `centurion remote pair --host …`) → approve if prompted.
 4. Crypto Chat: send one message and confirm a real model reply.
 5. Settings → Check for updates: confirm status dialog; Update now when behind.
 6. Pulse: confirm live feed updates (not sample/static activity).
