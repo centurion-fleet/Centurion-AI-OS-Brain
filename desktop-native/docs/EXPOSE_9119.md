@@ -4,15 +4,20 @@ Sovereign AI Remote links over encrypted TCP **port 9119**. The QR / connection
 string embeds a hostname the iPhone can reach from **cellular** (not only home
 Wi‑Fi). Choose one path below, then mint a pairing QR that uses that host.
 
-## 1. Set the advertise host
+## Persist advertise host
 
 ```bash
+mkdir -p ~/.centurion/remote
+echo 'brain.yourdomain.com' > ~/.centurion/remote/advertise-host
+
+# Or export once and re-run install (writes the same file + systemd Environment=):
 export CENTURION_REMOTE_ADVERTISE_HOST=brain.yourdomain.com
-# Persist for the user service (re-run install-user.sh after export, or edit
-# ~/.config/systemd/user/centurion-remote.service Environment= line).
+desktop-native/scripts/install-user.sh
 ```
 
-GTK **Link iPhone** and `centurion remote pair` read this env var first.
+GTK **Link iPhone** and `centurion remote pair` (when `--host` omitted) read
+`CENTURION_REMOTE_ADVERTISE_HOST`, then that file, then LAN IP.
+
 
 ## 2. Confirm the listener
 

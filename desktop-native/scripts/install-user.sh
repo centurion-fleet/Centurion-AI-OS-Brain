@@ -69,9 +69,18 @@ done
   printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
   printf 'Environment=CENTURION_AI_REPO=%s\n' "${ROOT}"
   printf 'ReadWritePaths=%s\n' "${ROOT}"
-  # Away-from-home: advertise a public/tunnel host when set.
-  if [[ -n "${CENTURION_REMOTE_ADVERTISE_HOST:-}" ]]; then
-    printf 'Environment=CENTURION_REMOTE_ADVERTISE_HOST=%s\n' "${CENTURION_REMOTE_ADVERTISE_HOST}"
+  # Away-from-home advertise host: env at install time, or persistent file.
+  ADVERTISE_HOST="${CENTURION_REMOTE_ADVERTISE_HOST:-}"
+  ADVERTISE_FILE="${HOME}/.centurion/remote/advertise-host"
+  if [[ -z "${ADVERTISE_HOST}" && -f "${ADVERTISE_FILE}" ]]; then
+    ADVERTISE_HOST="$(tr -d '[:space:]' < "${ADVERTISE_FILE}" || true)"
+  fi
+  if [[ -n "${ADVERTISE_HOST}" ]]; then
+    mkdir -p "${HOME}/.centurion/remote"
+    printf '%s\n' "${ADVERTISE_HOST}" > "${ADVERTISE_FILE}"
+    chmod 0644 "${ADVERTISE_FILE}" || true
+    printf 'Environment=CENTURION_REMOTE_ADVERTISE_HOST=%s\n' "${ADVERTISE_HOST}"
+    echo "Persisted advertise host → ${ADVERTISE_FILE}"
   fi
   printf 'ExecStart=\n'
   printf 'ExecStart=%%h/.local/bin/centurion-remote serve --name "Sovereign AI Brain" --python %s\n' "${PYTHON_BIN}"

@@ -374,6 +374,18 @@ fn default_advertise_host() -> String {
             return trimmed;
         }
     }
+    if let Ok(path) = PairingTokenStore::default_path() {
+        let advertise = path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("advertise-host");
+        if let Ok(contents) = std::fs::read_to_string(&advertise) {
+            let trimmed = contents.trim().to_owned();
+            if !trimmed.is_empty() && !trimmed.contains('\n') {
+                return trimmed;
+            }
+        }
+    }
     pairing_lan_host().unwrap_or_else(|| "127.0.0.1".to_owned())
 }
 

@@ -290,14 +290,40 @@ mod linux {
         qr_png: Vec<u8>,
     }
 
-    fn mint_remote_pairing() -> Result<MintedPairing, String> {
+    /// Resolve the hostname embedded in pairing QR / connection strings.
+    /// Prefer `CENTURION_REMOTE_ADVERTISE_HOST`, then
+    /// `$CENTURION_HOME/remote/advertise-host` (one-line file), then LAN IP.
+    fn resolve_advertise_host() -> String {
+        if let Ok(value) = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST") {
+            let trimmed = value.trim().to_owned();
+            if !trimmed.is_empty() {
+                return trimmed;
+            }
+        }
+        let home = std::env::var_os("CENTURION_HOME")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".centurion"))
+            });
+        if let Some(home) = home {
+            let path = home.join("remote").join("advertise-host");
+            if let Ok(contents) = std::fs::read_to_string(&path) {
+                let trimmed = contents.trim().to_owned();
+                if !trimmed.is_empty() && !trimmed.contains('\n') {
+                    return trimmed;
+                }
+            }
+        }
         let addresses = discover_link_addresses();
-        let host = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST")
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .or_else(|| addresses.lan_ips.first().cloned())
-            .unwrap_or_else(|| "127.0.0.1".to_owned());
+        addresses
+            .lan_ips
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "127.0.0.1".to_owned())
+    }
+
+    fn mint_remote_pairing() -> Result<MintedPairing, String> {
+        let host = resolve_advertise_host();
 
         let output = Command::new(centurion_remote_bin())
             .args(["remote-pair", "--host", &host, "--json", "--include-qr"])
@@ -347,7 +373,9 @@ mod linux {
     }
 
     fn qr_image_from_png(png: &[u8], pixel_size: i32) -> gtk::Image {
-        let bytes = glib::Bytes::from(png.to_vec());
+        // glib 0.22: `Bytes::from` only accepts borrowed slices; owned data
+        // must use `from_owned` (requires Send — Vec<u8> is fine).
+        let bytes = glib::Bytes::from_owned(png.to_vec());
         match gtk::gdk::Texture::from_bytes(&bytes) {
             Ok(texture) => {
                 let image = gtk::Image::from_paintable(Some(&texture));
@@ -358,7 +386,46 @@ mod linux {
         }
     }
 
+    /// Apply a mint result to the QR window widgets (main-thread only).
+    fn apply_pairing_mint_result(
+        minted: Result<MintedPairing, String>,
+        qr_holder: &gtk::Box,
+        status: &gtk::Label,
+        text_reveal: &gtk::Label,
+        token_id: &RefCell<String>,
+        connection: &RefCell<String>,
+    ) {
+        match minted {
+            Ok(minted) => {
+                let previous = token_id.borrow().clone();
+                if !previous.is_empty() && previous != minted.id {
+                    revoke_remote_pairing_token(&previous);
+                }
+                *token_id.borrow_mut() = minted.id;
+                *connection.borrow_mut() = minted.connection_string.clone();
+                while let Some(child) = qr_holder.first_child() {
+                    qr_holder.remove(&child);
+                }
+                qr_holder.append(&qr_image_from_png(&minted.qr_png, 360));
+                status.set_label("Point your iPhone camera at this QR code");
+                if text_reveal.is_visible() {
+                    text_reveal.set_label(&minted.connection_string);
+                }
+            }
+            Err(error) => {
+                let plain = if error.contains("not found") {
+                    "Could not create a pairing code. Is Centurion installed on this brain?"
+                        .to_owned()
+                } else {
+                    "Could not create a pairing code. Try again in a moment.".to_owned()
+                };
+                status.set_label(&plain);
+            }
+        }
+    }
+
     /// Full-screen QR pairing page: scan-first UX with auto-rotated tokens.
+    /// Minting stays on the GTK main thread (no idle_add / Send wrappers).
     fn show_pairing_qr_window(parent: &adw::ApplicationWindow) {
         let window = adw::Window::builder()
             .title("Link iPhone")
@@ -447,42 +514,25 @@ mod linux {
         let token_id = Rc::new(RefCell::new(String::new()));
         let connection = Rc::new(RefCell::new(String::new()));
 
-        let apply_mint: Rc<dyn Fn()> = Rc::new({
+        let remint = Rc::new({
             let qr_holder = qr_holder.clone();
             let status = status.clone();
             let text_reveal = text_reveal.clone();
             let token_id = token_id.clone();
             let connection = connection.clone();
-            move || match mint_remote_pairing() {
-                Ok(minted) => {
-                    let previous = token_id.borrow().clone();
-                    if !previous.is_empty() && previous != minted.id {
-                        revoke_remote_pairing_token(&previous);
-                    }
-                    *token_id.borrow_mut() = minted.id;
-                    *connection.borrow_mut() = minted.connection_string.clone();
-                    while let Some(child) = qr_holder.first_child() {
-                        qr_holder.remove(&child);
-                    }
-                    qr_holder.append(&qr_image_from_png(&minted.qr_png, 360));
-                    status.set_label("Point your iPhone camera at this QR code");
-                    if text_reveal.is_visible() {
-                        text_reveal.set_label(&minted.connection_string);
-                    }
-                }
-                Err(error) => {
-                    let plain = if error.contains("not found") {
-                        "Could not create a pairing code. Is Centurion installed on this brain?"
-                            .to_owned()
-                    } else {
-                        "Could not create a pairing code. Try again in a moment.".to_owned()
-                    };
-                    status.set_label(&plain);
-                }
+            move || {
+                apply_pairing_mint_result(
+                    mint_remote_pairing(),
+                    &qr_holder,
+                    &status,
+                    &text_reveal,
+                    &token_id,
+                    &connection,
+                );
             }
         });
 
-        apply_mint();
+        remint();
 
         copy.connect_clicked({
             let connection = connection.clone();
@@ -508,23 +558,24 @@ mod linux {
             }
         });
         refresh.connect_clicked({
-            let apply_mint = apply_mint.clone();
-            move |_| apply_mint()
+            let remint = remint.clone();
+            move |_| remint()
         });
         done.connect_clicked({
             let window = window.clone();
             move |_| window.close()
         });
 
-        // Rotate every 3 minutes so unused display tokens expire from the QR.
+        // Rotate every 3 minutes. `_local` keeps the closure on the GTK thread
+        // (widgets are !Send — do not use idle_add / timeout_add without _local).
         glib::timeout_add_seconds_local(180, {
             let window = window.clone();
-            let apply_mint = apply_mint.clone();
+            let remint = remint.clone();
             move || {
                 if !window.is_visible() {
                     return glib::ControlFlow::Break;
                 }
-                apply_mint();
+                remint();
                 glib::ControlFlow::Continue
             }
         });
@@ -532,8 +583,6 @@ mod linux {
         window.connect_close_request({
             let token_id = token_id.clone();
             move |_| {
-                // Keep the latest token so a phone that just scanned can still bind;
-                // only rotated-away tokens were revoked above.
                 let _ = token_id;
                 glib::Propagation::Proceed
             }
