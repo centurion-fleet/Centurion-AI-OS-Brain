@@ -1637,11 +1637,24 @@ mod linux {
         update_row.set_subtitle("Checking for updates…");
         let parent = parent.clone();
         let update_row = update_row.clone();
+        // Worker thread must not capture GTK widgets (!Send). Poll the result
+        // on the main loop instead of glib::idle_add_once from the worker.
+        let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let payload = run_update_check();
-            glib::idle_add_once(move || {
-                present_update_check_result(&parent, &update_row, payload);
-            });
+            let _ = tx.send(run_update_check());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+            match rx.try_recv() {
+                Ok(payload) => {
+                    present_update_check_result(&parent, &update_row, payload);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    present_update_check_result(&parent, &update_row, None);
+                    glib::ControlFlow::Break
+                }
+            }
         });
     }
 
@@ -1749,52 +1762,68 @@ mod linux {
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
         let progress_for_result = progress.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let result = run_full_brain_update_pipeline();
-            glib::idle_add_once(move || {
-                progress_for_result.close();
-                match result {
-                    Ok(body) => {
-                        update_row_for_result.set_subtitle("Update finished — quit to load new screen");
-                        let done = adw::MessageDialog::builder()
-                            .heading("Update complete")
-                            .body(&format!(
-                                "{body}\n\nQuit and reopen Sovereign AI Brain to load the new screen. \
-                                 Sovereign AI Remote may reconnect automatically."
-                            ))
-                            .close_response("later")
-                            .default_response("quit")
-                            .build();
-                        done.add_response("later", "Later");
-                        done.add_response("quit", "Quit now");
-                        done.set_response_appearance("quit", adw::ResponseAppearance::Suggested);
-                        done.set_transient_for(Some(&parent_for_result));
-                        let parent_for_quit = parent_for_result.clone();
-                        done.connect_response(None, move |dialog, response| {
-                            dialog.close();
-                            if response == "quit" {
-                                if let Some(app) = parent_for_quit.application() {
-                                    app.quit();
-                                } else {
-                                    parent_for_quit.close();
+            let _ = tx.send(run_full_brain_update_pipeline());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(result) => {
+                    progress_for_result.close();
+                    match result {
+                        Ok(body) => {
+                            update_row_for_result
+                                .set_subtitle("Update finished — quit to load new screen");
+                            let done = adw::MessageDialog::builder()
+                                .heading("Update complete")
+                                .body(&format!(
+                                    "{body}\n\nQuit and reopen Sovereign AI Brain to load the new screen. \
+                                     Sovereign AI Remote may reconnect automatically."
+                                ))
+                                .close_response("later")
+                                .default_response("quit")
+                                .build();
+                            done.add_response("later", "Later");
+                            done.add_response("quit", "Quit now");
+                            done.set_response_appearance(
+                                "quit",
+                                adw::ResponseAppearance::Suggested,
+                            );
+                            done.set_transient_for(Some(&parent_for_result));
+                            let parent_for_quit = parent_for_result.clone();
+                            done.connect_response(None, move |dialog, response| {
+                                dialog.close();
+                                if response == "quit" {
+                                    if let Some(app) = parent_for_quit.application() {
+                                        app.quit();
+                                    } else {
+                                        parent_for_quit.close();
+                                    }
                                 }
-                            }
-                        });
-                        done.present();
+                            });
+                            done.present();
+                        }
+                        Err(error) => {
+                            update_row_for_result.set_subtitle("Update failed");
+                            let fail = adw::MessageDialog::builder()
+                                .heading("Update failed")
+                                .body(&error)
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.set_transient_for(Some(&parent_for_result));
+                            fail.present();
+                        }
                     }
-                    Err(error) => {
-                        update_row_for_result.set_subtitle("Update failed");
-                        let fail = adw::MessageDialog::builder()
-                            .heading("Update failed")
-                            .body(&error)
-                            .close_response("ok")
-                            .build();
-                        fail.add_response("ok", "OK");
-                        fail.set_transient_for(Some(&parent_for_result));
-                        fail.present();
-                    }
+                    glib::ControlFlow::Break
                 }
-            });
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    progress_for_result.close();
+                    update_row_for_result.set_subtitle("Update failed");
+                    glib::ControlFlow::Break
+                }
+            }
         });
     }
 
