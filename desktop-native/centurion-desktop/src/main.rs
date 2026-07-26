@@ -866,12 +866,18 @@ mod linux {
         );
         let update_row = adw::ActionRow::builder()
             .title("Check for update")
-            .subtitle("Checks and updates brain software and this screen")
+            .subtitle("Checks published brain software — branch screen fixes use Rebuild")
             .icon_name("software-update-available-symbolic")
             .build();
         let update_check_button = gtk::Button::with_label("Check");
         update_check_button.add_css_class("suggested-action");
         update_check_button.set_valign(gtk::Align::Center);
+        let rebuild_screen_button = gtk::Button::with_label("Rebuild screen");
+        rebuild_screen_button.set_tooltip_text(Some(
+            "Rebuild this screen app from the Centurion folder on this brain (does not need an iPhone).",
+        ));
+        rebuild_screen_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&rebuild_screen_button);
         update_row.add_suffix(&update_check_button);
         settings_list.append(&update_row);
 
@@ -1232,6 +1238,11 @@ mod linux {
             let window = window.clone();
             let update_row = update_row.clone();
             move |_| show_update_check_dialog(&window, &update_row)
+        });
+        rebuild_screen_button.connect_clicked({
+            let window = window.clone();
+            let update_row = update_row.clone();
+            move |_| run_screen_rebuild(&window, &update_row)
         });
         bundle_button.connect_clicked({
             let window = window.clone();
@@ -1688,6 +1699,97 @@ mod linux {
             .output();
     }
 
+    /// Rebuild only the screen app + remote from the local checkout (no OS update).
+    fn run_screen_rebuild_pipeline() -> Result<String, String> {
+        let repo_root = resolve_centurion_repo_root()?;
+        run_native_brain_install(&repo_root)?;
+        restart_centurion_remote_best_effort();
+        Ok(format!(
+            "Screen app rebuilt from {}.\n\nQuit and reopen Sovereign AI Brain to load it.\n\
+             Brain Chat is local on this computer — no iPhone pairing required.",
+            repo_root.display()
+        ))
+    }
+
+    fn run_screen_rebuild(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        update_row.set_subtitle("Rebuilding this screen…");
+        let progress = adw::MessageDialog::builder()
+            .heading("Rebuilding screen…")
+            .body(
+                "Rebuilding the screen app from the Centurion folder on this brain.\n\
+                 This can take a few minutes.",
+            )
+            .close_response("ok")
+            .build();
+        progress.add_response("ok", "Hide");
+        progress.set_transient_for(Some(parent));
+        progress.present();
+
+        let parent_for_result = parent.clone();
+        let update_row_for_result = update_row.clone();
+        let progress_for_result = progress.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_screen_rebuild_pipeline());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(result) => {
+                    progress_for_result.close();
+                    match result {
+                        Ok(body) => {
+                            update_row_for_result
+                                .set_subtitle("Rebuild finished — quit to load new screen");
+                            let done = adw::MessageDialog::builder()
+                                .heading("Screen rebuilt")
+                                .body(&body)
+                                .close_response("later")
+                                .default_response("quit")
+                                .build();
+                            done.add_response("later", "Later");
+                            done.add_response("quit", "Quit now");
+                            done.set_response_appearance(
+                                "quit",
+                                adw::ResponseAppearance::Suggested,
+                            );
+                            done.set_transient_for(Some(&parent_for_result));
+                            let parent_for_quit = parent_for_result.clone();
+                            done.connect_response(None, move |dialog, response| {
+                                dialog.close();
+                                if response == "quit" {
+                                    if let Some(app) = parent_for_quit.application() {
+                                        app.quit();
+                                    } else {
+                                        parent_for_quit.close();
+                                    }
+                                }
+                            });
+                            done.present();
+                        }
+                        Err(error) => {
+                            update_row_for_result.set_subtitle("Rebuild failed");
+                            let fail = adw::MessageDialog::builder()
+                                .heading("Rebuild failed")
+                                .body(&error)
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.set_transient_for(Some(&parent_for_result));
+                            fail.present();
+                        }
+                    }
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    progress_for_result.close();
+                    update_row_for_result.set_subtitle("Rebuild failed");
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    }
+
     /// Full Brain update: OS package, then desktop + remote binaries.
     fn run_full_brain_update_pipeline() -> Result<String, String> {
         let os_message = run_os_update()?;
@@ -1757,12 +1859,25 @@ mod linux {
                 let dialog = adw::MessageDialog::builder()
                     .heading("You're up to date")
                     .body(&format!(
-                        "Your brain software is current (v{os_version}).\n\n{message}"
+                        "Published brain software is current (v{os_version}).\n\n{message}\n\n\
+                         If Chat or this screen still looks wrong, rebuild from the Centurion \
+                         folder on this brain (no iPhone needed)."
                     ))
                     .close_response("ok")
+                    .default_response("rebuild")
                     .build();
                 dialog.add_response("ok", "OK");
+                dialog.add_response("rebuild", "Rebuild this screen");
+                dialog.set_response_appearance("rebuild", adw::ResponseAppearance::Suggested);
                 dialog.set_transient_for(Some(parent));
+                let parent = parent.clone();
+                let update_row = update_row.clone();
+                dialog.connect_response(None, move |dialog, response| {
+                    dialog.close();
+                    if response == "rebuild" {
+                        run_screen_rebuild(&parent, &update_row);
+                    }
+                });
                 dialog.present();
             }
             "update_available" => {

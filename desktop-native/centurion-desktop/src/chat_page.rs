@@ -530,7 +530,9 @@ pub fn build() -> gtk::Box {
     );
     top.append(
         &gtk::Label::builder()
-            .label("Message box is fixed at the bottom of this page — type there, then Send.")
+            .label(
+                "Local chat on this brain — no iPhone required. Message box is at the bottom.",
+            )
             .wrap(true)
             .xalign(0.0)
             .css_classes(["dim-label"])
