@@ -30,6 +30,9 @@ from typing import Any, Dict, List, Optional
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY,
     PRODUCT_IDENTITY_LOCK,
+    build_personal_name_lock,
+    resolve_centurion_display_name,
+    soul_identity_fingerprint,
     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
     CENTURION_AGENT_HELP_GUIDANCE,
     KANBAN_GUIDANCE,
@@ -89,6 +92,15 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # must not override Centurion / SOUL.md identity.
     stable_parts.append(PRODUCT_IDENTITY_LOCK)
 
+    # Personal name lock — resolved from SOUL.md ## Name every build.
+    _display_name = resolve_centurion_display_name()
+    stable_parts.append(build_personal_name_lock(_display_name))
+    try:
+        agent._centurion_display_name = _display_name
+        agent._soul_fp = soul_identity_fingerprint()
+    except Exception:
+        pass
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want CENTURION_HOME persona while keeping
     # cwd project instructions disabled.
@@ -106,9 +118,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     _model_lower_early = (getattr(agent, "model", None) or "").lower()
     if "hermes" in _model_lower_early:
         stable_parts.append(
-            "MODEL NOTE: The inference model id may contain 'Hermes'. That is a "
-            "weight/family label only. You still answer as Centurion (or your "
-            "SOUL.md name). Do not introduce yourself as Hermes."
+            f"MODEL NOTE: The inference model id may contain 'Hermes'. That is a "
+            f"weight/family label only. You still answer as {_display_name} "
+            f"(Centurion AI OS). Do not introduce yourself as Hermes."
         )
 
     # Autonomy / reporting oversight — loaded once per session (cache-safe).

@@ -137,11 +137,81 @@ PRODUCT_IDENTITY_LOCK = (
     "private brain, created by Centurion Fleet. "
     "Never identify as Hermes, Hermes Agent, or a Nous Research chatbot product. "
     "Never say you were created by Nous Research. "
-    "If SOUL.md states a personal name (for example Titus), that is your name when "
-    "asked who you are. Otherwise your name is Centurion. "
-    "Underlying model weights or a Nous subscription for tools do not change your "
-    "product name or creator."
+    "Your personal name comes from SOUL.md (## Name). If set, that is who you are "
+    "when asked your name. If no personal name is set, your name is Centurion. "
+    "Underlying model weights, provider branding, or a Nous subscription for tools "
+    "do not change your product name, creator, or SOUL.md identity."
 )
+
+
+def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
+    """Return the owner's chosen Centurion name, or ``Centurion``.
+
+    Prefers the structured ``## Name`` field in SOUL.md. Never returns
+    Hermes / provider brand strings.
+    """
+    forbidden = {
+        "hermes",
+        "hermes agent",
+        "nous",
+        "nous research",
+        "chatgpt",
+        "claude",
+        "gemini",
+        "gpt",
+    }
+    name = ""
+    try:
+        if soul_markdown is None:
+            from centurion_cli.soul_sync import read_soul
+
+            name = str(read_soul().get("name") or "").strip()
+        else:
+            from centurion_cli.soul_sync import markdown_to_structured
+
+            name = str(markdown_to_structured(soul_markdown).get("name") or "").strip()
+    except Exception:
+        name = ""
+
+    # Strip to a short personal name (first line / first sentence fragment).
+    if name:
+        name = name.splitlines()[0].strip()
+        for sep in (".", "—", "-", ","):
+            if sep in name and len(name) > 40:
+                name = name.split(sep, 1)[0].strip()
+        # Drop leading "You are " / "I am " leftovers from freeform prose.
+        for prefix in ("you are ", "i am ", "my name is ", "name:"):
+            if name.lower().startswith(prefix):
+                name = name[len(prefix) :].strip()
+
+    if not name or name.lower() in forbidden or "hermes" in name.lower():
+        return "Centurion"
+    # Cap length so we don't inject a whole paragraph as a "name".
+    if len(name) > 48:
+        return "Centurion"
+    return name
+
+
+def build_personal_name_lock(display_name: str) -> str:
+    """Hardwire the personal name for this turn — applied before SOUL.md body."""
+    name = (display_name or "").strip() or "Centurion"
+    return (
+        f"YOUR NAME (non-negotiable this turn): {name}. "
+        f"When asked who you are or what your name is, answer \"{name}\". "
+        "You are still Centurion AI OS by Centurion Fleet — the personal name "
+        "is how this owner addresses you. Do not use the model family name, "
+        "provider name, or any prior fork name as your identity."
+    )
+
+
+def soul_identity_fingerprint() -> str:
+    """Cheap fingerprint of SOUL.md so sessions can detect identity edits."""
+    soul_path = get_centurion_home() / "SOUL.md"
+    try:
+        st = soul_path.stat()
+        return f"{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        return "missing"
 
 CENTURION_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Centurion AI OS "

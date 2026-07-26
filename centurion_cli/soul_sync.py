@@ -28,6 +28,7 @@ def soul_md_path():
 
 def structured_to_markdown(fields: dict[str, Any]) -> str:
     """Render iOS-style structured fields to the managed SOUL.md section."""
+    name = str(fields.get("name") or fields.get("displayName") or "").strip()
     personality = str(fields.get("personalitySummary") or fields.get("personality_summary") or "").strip()
     tone = str(fields.get("tone") or "").strip()
     communication = str(
@@ -53,6 +54,8 @@ def structured_to_markdown(fields: dict[str, Any]) -> str:
         "update this block. Content outside the markers is preserved.",
         "",
     ]
+    if name:
+        lines.extend(["## Name", "", name, ""])
     if personality:
         lines.extend(["## Personality", "", personality, ""])
     if tone:
@@ -85,7 +88,12 @@ def markdown_to_structured(markdown: str) -> dict[str, Any]:
     def body(title: str) -> str:
         return sections.get(title.lower(), "").strip()
 
+    name = body("name")
+    # First line of a freeform SOUL (no ## Name) may still be a short name
+    # when users wrote "You are Titus..." — leave extraction to prompt_builder.
+
     return {
+        "name": name,
         "personalitySummary": body("personality"),
         "tone": body("tone"),
         "communicationStyle": body("communication style"),
@@ -142,8 +150,19 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if markdown is not None and fields:
-        # Prefer structured merge when both provided — structured wins for managed block.
-        content = merge_structured_into_soul_md(fields, existing=markdown)
+        # Merge structured patches onto whatever the markdown already encodes
+        # so a Name-only update does not wipe Personality / rules.
+        existing_fields = markdown_to_structured(markdown)
+        merged = dict(existing_fields)
+        for key, value in fields.items():
+            if key == "markdown":
+                continue
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip() and key != "name":
+                continue
+            merged[key] = value
+        content = merge_structured_into_soul_md(merged, existing=markdown)
     elif markdown is not None:
         content = markdown
     elif fields is not None:
@@ -157,7 +176,19 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
         path.chmod(0o600)
     except OSError:
         pass
+    # Soul edits must take effect on the next agent turn — drop cached
+    # system prompts so continuing sessions rebuild identity from disk.
+    _invalidate_cached_system_prompts()
     return read_soul()
+
+
+def _invalidate_cached_system_prompts() -> None:
+    try:
+        from centurion_state import SessionDB
+
+        SessionDB().clear_system_prompts()
+    except Exception:
+        pass
 
 
 def _as_str_list(value: Any) -> list[str]:

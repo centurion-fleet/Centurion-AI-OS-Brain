@@ -438,7 +438,7 @@ fn run_chat_turn(
     let _ = event_tx.send(WorkerEvent::Done(result));
 }
 
-fn message_row(message: &ChatMessage) -> gtk::ListBoxRow {
+fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.set_activatable(false);
     row.set_selectable(false);
@@ -453,7 +453,7 @@ fn message_row(message: &ChatMessage) -> gtk::ListBoxRow {
     if message.role == ChatRole::Assistant {
         bubble.append(
             &gtk::Label::builder()
-                .label("Centurion")
+                .label(assistant_name)
                 .xalign(0.0)
                 .css_classes(["caption", "dim-label"])
                 .build(),
@@ -499,6 +499,24 @@ fn message_row(message: &ChatMessage) -> gtk::ListBoxRow {
     row
 }
 
+fn load_assistant_display_name() -> String {
+    match run_bridge_json("soul_get", serde_json::json!({})) {
+        Ok(payload) => {
+            let name = payload
+                .pointer("/soul/name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if name.is_empty() || name.eq_ignore_ascii_case("hermes") {
+                "Centurion".to_owned()
+            } else {
+                name.chars().take(48).collect()
+            }
+        }
+        Err(_) => "Centurion".to_owned(),
+    }
+}
+
 /// Build the Chat tab page (bubble UI + always-visible composer).
 pub fn build() -> gtk::Box {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -515,23 +533,25 @@ pub fn build() -> gtk::Box {
     main.set_vexpand(true);
     main.set_hexpand(true);
 
+    let assistant_name = Rc::new(RefCell::new(load_assistant_display_name()));
+
     let top = gtk::Box::new(gtk::Orientation::Vertical, 4);
     top.set_margin_top(12);
     top.set_margin_start(16);
     top.set_margin_end(16);
     top.set_margin_bottom(8);
     top.set_vexpand(false);
-    top.append(
-        &gtk::Label::builder()
-            .label("Chat")
-            .css_classes(["title-1"])
-            .xalign(0.0)
-            .build(),
-    );
+    let title = gtk::Label::builder()
+        .label(&format!("Chat with {}", assistant_name.borrow()))
+        .css_classes(["title-1"])
+        .xalign(0.0)
+        .build();
+    top.append(&title);
     top.append(
         &gtk::Label::builder()
             .label(
-                "Local chat on this brain — no iPhone required. Message box is at the bottom.",
+                "Local chat on this brain — Soul identity (name + personality) \
+                 is applied before every answer. Message box is at the bottom.",
             )
             .wrap(true)
             .xalign(0.0)
@@ -648,21 +668,28 @@ pub fn build() -> gtk::Box {
         let message_list = message_list.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
+        let assistant_name = assistant_name.clone();
+        let title = title.clone();
         move || {
+            let name = assistant_name.borrow().clone();
+            title.set_label(&format!("Chat with {name}"));
             while let Some(child) = message_list.first_child() {
                 message_list.remove(&child);
             }
             let msgs = messages.borrow();
             if msgs.is_empty() {
-                message_list.append(&message_row(&ChatMessage {
-                    role: ChatRole::System,
-                    content:
-                        "Your private conversation starts here. Use the message box at the bottom of this page."
-                            .to_owned(),
-                }));
+                message_list.append(&message_row(
+                    &ChatMessage {
+                        role: ChatRole::System,
+                        content:
+                            "Your private conversation starts here. Use the message box at the bottom of this page."
+                                .to_owned(),
+                    },
+                    &name,
+                ));
             } else {
                 for message in msgs.iter() {
-                    message_list.append(&message_row(message));
+                    message_list.append(&message_row(message, &name));
                 }
             }
             let adj = message_scroll.vadjustment();
@@ -751,6 +778,7 @@ pub fn build() -> gtk::Box {
         let clear_approval = clear_approval.clone();
         let set_sending = set_sending.clone();
         let is_sending = is_sending.clone();
+        let assistant_name = assistant_name.clone();
         new_chat_button.connect_clicked(move |_| {
             if *is_sending.borrow() {
                 return;
@@ -758,6 +786,7 @@ pub fn build() -> gtk::Box {
             clear_approval();
             set_sending(false);
             set_error(None);
+            *assistant_name.borrow_mut() = load_assistant_display_name();
             messages.borrow_mut().clear();
             *session_id.borrow_mut() = None;
             let path = session_store_path();

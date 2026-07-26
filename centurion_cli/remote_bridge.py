@@ -1385,7 +1385,7 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
             "ok": True,
             "action": "soul_put",
             "soul": soul,
-            "message": "Saved. Soul changes apply on the next conversation.",
+            "message": "Saved. Soul identity applies on the next message.",
         }
     except Exception as exc:
         return _error_response(request_id, action="soul_put", exc=exc)

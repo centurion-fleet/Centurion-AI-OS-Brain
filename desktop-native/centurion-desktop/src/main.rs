@@ -2110,20 +2110,34 @@ mod linux {
             row.set_subtitle("Could not read your Sovereign's Soul.");
             return;
         };
+        let name = payload
+            .pointer("/soul/name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
         let summary = payload
             .pointer("/soul/personalitySummary")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .trim();
+        if !name.is_empty() {
+            if summary.is_empty() {
+                row.set_subtitle(&format!("{name} — tap to shape Soul"));
+            } else {
+                let clipped: String = summary.chars().take(48).collect();
+                row.set_subtitle(&format!("{name} · {clipped}"));
+            }
+            return;
+        }
         if summary.is_empty() {
             let exists = payload
                 .pointer("/soul/exists")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             row.set_subtitle(if exists {
-                "Soul document on this Centurion"
+                "Soul document on this Centurion — set a Name"
             } else {
-                "Not set yet — shape personality and rules"
+                "Not set yet — give your Centurion a name"
             });
         } else {
             let clipped: String = summary.chars().take(72).collect();
@@ -2380,13 +2394,25 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
-        let markdown = run_bridge_action("soul_get", serde_json::json!({}))
-            .and_then(|p| {
-                p.pointer("/soul/markdown")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-            })
-            .unwrap_or_default();
+        let soul = run_bridge_action("soul_get", serde_json::json!({}))
+            .and_then(|p| p.get("soul").cloned())
+            .unwrap_or_else(|| serde_json::json!({}));
+        let name = soul
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let markdown = soul
+            .get("markdown")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+
+        let name_entry = gtk::Entry::builder()
+            .text(&name)
+            .placeholder_text("e.g. Titus")
+            .hexpand(true)
+            .build();
 
         let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
         buffer.set_text(&markdown);
@@ -2398,7 +2424,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .build();
         let scrolled = gtk::ScrolledWindow::builder()
             .child(&view)
-            .min_content_height(280)
+            .min_content_height(240)
             .min_content_width(480)
             .hexpand(true)
             .vexpand(true)
@@ -2412,11 +2438,27 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         content.append(
             &gtk::Label::builder()
                 .label(
-                    "This changes how your Centurion speaks and behaves. \
-                     Changes may take time to fully take effect — they apply on the next conversation.",
+                    "Name your Centurion — this is who they are every time they answer. \
+                     The Soul below shapes how they speak and behave. Changes apply on \
+                     the next message (Brain Chat reloads Soul every turn).",
                 )
                 .wrap(true)
                 .xalign(0.0)
+                .build(),
+        );
+        content.append(
+            &gtk::Label::builder()
+                .label("Name")
+                .xalign(0.0)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+        content.append(&name_entry);
+        content.append(
+            &gtk::Label::builder()
+                .label("Soul document")
+                .xalign(0.0)
+                .css_classes(["caption", "dim-label"])
                 .build(),
         );
         content.append(&scrolled);
@@ -2435,9 +2477,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             if response == "save" {
                 let (start, end) = buffer.bounds();
                 let text = buffer.text(&start, &end, false);
+                let name_text = name_entry.text().to_string();
                 match run_bridge_action(
                     "soul_put",
-                    serde_json::json!({ "markdown": text.as_str() }),
+                    serde_json::json!({
+                        "soul": { "name": name_text.trim() },
+                        "markdown": text.as_str(),
+                    }),
                 ) {
                     Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                         refresh_soul_row(&soul_row);
