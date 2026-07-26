@@ -538,6 +538,12 @@ pub fn build() -> gtk::Box {
             .css_classes(["dim-label"])
             .build(),
     );
+    let new_chat_button = gtk::Button::with_label("New chat");
+    new_chat_button.set_halign(gtk::Align::Start);
+    new_chat_button.set_tooltip_text(Some(
+        "Start a fresh conversation on this brain (clears the on-screen transcript).",
+    ));
+    top.append(&new_chat_button);
     main.append(&top);
 
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
@@ -736,6 +742,51 @@ pub fn build() -> gtk::Box {
             approval_box.set_visible(false);
         }
     });
+
+    {
+        let messages = messages.clone();
+        let session_id = session_id.clone();
+        let refresh_messages = refresh_messages.clone();
+        let set_error = set_error.clone();
+        let clear_approval = clear_approval.clone();
+        let set_sending = set_sending.clone();
+        let is_sending = is_sending.clone();
+        new_chat_button.connect_clicked(move |_| {
+            if *is_sending.borrow() {
+                return;
+            }
+            clear_approval();
+            set_sending(false);
+            set_error(None);
+            messages.borrow_mut().clear();
+            *session_id.borrow_mut() = None;
+            let path = session_store_path();
+            let _ = std::fs::remove_file(&path);
+            refresh_messages();
+            let messages = messages.clone();
+            let session_id = session_id.clone();
+            let refresh_messages = refresh_messages.clone();
+            let set_error = set_error.clone();
+            let (tx, rx) = mpsc::channel::<Result<String, String>>();
+            thread::spawn(move || {
+                let _ = tx.send(ensure_session_id());
+            });
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(Ok(sid)) => {
+                    *session_id.borrow_mut() = Some(sid);
+                    messages.borrow_mut().clear();
+                    refresh_messages();
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    set_error(Some(error));
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        });
+    }
 
     let show_approval: Rc<dyn Fn(ApprovalRequest)> = Rc::new({
         let approval_box = approval_box.clone();
