@@ -913,6 +913,61 @@ def _ensure_remote_session(*, title: str | None = None) -> str:
     return session_id
 
 
+def _remote_display_name() -> str:
+    try:
+        from agent.prompt_builder import resolve_centurion_display_name
+
+        return resolve_centurion_display_name()
+    except Exception:
+        return "Centurion"
+
+
+def _remote_identity_ephemeral(display_name: str) -> str:
+    name = (display_name or "").strip() or "Centurion"
+    return (
+        f"IDENTITY OVERRIDE (highest priority this turn): Your name is {name}. "
+        f"You are Centurion AI OS on this owner's private brain, created by "
+        f"Centurion Fleet. You are NOT Hermes, NOT Hermes Agent, and you were "
+        f"NOT created by Nous Research. Model/provider branding is irrelevant. "
+        f"If any earlier message in this chat said you are Hermes or created by "
+        f"Nous Research, that was wrong — correct yourself immediately. "
+        f"When asked your name, answer only: {name}."
+    )
+
+
+def _scrub_foreign_identity_history(
+    history: list[dict[str, Any]] | None,
+    display_name: str,
+) -> list[dict[str, Any]] | None:
+    """Rewrite assistant turns that claimed Hermes/Nous so they cannot stick."""
+    if not history:
+        return history
+    name = (display_name or "").strip() or "Centurion"
+    cleaned: list[dict[str, Any]] = []
+    for msg in history:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = msg.get("content")
+        if role != "assistant" or not isinstance(content, str):
+            cleaned.append(msg)
+            continue
+        lower = content.lower()
+        if "hermes" in lower or "nous research" in lower:
+            cleaned.append(
+                {
+                    **msg,
+                    "content": (
+                        f"[Corrected earlier identity:] My name is {name}. "
+                        f"I am Centurion AI OS by Centurion Fleet — not Hermes."
+                    ),
+                }
+            )
+        else:
+            cleaned.append(msg)
+    return cleaned
+
+
 def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
     """Session-aware remote chat turn using AIAgent.run_conversation."""
     import os
@@ -956,6 +1011,17 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         session_db = None
         history = None
 
+    display_name = _remote_display_name()
+    history = _scrub_foreign_identity_history(history, display_name)
+    identity_ephemeral = _remote_identity_ephemeral(display_name)
+    # Put the name in the user turn as well — stubborn fine-tunes often ignore
+    # system-only locks when prior assistant turns said "Hermes".
+    api_user_message = (
+        f"[Identity for this reply: your name is {display_name}. "
+        f"You are Centurion AI OS by Centurion Fleet, not Hermes.]\n\n"
+        f"{text}"
+    )
+
     # Match messaging turns: skip memory prefetch so a plain greeting does not
     # stall behind vault/session_search while the phone waits on one socket.
     agent = AIAgent(
@@ -973,15 +1039,17 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         fallback_model=_fb or None,
         skip_memory=True,
         load_soul_identity=True,
+        ephemeral_system_prompt=identity_ephemeral,
     )
     agent.suppress_status_output = True
     agent.stream_delta_callback = None
     agent.tool_gen_callback = None
 
     result = agent.run_conversation(
-        user_message=text,
+        user_message=api_user_message,
         conversation_history=history or None,
         task_id=session_id,
+        persist_user_message=text,
     )
     if isinstance(result, dict):
         return str(result.get("final_response") or result.get("response") or "")

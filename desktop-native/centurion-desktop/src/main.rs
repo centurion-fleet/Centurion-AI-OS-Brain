@@ -2486,6 +2486,9 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     }),
                 ) {
                     Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                        // Prior chat turns may have claimed Hermes — clear the
+                        // Brain session so the next message loads Titus cleanly.
+                        crate::chat_page::clear_desktop_chat_session();
                         refresh_soul_row(&soul_row);
                     }
                     Some(payload) => {

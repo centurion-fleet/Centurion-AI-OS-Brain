@@ -100,6 +100,13 @@ fn session_store_path() -> PathBuf {
     home.join("desktop_chat_session")
 }
 
+/// Drop the Brain Chat session pointer so the next message starts clean
+/// (needed after Soul/name changes — prior Hermes replies stick otherwise).
+pub fn clear_desktop_chat_session() {
+    let path = session_store_path();
+    let _ = std::fs::remove_file(path);
+}
+
 fn load_session_id() -> Option<String> {
     let path = session_store_path();
     std::fs::read_to_string(path)
