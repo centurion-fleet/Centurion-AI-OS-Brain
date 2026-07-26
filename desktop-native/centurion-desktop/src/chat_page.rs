@@ -499,22 +499,28 @@ fn message_row(message: &ChatMessage) -> gtk::ListBoxRow {
     row
 }
 
-/// Build the Chat tab page (bubble UI + composer pinned to the bottom).
+/// Build the Chat tab page (bubble UI + always-visible composer).
 pub fn build() -> gtk::Box {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     container.set_vexpand(true);
     container.set_hexpand(true);
 
-    // ToolbarView keeps the composer visible: content scrolls, bottom bar stays put.
-    let page = adw::ToolbarView::new();
-    page.set_vexpand(true);
-    page.set_hexpand(true);
+    // Overlay pins the composer to the bottom of the allocated page area.
+    // Nested ToolbarView/Stack layouts were clipping the entry off-screen.
+    let overlay = gtk::Overlay::new();
+    overlay.set_vexpand(true);
+    overlay.set_hexpand(true);
+
+    let main = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    main.set_vexpand(true);
+    main.set_hexpand(true);
 
     let top = gtk::Box::new(gtk::Orientation::Vertical, 4);
     top.set_margin_top(12);
     top.set_margin_start(16);
     top.set_margin_end(16);
     top.set_margin_bottom(8);
+    top.set_vexpand(false);
     top.append(
         &gtk::Label::builder()
             .label("Chat")
@@ -524,13 +530,13 @@ pub fn build() -> gtk::Box {
     );
     top.append(
         &gtk::Label::builder()
-            .label("Talk with your Centurion on this brain — private, on this computer.")
+            .label("Message box is fixed at the bottom of this page — type there, then Send.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(["dim-label"])
             .build(),
     );
-    page.add_top_bar(&top);
+    main.append(&top);
 
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
     let session_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(load_session_id()));
@@ -542,7 +548,8 @@ pub fn build() -> gtk::Box {
     message_list.set_margin_start(12);
     message_list.set_margin_end(12);
     message_list.set_margin_top(4);
-    message_list.set_margin_bottom(4);
+    // Leave room so the last bubble is not hidden under the overlaid composer.
+    message_list.set_margin_bottom(96);
 
     let message_scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
@@ -552,10 +559,15 @@ pub fn build() -> gtk::Box {
         .propagate_natural_height(false)
         .build();
     message_scroll.set_child(Some(&message_list));
-    page.set_content(Some(&message_scroll));
+    main.append(&message_scroll);
+    overlay.set_child(Some(&main));
 
     let bottom = gtk::Box::new(gtk::Orientation::Vertical, 0);
     bottom.add_css_class("centurion-chat-composer");
+    bottom.set_halign(gtk::Align::Fill);
+    bottom.set_valign(gtk::Align::End);
+    bottom.set_hexpand(true);
+    bottom.set_vexpand(false);
 
     let approval_box = gtk::Box::new(gtk::Orientation::Vertical, 8);
     approval_box.set_margin_start(16);
@@ -594,29 +606,35 @@ pub fn build() -> gtk::Box {
     let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     input_row.set_margin_start(16);
     input_row.set_margin_end(16);
-    input_row.set_margin_top(8);
+    input_row.set_margin_top(10);
     input_row.set_margin_bottom(16);
     input_row.set_vexpand(false);
+
     let input = gtk::Entry::builder()
-        .placeholder_text("Message your Centurion…")
+        .placeholder_text("Type a message to your Centurion…")
         .hexpand(true)
         .can_focus(true)
+        .css_classes(["centurion-chat-entry"])
         .build();
-    input.set_size_request(-1, 40);
-    let send_button = gtk::Button::from_icon_name("mail-send-symbolic");
+    input.set_size_request(-1, 44);
+
+    let send_button = gtk::Button::with_label("Send");
     send_button.add_css_class("suggested-action");
     send_button.set_tooltip_text(Some("Send"));
     send_button.set_valign(gtk::Align::Center);
+    send_button.set_size_request(88, 44);
+
     let sending_spinner = gtk::Spinner::new();
     sending_spinner.set_visible(false);
     sending_spinner.set_valign(gtk::Align::Center);
+
     input_row.append(&input);
     input_row.append(&send_button);
     input_row.append(&sending_spinner);
     bottom.append(&input_row);
-    page.add_bottom_bar(&bottom);
+    overlay.add_overlay(&bottom);
 
-    container.append(&page);
+    container.append(&overlay);
 
     let refresh_messages: Rc<dyn Fn()> = Rc::new({
         let message_list = message_list.clone();
@@ -631,7 +649,7 @@ pub fn build() -> gtk::Box {
                 message_list.append(&message_row(&ChatMessage {
                     role: ChatRole::System,
                     content:
-                        "Your private conversation starts here. Type below and press Send when you're ready."
+                        "Your private conversation starts here. Use the message box at the bottom of this page."
                             .to_owned(),
                 }));
             } else {

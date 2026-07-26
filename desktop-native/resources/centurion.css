@@ -84,10 +84,7 @@ button.link {
   background: alpha(@centurion_warm, 0.08);
 }
 
-.centurion-chat-composer {
-  background: alpha(@window_bg_color, 0.98);
-  border-top: 1px solid @centurion_border;
-}
+
 
 button.pill {
   border-radius: 999px;
@@ -100,4 +97,17 @@ button.pill {
 stackswitcher button {
   min-height: 36px;
   min-width: 96px;
+}
+
+.centurion-chat-composer {
+  background: @window_bg_color;
+  border-top: 2px solid @centurion_border;
+  box-shadow: 0 -8px 24px alpha(@centurion_ink, 0.08);
+  min-height: 72px;
+}
+
+.centurion-chat-entry {
+  min-height: 44px;
+  font-size: 15px;
+  padding: 8px 12px;
 }
