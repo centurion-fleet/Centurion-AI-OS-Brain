@@ -1480,7 +1480,7 @@ mod linux {
             let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
-                let confirm = adw::MessageDialog::builder()
+                let confirm = adw::AlertDialog::builder()
                     .heading("Remove this iPhone?")
                     .body(&format!(
                         "Remove {device_name}? They’ll need a new pairing code to link again."
@@ -1491,18 +1491,13 @@ mod linux {
                 confirm.add_response("cancel", "Cancel");
                 confirm.add_response("revoke", "Remove");
                 confirm.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
-                if let Some(root) = button.root() {
-                    if let Ok(window) = root.downcast::<gtk::Window>() {
-                        confirm.set_transient_for(Some(&window));
-                    }
-                }
+                let parent_widget = button.root();
                 let button = button.clone();
                 let fingerprint = fingerprint.clone();
                 let list_refresh = list_refresh.clone();
                 let remote = remote.clone();
-                confirm.connect_response(None, move |dialog, response| {
+                confirm.connect_response(None, move |_dialog, response| {
                     if response != "revoke" {
-                        dialog.close();
                         return;
                     }
                     button.set_sensitive(false);
@@ -1512,24 +1507,18 @@ mod linux {
                         .is_ok_and(|status| status.success());
                     if revoked {
                         refresh_devices(&list_refresh);
-                        if let Some(root) = button.root() {
-                            if let Ok(window) = root.downcast::<gtk::Window>() {
-                                let done = adw::MessageDialog::builder()
-                                    .heading("iPhone removed")
-                                    .body("They’ll need a new pairing code to link again.")
-                                    .close_response("ok")
-                                    .build();
-                                done.add_response("ok", "OK");
-                                done.set_transient_for(Some(&window));
-                                done.present();
-                            }
-                        }
+                        let done = adw::AlertDialog::builder()
+                            .heading("iPhone removed")
+                            .body("They’ll need a new pairing code to link again.")
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(button.root().as_ref());
                     } else {
                         button.set_sensitive(true);
                     }
-                    dialog.close();
                 });
-                confirm.present();
+                confirm.present(parent_widget.as_ref());
             });
             row.add_suffix(&revoke);
             list.append(&row);
@@ -1729,22 +1718,11 @@ mod linux {
     }
 
     fn run_screen_rebuild(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        // No progress AlertDialog — stacking a modal then replacing it left
+        // response buttons dead on the Brain (Wayland / touch). Subtitle is enough.
         update_row.set_subtitle("Rebuilding this screen…");
-        let progress = adw::MessageDialog::builder()
-            .heading("Rebuilding screen…")
-            .body(
-                "Rebuilding the screen app from the Centurion folder on this brain.\n\
-                 This can take a few minutes.",
-            )
-            .close_response("ok")
-            .build();
-        progress.add_response("ok", "Hide");
-        progress.set_transient_for(Some(parent));
-        progress.present();
-
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
-        let progress_for_result = progress.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(run_screen_rebuild_pipeline());
@@ -1752,12 +1730,11 @@ mod linux {
         glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             match rx.try_recv() {
                 Ok(result) => {
-                    progress_for_result.close();
                     match result {
                         Ok(body) => {
                             update_row_for_result
                                 .set_subtitle("Rebuild finished — quit to load new screen");
-                            let done = adw::MessageDialog::builder()
+                            let done = adw::AlertDialog::builder()
                                 .heading("Screen rebuilt")
                                 .body(&body)
                                 .close_response("later")
@@ -1769,10 +1746,8 @@ mod linux {
                                 "quit",
                                 adw::ResponseAppearance::Suggested,
                             );
-                            done.set_transient_for(Some(&parent_for_result));
                             let parent_for_quit = parent_for_result.clone();
-                            done.connect_response(None, move |dialog, response| {
-                                dialog.close();
+                            done.connect_response(None, move |_dialog, response| {
                                 if response == "quit" {
                                     if let Some(app) = parent_for_quit.application() {
                                         app.quit();
@@ -1781,25 +1756,23 @@ mod linux {
                                     }
                                 }
                             });
-                            done.present();
+                            done.present(Some(&parent_for_result));
                         }
                         Err(error) => {
                             update_row_for_result.set_subtitle("Rebuild failed");
-                            let fail = adw::MessageDialog::builder()
+                            let fail = adw::AlertDialog::builder()
                                 .heading("Rebuild failed")
                                 .body(&error)
                                 .close_response("ok")
                                 .build();
                             fail.add_response("ok", "OK");
-                            fail.set_transient_for(Some(&parent_for_result));
-                            fail.present();
+                            fail.present(Some(&parent_for_result));
                         }
                     }
                     glib::ControlFlow::Break
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    progress_for_result.close();
                     update_row_for_result.set_subtitle("Rebuild failed");
                     glib::ControlFlow::Break
                 }
@@ -1850,7 +1823,7 @@ mod linux {
     ) {
         let Some(payload) = payload else {
             update_row.set_subtitle("Could not check for updates.");
-            let dialog = adw::MessageDialog::builder()
+            let dialog = adw::AlertDialog::builder()
                 .heading("Check for update")
                 .body(
                     "Could not check for updates on this brain.\n\n\
@@ -1859,8 +1832,7 @@ mod linux {
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
-            dialog.set_transient_for(Some(parent));
-            dialog.present();
+            dialog.present(Some(parent));
             return;
         };
 
@@ -1873,7 +1845,7 @@ mod linux {
         match payload.status.as_str() {
             "up_to_date" => {
                 update_row.set_subtitle(&format!("Brain software {os_version} — up to date"));
-                let dialog = adw::MessageDialog::builder()
+                let dialog = adw::AlertDialog::builder()
                     .heading("You're up to date")
                     .body(&format!(
                         "Published brain software is current (v{os_version}).\n\n{message}\n\n\
@@ -1886,16 +1858,18 @@ mod linux {
                 dialog.add_response("ok", "OK");
                 dialog.add_response("rebuild", "Rebuild this screen");
                 dialog.set_response_appearance("rebuild", adw::ResponseAppearance::Suggested);
-                dialog.set_transient_for(Some(parent));
-                let parent = parent.clone();
-                let update_row = update_row.clone();
-                dialog.connect_response(None, move |dialog, response| {
-                    dialog.close();
+                let parent_for_cb = parent.clone();
+                let update_row_for_cb = update_row.clone();
+                dialog.connect_response(None, move |_dialog, response| {
                     if response == "rebuild" {
-                        run_screen_rebuild(&parent, &update_row);
+                        let parent = parent_for_cb.clone();
+                        let update_row = update_row_for_cb.clone();
+                        glib::idle_add_local_once(move || {
+                            run_screen_rebuild(&parent, &update_row);
+                        });
                     }
                 });
-                dialog.present();
+                dialog.present(Some(parent));
             }
             "update_available" => {
                 let action = payload
@@ -1916,7 +1890,7 @@ mod linux {
                         "{message}\n\nRebuild this screen from the Centurion folder on this \
                          brain. No published main update is required."
                     );
-                    let dialog = adw::MessageDialog::builder()
+                    let dialog = adw::AlertDialog::builder()
                         .heading("Screen update available")
                         .body(&body)
                         .close_response("cancel")
@@ -1928,16 +1902,18 @@ mod linux {
                         "rebuild",
                         adw::ResponseAppearance::Suggested,
                     );
-                    dialog.set_transient_for(Some(parent));
-                    let parent = parent.clone();
-                    let update_row = update_row.clone();
-                    dialog.connect_response(None, move |dialog, response| {
-                        dialog.close();
+                    let parent_for_cb = parent.clone();
+                    let update_row_for_cb = update_row.clone();
+                    dialog.connect_response(None, move |_dialog, response| {
                         if response == "rebuild" {
-                            run_screen_rebuild(&parent, &update_row);
+                            let parent = parent_for_cb.clone();
+                            let update_row = update_row_for_cb.clone();
+                            glib::idle_add_local_once(move || {
+                                run_screen_rebuild(&parent, &update_row);
+                            });
                         }
                     });
-                    dialog.present();
+                    dialog.present(Some(parent));
                 } else {
                     update_row.set_subtitle(&format!("Update available (v{os_version})"));
                     let body = format!(
@@ -1945,7 +1921,7 @@ mod linux {
                          this screen. It may take several minutes; Sovereign AI Remote may \
                          briefly disconnect."
                     );
-                    let dialog = adw::MessageDialog::builder()
+                    let dialog = adw::AlertDialog::builder()
                         .heading("Update available")
                         .body(&body)
                         .close_response("cancel")
@@ -1954,23 +1930,23 @@ mod linux {
                     dialog.add_response("cancel", "Not now");
                     dialog.add_response("update", "Update now");
                     dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
-                    dialog.set_transient_for(Some(parent));
-                    let parent = parent.clone();
-                    let update_row = update_row.clone();
-                    dialog.connect_response(None, move |dialog, response| {
-                        if response != "update" {
-                            dialog.close();
-                            return;
+                    let parent_for_cb = parent.clone();
+                    let update_row_for_cb = update_row.clone();
+                    dialog.connect_response(None, move |_dialog, response| {
+                        if response == "update" {
+                            let parent = parent_for_cb.clone();
+                            let update_row = update_row_for_cb.clone();
+                            glib::idle_add_local_once(move || {
+                                run_full_brain_update(&parent, &update_row);
+                            });
                         }
-                        dialog.close();
-                        run_full_brain_update(&parent, &update_row);
                     });
-                    dialog.present();
+                    dialog.present(Some(parent));
                 }
             }
             _ => {
                 update_row.set_subtitle("Updates managed outside this app");
-                let dialog = adw::MessageDialog::builder()
+                let dialog = adw::AlertDialog::builder()
                     .heading("Cannot update from this app")
                     .body(&format!(
                         "{message}\n\nAsk your advisor if updates are managed for this brain."
@@ -1978,8 +1954,7 @@ mod linux {
                     .close_response("ok")
                     .build();
                 dialog.add_response("ok", "OK");
-                dialog.set_transient_for(Some(parent));
-                dialog.present();
+                dialog.present(Some(parent));
             }
         }
     }
@@ -1987,21 +1962,8 @@ mod linux {
     /// One-confirm full Brain update (OS + screen + remote).
     fn run_full_brain_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
         update_row.set_subtitle("Updating brain software and this screen…");
-        let progress = adw::MessageDialog::builder()
-            .heading("Updating…")
-            .body(
-                "Please wait. This can take several minutes while brain software \
-                 and this screen are updated.",
-            )
-            .close_response("ok")
-            .build();
-        progress.add_response("ok", "Hide");
-        progress.set_transient_for(Some(parent));
-        progress.present();
-
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
-        let progress_for_result = progress.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(run_full_brain_update_pipeline());
@@ -2009,12 +1971,11 @@ mod linux {
         glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             match rx.try_recv() {
                 Ok(result) => {
-                    progress_for_result.close();
                     match result {
                         Ok(body) => {
                             update_row_for_result
                                 .set_subtitle("Update finished — quit to load new screen");
-                            let done = adw::MessageDialog::builder()
+                            let done = adw::AlertDialog::builder()
                                 .heading("Update complete")
                                 .body(&format!(
                                     "{body}\n\nQuit and reopen Sovereign AI Brain to load the new screen. \
@@ -2029,10 +1990,8 @@ mod linux {
                                 "quit",
                                 adw::ResponseAppearance::Suggested,
                             );
-                            done.set_transient_for(Some(&parent_for_result));
                             let parent_for_quit = parent_for_result.clone();
-                            done.connect_response(None, move |dialog, response| {
-                                dialog.close();
+                            done.connect_response(None, move |_dialog, response| {
                                 if response == "quit" {
                                     if let Some(app) = parent_for_quit.application() {
                                         app.quit();
@@ -2041,25 +2000,23 @@ mod linux {
                                     }
                                 }
                             });
-                            done.present();
+                            done.present(Some(&parent_for_result));
                         }
                         Err(error) => {
                             update_row_for_result.set_subtitle("Update failed");
-                            let fail = adw::MessageDialog::builder()
+                            let fail = adw::AlertDialog::builder()
                                 .heading("Update failed")
                                 .body(&error)
                                 .close_response("ok")
                                 .build();
                             fail.add_response("ok", "OK");
-                            fail.set_transient_for(Some(&parent_for_result));
-                            fail.present();
+                            fail.present(Some(&parent_for_result));
                         }
                     }
                     glib::ControlFlow::Break
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    progress_for_result.close();
                     update_row_for_result.set_subtitle("Update failed");
                     glib::ControlFlow::Break
                 }
@@ -2298,20 +2255,18 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             recall_fill * 100.0,
         );
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Memory Horizon")
             .body(&body)
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
         dialog.set_default_response(Some("close"));
-        dialog.set_transient_for(Some(parent));
         let row = row.clone();
-        dialog.connect_response(None, move |dialog, _| {
+        dialog.connect_response(None, move |_dialog, _| {
             refresh_memory_horizon_row(&row);
-            dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn refresh_oversight_row(row: &adw::ActionRow) {
@@ -2352,7 +2307,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             })
             .unwrap_or_else(|| "balanced".to_owned());
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Autonomy Level")
             .body(
                 "How much freedom your Centurion has. Changes apply on the next conversation.\n\n\
@@ -2376,7 +2331,6 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 dialog.set_default_response(Some(id));
             }
         }
-        dialog.set_transient_for(Some(parent));
         let autonomy_row = autonomy_row.clone();
         let oversight_row = oversight_row.clone();
         dialog.connect_response(None, move |dialog, response| {
@@ -2406,7 +2360,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
@@ -2451,7 +2405,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         );
         content.append(&scrolled);
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Your Sovereign's Soul")
             .close_response("cancel")
             .extra_child(&content)
@@ -2460,7 +2414,6 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("save", "Save Changes");
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("save"));
-        dialog.set_transient_for(Some(parent));
         let soul_row = soul_row.clone();
         dialog.connect_response(None, move |dialog, response| {
             if response == "save" {
@@ -2487,7 +2440,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_oversight_dialog(
@@ -2591,7 +2544,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         );
         content.append(&list);
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Reporting & Oversight")
             .close_response("cancel")
             .extra_child(&content)
@@ -2600,7 +2553,6 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("save", "Save");
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("save"));
-        dialog.set_transient_for(Some(parent));
 
         let oversight_row = oversight_row.clone();
         let autonomy_row = autonomy_row.clone();
@@ -2644,7 +2596,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_telegram_history_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
@@ -2697,7 +2649,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             ),
         };
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading(&heading)
             .body(&body)
             .close_response("cancel")
@@ -2710,9 +2662,9 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         } else {
             dialog.set_default_response(Some("cancel"));
         }
-        dialog.set_transient_for(Some(parent));
         let row = row.clone();
-        dialog.connect_response(None, move |dialog, response| {
+        let parent_for_cb = parent.clone();
+        dialog.connect_response(None, move |_dialog, response| {
             if response == "bring" {
                 if let Some(result) = run_telegram_summary(&[]) {
                     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -2730,7 +2682,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         row.set_subtitle(&format!(
                             "Brought over {messages} messages — saved on this Centurion."
                         ));
-                        let done = adw::MessageDialog::builder()
+                        let done = adw::AlertDialog::builder()
                             .heading("Telegram history saved")
                             .body(if path.is_empty() {
                                 format!("Brought over {messages} messages onto this Centurion.")
@@ -2742,8 +2694,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                             .close_response("ok")
                             .build();
                         done.add_response("ok", "OK");
-                        done.set_transient_for(dialog.transient_for().as_ref());
-                        done.present();
+                        done.present(Some(&parent_for_cb));
                     } else {
                         let message = result
                             .get("message")
@@ -2755,9 +2706,8 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     row.set_subtitle("Could not bring over Telegram history.");
                 }
             }
-            dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn refresh_thinking_status(detail: &gtk::Label, settings_row: &adw::ActionRow) {
@@ -2873,20 +2823,19 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             None => "Could not read backup thinking services. Is Centurion AI OS installed?"
                 .to_owned(),
         };
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Backup Thinking Services")
             .body(&body)
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
         dialog.set_default_response(Some("close"));
-        dialog.set_transient_for(Some(parent));
         let row = row.clone();
         dialog.connect_response(None, move |dialog, _| {
             refresh_backup_thinking_services(&row);
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_change_thinking_dialog(
@@ -2946,14 +2895,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .collect();
 
         if connectors.is_empty() {
-            let dialog = adw::MessageDialog::builder()
+            let dialog = adw::AlertDialog::builder()
                 .heading("Change thinking service")
                 .body("Could not load the curated thinking-service catalog. Is Centurion AI OS installed?")
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
-            dialog.set_transient_for(Some(parent));
-            dialog.present();
+            dialog.present(Some(parent));
             return;
         }
 
@@ -3035,7 +2983,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             move |dropdown| update_hint(dropdown.selected())
         });
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Change thinking service")
             .body(
                 "Pick a curated thinking service. Access codes are saved only on this brain — never kept on your iPhone.",
@@ -3062,8 +3010,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         extra.append(&key_entry);
         extra.append(&error_label);
         dialog.set_extra_child(Some(&extra));
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
 
         let settings_row = settings_row.clone();
         let detail = detail.clone();
@@ -3073,7 +3020,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 dialog.close();
                 return;
             }
-            // AdwMessageDialog always closes after a response — on failure, reopen
+            // AlertDialog closes after a response — on failure, reopen
             // with the error so the owner can correct the access code without hunting Settings.
             let reopen_with_error = {
                 let parent = parent.clone();
@@ -3173,14 +3120,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         } else {
             "Could not run health check. Is Centurion AI OS installed?".to_owned()
         };
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Health Check")
             .body(&body)
             .close_response("ok")
             .build();
         dialog.add_response("ok", "OK");
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_support_bundle_dialog(parent: &adw::ApplicationWindow) {
@@ -3207,18 +3153,17 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 "Could not create a support code.".to_owned(),
             )
         };
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading(&heading)
             .body(&body)
             .close_response("ok")
             .build();
         dialog.add_response("ok", "OK");
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_support_lookup_dialog(parent: &adw::ApplicationWindow) {
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Look Up Support Code")
             .body("Enter the support code from an iPhone or a previous bundle.")
             .close_response("cancel")
@@ -3228,12 +3173,11 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("lookup", "Look Up");
         let code_entry = gtk::Entry::builder().placeholder_text("ABC-123").build();
         dialog.set_extra_child(Some(&code_entry));
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        let parent = parent.clone();
+        dialog.present(Some(&parent));
 
-        dialog.connect_response(None, move |dialog, response| {
+        dialog.connect_response(None, move |_dialog, response| {
             if response != "lookup" {
-                dialog.close();
                 return;
             }
             let code = code_entry.text().to_string();
@@ -3251,13 +3195,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                             })
                         })
                         .unwrap_or_else(|| "Support bundle found.".to_owned());
-                    adw::MessageDialog::builder()
+                    adw::AlertDialog::builder()
                         .heading(format!("Support Code {code}"))
                         .body(&body)
                         .close_response("ok")
                         .build()
                 }
-                Some(cli_response) => adw::MessageDialog::builder()
+                Some(cli_response) => adw::AlertDialog::builder()
                     .heading("Support Code Not Found")
                     .body(
                         cli_response
@@ -3267,16 +3211,14 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     )
                     .close_response("ok")
                     .build(),
-                None => adw::MessageDialog::builder()
+                None => adw::AlertDialog::builder()
                     .heading("Support Code Not Found")
                     .body("That code is missing or has expired.")
                     .close_response("ok")
                     .build(),
             };
             result_dialog.add_response("ok", "OK");
-            result_dialog.set_transient_for(dialog.transient_for().as_ref());
-            result_dialog.present();
-            dialog.close();
+            result_dialog.present(Some(&parent));
         });
     }
 
