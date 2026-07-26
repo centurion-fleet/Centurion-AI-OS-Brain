@@ -1033,11 +1033,22 @@ mod linux {
         support_group.add(&adrian_row);
         settings.append(&support_group);
 
+        // ScrolledWindow only scrolls if the child keeps its natural height.
+        // vexpand/fill on the child clips content instead of scrolling (Brain
+        // touch screens then look like Settings just "ends" mid-row).
+        settings.set_vexpand(false);
+        settings.set_hexpand(true);
+        settings.set_valign(gtk::Align::Start);
+
         let settings_scroll = gtk::ScrolledWindow::builder()
             .child(&settings)
             .vexpand(true)
             .hexpand(true)
             .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .kinetic_scrolling(true)
+            .overlay_scrolling(false) // always show a scrollbar so scroll is discoverable on touch
+            .min_content_height(240)
             .build();
 
         let chat = build_chat_page();
@@ -1056,6 +1067,7 @@ mod linux {
         chat.set_vexpand(true);
         devices.set_vexpand(true);
         settings_scroll.set_vexpand(true);
+        settings_scroll.set_hexpand(true);
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
