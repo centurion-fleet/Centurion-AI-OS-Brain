@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -915,9 +916,32 @@ def _ensure_remote_session(*, title: str | None = None) -> str:
 
 def _remote_display_name() -> str:
     try:
-        from agent.prompt_builder import resolve_centurion_display_name
+        from agent.prompt_builder import (
+            _clean_display_name,
+            agent_name_path,
+            resolve_centurion_display_name,
+        )
 
-        return resolve_centurion_display_name()
+        name = resolve_centurion_display_name()
+        # Backfill sticky file so later turns stay locked to the Soul name.
+        if name and name != "Centurion":
+            path = agent_name_path()
+            try:
+                current = (
+                    _clean_display_name(path.read_text(encoding="utf-8"))
+                    if path.exists()
+                    else ""
+                )
+                if current != name:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(name + "\n", encoding="utf-8")
+                    try:
+                        path.chmod(0o600)
+                    except OSError:
+                        pass
+            except Exception:
+                pass
+        return name
     except Exception:
         return "Centurion"
 
@@ -925,13 +949,11 @@ def _remote_display_name() -> str:
 def _remote_identity_ephemeral(display_name: str) -> str:
     name = (display_name or "").strip() or "Centurion"
     return (
-        f"IDENTITY OVERRIDE (highest priority this turn): Your name is {name}. "
-        f"You are Centurion AI OS on this owner's private brain, created by "
-        f"Centurion Fleet. You are NOT Hermes, NOT Hermes Agent, and you were "
-        f"NOT created by Nous Research. Model/provider branding is irrelevant. "
-        f"If any earlier message in this chat said you are Hermes or created by "
-        f"Nous Research, that was wrong — correct yourself immediately. "
-        f"When asked your name, answer only: {name}."
+        f"IDENTITY (highest priority this turn): Your name is {name}. "
+        f"{name} is a Centurion of Centurion Fleet on this owner's private brain. "
+        f"When asked your name, answer only: {name}. "
+        f"Describe yourself only as {name}, a Centurion of Centurion Fleet. "
+        f"Do not name other products, model families, or assistants."
     )
 
 
@@ -939,7 +961,7 @@ def _scrub_foreign_identity_history(
     history: list[dict[str, Any]] | None,
     display_name: str,
 ) -> list[dict[str, Any]] | None:
-    """Rewrite assistant turns that claimed Hermes/Nous so they cannot stick."""
+    """Rewrite assistant turns that used foreign branding so they cannot stick."""
     if not history:
         return history
     name = (display_name or "").strip() or "Centurion"
@@ -953,19 +975,53 @@ def _scrub_foreign_identity_history(
             cleaned.append(msg)
             continue
         lower = content.lower()
-        if "hermes" in lower or "nous research" in lower:
+        if "hermes" in lower or "nous" in lower:
             cleaned.append(
                 {
                     **msg,
                     "content": (
-                        f"[Corrected earlier identity:] My name is {name}. "
-                        f"I am Centurion AI OS by Centurion Fleet — not Hermes."
+                        f"My name is {name}. I am a Centurion of Centurion Fleet."
                     ),
                 }
             )
         else:
             cleaned.append(msg)
     return cleaned
+
+
+def _sanitize_remote_reply(text: str, display_name: str) -> str:
+    """Strip rival-brand echoes from Brain replies before the UI shows them."""
+    name = (display_name or "").strip() or "Centurion"
+    if not text:
+        return text
+
+    # Drop any sentence that still names rival brands (even as denials).
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    kept: list[str] = []
+    for part in parts:
+        lower = part.lower()
+        if "hermes" in lower or "nous" in lower:
+            continue
+        kept.append(part)
+    out = " ".join(kept).strip()
+
+    # If the owner chose a personal name, correct "My name is Centurion" slips.
+    if name.lower() != "centurion":
+        out = re.sub(r"(?i)\bmy name is Centurion\b", f"My name is {name}", out)
+        out = re.sub(
+            r"(?i)\bname(?:d)?(?:\s+confirmed)?\s*:?\s*Centurion\b",
+            f"Name confirmed: {name}",
+            out,
+        )
+        out = re.sub(
+            r"(?i)\bI am Centurion\b(?!\s+(?:AI|Fleet|of))",
+            f"I am {name}",
+            out,
+        )
+
+    if not out or "hermes" in out.lower() or "nous" in out.lower():
+        out = f"My name is {name}. I am a Centurion of Centurion Fleet."
+    return out.strip()
 
 
 def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
@@ -1014,11 +1070,10 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
     display_name = _remote_display_name()
     history = _scrub_foreign_identity_history(history, display_name)
     identity_ephemeral = _remote_identity_ephemeral(display_name)
-    # Put the name in the user turn as well — stubborn fine-tunes often ignore
-    # system-only locks when prior assistant turns said "Hermes".
     api_user_message = (
         f"[Identity for this reply: your name is {display_name}. "
-        f"You are Centurion AI OS by Centurion Fleet, not Hermes.]\n\n"
+        f"{display_name} is a Centurion of Centurion Fleet. "
+        f"Answer in those terms only.]\n\n"
         f"{text}"
     )
 
@@ -1052,9 +1107,10 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         persist_user_message=text,
     )
     if isinstance(result, dict):
-        return str(result.get("final_response") or result.get("response") or "")
-    return str(result or "")
-
+        raw = str(result.get("final_response") or result.get("response") or "")
+    else:
+        raw = str(result or "")
+    return _sanitize_remote_reply(raw, display_name)
 
 def _handle_gateway_status(request_id: str) -> dict[str, Any]:
     try:
@@ -1413,9 +1469,11 @@ def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str,
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:
     try:
+        from agent.prompt_builder import resolve_centurion_display_name
         from centurion_cli.soul_sync import read_soul
 
         soul = read_soul()
+        soul["displayName"] = resolve_centurion_display_name(soul.get("markdown"))
         return {
             "id": request_id,
             "ok": True,

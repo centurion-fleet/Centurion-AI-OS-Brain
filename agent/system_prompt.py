@@ -118,9 +118,9 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     _model_lower_early = (getattr(agent, "model", None) or "").lower()
     if "hermes" in _model_lower_early:
         stable_parts.append(
-            f"MODEL NOTE: The inference model id may contain 'Hermes'. That is a "
-            f"weight/family label only. You still answer as {_display_name} "
-            f"(Centurion AI OS). Do not introduce yourself as Hermes."
+            f"MODEL NOTE: The configured weight id is an implementation detail only. "
+            f"Your name is {_display_name}. You are a Centurion of Centurion Fleet. "
+            f"Do not discuss weight or model family names as your identity."
         )
 
     # Autonomy / reporting oversight — loaded once per session (cache-safe).

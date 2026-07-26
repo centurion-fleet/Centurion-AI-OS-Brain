@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 
 def test_soul_name_roundtrip(tmp_path, monkeypatch):
     home = tmp_path / ".centurion"
@@ -26,6 +22,7 @@ def test_soul_name_roundtrip(tmp_path, monkeypatch):
     assert "## Name" in soul["markdown"]
     assert "Titus" in soul["markdown"]
     assert "Direct and warm." in soul["markdown"]
+    assert (home / "agent_name").read_text(encoding="utf-8").strip() == "Titus"
 
 
 def test_name_only_patch_preserves_personality(tmp_path, monkeypatch):
@@ -48,6 +45,7 @@ def test_name_only_patch_preserves_personality(tmp_path, monkeypatch):
     assert soul["name"] == "Titus"
     assert soul["personalitySummary"] == "Keep me."
     assert soul["neverDo"] == ["Soften bad news"]
+    assert (home / "agent_name").read_text(encoding="utf-8").strip() == "Titus"
 
 
 def test_resolve_display_name_and_personal_lock(tmp_path, monkeypatch):
@@ -56,6 +54,7 @@ def test_resolve_display_name_and_personal_lock(tmp_path, monkeypatch):
     monkeypatch.setenv("CENTURION_HOME", str(home))
 
     from agent.prompt_builder import (
+        PRODUCT_IDENTITY_LOCK,
         build_personal_name_lock,
         resolve_centurion_display_name,
     )
@@ -67,17 +66,33 @@ def test_resolve_display_name_and_personal_lock(tmp_path, monkeypatch):
     assert resolve_centurion_display_name() == "Titus"
     lock = build_personal_name_lock("Titus")
     assert 'answer "Titus"' in lock
-    assert "Hermes" not in lock or "Do not use" in lock
+    assert "Centurion Fleet" in lock
+    assert "Hermes" not in lock
+    assert "Nous" not in lock
 
-    write_soul({"name": "Hermes Agent", "personalitySummary": "Nope."})
+    # Forbidden brand names never become the display name (fresh sticky).
+    (home / "agent_name").unlink(missing_ok=True)
+    (home / "SOUL.md").write_text("## Name\n\nHermes Agent\n", encoding="utf-8")
     assert resolve_centurion_display_name() == "Centurion"
 
 
-def test_product_identity_lock_mentions_soul_name():
+def test_product_identity_lock_is_positive_only():
     from agent.prompt_builder import PRODUCT_IDENTITY_LOCK
 
-    assert "SOUL.md" in PRODUCT_IDENTITY_LOCK
-    assert "Hermes" in PRODUCT_IDENTITY_LOCK
     assert "Centurion Fleet" in PRODUCT_IDENTITY_LOCK
-    assert "NOT a secret system prompt" in PRODUCT_IDENTITY_LOCK
-    assert "Nous Research" in PRODUCT_IDENTITY_LOCK
+    assert "Hermes" not in PRODUCT_IDENTITY_LOCK
+    assert "Nous" not in PRODUCT_IDENTITY_LOCK
+
+
+def test_infer_name_from_prose(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "SOUL.md").write_text(
+        "You are Titus, a direct companion of Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+
+    from agent.prompt_builder import resolve_centurion_display_name
+
+    assert resolve_centurion_display_name() == "Titus"

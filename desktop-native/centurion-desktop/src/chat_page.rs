@@ -509,11 +509,20 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
 fn load_assistant_display_name() -> String {
     match run_bridge_json("soul_get", serde_json::json!({})) {
         Ok(payload) => {
-            let name = payload
-                .pointer("/soul/name")
+            let display = payload
+                .pointer("/soul/displayName")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .trim();
+            let name = if !display.is_empty() {
+                display
+            } else {
+                payload
+                    .pointer("/soul/name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+            };
             if name.is_empty() || name.eq_ignore_ascii_case("hermes") {
                 "Centurion".to_owned()
             } else {
@@ -522,6 +531,31 @@ fn load_assistant_display_name() -> String {
         }
         Err(_) => "Centurion".to_owned(),
     }
+}
+
+fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow) {
+    let adj = message_scroll.vadjustment();
+    let do_scroll = Rc::new({
+        let adj = adj.clone();
+        move || {
+            let target = (adj.upper() - adj.page_size()).max(adj.lower());
+            adj.set_value(target);
+        }
+    });
+    // Layout often settles after the first idle tick; retry so the latest
+    // bubble is actually visible without manual scrolling.
+    glib::idle_add_local_once({
+        let do_scroll = do_scroll.clone();
+        move || do_scroll()
+    });
+    glib::timeout_add_local_once(Duration::from_millis(50), {
+        let do_scroll = do_scroll.clone();
+        move || do_scroll()
+    });
+    glib::timeout_add_local_once(Duration::from_millis(200), {
+        let do_scroll = do_scroll.clone();
+        move || do_scroll()
+    });
 }
 
 /// Build the Chat tab page (bubble UI + always-visible composer).
@@ -699,10 +733,7 @@ pub fn build() -> gtk::Box {
                     message_list.append(&message_row(message, &name));
                 }
             }
-            let adj = message_scroll.vadjustment();
-            glib::idle_add_local_once(move || {
-                adj.set_value(adj.upper());
-            });
+            scroll_chat_to_latest(&message_scroll);
         }
     });
 

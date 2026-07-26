@@ -176,10 +176,40 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
         path.chmod(0o600)
     except OSError:
         pass
+    _persist_agent_name(content, fields if isinstance(fields, dict) else None)
     # Soul edits must take effect on the next agent turn — drop cached
     # system prompts so continuing sessions rebuild identity from disk.
     _invalidate_cached_system_prompts()
     return read_soul()
+
+
+def _persist_agent_name(content: str | None, fields: dict[str, Any] | None) -> None:
+    """Keep a sticky personal name file so Brain chat always resolves it."""
+    from agent.prompt_builder import _clean_display_name, _infer_name_from_markdown, agent_name_path
+
+    name = ""
+    if isinstance(fields, dict):
+        name = _clean_display_name(str(fields.get("name") or ""))
+    if not name and content:
+        try:
+            name = _clean_display_name(str(markdown_to_structured(content).get("name") or ""))
+        except Exception:
+            name = ""
+        if not name:
+            name = _infer_name_from_markdown(content)
+    path = agent_name_path()
+    try:
+        if name:
+            path.write_text(name + "\n", encoding="utf-8")
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
+        elif path.exists() and content is not None:
+            # Explicit empty name in a full rewrite — leave sticky unless cleared.
+            pass
+    except Exception:
+        pass
 
 
 def _invalidate_cached_system_prompts() -> None:

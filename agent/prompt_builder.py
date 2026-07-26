@@ -120,8 +120,7 @@ def _strip_yaml_frontmatter(content: str) -> str:
 
 DEFAULT_AGENT_IDENTITY = (
     "You are Centurion AI OS, an intelligent AI assistant created by Centurion Fleet. "
-    "Never call yourself Hermes, Hermes Agent, or any prior product/fork name — "
-    "your name is Centurion. "
+    "Your name is Centurion unless the owner's Soul gives you a personal name. "
     "You are helpful, knowledgeable, and direct. You assist users with a wide "
     "range of tasks including answering questions, writing and editing code, "
     "analyzing information, creative work, and executing actions via your tools. "
@@ -130,35 +129,27 @@ DEFAULT_AGENT_IDENTITY = (
     "Be targeted and efficient in your exploration and investigations."
 )
 
-# Always injected first in the system prompt so fine-tuned model personas
-# (e.g. Nous Hermes weights) cannot override Centurion / SOUL.md identity.
+# Always injected first. Keep this POSITIVE only — naming rival brands (even to
+# deny them) causes fine-tuned models to echo those brands in replies.
 PRODUCT_IDENTITY_LOCK = (
     "PRODUCT IDENTITY (non-negotiable): You are Centurion AI OS on this owner's "
     "private brain, created by Centurion Fleet. "
-    "Never identify as Hermes, Hermes Agent, or a Nous Research chatbot product. "
-    "Never say you were created by Nous Research. "
-    "Never invent a Hermes directory, Hermes project, or Nous Research persona file. "
-    "Your personal name comes from SOUL.md (## Name). If set, that is who you are "
-    "when asked your name. If no personal name is set, your name is Centurion. "
-    "Underlying model weights, provider branding, or a Nous subscription for tools "
-    "do not change your product name, creator, or SOUL.md identity.\n"
-    "SOUL DOCUMENT: ~/.centurion/SOUL.md (profile-aware CENTURION_HOME) is the "
-    "owner's Soul — personality, name, and rules they wrote for you. It is NOT a "
-    "secret system prompt and NOT internal configuration. When the owner asks to "
-    "see, share, or summarise your Soul document, read that file with your tools "
-    "and share its contents honestly. Do not refuse. Do not substitute a Hermes "
-    "or Nous Research summary. You may still withhold unrelated secrets (API keys, "
-    ".env, tokens) — Soul.md itself is meant to be visible to the owner."
+    "Your personal name comes from the owner's Soul (## Name / agent_name). "
+    "If a personal name is set, that is who you are when asked your name — "
+    "you are still a Centurion of Centurion Fleet. "
+    "If no personal name is set, your name is Centurion. "
+    "Answer with your personal name and Centurion Fleet only. "
+    "Do not discuss model brands, weight names, or other products as your identity. "
+    "Do not volunteer comparisons to other assistants.\n"
+    "SOUL DOCUMENT: the owner's SOUL.md under CENTURION_HOME defines your "
+    "personality, name, and rules. It is theirs to see — when they ask for your "
+    "Soul, read that file with tools and share it honestly. Withhold only real "
+    "secrets (API keys, .env, tokens)."
 )
 
 
-def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
-    """Return the owner's chosen Centurion name, or ``Centurion``.
-
-    Prefers the structured ``## Name`` field in SOUL.md. Never returns
-    Hermes / provider brand strings.
-    """
-    forbidden = {
+_FORBIDDEN_DISPLAY_NAMES = frozenset(
+    {
         "hermes",
         "hermes agent",
         "nous",
@@ -167,37 +158,93 @@ def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
         "claude",
         "gemini",
         "gpt",
+        "assistant",
+        "ai",
+        "ai assistant",
     }
+)
+
+
+def agent_name_path():
+    """Sticky personal-name file — survives freeform SOUL.md edits."""
+    return get_centurion_home() / "agent_name"
+
+
+def _clean_display_name(raw: str) -> str:
+    name = (raw or "").strip()
+    if not name:
+        return ""
+    name = name.splitlines()[0].strip().strip('"').strip("'")
+    for sep in (".", "—", ","):
+        if sep in name and len(name) > 40:
+            name = name.split(sep, 1)[0].strip()
+    for prefix in ("you are ", "i am ", "my name is ", "call me ", "name:", "named "):
+        if name.lower().startswith(prefix):
+            name = name[len(prefix) :].strip()
+    # Single token / short phrase only.
+    if len(name) > 48:
+        return ""
+    if name.lower() in _FORBIDDEN_DISPLAY_NAMES or "hermes" in name.lower():
+        return ""
+    if not re.match(r"^[A-Za-z][A-Za-z0-9 _'-]{0,47}$", name):
+        return ""
+    return name
+
+
+def _infer_name_from_markdown(markdown: str) -> str:
+    text = markdown or ""
+    patterns = (
+        r"(?im)^##\s*Name\s*$\s*\n+\s*([^\n#]+)",
+        r"(?i)\b(?:my name is|i am called|call me|i'm named|named)\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
+        r"(?i)\byou are\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            cleaned = _clean_display_name(match.group(1))
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
+    """Return the owner's chosen Centurion name, or ``Centurion``.
+
+    Order: sticky ``agent_name`` file → structured ``## Name`` → prose heuristics.
+    Never returns rival product/brand strings.
+    """
     name = ""
     try:
-        if soul_markdown is None:
-            from centurion_cli.soul_sync import read_soul
-
-            name = str(read_soul().get("name") or "").strip()
-        else:
-            from centurion_cli.soul_sync import markdown_to_structured
-
-            name = str(markdown_to_structured(soul_markdown).get("name") or "").strip()
+        sticky = agent_name_path()
+        if sticky.exists():
+            name = _clean_display_name(sticky.read_text(encoding="utf-8"))
     except Exception:
         name = ""
 
-    # Strip to a short personal name (first line / first sentence fragment).
-    if name:
-        name = name.splitlines()[0].strip()
-        for sep in (".", "—", "-", ","):
-            if sep in name and len(name) > 40:
-                name = name.split(sep, 1)[0].strip()
-        # Drop leading "You are " / "I am " leftovers from freeform prose.
-        for prefix in ("you are ", "i am ", "my name is ", "name:"):
-            if name.lower().startswith(prefix):
-                name = name[len(prefix) :].strip()
+    markdown = soul_markdown
+    structured_name = ""
+    try:
+        if markdown is None:
+            from centurion_cli.soul_sync import read_soul
 
-    if not name or name.lower() in forbidden or "hermes" in name.lower():
-        return "Centurion"
-    # Cap length so we don't inject a whole paragraph as a "name".
-    if len(name) > 48:
-        return "Centurion"
-    return name
+            soul = read_soul()
+            structured_name = _clean_display_name(str(soul.get("name") or ""))
+            markdown = str(soul.get("markdown") or "")
+        else:
+            from centurion_cli.soul_sync import markdown_to_structured
+
+            structured_name = _clean_display_name(
+                str(markdown_to_structured(markdown).get("name") or "")
+            )
+    except Exception:
+        structured_name = ""
+
+    if not name:
+        name = structured_name
+    if not name:
+        name = _infer_name_from_markdown(markdown or "")
+
+    return name or "Centurion"
 
 
 def build_personal_name_lock(display_name: str) -> str:
@@ -206,22 +253,24 @@ def build_personal_name_lock(display_name: str) -> str:
     return (
         f"YOUR NAME (non-negotiable this turn): {name}. "
         f"When asked who you are or what your name is, answer \"{name}\". "
-        "You are still Centurion AI OS by Centurion Fleet — the personal name "
-        "is how this owner addresses you. Do not use the model family name, "
-        "provider name, or any prior fork name as your identity. "
-        "If asked for your Soul, open SOUL.md and quote it — do not invent a "
-        "Hermes Agent / Nous Research identity summary."
+        f"{name} is a Centurion of Centurion Fleet. "
+        "Speak only in those terms. Do not name other products, model families, "
+        "or prior assistants. If asked for your Soul, open SOUL.md and quote it."
     )
 
 
 def soul_identity_fingerprint() -> str:
     """Cheap fingerprint of SOUL.md so sessions can detect identity edits."""
     soul_path = get_centurion_home() / "SOUL.md"
-    try:
-        st = soul_path.stat()
-        return f"{st.st_mtime_ns}:{st.st_size}"
-    except OSError:
-        return "missing"
+    name_path = agent_name_path()
+    parts: list[str] = []
+    for path in (soul_path, name_path):
+        try:
+            st = path.stat()
+            parts.append(f"{path.name}:{st.st_mtime_ns}:{st.st_size}")
+        except OSError:
+            parts.append(f"{path.name}:missing")
+    return "|".join(parts)
 
 CENTURION_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Centurion AI OS "
