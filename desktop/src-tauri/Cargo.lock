@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-desktop"
-version = "0.1.0"
+version = "5.2.1"
 dependencies = [
  "serde",
  "serde_json",
