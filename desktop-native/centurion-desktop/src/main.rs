@@ -847,6 +847,7 @@ mod linux {
         settings.set_margin_top(32);
         settings.set_margin_start(32);
         settings.set_margin_end(32);
+        settings.set_margin_bottom(32);
         settings.append(
             &gtk::Label::builder()
                 .label("Settings")
@@ -854,8 +855,14 @@ mod linux {
                 .xalign(0.0)
                 .build(),
         );
-        let settings_list = gtk::ListBox::new();
-        settings_list.add_css_class("boxed-list");
+
+        // Each section is its own PreferencesGroup. Earlier we appended section
+        // labels to the page *before* a single list, so Autonomy/Soul/Telegram
+        // visually sat under "Support Tools" and the middle headers looked empty.
+        let brain_group = adw::PreferencesGroup::builder()
+            .title("Brain")
+            .description("Screen app, updates, and how your Centurion thinks")
+            .build();
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
@@ -864,8 +871,8 @@ mod linux {
             .icon_name("network-wireless-symbolic")
             .activatable(true)
             .build();
-        settings_list.append(&pairing_settings_row);
-        settings_list.append(
+        brain_group.add(&pairing_settings_row);
+        brain_group.add(
             &adw::ActionRow::builder()
                 .title("Version")
                 .subtitle(&format!(
@@ -890,7 +897,7 @@ mod linux {
         rebuild_screen_button.set_valign(gtk::Align::Center);
         update_row.add_suffix(&rebuild_screen_button);
         update_row.add_suffix(&update_check_button);
-        settings_list.append(&update_row);
+        brain_group.add(&update_row);
 
         let thinking_settings_row = adw::ActionRow::builder()
             .title("Thinking Service")
@@ -904,30 +911,27 @@ mod linux {
         change_thinking_button.set_valign(gtk::Align::Center);
         thinking_settings_row.add_suffix(&restore_thinking_button);
         thinking_settings_row.add_suffix(&change_thinking_button);
-        settings_list.append(&thinking_settings_row);
+        brain_group.add(&thinking_settings_row);
 
         let backup_thinking_row = adw::ActionRow::builder()
             .title("Backup Thinking Services")
             .subtitle("No backup thinking services configured.")
             .icon_name("view-list-symbolic")
             .build();
-        settings_list.append(&backup_thinking_row);
+        brain_group.add(&backup_thinking_row);
 
         let setup_thinking_row = adw::ActionRow::builder()
             .title("Set up how your Centurion thinks")
             .subtitle("Run centurion setup on this computer for first-time configuration.")
             .icon_name("system-run-symbolic")
             .build();
-        settings_list.append(&setup_thinking_row);
+        brain_group.add(&setup_thinking_row);
+        settings.append(&brain_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("You & Oversight")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let you_group = adw::PreferencesGroup::builder()
+            .title("You & Oversight")
+            .description("Autonomy, personality, memory, and reporting")
+            .build();
         let autonomy_row = adw::ActionRow::builder()
             .title("Autonomy Level")
             .subtitle("Balanced (default) — follow with light interpretation")
@@ -936,7 +940,7 @@ mod linux {
         let autonomy_button = gtk::Button::with_label("Adjust");
         autonomy_button.set_valign(gtk::Align::Center);
         autonomy_row.add_suffix(&autonomy_button);
-        settings_list.append(&autonomy_row);
+        you_group.add(&autonomy_row);
 
         let soul_row = adw::ActionRow::builder()
             .title("Your Sovereign's Soul")
@@ -946,7 +950,7 @@ mod linux {
         let soul_button = gtk::Button::with_label("View / Edit");
         soul_button.set_valign(gtk::Align::Center);
         soul_row.add_suffix(&soul_button);
-        settings_list.append(&soul_row);
+        you_group.add(&soul_row);
 
         let memory_horizon_row = adw::ActionRow::builder()
             .title("Memory Horizon")
@@ -956,7 +960,7 @@ mod linux {
         let memory_horizon_button = gtk::Button::with_label("View");
         memory_horizon_button.set_valign(gtk::Align::Center);
         memory_horizon_row.add_suffix(&memory_horizon_button);
-        settings_list.append(&memory_horizon_row);
+        you_group.add(&memory_horizon_row);
 
         let oversight_row = adw::ActionRow::builder()
             .title("Reporting & Oversight")
@@ -966,16 +970,13 @@ mod linux {
         let oversight_button = gtk::Button::with_label("Adjust");
         oversight_button.set_valign(gtk::Align::Center);
         oversight_row.add_suffix(&oversight_button);
-        settings_list.append(&oversight_row);
+        you_group.add(&oversight_row);
+        settings.append(&you_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("Transition")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let transition_group = adw::PreferencesGroup::builder()
+            .title("Transition")
+            .description("One-time moves from earlier Centurion setups")
+            .build();
         let telegram_history_row = adw::ActionRow::builder()
             .title("Bring over Telegram history")
             .subtitle(
@@ -986,16 +987,13 @@ mod linux {
         let telegram_bring_button = gtk::Button::with_label("Bring over");
         telegram_bring_button.set_valign(gtk::Align::Center);
         telegram_history_row.add_suffix(&telegram_bring_button);
-        settings_list.append(&telegram_history_row);
+        transition_group.add(&telegram_history_row);
+        settings.append(&transition_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("Support Tools")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let support_group = adw::PreferencesGroup::builder()
+            .title("Support Tools")
+            .description("Health checks and help for your advisor")
+            .build();
         let support_health_row = adw::ActionRow::builder()
             .title("Run Health Check")
             .subtitle("Check thinking service and configuration")
@@ -1020,9 +1018,9 @@ mod linux {
         support_health_row.add_suffix(&health_check_button);
         support_bundle_row.add_suffix(&bundle_button);
         support_lookup_row.add_suffix(&lookup_button);
-        settings_list.append(&support_health_row);
-        settings_list.append(&support_bundle_row);
-        settings_list.append(&support_lookup_row);
+        support_group.add(&support_health_row);
+        support_group.add(&support_bundle_row);
+        support_group.add(&support_lookup_row);
 
         let adrian_row = adw::ActionRow::builder()
             .title("Talk to Adrian")
@@ -1032,9 +1030,15 @@ mod linux {
         let adrian_button = gtk::Button::with_label("Open");
         adrian_button.set_valign(gtk::Align::Center);
         adrian_row.add_suffix(&adrian_button);
-        settings_list.append(&adrian_row);
+        support_group.add(&adrian_row);
+        settings.append(&support_group);
 
-        settings.append(&settings_list);
+        let settings_scroll = gtk::ScrolledWindow::builder()
+            .child(&settings)
+            .vexpand(true)
+            .hexpand(true)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .build();
 
         let chat = build_chat_page();
 
@@ -1047,11 +1051,11 @@ mod linux {
         stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&devices, Some("devices"), "Devices");
-        stack.add_titled(&settings, Some("settings"), "Settings");
+        stack.add_titled(&settings_scroll, Some("settings"), "Settings");
         home.set_vexpand(true);
         chat.set_vexpand(true);
         devices.set_vexpand(true);
-        settings.set_vexpand(true);
+        settings_scroll.set_vexpand(true);
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
