@@ -1,10 +1,14 @@
-# Expose TCP 9119 for away-from-home pairing
+# Expose TCP 9119 (legacy / power-user)
 
-Sovereign AI Remote links over encrypted TCP **port 9119**. The QR / connection
-string embeds a hostname the iPhone can reach from **cellular** (not only home
-Wi‑Fi). Choose one path below, then mint a pairing QR that uses that host.
+> **Product path:** Unbox & Go is **LAN-only** (Bonjour + QR on the same Wi‑Fi).
+> Away-from-home for customers is a **Centurion-hosted relay** (Phase 2) — not
+> DIY Cloudflare or port-forward. This document remains for lab / power users
+> who still want a public `:9119` endpoint.
 
-## Persist advertise host
+Sovereign AI Remote links over encrypted TCP **port 9119**. A public hostname
+in the QR only matters if you are **not** using same-LAN Unbox pairing.
+
+## Persist advertise host (power-user)
 
 ```bash
 mkdir -p ~/.centurion/remote
@@ -15,59 +19,41 @@ export CENTURION_REMOTE_ADVERTISE_HOST=brain.yourdomain.com
 desktop-native/scripts/install-user.sh
 ```
 
-GTK **Link iPhone** and `centurion remote pair` (when `--host` omitted) read
+`centurion remote pair` (when `--host` omitted) still reads
 `CENTURION_REMOTE_ADVERTISE_HOST`, then that file, then LAN IP.
 
+**Unbox note:** Sovereign AI Brain’s full-screen pairing QR always embeds the
+**LAN IPv4** (never the tunnel advertise-host), so first-link Unbox works on
+Wi‑Fi without router changes.
 
-## 2. Confirm the listener
+## Confirm the listener
 
 ```bash
 systemctl --user status centurion-remote
 # Should be active; listening on 0.0.0.0:9119 (or configured bind).
 ```
 
-## 3. Tunnel / public path (pick one)
+## Tunnel / public path (lab only)
 
-### Cloudflare Tunnel (recommended)
+### Port-forward / firewall
 
-1. Install `cloudflared` and authenticate.
-2. Create a TCP tunnel to the Brain:
-
-```bash
-cloudflared tunnel create centurion-remote
-# Route hostname → localhost:9119 (TCP). Exact config depends on your CF setup.
-cloudflared tunnel run --url tcp://127.0.0.1:9119 <tunnel-name>
-```
-
-3. Point DNS (`brain.yourdomain.com`) at the tunnel.
-4. Verify from another network:
-
-```bash
-nc -vz brain.yourdomain.com 9119
-```
+Allow inbound TCP 9119 to the Brain. Use public IP or DynDNS as `--host`.
 
 ### Reverse proxy (nginx stream / Caddy)
 
 TCP pass-through to `127.0.0.1:9119`. Use your public DNS name as
 `CENTURION_REMOTE_ADVERTISE_HOST`.
 
-### Port-forward / firewall
+Cloudflare HTTP tunnels are **not** a substitute for raw Centurion TCP.
 
-Allow inbound TCP 9119 to the Brain. Use public IP or DynDNS as `--host`.
-
-## 4. Mint QR and pair
+## Mint QR (power-user)
 
 ```bash
 centurion remote pair --host "$CENTURION_REMOTE_ADVERTISE_HOST"
-# TTY: ASCII QR + connection string
-# Or: Sovereign AI Brain → Link iPhone — show QR
 ```
 
-On the iPhone (cellular): Connect → **Scan QR code**.
-
-## Checklist
+## Checklist (lab)
 
 - [ ] `centurion-remote` active
-- [ ] `CENTURION_REMOTE_ADVERTISE_HOST` is a public/tunnel hostname (not `127.0.0.1`)
 - [ ] `nc -vz <host> 9119` succeeds from outside the Brain LAN
-- [ ] QR scan on cellular completes pairing
+- [ ] Prefer Unbox LAN smoke first — see `ios/CenturionApp/DEVICE_SMOKE.md`

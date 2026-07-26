@@ -937,7 +937,7 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         requested=effective_provider,
         target_model=effective_model or None,
     )
-    toolsets_list = sorted(_get_platform_tools(cfg, "cli"))
+    toolsets_list = sorted(_get_platform_tools(cfg, "telegram"))
     _fb = get_fallback_chain(cfg)
 
     history = None
@@ -956,6 +956,8 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         session_db = None
         history = None
 
+    # Match messaging turns: skip memory prefetch so a plain greeting does not
+    # stall behind vault/session_search while the phone waits on one socket.
     agent = AIAgent(
         api_key=runtime.get("api_key"),
         base_url=runtime.get("base_url"),
@@ -969,6 +971,7 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         session_db=session_db,
         credential_pool=runtime.get("credential_pool"),
         fallback_model=_fb or None,
+        skip_memory=True,
     )
     agent.suppress_status_output = True
     agent.stream_delta_callback = None

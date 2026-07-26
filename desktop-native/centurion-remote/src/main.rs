@@ -390,7 +390,28 @@ fn default_advertise_host() -> String {
 }
 
 fn pairing_lan_host() -> Option<String> {
-    // Best-effort: hostname that resolves, else first non-loopback IPv4 via `hostname -I` style.
+    // Prefer a concrete LAN IPv4 for pairing QR / connection strings.
+    if let Ok(output) = std::process::Command::new("hostname")
+        .args(["-I"])
+        .output()
+    {
+        if output.status.success() {
+            for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+                if token.contains(':') || token.starts_with("127.") {
+                    continue;
+                }
+                // Skip Tailscale CGNAT.
+                let parts: Vec<u8> = token
+                    .split('.')
+                    .filter_map(|part| part.parse().ok())
+                    .collect();
+                if parts.len() == 4 && parts[0] == 100 && (64..=127).contains(&parts[1]) {
+                    continue;
+                }
+                return Some(token.to_owned());
+            }
+        }
+    }
     if let Ok(name) = hostname::get() {
         if let Ok(s) = name.into_string() {
             let trimmed = s.trim().to_owned();

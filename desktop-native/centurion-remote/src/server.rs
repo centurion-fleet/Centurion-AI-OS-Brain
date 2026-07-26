@@ -56,9 +56,20 @@ async fn handle_connection(
 
     let approved = reload_is_approved(&state, &fingerprint).await?;
 
-    if !approved && state.auto_approve {
+    // Unbox & Go: first phone on the LAN may Confirm without a QR when no
+    // devices are linked yet. Once any device is approved, QR / explicit
+    // approve is required again.
+    let virgin_lan_auto = {
+        let registry = state.registry.lock().await;
+        registry.devices().is_empty() && is_private_lan_peer(peer)
+    };
+
+    if !approved && (state.auto_approve || virgin_lan_auto) {
         let name = format!("iPhone {}", &fingerprint[..8]);
         state.registry.lock().await.approve(&fingerprint, name)?;
+        if virgin_lan_auto && !state.auto_approve {
+            info!(%peer, %fingerprint, "Virgin LAN link auto-approved");
+        }
     } else if !approved {
         let requires_pair = {
             let mut pairing = state.pairing.lock().await;
@@ -1793,6 +1804,18 @@ async fn write_message(
     let frame = encode_frame(&encrypted)?;
     stream.write_all(&frame).await?;
     Ok(())
+}
+
+/// True for RFC1918 / link-local peers — Unbox Confirm on the home LAN.
+/// Loopback is excluded so lab pair-token tests still exercise PairRequired.
+fn is_private_lan_peer(peer: SocketAddr) -> bool {
+    match peer.ip() {
+        std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+        std::net::IpAddr::V6(v6) => {
+            // Unique-local (fc00::/7) and link-local — not loopback.
+            (v6.segments()[0] & 0xfe00) == 0xfc00 || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

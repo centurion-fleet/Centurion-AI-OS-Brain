@@ -25,9 +25,36 @@ echo "Installing menu entry and icons…"
 mkdir -p "${APP_DIR}" "${ICON_DIR}"
 # Remove stale Tauri launcher if present.
 rm -f "${APP_DIR}/centurion-desktop.desktop"
-sed "s|^Exec=centurion-desktop$|Exec=${BIN_DIR}/centurion-desktop|" \
-  "${DESKTOP_NATIVE}/resources/com.centurion.desktop.desktop" \
-  > "${APP_DIR}/com.centurion.desktop.desktop"
+
+# Prefer Centurion venv python so the desktop + remote bridges can import centurion_cli.
+PYTHON_BIN="python3"
+for candidate in \
+  "${ROOT}/.venv/bin/python" \
+  "${ROOT}/venv/bin/python" \
+  "${HOME}/.centurion/Centurion-AI-OS/venv/bin/python" \
+  "${HOME}/.centurion/venv/bin/python"
+do
+  if [[ -x "${candidate}" ]]; then
+    PYTHON_BIN="${candidate}"
+    break
+  fi
+done
+
+# Pin Centurion Python + repo for Settings (Autonomy/Soul/Horizon) and Chat tab.
+cat > "${APP_DIR}/com.centurion.desktop.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Sovereign AI Brain
+GenericName=Personal AI Brain
+Comment=Your private Sovereign AI Brain
+Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} ${BIN_DIR}/centurion-desktop
+Icon=com.centurion.desktop
+Terminal=false
+Categories=Utility;Network;
+Keywords=AI;Assistant;Centurion;Sovereign;Brain;Private;
+StartupNotify=true
+StartupWMClass=com.centurion.desktop
+EOF
 chmod 0644 "${APP_DIR}/com.centurion.desktop.desktop"
 for size in 16 22 24 32 48 64 128 256 512; do
   install -D -m 0644 \
@@ -47,20 +74,6 @@ fi
 
 echo "Installing user systemd unit for centurion-remote…"
 mkdir -p "${SYSTEMD_DIR}"
-
-# Prefer Centurion venv python so the remote bridge can import centurion_cli.
-PYTHON_BIN="python3"
-for candidate in \
-  "${ROOT}/.venv/bin/python" \
-  "${ROOT}/venv/bin/python" \
-  "${HOME}/.centurion/Centurion-AI-OS/venv/bin/python" \
-  "${HOME}/.centurion/venv/bin/python"
-do
-  if [[ -x "${candidate}" ]]; then
-    PYTHON_BIN="${candidate}"
-    break
-  fi
-done
 
 {
   sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
