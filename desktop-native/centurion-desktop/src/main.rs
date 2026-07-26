@@ -2080,7 +2080,7 @@ mod linux {
         if !output.status.success() && output.stdout.is_empty() {
             return None;
         }
-        serde_json::from_slice(&output.stdout).ok()
+        crate::chat_page::parse_bridge_stdout(&output.stdout)
     }
 
     fn autonomy_label(level: &str) -> &'static str {
@@ -2166,6 +2166,14 @@ mod linux {
             row.set_subtitle("Could not read Memory Horizon.");
             return;
         };
+        if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            let message = payload
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not read Memory Horizon.");
+            row.set_subtitle(message);
+            return;
+        }
         let hot = payload
             .pointer("/snapshot/hot_cache/fill_ratio")
             .and_then(|v| v.as_f64())

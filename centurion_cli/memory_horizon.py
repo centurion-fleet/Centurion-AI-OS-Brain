@@ -101,11 +101,13 @@ def build_memory_horizon_snapshot() -> dict[str, Any]:
     messages = 0
     db_bytes = 0
     try:
-        from centurion_state import DEFAULT_DB_PATH, SessionDB
+        from centurion_state import SessionDB
 
-        db_path = Path(DEFAULT_DB_PATH)
+        # Resolve at call time — DEFAULT_DB_PATH is frozen at import and can
+        # miss profile / CENTURION_HOME overrides used by the desktop bridge.
+        db_path = get_centurion_home() / "state.db"
         db_bytes = _safe_file_bytes(db_path)
-        db = SessionDB()
+        db = SessionDB(db_path=db_path)
         try:
             sessions = int(db.session_count())
             messages = int(db.message_count())

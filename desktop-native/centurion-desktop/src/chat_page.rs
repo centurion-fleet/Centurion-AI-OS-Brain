@@ -7,7 +7,7 @@ use adw::prelude::*;
 use gtk4 as gtk;
 use libadwaita as adw;
 use serde_json::Value;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -171,6 +171,12 @@ fn parse_final_json(stdout: &str) -> Option<Value> {
         }
     }
     last.or_else(|| serde_json::from_str(stdout.trim()).ok())
+}
+
+/// Parse bridge stdout the same way Chat does (last JSON line wins).
+pub fn parse_bridge_stdout(stdout: &[u8]) -> Option<Value> {
+    let text = String::from_utf8_lossy(stdout);
+    parse_final_json(&text)
 }
 
 fn ensure_session_id() -> Result<String, String> {
@@ -533,28 +539,56 @@ fn load_assistant_display_name() -> String {
     }
 }
 
-fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow) {
+fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow, message_list: &gtk::ListBox) {
+    if let Some(child) = message_list.last_child() {
+        if let Ok(row) = child.downcast::<gtk::ListBoxRow>() {
+            message_list.scroll_to(
+                &row,
+                gtk::ListScrollFlags::NONE,
+                None::<gtk::ScrollInfo>,
+            );
+        }
+    }
     let adj = message_scroll.vadjustment();
-    let do_scroll = Rc::new({
-        let adj = adj.clone();
-        move || {
+    let target = (adj.upper() - adj.page_size()).max(adj.lower());
+    adj.set_value(target);
+}
+
+fn wire_follow_bottom_scroll(
+    message_scroll: &gtk::ScrolledWindow,
+    follow_bottom: Rc<Cell<bool>>,
+) {
+    let adj = message_scroll.vadjustment();
+    let suppressing = Rc::new(Cell::new(false));
+
+    adj.connect_changed({
+        let follow_bottom = follow_bottom.clone();
+        let suppressing = suppressing.clone();
+        move |adj| {
+            if !follow_bottom.get() || suppressing.get() {
+                return;
+            }
             let target = (adj.upper() - adj.page_size()).max(adj.lower());
-            adj.set_value(target);
+            if (adj.value() - target).abs() > 1.0 {
+                suppressing.set(true);
+                adj.set_value(target);
+                suppressing.set(false);
+            }
         }
     });
-    // Layout often settles after the first idle tick; retry so the latest
-    // bubble is actually visible without manual scrolling.
-    glib::idle_add_local_once({
-        let do_scroll = do_scroll.clone();
-        move || do_scroll()
-    });
-    glib::timeout_add_local_once(Duration::from_millis(50), {
-        let do_scroll = do_scroll.clone();
-        move || do_scroll()
-    });
-    glib::timeout_add_local_once(Duration::from_millis(200), {
-        let do_scroll = do_scroll.clone();
-        move || do_scroll()
+
+    adj.connect_value_changed({
+        let follow_bottom = follow_bottom.clone();
+        let suppressing = suppressing.clone();
+        move |adj| {
+            if suppressing.get() {
+                return;
+            }
+            let target = (adj.upper() - adj.page_size()).max(adj.lower());
+            // If the user scrolls away from the bottom, stop chasing until
+            // the next send/reply arms follow again.
+            follow_bottom.set(adj.value() >= target - 72.0);
+        }
     });
 }
 
@@ -591,8 +625,9 @@ pub fn build() -> gtk::Box {
     top.append(
         &gtk::Label::builder()
             .label(
-                "Local chat on this brain — Soul identity (name + personality) \
-                 is applied before every answer. Message box is at the bottom.",
+                "Local chat on this brain — Soul, name, and Memory Horizon \
+                 (hot cache + past conversations on this computer) load with each answer. \
+                 Message box is at the bottom.",
             )
             .wrap(true)
             .xalign(0.0)
@@ -628,6 +663,8 @@ pub fn build() -> gtk::Box {
         .propagate_natural_height(false)
         .build();
     message_scroll.set_child(Some(&message_list));
+    let follow_bottom = Rc::new(Cell::new(true));
+    wire_follow_bottom_scroll(&message_scroll, follow_bottom.clone());
     main.append(&message_scroll);
     overlay.set_child(Some(&main));
 
@@ -711,9 +748,11 @@ pub fn build() -> gtk::Box {
         let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
         let title = title.clone();
+        let follow_bottom = follow_bottom.clone();
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
+            follow_bottom.set(true);
             while let Some(child) = message_list.first_child() {
                 message_list.remove(&child);
             }
@@ -733,7 +772,32 @@ pub fn build() -> gtk::Box {
                     message_list.append(&message_row(message, &name));
                 }
             }
-            scroll_chat_to_latest(&message_scroll);
+            scroll_chat_to_latest(&message_scroll, &message_list);
+            let message_scroll = message_scroll.clone();
+            let message_list = message_list.clone();
+            let follow_bottom = follow_bottom.clone();
+            glib::idle_add_local_once({
+                let message_scroll = message_scroll.clone();
+                let message_list = message_list.clone();
+                let follow_bottom = follow_bottom.clone();
+                move || {
+                    follow_bottom.set(true);
+                    scroll_chat_to_latest(&message_scroll, &message_list);
+                }
+            });
+            glib::timeout_add_local_once(Duration::from_millis(50), {
+                let message_scroll = message_scroll.clone();
+                let message_list = message_list.clone();
+                let follow_bottom = follow_bottom.clone();
+                move || {
+                    follow_bottom.set(true);
+                    scroll_chat_to_latest(&message_scroll, &message_list);
+                }
+            });
+            glib::timeout_add_local_once(Duration::from_millis(200), move || {
+                follow_bottom.set(true);
+                scroll_chat_to_latest(&message_scroll, &message_list);
+            });
         }
     });
 

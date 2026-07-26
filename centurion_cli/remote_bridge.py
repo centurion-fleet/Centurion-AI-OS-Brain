@@ -1077,8 +1077,9 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         f"{text}"
     )
 
-    # Match messaging turns: skip memory prefetch so a plain greeting does not
-    # stall behind vault/session_search while the phone waits on one socket.
+    # Brain Chat shares CENTURION_HOME with Telegram/gateway — load hot-cache
+    # memory + providers so existing customers keep continuity. Vault prefetch
+    # stays config-gated inside agent init.
     agent = AIAgent(
         api_key=runtime.get("api_key"),
         base_url=runtime.get("base_url"),
@@ -1092,7 +1093,7 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         session_db=session_db,
         credential_pool=runtime.get("credential_pool"),
         fallback_model=_fb or None,
-        skip_memory=True,
+        skip_memory=False,
         load_soul_identity=True,
         ephemeral_system_prompt=identity_ephemeral,
     )
