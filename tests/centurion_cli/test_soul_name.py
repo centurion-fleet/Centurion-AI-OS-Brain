@@ -79,3 +79,5 @@ def test_product_identity_lock_mentions_soul_name():
     assert "SOUL.md" in PRODUCT_IDENTITY_LOCK
     assert "Hermes" in PRODUCT_IDENTITY_LOCK
     assert "Centurion Fleet" in PRODUCT_IDENTITY_LOCK
+    assert "NOT a secret system prompt" in PRODUCT_IDENTITY_LOCK
+    assert "Nous Research" in PRODUCT_IDENTITY_LOCK
