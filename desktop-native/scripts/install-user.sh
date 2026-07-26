@@ -124,12 +124,40 @@ if [[ ! -x "${BIN_DIR}/centurion-desktop" ]]; then
   exit 1
 fi
 
+# Stamp so Settings → Check for update can see when the screen binary is stale.
+CENTURION_HOME_DIR="${CENTURION_HOME:-${HOME}/.centurion}"
+mkdir -p "${CENTURION_HOME_DIR}"
+SCREEN_VERSION="$(
+  awk '
+    /^\[workspace\.package\]/ { in_pkg=1; next }
+    /^\[/ { in_pkg=0 }
+    in_pkg && /^version[[:space:]]*=/ {
+      gsub(/"/, "", $3); print $3; exit
+    }
+  ' "${DESKTOP_NATIVE}/Cargo.toml" 2>/dev/null || true
+)"
+GIT_REV="$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+GIT_BRANCH="$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo unknown)"
+cat > "${CENTURION_HOME_DIR}/desktop-build.json" <<EOF
+{
+  "version": "${SCREEN_VERSION:-unknown}",
+  "git_rev": "${GIT_REV}",
+  "git_branch": "${GIT_BRANCH}",
+  "built_at": "${BUILT_AT}",
+  "repo_root": "${ROOT}",
+  "binary": "${BIN_DIR}/centurion-desktop"
+}
+EOF
+chmod 0644 "${CENTURION_HOME_DIR}/desktop-build.json" || true
+
 echo
 echo "Installed:"
 echo "  ${BIN_DIR}/centurion-remote"
 echo "  ${BIN_DIR}/centurion-desktop"
 echo "  ${APP_DIR}/com.centurion.desktop.desktop"
 echo "  Python bridge: ${PYTHON_BIN}"
+echo "  Build stamp: ${CENTURION_HOME_DIR}/desktop-build.json (${SCREEN_VERSION:-unknown})"
 echo
 echo "Launch GUI:"
 echo "  ${BIN_DIR}/centurion-desktop"

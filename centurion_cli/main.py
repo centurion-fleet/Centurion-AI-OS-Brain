@@ -129,6 +129,7 @@ if _try_termux_ultrafast_version():
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -8407,14 +8408,209 @@ def _finalize_update_output(state):
             pass
 
 
+def _version_tuple(version: str) -> tuple[int, ...]:
+    """Parse a dotted version into comparable ints (non-digits ignored)."""
+    parts: list[int] = []
+    for piece in re.split(r"[^0-9]+", (version or "").strip().lstrip("vV")):
+        if piece.isdigit():
+            parts.append(int(piece))
+    return tuple(parts) or (0,)
+
+
+def _version_newer(candidate: str, installed: str) -> bool:
+    """True when ``candidate`` is a strictly newer semver-ish version."""
+    return _version_tuple(candidate) > _version_tuple(installed)
+
+
+def _read_desktop_native_version(root: Path) -> str | None:
+    """Read workspace package version from ``desktop-native/Cargo.toml``."""
+    cargo = root / "desktop-native" / "Cargo.toml"
+    if not cargo.is_file():
+        return None
+    try:
+        text = cargo.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    # Prefer [workspace.package] version (Brain screen lockstep source).
+    match = re.search(
+        r"(?ms)^\[workspace\.package\].*?^version\s*=\s*\"([^\"]+)\"",
+        text,
+    )
+    if match:
+        return match.group(1).strip()
+    match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+    return match.group(1).strip() if match else None
+
+
+def _desktop_build_stamp_path() -> Path:
+    from centurion_cli.config import get_centurion_home
+
+    return get_centurion_home() / "desktop-build.json"
+
+
+def _read_desktop_build_stamp() -> dict | None:
+    path = _desktop_build_stamp_path()
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _installed_desktop_binary() -> Path | None:
+    home = Path.home()
+    for candidate in (
+        home / ".local" / "bin" / "centurion-desktop",
+        Path("/usr/local/bin/centurion-desktop"),
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _git_rev_list_count(git_cmd: list[str], cwd: Path, rev_range: str) -> int | None:
+    """Return ``git rev-list A..B --count`` or None if the range is invalid."""
+    result = subprocess.run(
+        git_cmd + ["rev-list", rev_range, "--count"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return int((result.stdout or "").strip() or "0")
+    except ValueError:
+        return None
+
+
+def _git_current_branch(git_cmd: list[str], cwd: Path) -> str | None:
+    result = subprocess.run(
+        git_cmd + ["rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    branch = (result.stdout or "").strip()
+    if not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def _git_upstream_ref(git_cmd: list[str], cwd: Path) -> str | None:
+    result = subprocess.run(
+        git_cmd + ["rev-parse", "--abbrev-ref", "@{u}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    ref = (result.stdout or "").strip()
+    return ref or None
+
+
+def _screen_rebuild_needed(
+    git_cmd: list[str],
+    cwd: Path,
+    *,
+    screen_version: str | None,
+) -> tuple[bool, str | None, str | None, str]:
+    """Detect Brain screen binary lagging the local checkout.
+
+    Returns ``(needed, checkout_version, installed_hint, reason)``.
+    """
+    checkout_version = _read_desktop_native_version(cwd)
+    stamp = _read_desktop_build_stamp()
+    installed_hint = None
+    if screen_version:
+        installed_hint = screen_version.strip() or None
+    elif isinstance(stamp, dict) and stamp.get("version"):
+        installed_hint = str(stamp.get("version"))
+
+    if (
+        checkout_version
+        and installed_hint
+        and _version_newer(checkout_version, installed_hint)
+    ):
+        return (
+            True,
+            checkout_version,
+            installed_hint,
+            (
+                f"Screen app {checkout_version} is in your Centurion folder "
+                f"(running {installed_hint})."
+            ),
+        )
+
+    head_result = subprocess.run(
+        git_cmd + ["rev-parse", "HEAD"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    head = (head_result.stdout or "").strip() if head_result.returncode == 0 else ""
+    if (
+        head
+        and isinstance(stamp, dict)
+        and stamp.get("git_rev")
+        and str(stamp.get("git_rev")).strip() != head
+    ):
+        return (
+            True,
+            checkout_version,
+            installed_hint or str(stamp.get("version") or ""),
+            "Your Centurion folder has newer screen code than the installed Brain app.",
+        )
+
+    binary = _installed_desktop_binary()
+    if binary is not None and (cwd / "desktop-native").is_dir():
+        try:
+            bin_mtime = binary.stat().st_mtime
+        except OSError:
+            bin_mtime = 0.0
+        log_result = subprocess.run(
+            git_cmd + ["log", "-1", "--format=%ct", "--", "desktop-native"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+        if log_result.returncode == 0:
+            try:
+                commit_ts = float((log_result.stdout or "").strip() or "0")
+            except ValueError:
+                commit_ts = 0.0
+            # Commit on disk is newer than the installed binary → needs rebuild.
+            if commit_ts > bin_mtime + 2.0:
+                return (
+                    True,
+                    checkout_version,
+                    installed_hint,
+                    "Screen source in your Centurion folder is newer than the installed Brain app.",
+                )
+
+    return (False, checkout_version, installed_hint, "")
+
+
 def _cmd_update_check(args=None):
     """Implement ``centurion update --check``: fetch and report without installing.
 
     With ``--json``, print a single JSON object for desktop / automation clients:
     ``ok``, ``method``, ``status`` (up_to_date | update_available | unavailable),
-    ``behind``, ``os_version``, ``message``, ``recommended_command``.
+    ``behind``, ``branch_behind``, ``os_version``, ``message``, ``recommended_command``,
+    ``update_action`` (full | rebuild_screen), ``screen_rebuild_available``,
+    ``screen_checkout_version``, ``screen_installed_version``.
     """
     as_json = bool(args is not None and getattr(args, "json", False))
+    screen_version = None
+    if args is not None:
+        raw = getattr(args, "screen_version", None)
+        if raw:
+            screen_version = str(raw).strip() or None
     from centurion_cli.config import (
         detect_install_method,
         is_managed,
@@ -8450,8 +8646,13 @@ def _cmd_update_check(args=None):
     base = {
         "ok": True,
         "behind": 0,
+        "branch_behind": 0,
         "os_version": __version__,
         "recommended_command": recommended_update_command(),
+        "update_action": "full",
+        "screen_rebuild_available": False,
+        "screen_checkout_version": None,
+        "screen_installed_version": None,
     }
 
     if is_managed():
@@ -8524,29 +8725,26 @@ def _cmd_update_check(args=None):
     if sys.platform == "win32":
         git_cmd = ["git", "-c", "windows.appendAtomically=false"]
 
+    # Fetch origin always (current branch tips). Also try upstream for main compare.
+    if not as_json:
+        print("→ Fetching from origin...")
+    origin_fetch = subprocess.run(
+        git_cmd + ["fetch", "origin"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
     if not as_json:
         print("→ Fetching from upstream...")
-    fetch_result = subprocess.run(
+    upstream_fetch = subprocess.run(
         git_cmd + ["fetch", "upstream"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
     )
-    if fetch_result.returncode != 0:
-        if not as_json:
-            print("→ Fetching from origin...")
-        fetch_result = subprocess.run(
-            git_cmd + ["fetch", "origin"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-        )
-        compare_branch = "origin/main"
-    else:
-        compare_branch = "upstream/main"
 
-    if fetch_result.returncode != 0:
-        stderr = fetch_result.stderr.strip()
+    if origin_fetch.returncode != 0 and upstream_fetch.returncode != 0:
+        stderr = (origin_fetch.stderr or upstream_fetch.stderr or "").strip()
         if "Could not resolve host" in stderr or "unable to access" in stderr:
             message = "Network error — cannot reach the remote repository."
         elif "Authentication failed" in stderr or "could not read Username" in stderr:
@@ -8567,36 +8765,96 @@ def _cmd_update_check(args=None):
         )
         return
 
-    rev_result = subprocess.run(
-        git_cmd + ["rev-list", f"HEAD..{compare_branch}", "--count"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    behind = int(rev_result.stdout.strip())
-
-    if behind == 0:
-        emit(
-            {
-                **base,
-                "method": "git",
-                "status": "up_to_date",
-                "behind": 0,
-                "message": "Already up to date.",
-            }
-        )
+    if upstream_fetch.returncode == 0:
+        compare_branch = "upstream/main"
     else:
+        compare_branch = "origin/main"
+
+    behind_main = _git_rev_list_count(
+        git_cmd, PROJECT_ROOT, f"HEAD..{compare_branch}"
+    )
+    if behind_main is None:
+        behind_main = 0
+
+    # Also compare against the current branch's upstream (feature branches).
+    branch_behind = 0
+    branch_compare = _git_upstream_ref(git_cmd, PROJECT_ROOT)
+    if not branch_compare:
+        current_branch = _git_current_branch(git_cmd, PROJECT_ROOT)
+        if current_branch:
+            branch_compare = f"origin/{current_branch}"
+    if branch_compare and branch_compare != compare_branch:
+        counted = _git_rev_list_count(
+            git_cmd, PROJECT_ROOT, f"HEAD..{branch_compare}"
+        )
+        if counted is not None:
+            branch_behind = counted
+
+    behind = max(behind_main, branch_behind)
+
+    (
+        screen_rebuild,
+        screen_checkout,
+        screen_installed,
+        screen_reason,
+    ) = _screen_rebuild_needed(
+        git_cmd, PROJECT_ROOT, screen_version=screen_version
+    )
+
+    base.update(
+        {
+            "behind": behind,
+            "branch_behind": branch_behind,
+            "screen_rebuild_available": screen_rebuild,
+            "screen_checkout_version": screen_checkout,
+            "screen_installed_version": screen_installed,
+        }
+    )
+
+    if behind > 0:
         commits_word = "commit" if behind == 1 else "commits"
+        if branch_behind > behind_main and branch_compare:
+            source = branch_compare
+        else:
+            source = compare_branch
+        message = f"Update available: {behind} {commits_word} behind {source}."
+        if screen_rebuild and screen_reason:
+            message = f"{message} {screen_reason}"
         emit(
             {
                 **base,
                 "method": "git",
                 "status": "update_available",
-                "behind": behind,
-                "message": f"Update available: {behind} {commits_word} behind {compare_branch}.",
+                "update_action": "full",
+                "message": message,
             }
         )
+        return
+
+    if screen_rebuild:
+        emit(
+            {
+                **base,
+                "method": "git",
+                "status": "update_available",
+                "update_action": "rebuild_screen",
+                "recommended_command": (
+                    "desktop-native/scripts/install-user.sh"
+                ),
+                "message": screen_reason
+                or "Screen app update available — rebuild from your Centurion folder.",
+            }
+        )
+        return
+
+    emit(
+        {
+            **base,
+            "method": "git",
+            "status": "up_to_date",
+            "message": "Already up to date.",
+        }
+    )
 
 
 def _ensure_fhs_path_guard() -> None:
@@ -13682,6 +13940,14 @@ Examples:
         action="store_true",
         default=False,
         help="With --check: print machine-readable JSON instead of human text",
+    )
+    update_parser.add_argument(
+        "--screen-version",
+        default=None,
+        help=(
+            "With --check: version of the running Brain screen app. Desktop clients "
+            "pass this so Check can detect a newer screen build in the local checkout."
+        ),
     )
     update_parser.add_argument(
         "--no-backup",

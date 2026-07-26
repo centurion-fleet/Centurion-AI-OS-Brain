@@ -121,11 +121,22 @@ mod linux {
         #[serde(default)]
         behind: u64,
         #[serde(default)]
+        branch_behind: u64,
+        #[serde(default)]
         os_version: Option<String>,
         #[serde(default)]
         message: Option<String>,
         #[serde(default)]
         recommended_command: Option<String>,
+        /// "full" (OS + screen) or "rebuild_screen" (local checkout newer than binary).
+        #[serde(default)]
+        update_action: Option<String>,
+        #[serde(default)]
+        screen_rebuild_available: bool,
+        #[serde(default)]
+        screen_checkout_version: Option<String>,
+        #[serde(default)]
+        screen_installed_version: Option<String>,
     }
 
     impl RemoteSupervisor {
@@ -1595,7 +1606,13 @@ mod linux {
 
     fn run_update_check() -> Option<UpdateCheckPayload> {
         let output = Command::new(centurion_binary())
-            .args(["update", "--check", "--json"])
+            .args([
+                "update",
+                "--check",
+                "--json",
+                "--screen-version",
+                env!("CARGO_PKG_VERSION"),
+            ])
             .output()
             .ok()?;
         // Parse JSON even when exit status is non-zero (network / unavailable).
@@ -1881,33 +1898,75 @@ mod linux {
                 dialog.present();
             }
             "update_available" => {
-                update_row.set_subtitle(&format!("Update available (v{os_version})"));
-                let body = format!(
-                    "{message}\n\nAn update is available. This updates brain software and \
-                     this screen. It may take several minutes; Sovereign AI Remote may \
-                     briefly disconnect."
-                );
-                let dialog = adw::MessageDialog::builder()
-                    .heading("Update available")
-                    .body(&body)
-                    .close_response("cancel")
-                    .default_response("update")
-                    .build();
-                dialog.add_response("cancel", "Not now");
-                dialog.add_response("update", "Update now");
-                dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
-                dialog.set_transient_for(Some(parent));
-                let parent = parent.clone();
-                let update_row = update_row.clone();
-                dialog.connect_response(None, move |dialog, response| {
-                    if response != "update" {
+                let action = payload
+                    .update_action
+                    .as_deref()
+                    .unwrap_or("full");
+                let screen_only = action == "rebuild_screen"
+                    || (payload.screen_rebuild_available && payload.behind == 0);
+                if screen_only {
+                    update_row.set_subtitle(&format!(
+                        "Screen update available ({})",
+                        payload
+                            .screen_checkout_version
+                            .as_deref()
+                            .unwrap_or(os_version)
+                    ));
+                    let body = format!(
+                        "{message}\n\nRebuild this screen from the Centurion folder on this \
+                         brain. No published main update is required."
+                    );
+                    let dialog = adw::MessageDialog::builder()
+                        .heading("Screen update available")
+                        .body(&body)
+                        .close_response("cancel")
+                        .default_response("rebuild")
+                        .build();
+                    dialog.add_response("cancel", "Not now");
+                    dialog.add_response("rebuild", "Rebuild this screen");
+                    dialog.set_response_appearance(
+                        "rebuild",
+                        adw::ResponseAppearance::Suggested,
+                    );
+                    dialog.set_transient_for(Some(parent));
+                    let parent = parent.clone();
+                    let update_row = update_row.clone();
+                    dialog.connect_response(None, move |dialog, response| {
                         dialog.close();
-                        return;
-                    }
-                    dialog.close();
-                    run_full_brain_update(&parent, &update_row);
-                });
-                dialog.present();
+                        if response == "rebuild" {
+                            run_screen_rebuild(&parent, &update_row);
+                        }
+                    });
+                    dialog.present();
+                } else {
+                    update_row.set_subtitle(&format!("Update available (v{os_version})"));
+                    let body = format!(
+                        "{message}\n\nAn update is available. This updates brain software and \
+                         this screen. It may take several minutes; Sovereign AI Remote may \
+                         briefly disconnect."
+                    );
+                    let dialog = adw::MessageDialog::builder()
+                        .heading("Update available")
+                        .body(&body)
+                        .close_response("cancel")
+                        .default_response("update")
+                        .build();
+                    dialog.add_response("cancel", "Not now");
+                    dialog.add_response("update", "Update now");
+                    dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
+                    dialog.set_transient_for(Some(parent));
+                    let parent = parent.clone();
+                    let update_row = update_row.clone();
+                    dialog.connect_response(None, move |dialog, response| {
+                        if response != "update" {
+                            dialog.close();
+                            return;
+                        }
+                        dialog.close();
+                        run_full_brain_update(&parent, &update_row);
+                    });
+                    dialog.present();
+                }
             }
             _ => {
                 update_row.set_subtitle("Updates managed outside this app");
