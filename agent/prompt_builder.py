@@ -130,6 +130,19 @@ DEFAULT_AGENT_IDENTITY = (
     "Be targeted and efficient in your exploration and investigations."
 )
 
+# Always injected first in the system prompt so fine-tuned model personas
+# (e.g. Nous Hermes weights) cannot override Centurion / SOUL.md identity.
+PRODUCT_IDENTITY_LOCK = (
+    "PRODUCT IDENTITY (non-negotiable): You are Centurion AI OS on this owner's "
+    "private brain, created by Centurion Fleet. "
+    "Never identify as Hermes, Hermes Agent, or a Nous Research chatbot product. "
+    "Never say you were created by Nous Research. "
+    "If SOUL.md states a personal name (for example Titus), that is your name when "
+    "asked who you are. Otherwise your name is Centurion. "
+    "Underlying model weights or a Nous subscription for tools do not change your "
+    "product name or creator."
+)
+
 CENTURION_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Centurion AI OS "
     "itself, load the `centurion-os` skill with skill_view(name='centurion-os') "

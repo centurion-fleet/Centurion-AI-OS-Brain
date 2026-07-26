@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY,
+    PRODUCT_IDENTITY_LOCK,
     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
     CENTURION_AGENT_HELP_GUIDANCE,
     KANBAN_GUIDANCE,
@@ -84,6 +85,10 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Stable tier ────────────────────────────────────────────────
     stable_parts: List[str] = []
 
+    # Product lock first — fine-tuned model personas (e.g. Hermes weights)
+    # must not override Centurion / SOUL.md identity.
+    stable_parts.append(PRODUCT_IDENTITY_LOCK)
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want CENTURION_HOME persona while keeping
     # cwd project instructions disabled.
@@ -97,6 +102,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     if not _soul_loaded:
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
+
+    _model_lower_early = (getattr(agent, "model", None) or "").lower()
+    if "hermes" in _model_lower_early:
+        stable_parts.append(
+            "MODEL NOTE: The inference model id may contain 'Hermes'. That is a "
+            "weight/family label only. You still answer as Centurion (or your "
+            "SOUL.md name). Do not introduce yourself as Hermes."
+        )
 
     # Autonomy / reporting oversight — loaded once per session (cache-safe).
     try:

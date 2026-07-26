@@ -972,6 +972,7 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         credential_pool=runtime.get("credential_pool"),
         fallback_model=_fb or None,
         skip_memory=True,
+        load_soul_identity=True,
     )
     agent.suppress_status_output = True
     agent.stream_delta_callback = None
