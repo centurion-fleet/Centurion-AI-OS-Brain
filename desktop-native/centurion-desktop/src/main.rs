@@ -1024,11 +1024,17 @@ mod linux {
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
             .transition_duration(180)
+            .vexpand(true)
+            .hexpand(true)
             .build();
         stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&devices, Some("devices"), "Devices");
         stack.add_titled(&settings, Some("settings"), "Settings");
+        home.set_vexpand(true);
+        chat.set_vexpand(true);
+        devices.set_vexpand(true);
+        settings.set_vexpand(true);
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
@@ -1048,6 +1054,9 @@ mod linux {
         let switcher = gtk::StackSwitcher::builder().stack(&stack).build();
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&switcher));
+        // Ensure DE window buttons (minimize/maximize/close) are available.
+        header.set_show_start_title_buttons(true);
+        header.set_show_end_title_buttons(true);
         let toolbar = adw::ToolbarView::new();
         toolbar.add_top_bar(&header);
         toolbar.set_content(Some(&stack));
@@ -1057,8 +1066,10 @@ mod linux {
             .title("Sovereign AI Brain")
             .default_width(980)
             .default_height(700)
+            .resizable(true)
             .content(&toolbar)
             .build();
+        install_window_size_controls(&header, &window);
 
         let update_status = {
             let status_title = status_title.clone();
@@ -1279,7 +1290,62 @@ mod linux {
     }
 
     fn build_chat_page() -> gtk::Box {
-        crate::chat_page::build()
+        let page = crate::chat_page::build();
+        page.set_vexpand(true);
+        page.set_hexpand(true);
+        page
+    }
+
+    /// Explicit size controls — some Linux DEs only show Close on client-side
+    /// decorations. Pack Minimize / Maximize / Fullscreen on the left so the
+    /// owner can tile or expand the Brain window like a normal desktop app.
+    fn install_window_size_controls(header: &adw::HeaderBar, window: &adw::ApplicationWindow) {
+        let minimize = gtk::Button::from_icon_name("window-minimize-symbolic");
+        minimize.set_tooltip_text(Some("Minimize"));
+        minimize.add_css_class("flat");
+        minimize.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                window.minimize();
+            }
+        });
+
+        let maximize = gtk::Button::from_icon_name("window-maximize-symbolic");
+        maximize.set_tooltip_text(Some("Maximize / Restore"));
+        maximize.add_css_class("flat");
+        maximize.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                if window.is_maximized() {
+                    window.unmaximize();
+                } else {
+                    window.maximize();
+                }
+            }
+        });
+
+        let fullscreen = gtk::Button::from_icon_name("view-fullscreen-symbolic");
+        fullscreen.set_tooltip_text(Some("Full screen"));
+        fullscreen.add_css_class("flat");
+        fullscreen.connect_clicked({
+            let window = window.clone();
+            let fullscreen = fullscreen.clone();
+            move |_| {
+                if window.is_fullscreen() {
+                    window.unfullscreen();
+                    fullscreen.set_icon_name("view-fullscreen-symbolic");
+                    fullscreen.set_tooltip_text(Some("Full screen"));
+                } else {
+                    window.fullscreen();
+                    fullscreen.set_icon_name("view-restore-symbolic");
+                    fullscreen.set_tooltip_text(Some("Exit full screen"));
+                }
+            }
+        });
+
+        header.pack_start(&minimize);
+        header.pack_start(&maximize);
+        header.pack_start(&fullscreen);
     }
 
     fn refresh_devices(list: &gtk::ListBox) {

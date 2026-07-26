@@ -84,6 +84,11 @@ button.link {
   background: alpha(@centurion_warm, 0.08);
 }
 
+.centurion-chat-composer {
+  background: alpha(@window_bg_color, 0.98);
+  border-top: 1px solid @centurion_border;
+}
+
 button.pill {
   border-radius: 999px;
   padding: 6px 14px;
