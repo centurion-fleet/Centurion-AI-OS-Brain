@@ -84,6 +84,27 @@ def test_product_identity_lock_is_positive_only():
     assert "Nous" not in PRODUCT_IDENTITY_LOCK
 
 
+def test_soul_name_beats_sticky_centurion_default(tmp_path, monkeypatch):
+    """Stale agent_name=Centurion must not hide ## Name Titus."""
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "agent_name").write_text("Centurion\n", encoding="utf-8")
+    (home / "SOUL.md").write_text(
+        "<!-- centurion:soul-structured:begin -->\n"
+        "# Your Sovereign's Soul\n\n"
+        "## Name\n\nTitus\n\n"
+        "## Personality\n\nDirect and warm.\n"
+        "<!-- centurion:soul-structured:end -->\n",
+        encoding="utf-8",
+    )
+
+    from agent.prompt_builder import resolve_centurion_display_name
+
+    assert resolve_centurion_display_name() == "Titus"
+    assert (home / "agent_name").read_text(encoding="utf-8").strip() == "Titus"
+
+
 def test_infer_name_from_prose(tmp_path, monkeypatch):
     home = tmp_path / ".centurion"
     home.mkdir()

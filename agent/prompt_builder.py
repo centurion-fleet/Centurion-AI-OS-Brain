@@ -210,16 +210,18 @@ def _infer_name_from_markdown(markdown: str) -> str:
 def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
     """Return the owner's chosen Centurion name, or ``Centurion``.
 
-    Order: sticky ``agent_name`` file → structured ``## Name`` → prose heuristics.
-    Never returns rival product/brand strings.
+    Order prefers an explicit personal name from Soul ``## Name``, then the
+    sticky ``agent_name`` file, then prose heuristics. The generic product
+    default ``Centurion`` never blocks a personal name (e.g. Titus) that
+    lives in SOUL.md.
     """
-    name = ""
+    sticky_name = ""
     try:
         sticky = agent_name_path()
         if sticky.exists():
-            name = _clean_display_name(sticky.read_text(encoding="utf-8"))
+            sticky_name = _clean_display_name(sticky.read_text(encoding="utf-8"))
     except Exception:
-        name = ""
+        sticky_name = ""
 
     markdown = soul_markdown
     structured_name = ""
@@ -239,12 +241,40 @@ def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
     except Exception:
         structured_name = ""
 
-    if not name:
-        name = structured_name
-    if not name:
-        name = _infer_name_from_markdown(markdown or "")
+    prose_name = _infer_name_from_markdown(markdown or "")
 
-    return name or "Centurion"
+    def _is_generic(value: str) -> bool:
+        return not value or value.lower() == "centurion"
+
+    # Personal names win — never let a stale sticky "Centurion" mask Titus.
+    for candidate in (structured_name, sticky_name, prose_name):
+        if candidate and not _is_generic(candidate):
+            _backfill_agent_name(candidate)
+            return candidate
+
+    return "Centurion"
+
+
+def _backfill_agent_name(name: str) -> None:
+    """Keep sticky agent_name aligned with the resolved personal name."""
+    cleaned = _clean_display_name(name)
+    if not cleaned or cleaned.lower() == "centurion":
+        return
+    path = agent_name_path()
+    try:
+        current = (
+            _clean_display_name(path.read_text(encoding="utf-8")) if path.exists() else ""
+        )
+        if current == cleaned:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(cleaned + "\n", encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    except Exception:
+        pass
 
 
 def build_personal_name_lock(display_name: str) -> str:
