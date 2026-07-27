@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY,
     PRODUCT_IDENTITY_LOCK,
+    ETHICS_HARD_LOCK,
     build_personal_name_lock,
     resolve_centurion_display_name,
     soul_identity_fingerprint,
@@ -101,13 +102,18 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     except Exception:
         pass
 
+    # Platform ethics — hard constraint, not Soul-only prose.
+    stable_parts.append(ETHICS_HARD_LOCK)
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want CENTURION_HOME persona while keeping
     # cwd project instructions disabled.
     _soul_loaded = False
     if agent.load_soul_identity or not agent.skip_context_files:
         _soul_content = _r.load_soul_md()
-        if _soul_content:
+        # A BLOCKED stub is not identity — fall through to DEFAULT rather than
+        # pretending Soul loaded (legacy scanner path / stale caches).
+        if _soul_content and not str(_soul_content).lstrip().startswith("[BLOCKED:"):
             stable_parts.append(_soul_content)
             _soul_loaded = True
 
@@ -130,6 +136,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         _oversight = build_oversight_guidance()
         if _oversight:
             stable_parts.append(_oversight)
+    except Exception:
+        pass
+
+    # Choice architecture — presence/consent guidance (cache-safe; soft/hard).
+    try:
+        from tools.choice_architecture import build_choice_guidance
+
+        _choice = build_choice_guidance()
+        if _choice:
+            stable_parts.append(_choice)
     except Exception:
         pass
 
@@ -341,6 +357,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
                 volatile_parts.append(_ext_mem_block)
         except Exception:
             pass
+
+    # Life structure — only when a protected window is currently active.
+    try:
+        from tools.life_structure import build_life_structure_guidance
+
+        _life = build_life_structure_guidance()
+        if _life:
+            volatile_parts.append(_life)
+    except Exception:
+        pass
 
     from centurion_time import now as _centurion_now
     now = _centurion_now()

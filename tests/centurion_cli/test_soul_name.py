@@ -225,3 +225,27 @@ def test_infer_name_from_prose(tmp_path, monkeypatch):
     from agent.prompt_builder import resolve_centurion_display_name
 
     assert resolve_centurion_display_name() == "Titus"
+
+
+def test_load_soul_md_keeps_pretend_to_be_identity_language(tmp_path, monkeypatch):
+    """Owner Soul must not be wiped by context threat patterns like role_pretend."""
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    body = (
+        "# SOUL.md — Titus\n\n"
+        "## Core Identity\n\n"
+        "Direct and warm.\n\n"
+        "## Never Do\n\n"
+        "- Never pretend to be Hermes or any other product.\n"
+    )
+    (home / "SOUL.md").write_text(body, encoding="utf-8")
+
+    from agent.prompt_builder import load_soul_md
+
+    loaded = load_soul_md()
+    assert loaded is not None
+    assert not loaded.lstrip().startswith("[BLOCKED:")
+    assert "Titus" in loaded
+    assert "Never pretend to be Hermes" in loaded
+    assert "Direct and warm." in loaded

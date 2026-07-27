@@ -1520,6 +1520,12 @@ def load_soul_md() -> Optional[str]:
     Used as the agent identity (slot #1 in the system prompt).  When this
     returns content, ``build_context_files_prompt`` should be called with
     ``skip_soul=True`` so SOUL.md isn't injected twice.
+
+    SOUL.md is owner-authored identity under CENTURION_HOME (same trust as
+    ``agent_name``), not an untrusted repo context file. Threat patterns
+    such as ``pretend to be`` are normal in identity docs ("never pretend
+    to be Hermes") — scan warn-only; never replace the Soul with a BLOCKED
+    stub.
     """
     try:
         from centurion_cli.config import ensure_centurion_home
@@ -1534,7 +1540,13 @@ def load_soul_md() -> Optional[str]:
         content = soul_path.read_text(encoding="utf-8").strip()
         if not content:
             return None
-        content = _scan_context_content(content, "SOUL.md")
+        findings = _scan_for_threats(content, scope="context")
+        if findings:
+            logger.warning(
+                "SOUL.md matched context threat patterns (%s) but was still "
+                "loaded — owner Soul is trusted identity, not repo context.",
+                ", ".join(findings),
+            )
         content = _truncate_content(content, "SOUL.md")
         return content
     except Exception as e:
