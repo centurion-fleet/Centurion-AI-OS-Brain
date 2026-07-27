@@ -121,3 +121,60 @@ stackswitcher button {
 .centurion-session-active {
   background: alpha(@centurion_interactive, 0.10);
 }
+
+/* Home (Pulse) — iPhone Mission Portfolio parity */
+.centurion-home-pills {
+  padding: 4px 0 8px 0;
+}
+
+.centurion-home-pill {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 600;
+  background: alpha(@centurion_ink, 0.05);
+}
+
+.centurion-home-pill:checked {
+  background: @centurion_ink;
+  color: @centurion_canvas;
+}
+
+.centurion-home-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid @centurion_border;
+  background: alpha(@window_bg_color, 0.96);
+  box-shadow: 0 8px 24px alpha(@centurion_ink, 0.05);
+}
+
+.centurion-home-mission {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid @centurion_border;
+  background: alpha(@centurion_interactive, 0.06);
+}
+
+.centurion-home-orb {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: alpha(@centurion_warm, 0.12);
+  color: @centurion_ink;
+  font-weight: 600;
+}
+
+.centurion-home-pulse-dot {
+  color: @centurion_interactive;
+  font-size: 14px;
+}
+
+.centurion-home-agent {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: alpha(@centurion_ink, 0.04);
+}
+
+.centurion-home-commitment {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: alpha(@centurion_interactive, 0.10);
+}

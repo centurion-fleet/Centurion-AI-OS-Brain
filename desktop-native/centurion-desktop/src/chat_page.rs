@@ -61,6 +61,27 @@ struct SessionSummary {
     last_active_label: String,
 }
 
+/// Handle for other tabs (Home) to seed the Chat composer.
+#[derive(Clone)]
+pub struct ChatHandle {
+    input: gtk::Entry,
+}
+
+impl ChatHandle {
+    /// Prefill the composer with a discuss prompt and focus it.
+    pub fn seed_discuss(&self, title: &str, detail: &str) {
+        let body = if detail.trim().is_empty() {
+            format!("About “{title}”:\n\n")
+        } else {
+            format!("{detail}\n\n")
+        };
+        self.input.set_text(&body);
+        self.input.grab_focus();
+        let len = body.chars().count() as i32;
+        self.input.set_position(len);
+    }
+}
+
 /// Resolve CENTURION_HOME the same way the CLI honors ``active_profile``.
 pub fn resolve_centurion_home() -> String {
     let default_root = || -> PathBuf {
@@ -1094,7 +1115,7 @@ fn honor_soul_session_reset(
 }
 
 /// Build the Chat tab page (bubble UI + always-visible composer).
-pub fn build() -> gtk::Box {
+pub fn build() -> (gtk::Box, ChatHandle) {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     container.set_vexpand(true);
     container.set_hexpand(true);
@@ -2035,5 +2056,8 @@ pub fn build() -> gtk::Box {
         }
     });
 
-    container
+    let handle = ChatHandle {
+        input: input.clone(),
+    };
+    (container, handle)
 }

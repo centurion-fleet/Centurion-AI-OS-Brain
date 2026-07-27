@@ -25,6 +25,16 @@ mod adrian_dialog;
     clippy::too_many_lines
 )]
 mod chat_page;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
+mod home_page;
 
 #[cfg(target_os = "linux")]
 #[allow(
@@ -793,12 +803,12 @@ mod linux {
         support_links.append(&talk_to_adrian_link);
         status_card.append(&support_links);
 
-        let home = gtk::Box::new(gtk::Orientation::Vertical, 24);
-        home.set_margin_top(32);
-        home.set_margin_bottom(32);
-        home.set_margin_start(32);
-        home.set_margin_end(32);
-        home.append(&status_card);
+        let status = gtk::Box::new(gtk::Orientation::Vertical, 24);
+        status.set_margin_top(32);
+        status.set_margin_bottom(32);
+        status.set_margin_start(32);
+        status.set_margin_end(32);
+        status.append(&status_card);
 
         let devices = gtk::Box::new(gtk::Orientation::Vertical, 16);
         devices.set_margin_top(32);
@@ -820,7 +830,7 @@ mod linux {
         devices.append(
             &gtk::Label::builder()
                 .label(
-                    "Link flow: generate a pairing code on Home → paste in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
+                    "Link flow: generate a pairing code on Status → paste in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -861,7 +871,7 @@ mod linux {
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
-                "Generate a code on Home, paste it in Sovereign AI Remote, then approve the iPhone under Devices.",
+                "Generate a code on Status, paste it in Sovereign AI Remote, then approve the iPhone under Devices.",
             )
             .icon_name("network-wireless-symbolic")
             .activatable(true)
@@ -1046,7 +1056,7 @@ mod linux {
             .min_content_height(240)
             .build();
 
-        let chat = build_chat_page();
+        let (chat, chat_handle) = build_chat_page();
 
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
@@ -1054,12 +1064,27 @@ mod linux {
             .vexpand(true)
             .hexpand(true)
             .build();
+
+        let home = {
+            let stack = stack.clone();
+            let chat_handle = chat_handle.clone();
+            crate::home_page::build(crate::home_page::HomeHooks {
+                on_ask_about: Rc::new(move |title: String, detail: String| {
+                    chat_handle.seed_discuss(&title, &detail);
+                    stack.set_visible_child_name("chat");
+                }),
+            })
+        };
+
         stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&chat, Some("chat"), "Chat");
+        stack.add_titled(&status, Some("status"), "Status");
         stack.add_titled(&devices, Some("devices"), "Devices");
         stack.add_titled(&settings_scroll, Some("settings"), "Settings");
+        stack.set_visible_child_name("home");
         home.set_vexpand(true);
         chat.set_vexpand(true);
+        status.set_vexpand(true);
         devices.set_vexpand(true);
         settings_scroll.set_vexpand(true);
         settings_scroll.set_hexpand(true);
@@ -1221,13 +1246,13 @@ mod linux {
         pairing_settings_row.connect_activated({
             let stack = stack.clone();
             move |_| {
-                stack.set_visible_child_name("home");
+                stack.set_visible_child_name("status");
             }
         });
         go_to_pairing.connect_clicked({
             let stack = stack.clone();
             move |_| {
-                stack.set_visible_child_name("home");
+                stack.set_visible_child_name("status");
             }
         });
         autonomy_button.connect_clicked({
@@ -1322,11 +1347,11 @@ mod linux {
         window.present();
     }
 
-    fn build_chat_page() -> gtk::Box {
-        let page = crate::chat_page::build();
+    fn build_chat_page() -> (gtk::Box, crate::chat_page::ChatHandle) {
+        let (page, handle) = crate::chat_page::build();
         page.set_vexpand(true);
         page.set_hexpand(true);
-        page
+        (page, handle)
     }
 
     /// Explicit size controls — some Linux DEs only show Close on client-side
@@ -1539,7 +1564,7 @@ mod linux {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones linked yet")
-                    .subtitle("Scan the QR on Home with Sovereign AI Remote (same Wi‑Fi).")
+                    .subtitle("Scan the QR on Status with Sovereign AI Remote (same Wi‑Fi).")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -3515,7 +3540,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         let hooks = AdrianDialogHooks {
             build_context: Rc::new(build_adrian_context),
             on_action: Rc::new(move |action_id: &str| match action_id {
-                "open_connect" => stack.set_visible_child_name("home"),
+                "open_connect" => stack.set_visible_child_name("status"),
                 "open_get_help" => show_support_health_dialog(&window),
                 "try_auto_fix" => {
                     if let Some(response) = run_provider_command(&["restore", "--json"]) {
