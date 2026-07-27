@@ -12383,8 +12383,13 @@ def main():
     from centurion_cli.portal_cli import add_parser as _add_portal_parser
     _add_portal_parser(subparsers)
 
-    from centurion_cli.license_cli import add_parser as _add_license_parser
-    _add_license_parser(subparsers)
+    try:
+        from centurion_cli.license_cli import add_parser as _add_license_parser
+
+        _add_license_parser(subparsers)
+    except Exception:
+        # License CLI ships separately; never brick `centurion` when missing.
+        pass
 
     # =========================================================================
     # kanban command — multi-profile collaboration board
