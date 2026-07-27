@@ -200,6 +200,10 @@ def _clean_display_name(raw: str) -> str:
     for prefix in ("you are ", "i am ", "my name is ", "call me ", "name:", "named "):
         if name.lower().startswith(prefix):
             name = name[len(prefix) :].strip()
+    # Settings often saves "Titus 🦅" — drop emoji / punctuation decoration
+    # so Chat name locks and agent_name stay ASCII-clean.
+    name = re.sub(r"[^A-Za-z0-9 _'\-]+", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
     # Single token / short phrase only.
     if len(name) > 48:
         return ""

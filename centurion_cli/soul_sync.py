@@ -82,48 +82,16 @@ def _read_soul_file(path) -> str:
         return ""
 
 
-def _personal_soul_from_default_root() -> tuple[str, str, str]:
-    """If this process is on a named profile with a seed Soul, borrow default.
-
-    Common Brain failure: Titus lives in ``~/.centurion/SOUL.md`` (Settings /
-    deploy), while sticky ``active_profile`` points Chat at
-    ``~/.centurion/profiles/<name>/SOUL.md`` still holding the product seed.
-    """
-    try:
-        from centurion_constants import get_default_centurion_root, get_centurion_home
-    except Exception:
-        return "", "", ""
-
-    try:
-        current = get_centurion_home().resolve()
-        root = get_default_centurion_root().resolve()
-    except Exception:
-        return "", "", ""
-
-    if current == root or current.parent.name != "profiles":
-        return "", "", ""
-
-    default_soul = root / "SOUL.md"
-    text = _read_soul_file(default_soul)
-    if text.strip() and not is_generic_seed_soul(text):
-        return text, str(default_soul), "default_soul_md"
-
-    souls = root / "souls"
-    if souls.is_dir():
-        files = [p for p in souls.glob("*_SOUL.md") if p.is_file()]
-        files.sort(key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True)
-        for fleet_path in files:
-            fleet_text = _read_soul_file(fleet_path)
-            if fleet_text.strip() and not is_generic_seed_soul(fleet_text):
-                return fleet_text, str(fleet_path), "default_fleet_souls"
-    return "", "", ""
-
-
 def resolve_authoritative_soul_markdown() -> tuple[str, str, str]:
-    """Pick the Soul body Chat and Settings should share.
+    """Pick the Soul body for the *active* CENTURION_HOME only.
+
+    Policy (one Soul per profile): never borrow from the default home into a
+    named profile. Settings and Chat both edit/read this home's ``SOUL.md``.
+    Within the same home, a richer ``souls/*_SOUL.md`` (fleet deploy) may still
+    be promoted into primary.
 
     Returns ``(markdown, path, source)`` where source is ``soul_md``,
-    ``fleet_souls``, ``default_soul_md``, ``default_fleet_souls``, or ``empty``.
+    ``fleet_souls``, or ``empty``.
     """
     primary = soul_md_path()
     primary_text = _read_soul_file(primary)
@@ -137,29 +105,20 @@ def resolve_authoritative_soul_markdown() -> tuple[str, str, str]:
             continue
         return fleet_text, str(fleet_path), "fleet_souls"
 
-    default_text, default_path, default_source = _personal_soul_from_default_root()
-    if default_text.strip():
-        return default_text, default_path, default_source
-
     if primary_text.strip():
         return primary_text, str(primary), "soul_md"
     return "", str(primary), "empty"
 
 
-_PROMOTE_SOURCES = frozenset(
-    {"fleet_souls", "default_soul_md", "default_fleet_souls"}
-)
-
-
 def promote_authoritative_soul_to_primary() -> bool:
-    """If SOUL.md is still the seed, copy the owner's real Soul into place.
+    """If this home's SOUL.md is still the seed, promote same-home fleet Soul.
 
-    Chat and Settings both read SOUL.md as primary — fleet deploy historically
-    only wrote ``souls/<id>_SOUL.md``, and sticky profiles often keep a seed
-    while Titus lives under the default ``~/.centurion/SOUL.md``.
+    Does **not** copy from ``~/.centurion`` into a sticky profile — each
+    profile owns its own Soul (save Titus in Settings while that profile is
+    active).
     """
-    markdown, path, source = resolve_authoritative_soul_markdown()
-    if source not in _PROMOTE_SOURCES or not markdown.strip():
+    markdown, _path, source = resolve_authoritative_soul_markdown()
+    if source != "fleet_souls" or not markdown.strip():
         return False
     primary = soul_md_path()
     existing = _read_soul_file(primary)
@@ -405,6 +364,15 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
                 "Refusing to save an empty Soul document over existing content. "
                 "Close Settings and try again after the Brain bridge is healthy."
             )
+
+    # Normalize Name on every save (strip emoji etc.) so ## Name matches Chat.
+    if isinstance(fields, dict) and "name" in fields:
+        from agent.prompt_builder import _clean_display_name
+
+        fields = dict(fields)
+        cleaned = _clean_display_name(str(fields.get("name") or ""))
+        if cleaned:
+            fields["name"] = cleaned
 
     if markdown is not None and fields:
         # Merge structured patches onto whatever the markdown already encodes

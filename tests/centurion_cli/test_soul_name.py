@@ -220,8 +220,8 @@ def test_fleet_soul_promoted_when_primary_is_seed(tmp_path, monkeypatch):
     assert "Titus" in (home / "SOUL.md").read_text(encoding="utf-8")
 
 
-def test_promote_default_titus_into_sticky_profile(tmp_path, monkeypatch):
-    """Sticky profile with seed Soul must inherit Titus from ~/.centurion."""
+def test_profile_does_not_borrow_soul_from_default(tmp_path, monkeypatch):
+    """Option B: named profiles never inherit Titus from ~/.centurion."""
     root = tmp_path / ".centurion"
     profile = root / "profiles" / "june"
     profile.mkdir(parents=True)
@@ -245,14 +245,21 @@ def test_promote_default_titus_into_sticky_profile(tmp_path, monkeypatch):
     from centurion_cli.soul_sync import read_soul
 
     apply_sticky_profile_home()
-    assert resolve_centurion_display_name() == "Titus"
-    loaded = load_soul_md()
-    assert loaded is not None
-    assert "Titus" in loaded
-    assert "Static" in loaded
+    # Seed profile stays seed until Settings saves Titus into *this* profile.
+    assert resolve_centurion_display_name() == "Centurion"
+    loaded = load_soul_md() or ""
+    assert "Titus" not in loaded
+    assert "Centurion AI OS" in loaded
     soul = read_soul()
-    assert soul["name"] == "Titus"
-    assert "Titus" in (profile / "SOUL.md").read_text(encoding="utf-8")
+    assert "Titus" not in str(soul.get("name") or "")
+    assert "Titus" not in (profile / "SOUL.md").read_text(encoding="utf-8")
+
+
+def test_clean_display_name_strips_emoji():
+    from agent.prompt_builder import _clean_display_name
+
+    assert _clean_display_name("Titus 🦅") == "Titus"
+    assert _clean_display_name("Titus") == "Titus"
 
 
 def test_sanitize_rewrites_conversational_centurion_fleet_reply():

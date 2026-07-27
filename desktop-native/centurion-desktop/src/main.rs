@@ -2577,10 +2577,32 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .unwrap_or("")
             .trim()
             .to_owned();
+        let profile_name = soul
+            .get("profileName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default")
+            .trim()
+            .to_owned();
         if !soul_path.is_empty() {
+            let location = if profile_name.is_empty() || profile_name == "default" {
+                format!("This profile's Soul file: {soul_path}")
+            } else {
+                format!("Profile “{profile_name}” Soul file: {soul_path}")
+            };
             content.append(
                 &gtk::Label::builder()
-                    .label(&format!("Primary Soul file: {soul_path}"))
+                    .label(&location)
+                    .wrap(true)
+                    .xalign(0.0)
+                    .css_classes(["caption", "dim-label"])
+                    .build(),
+            );
+            content.append(
+                &gtk::Label::builder()
+                    .label(
+                        "Each profile has its own Soul. Save Titus here only while this \
+                         profile is active — Chat will not borrow Soul from another profile.",
+                    )
                     .wrap(true)
                     .xalign(0.0)
                     .css_classes(["caption", "dim-label"])

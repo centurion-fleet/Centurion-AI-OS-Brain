@@ -1723,13 +1723,27 @@ def _handle_soul_get(request_id: str) -> dict[str, Any]:
         from agent.prompt_builder import resolve_centurion_display_name
         from centurion_cli.config import ensure_centurion_home
         from centurion_cli.soul_sync import read_soul
+        from centurion_constants import get_centurion_home, get_default_centurion_root
 
         ensure_centurion_home()
         soul = read_soul()
         name = str(soul.get("name") or "").strip()
         resolved = resolve_centurion_display_name(str(soul.get("markdown") or ""))
+        # Prefer cleaned personal name for Chat/UI locks (emoji stripped).
         soul["resolvedName"] = resolved
-        soul["displayName"] = name if name else resolved
+        soul["displayName"] = resolved if resolved else name
+        home = get_centurion_home()
+        root = get_default_centurion_root()
+        profile_name = "default"
+        try:
+            if home.resolve().parent.name == "profiles":
+                profile_name = home.name
+            elif home.resolve() == root.resolve():
+                profile_name = "default"
+        except Exception:
+            profile_name = "default"
+        soul["profileName"] = profile_name
+        soul["centurionHome"] = str(home)
         return {
             "id": request_id,
             "ok": True,
