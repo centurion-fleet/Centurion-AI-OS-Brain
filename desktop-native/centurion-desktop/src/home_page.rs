@@ -1357,14 +1357,14 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
         btn.add_css_class("centurion-home-pill");
         btn.set_active(cat == PulseCategory::Live);
         let selected = selected.clone();
-        let pill_buttons = pill_buttons.clone();
+        let pill_buttons_for_toggle = pill_buttons.clone();
         let paint = paint.clone();
         btn.connect_toggled(move |b| {
             if !b.is_active() {
                 return;
             }
             selected.set(cat);
-            for (other_cat, other) in pill_buttons.borrow().iter() {
+            for (other_cat, other) in pill_buttons_for_toggle.borrow().iter() {
                 if *other_cat != cat {
                     other.set_active(false);
                 }

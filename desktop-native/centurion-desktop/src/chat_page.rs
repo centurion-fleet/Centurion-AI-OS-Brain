@@ -90,7 +90,6 @@ enum ChatIntent {
 }
 
 #[derive(Clone, Debug)]
-#[derive(Clone, Debug)]
 struct PendingAttachment {
     path: PathBuf,
     filename: String,
@@ -118,7 +117,7 @@ fn rebuild_attachment_chips(
         remove.add_css_class("flat");
         remove.set_tooltip_text(Some("Remove attachment"));
         let attachments = attachments.clone();
-        let attachment_row = attachment_row.clone();
+        let row_for_remove = attachment_row.clone();
         remove.connect_clicked(move |_| {
             {
                 let mut list = attachments.borrow_mut();
@@ -126,7 +125,7 @@ fn rebuild_attachment_chips(
                     list.remove(index);
                 }
             }
-            rebuild_attachment_chips(&attachment_row, &attachments);
+            rebuild_attachment_chips(&row_for_remove, &attachments);
         });
         chip.append(&remove);
         attachment_row.append(&chip);
