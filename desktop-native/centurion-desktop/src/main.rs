@@ -168,12 +168,7 @@ mod linux {
                 .stderr(Stdio::inherit())
                 .env(
                     "CENTURION_HOME",
-                    std::env::var("CENTURION_HOME").unwrap_or_else(|_| {
-                        format!(
-                            "{}/.centurion",
-                            std::env::var("HOME").unwrap_or_else(|_| ".".to_owned())
-                        )
-                    }),
+                    crate::chat_page::resolve_centurion_home(),
                 )
                 .spawn()
                 .map_err(|error| format!("Could not start your Centurion: {error}"))?;
@@ -2068,6 +2063,7 @@ mod linux {
         let payload = serde_json::Value::Object(body).to_string();
         let mut child = Command::new(bridge_python())
             .args(["-m", "centurion_cli.remote_bridge"])
+            .env("CENTURION_HOME", crate::chat_page::resolve_centurion_home())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -2402,8 +2398,44 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
-        let soul = run_bridge_action("soul_get", serde_json::json!({}))
-            .and_then(|p| p.get("soul").cloned())
+        let payload = match run_bridge_action("soul_get", serde_json::json!({})) {
+            Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => payload,
+            Some(payload) => {
+                let message = payload
+                    .get("message")
+                    .or_else(|| payload.get("error"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Could not read your Sovereign's Soul from disk.");
+                let fail = adw::AlertDialog::builder()
+                    .heading("Could not load Soul")
+                    .body(&format!(
+                        "{message}\n\nYour Soul file was not changed. \
+                         Try restarting Sovereign AI Brain after an update."
+                    ))
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(parent));
+                return;
+            }
+            None => {
+                let fail = adw::AlertDialog::builder()
+                    .heading("Could not load Soul")
+                    .body(
+                        "The Brain bridge did not respond. Your Soul file on disk was not \
+                         changed — close Settings, run install-user.sh again if you just \
+                         updated, then reopen Soul.",
+                    )
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(parent));
+                return;
+            }
+        };
+        let soul = payload
+            .get("soul")
+            .cloned()
             .unwrap_or_else(|| serde_json::json!({}));
         let name = soul
             .get("name")

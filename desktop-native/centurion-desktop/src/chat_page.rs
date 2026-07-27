@@ -53,6 +53,51 @@ struct ApprovalDecision {
     choice: String,
 }
 
+/// Resolve CENTURION_HOME the same way the CLI honors ``active_profile``.
+pub fn resolve_centurion_home() -> String {
+    let default_root = || -> PathBuf {
+        std::env::var("HOME")
+            .map(|home| PathBuf::from(home).join(".centurion"))
+            .unwrap_or_else(|_| PathBuf::from(".centurion"))
+    };
+
+    if let Ok(home) = std::env::var("CENTURION_HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .is_some_and(|name| name == "profiles")
+            {
+                return trimmed.to_owned();
+            }
+        }
+    }
+
+    let root = default_root();
+    let active = root.join("active_profile");
+    if let Ok(name) = std::fs::read_to_string(&active) {
+        let name = name.trim();
+        if !name.is_empty() && name != "default" {
+            return root
+                .join("profiles")
+                .join(name)
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    if let Ok(home) = std::env::var("CENTURION_HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_owned();
+        }
+    }
+
+    root.to_string_lossy().into_owned()
+}
+
 /// Resolve the Python that can `import centurion_cli` (venv preferred).
 pub fn resolve_bridge_python() -> String {
     for key in ["CENTURION_PYTHON", "CENTURION_REMOTE_PYTHON"] {
@@ -91,13 +136,7 @@ pub fn resolve_bridge_python() -> String {
 }
 
 fn session_store_path() -> PathBuf {
-    let home = std::env::var("CENTURION_HOME")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".centurion")))
-        .unwrap_or_else(|| PathBuf::from(".centurion"));
-    home.join("desktop_chat_session")
+    PathBuf::from(resolve_centurion_home()).join("desktop_chat_session")
 }
 
 /// Drop the Brain Chat session pointer so the next message starts clean
@@ -135,6 +174,7 @@ fn run_bridge_json(action: &str, extra: Value) -> Result<Value, String> {
     let payload = Value::Object(body).to_string();
     let mut child = Command::new(resolve_bridge_python())
         .args(["-m", "centurion_cli.remote_bridge"])
+        .env("CENTURION_HOME", resolve_centurion_home())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -276,6 +316,7 @@ fn run_chat_turn(
 
     let mut child = match Command::new(resolve_bridge_python())
         .args(["-m", "centurion_cli.remote_bridge"])
+        .env("CENTURION_HOME", resolve_centurion_home())
         .env("CENTURION_REMOTE_EVENTS", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

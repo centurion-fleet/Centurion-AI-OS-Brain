@@ -105,6 +105,63 @@ def test_soul_name_beats_sticky_centurion_default(tmp_path, monkeypatch):
     assert (home / "agent_name").read_text(encoding="utf-8").strip() == "Titus"
 
 
+def test_empty_markdown_save_does_not_wipe_soul(tmp_path, monkeypatch):
+    """Failed soul_get + empty Save must not destroy an existing SOUL.md."""
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    from centurion_cli.soul_sync import read_soul, write_soul
+
+    write_soul(
+        {
+            "name": "Titus",
+            "personalitySummary": "Direct and warm.",
+            "neverDo": ["Soften bad news"],
+        }
+    )
+    before = read_soul()["markdown"]
+    assert "Direct and warm." in before
+
+    write_soul({"name": "Titus"}, markdown="")
+    after = read_soul()
+    assert after["name"] == "Titus"
+    assert after["personalitySummary"] == "Direct and warm."
+    assert after["neverDo"] == ["Soften bad news"]
+    assert (home / "SOUL.md.bak").exists()
+
+
+def test_empty_markdown_only_save_raises(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "SOUL.md").write_text(
+        "## Name\n\nTitus\n\n## Personality\n\nKeep me.\n", encoding="utf-8"
+    )
+
+    from centurion_cli.soul_sync import write_soul
+    import pytest
+
+    with pytest.raises(ValueError, match="empty Soul"):
+        write_soul(markdown="")
+
+
+def test_apply_sticky_profile_home(tmp_path, monkeypatch):
+    root = tmp_path / ".centurion"
+    profile = root / "profiles" / "legio"
+    profile.mkdir(parents=True)
+    (root / "active_profile").write_text("legio\n", encoding="utf-8")
+    (profile / "SOUL.md").write_text("## Name\n\nTitus\n", encoding="utf-8")
+    monkeypatch.delenv("CENTURION_HOME", raising=False)
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+    from centurion_cli.profiles import apply_sticky_profile_home
+    from centurion_cli.soul_sync import read_soul
+
+    apply_sticky_profile_home()
+    assert read_soul()["name"] == "Titus"
+
+
 def test_infer_name_from_prose(tmp_path, monkeypatch):
     home = tmp_path / ".centurion"
     home.mkdir()

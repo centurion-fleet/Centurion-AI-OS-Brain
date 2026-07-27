@@ -1942,6 +1942,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.parse_args(argv)
 
     try:
+        from centurion_cli.profiles import apply_sticky_profile_home
+
+        apply_sticky_profile_home()
+    except Exception:
+        pass
+
+    try:
         request = _read_request()
         response = handle_request(request)
     except Exception as exc:

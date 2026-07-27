@@ -148,6 +148,18 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
     """Write SOUL.md from structured fields and/or raw markdown override."""
     path = soul_md_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    disk_existing = path.read_text(encoding="utf-8") if path.exists() else ""
+
+    # Desktop Settings can open with an empty buffer when soul_get fails after
+    # an update — never let that clobber a good on-disk Soul document.
+    if markdown is not None and not markdown.strip() and disk_existing.strip():
+        if fields:
+            markdown = disk_existing
+        else:
+            raise ValueError(
+                "Refusing to save an empty Soul document over existing content. "
+                "Close Settings and try again after the Brain bridge is healthy."
+            )
 
     if markdown is not None and fields:
         # Merge structured patches onto whatever the markdown already encodes
@@ -166,10 +178,25 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
     elif markdown is not None:
         content = markdown
     elif fields is not None:
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
-        content = merge_structured_into_soul_md(fields, existing=existing)
+        content = merge_structured_into_soul_md(fields, existing=disk_existing)
     else:
         raise ValueError("soul_put requires structured fields or markdown")
+
+    if disk_existing.strip() and not content.strip():
+        raise ValueError(
+            "Refusing to wipe SOUL.md. Re-open Settings or edit the file directly."
+        )
+
+    if disk_existing.strip():
+        backup = path.with_name("SOUL.md.bak")
+        try:
+            backup.write_text(disk_existing, encoding="utf-8")
+            try:
+                backup.chmod(0o600)
+            except OSError:
+                pass
+        except OSError:
+            pass
 
     path.write_text(content, encoding="utf-8")
     try:

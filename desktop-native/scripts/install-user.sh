@@ -41,13 +41,31 @@ do
 done
 
 # Pin Centurion Python + repo for Settings (Autonomy/Soul/Horizon) and Chat tab.
+resolve_centurion_home_dir() {
+  if [[ -n "${CENTURION_HOME:-}" ]]; then
+    printf '%s\n' "${CENTURION_HOME}"
+    return
+  fi
+  local ap="${HOME}/.centurion/active_profile"
+  if [[ -f "${ap}" ]]; then
+    local name
+    name="$(tr -d '[:space:]' < "${ap}" || true)"
+    if [[ -n "${name}" && "${name}" != "default" ]]; then
+      printf '%s\n' "${HOME}/.centurion/profiles/${name}"
+      return
+    fi
+  fi
+  printf '%s\n' "${HOME}/.centurion"
+}
+CENTURION_HOME_DIR="$(resolve_centurion_home_dir)"
+
 cat > "${APP_DIR}/com.centurion.desktop.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Sovereign AI Brain
 GenericName=Personal AI Brain
 Comment=Your private Sovereign AI Brain
-Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} ${BIN_DIR}/centurion-desktop
+Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} CENTURION_HOME=${CENTURION_HOME_DIR} ${BIN_DIR}/centurion-desktop
 Icon=com.centurion.desktop
 Terminal=false
 Categories=Utility;Network;
@@ -81,6 +99,7 @@ mkdir -p "${SYSTEMD_DIR}"
   printf 'WorkingDirectory=%s\n' "${ROOT}"
   printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
   printf 'Environment=CENTURION_AI_REPO=%s\n' "${ROOT}"
+  printf 'Environment=CENTURION_HOME=%s\n' "${CENTURION_HOME_DIR}"
   printf 'ReadWritePaths=%s\n' "${ROOT}"
   # Away-from-home advertise host: env at install time, or persistent file.
   ADVERTISE_HOST="${CENTURION_REMOTE_ADVERTISE_HOST:-}"
@@ -125,7 +144,6 @@ if [[ ! -x "${BIN_DIR}/centurion-desktop" ]]; then
 fi
 
 # Stamp so Settings → Check for update can see when the screen binary is stale.
-CENTURION_HOME_DIR="${CENTURION_HOME:-${HOME}/.centurion}"
 mkdir -p "${CENTURION_HOME_DIR}"
 SCREEN_VERSION="$(
   awk '
