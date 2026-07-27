@@ -1673,7 +1673,9 @@ mod linux {
 
     fn run_os_update() -> Result<String, String> {
         let output = prepare_centurion_cli()
-            .args(["update", "-y"])
+            // Brain Settings must not re-apply a dirty autostash over the
+            // just-pulled release — that was breaking install-user.sh rebuilds.
+            .args(["update", "-y", "--no-restore-stash"])
             .output()
             .map_err(|error| error.to_string())?;
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
@@ -1695,7 +1697,46 @@ mod linux {
         }
     }
 
+    /// Drop local dirt under desktop-native so the screen rebuild matches HEAD.
+    fn reset_desktop_native_sources(repo_root: &PathBuf) {
+        let _ = Command::new("git")
+            .args([
+                "-C",
+                &repo_root.to_string_lossy(),
+                "checkout",
+                "--",
+                "desktop-native",
+            ])
+            .output();
+        let _ = Command::new("git")
+            .args([
+                "-C",
+                &repo_root.to_string_lossy(),
+                "clean",
+                "-fd",
+                "--",
+                "desktop-native",
+            ])
+            .output();
+    }
+
+    fn truncate_update_error(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return "Screen app update failed.".to_owned();
+        }
+        let lines: Vec<&str> = trimmed.lines().collect();
+        if lines.len() <= 40 {
+            return trimmed.to_owned();
+        }
+        let tail = lines[lines.len().saturating_sub(40)..].join("\n");
+        format!(
+            "… (showing last 40 lines)\n{tail}\n\nFull log: ~/.centurion/logs/desktop-build.log"
+        )
+    }
+
     fn run_native_brain_install(repo_root: &PathBuf) -> Result<(), String> {
+        reset_desktop_native_sources(repo_root);
         let script = repo_root
             .join("desktop-native")
             .join("scripts")
@@ -1724,13 +1765,14 @@ mod linux {
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-            Err(if !stderr.is_empty() {
+            let combined = if !stderr.is_empty() {
                 stderr
             } else if !stdout.is_empty() {
                 stdout
             } else {
                 "Screen app update failed.".to_owned()
-            })
+            };
+            Err(truncate_update_error(&combined))
         }
     }
 

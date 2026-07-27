@@ -1748,6 +1748,14 @@ def cmd_chat(args):
         except Exception:
             pass
 
+    # Product license phone-home (soft; no-op unless license.enabled).
+    try:
+        from centurion_cli.cloud_client import check_subscription_on_startup
+
+        check_subscription_on_startup()
+    except Exception:
+        pass
+
     # Sync bundled skills on every CLI launch (fast -- skips unchanged skills)
     try:
         _sync_bundled_skills_for_startup()
@@ -2389,7 +2397,10 @@ def select_provider_and_model(args=None):
 
     # Step 2: Provider-specific setup + model selection
     if selected_provider == "openrouter":
-        _model_flow_openrouter(config, current_model)
+        from centurion_cli.openrouter_retired import retired_provider_message
+
+        print(retired_provider_message())
+        return
     elif selected_provider == "ai-gateway":
         _model_flow_ai_gateway(config, current_model)
     elif selected_provider == "nous":
@@ -2918,64 +2929,11 @@ def _prompt_provider_choice(choices, *, default=0):
 
 
 def _model_flow_openrouter(config, current_model=""):
-    """OpenRouter provider: ensure API key, then pick model."""
-    from centurion_constants import OPENROUTER_BASE_URL
-    from centurion_cli.auth import (
-        ProviderConfig,
-        _prompt_model_selection,
-        _save_model_choice,
-        deactivate_provider,
-    )
-    from centurion_cli.config import get_env_value
+    """Retired — OpenRouter is permanently removed from product setup."""
+    del config, current_model
+    from centurion_cli.openrouter_retired import retired_provider_message
 
-    # Route through _prompt_api_key so users can replace a stale/broken key
-    # in-flow (K/R/C) instead of having to edit ~/.centurion/.env by hand. The
-    # previous bypass-when-key-exists branch left no way to recover from a
-    # bad paste short of re-running `centurion setup` from scratch. OpenRouter
-    # isn't in PROVIDER_REGISTRY so we synthesize a minimal pconfig.
-    pconfig = ProviderConfig(
-        id="openrouter",
-        name="OpenRouter",
-        auth_type="api_key",
-        api_key_env_vars=("OPENROUTER_API_KEY",),
-    )
-    existing_key = get_env_value("OPENROUTER_API_KEY") or ""
-    if not existing_key:
-        print("Get one at: https://openrouter.ai/keys")
-        print()
-    _resolved, abort = _prompt_api_key(pconfig, existing_key, provider_id="openrouter")
-    if abort:
-        return
-
-    from centurion_cli.models import model_ids, get_pricing_for_provider
-
-    openrouter_models = model_ids(force_refresh=True)
-
-    # Fetch live pricing (non-blocking — returns empty dict on failure)
-    pricing = get_pricing_for_provider("openrouter", force_refresh=True)
-
-    selected = _prompt_model_selection(
-        openrouter_models, current_model=current_model, pricing=pricing
-    )
-    if selected:
-        _save_model_choice(selected)
-
-        # Update config provider and deactivate any OAuth provider
-        from centurion_cli.config import load_config, save_config
-
-        cfg = load_config()
-        model = cfg.get("model")
-        if not isinstance(model, dict):
-            model = {"default": model} if model else {}
-            cfg["model"] = model
-        model["provider"] = "openrouter"
-        model["base_url"] = OPENROUTER_BASE_URL
-        model["api_mode"] = "chat_completions"
-        save_config(cfg)
-        deactivate_provider()
-        print(f"Default model set to: {selected} (via OpenRouter)")
-    else:
-        print("No change.")
+    print(retired_provider_message())
 
 
 def _model_flow_ai_gateway(config, current_model=""):
@@ -9125,6 +9083,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         else None
     )
     assume_yes = bool(getattr(args, "yes", False))
+    no_restore_stash = bool(getattr(args, "no_restore_stash", False))
     update_root = _resolve_git_update_root()
 
     print("⚕ Updating Centurion AI OS...")
@@ -9282,13 +9241,22 @@ def _cmd_update_impl(args, gateway_mode: bool):
             _invalidate_update_cache()
             # Restore stash and switch back to original branch if we moved
             if auto_stash_ref is not None:
-                _restore_stashed_changes(
-                    git_cmd,
-                    update_root,
-                    auto_stash_ref,
-                    prompt_user=prompt_for_restore,
-                    input_fn=gw_input_fn,
-                )
+                if no_restore_stash:
+                    print(
+                        f"  ℹ️  Local changes kept in stash (ref: {auto_stash_ref})"
+                    )
+                    print(
+                        "  Skipped auto-restore (--no-restore-stash). "
+                        f"Restore later with: git stash apply {auto_stash_ref}"
+                    )
+                else:
+                    _restore_stashed_changes(
+                        git_cmd,
+                        update_root,
+                        auto_stash_ref,
+                        prompt_user=prompt_for_restore,
+                        input_fn=gw_input_fn,
+                    )
             if current_branch not in {"main", "HEAD"}:
                 subprocess.run(
                     git_cmd + ["checkout", current_branch],
@@ -9406,6 +9374,17 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         f"  ℹ️  Local changes preserved in stash (ref: {auto_stash_ref})"
                     )
                     print(f"  Restore manually with: git stash apply")
+                elif no_restore_stash:
+                    print(
+                        f"  ℹ️  Local changes kept in stash (ref: {auto_stash_ref})"
+                    )
+                    print(
+                        "  Skipped auto-restore (--no-restore-stash) so the "
+                        "pulled release stays clean for the screen rebuild."
+                    )
+                    print(
+                        f"  Restore later with: git stash apply {auto_stash_ref}"
+                    )
                 else:
                     _restore_stashed_changes(
                         git_cmd,
@@ -11167,6 +11146,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "fleet", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "platform", "plugins", "portal", "postinstall", "profile", "provider", "proxy",
+        "license",
         "remote",
         "support", "swarm",
         "send", "sessions", "setup",
@@ -12402,6 +12382,9 @@ def main():
     # =========================================================================
     from centurion_cli.portal_cli import add_parser as _add_portal_parser
     _add_portal_parser(subparsers)
+
+    from centurion_cli.license_cli import add_parser as _add_license_parser
+    _add_license_parser(subparsers)
 
     # =========================================================================
     # kanban command — multi-profile collaboration board
@@ -13988,6 +13971,17 @@ Examples:
         action="store_true",
         default=False,
         help="Assume yes for interactive prompts (config migration, stash restore). API-key entry is skipped; run 'centurion config migrate' separately for those.",
+    )
+    update_parser.add_argument(
+        "--no-restore-stash",
+        action="store_true",
+        default=False,
+        help=(
+            "After pulling, leave any auto-stashed local changes in the stash "
+            "instead of re-applying them. Brain Settings uses this so a dirty "
+            "checkout cannot overwrite the just-pulled release and break the "
+            "screen rebuild."
+        ),
     )
     update_parser.add_argument(
         "--force",

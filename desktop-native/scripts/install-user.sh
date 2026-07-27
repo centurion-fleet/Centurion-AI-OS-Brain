@@ -18,11 +18,30 @@ APP_DIR="${HOME}/.local/share/applications"
 ICON_DIR="${HOME}/.local/share/icons/hicolor"
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
 
+# Settings → Update can re-apply a dirty autostash after git pull. Reset the
+# screen sources to HEAD so this rebuild matches the release that was pulled.
+if git -C "${ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "${ROOT}" checkout -- desktop-native >/dev/null 2>&1 || true
+  git -C "${ROOT}" clean -fd -- desktop-native >/dev/null 2>&1 || true
+fi
+
 echo "Building native binaries…"
-cargo build --release \
+BUILD_LOG="${HOME}/.centurion/logs/desktop-build.log"
+mkdir -p "$(dirname "${BUILD_LOG}")"
+if ! cargo build --release \
   --manifest-path "${DESKTOP_NATIVE}/Cargo.toml" \
   -p centurion-remote \
-  -p centurion-desktop
+  -p centurion-desktop >"${BUILD_LOG}" 2>&1
+then
+  echo "ERROR: cargo build failed. Last lines:" >&2
+  tail -n 40 "${BUILD_LOG}" >&2 || true
+  echo "Full log: ${BUILD_LOG}" >&2
+  exit 1
+fi
+{
+  echo
+  echo "Build succeeded at $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo unknown)"
+} >>"${BUILD_LOG}"
 
 mkdir -p "${BIN_DIR}"
 install -m 0755 "${DESKTOP_NATIVE}/target/release/centurion-remote" "${BIN_DIR}/"
