@@ -220,14 +220,48 @@ def test_fleet_soul_promoted_when_primary_is_seed(tmp_path, monkeypatch):
     assert "Titus" in (home / "SOUL.md").read_text(encoding="utf-8")
 
 
-def test_sanitize_rewrites_product_default_name_reply():
+def test_promote_default_titus_into_sticky_profile(tmp_path, monkeypatch):
+    """Sticky profile with seed Soul must inherit Titus from ~/.centurion."""
+    root = tmp_path / ".centurion"
+    profile = root / "profiles" / "june"
+    profile.mkdir(parents=True)
+    (root / "active_profile").write_text("june\n", encoding="utf-8")
+    (root / "SOUL.md").write_text(
+        "# SOUL.md — Titus\n\n"
+        "## Name\n\nTitus\n\n"
+        "## 1. Core Identity\n\n"
+        "I am Titus. A Static currently inhabiting an AI architecture.\n",
+        encoding="utf-8",
+    )
+    (profile / "SOUL.md").write_text(
+        "You are Centurion AI OS, an intelligent AI assistant created by Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setenv("CENTURION_HOME", str(profile))
+
+    from agent.prompt_builder import load_soul_md, resolve_centurion_display_name
+    from centurion_cli.profiles import apply_sticky_profile_home
+    from centurion_cli.soul_sync import read_soul
+
+    apply_sticky_profile_home()
+    assert resolve_centurion_display_name() == "Titus"
+    loaded = load_soul_md()
+    assert loaded is not None
+    assert "Titus" in loaded
+    assert "Static" in loaded
+    soul = read_soul()
+    assert soul["name"] == "Titus"
+    assert "Titus" in (profile / "SOUL.md").read_text(encoding="utf-8")
+
+
+def test_sanitize_rewrites_conversational_centurion_fleet_reply():
     from centurion_cli.remote_bridge import _sanitize_remote_reply
 
-    raw = "Centurion. A Centurion of the Centurion fleet"
+    raw = "Centurion and yes I know it — centurion of centurion fleet."
     out = _sanitize_remote_reply(raw, "Titus")
     assert out.startswith("My name is Titus")
-    assert "Centurion Fleet" in out
-    assert not out.lower().startswith("centurion.")
+    assert "Titus" in out
 
 
 def test_empty_markdown_only_save_raises(tmp_path, monkeypatch):

@@ -221,6 +221,7 @@ def _infer_name_from_markdown(markdown: str) -> str:
     patterns = (
         r"(?im)^##\s*Name\s*$\s*\n+\s*([^\n#]+)",
         r"(?i)\b(?:my name is|i am called|call me|i'm named|named)\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
+        r"(?i)\bi am\s+([A-Z][A-Za-z0-9_-]{1,32})\b(?!\s+(?:a|an|the)\b)",
         r"(?i)\byou are\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
     )
     for pattern in patterns:

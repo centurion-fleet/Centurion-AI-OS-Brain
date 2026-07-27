@@ -1112,7 +1112,13 @@ def _sanitize_remote_reply(text: str, display_name: str) -> str:
             out,
         )
         # Common product-default reply: "Centurion. A Centurion of the Centurion fleet"
-        if re.match(
+        # Also: "Centurion and yes I know it — centurion of centurion fleet"
+        if re.search(
+            r"(?i)\bcenturion\s+of\s+(?:the\s+)?centurion\s+fleet\b",
+            out,
+        ) and not re.search(rf"(?i)\b{re.escape(name)}\b", out):
+            out = f"My name is {name}. I am a Centurion of Centurion Fleet."
+        elif re.match(
             r"(?is)^\s*Centurion\b[.!]?\s*(?:A\s+)?Centurion\s+of\s+(?:the\s+)?Centurion\s+fleet\b",
             out,
         ):

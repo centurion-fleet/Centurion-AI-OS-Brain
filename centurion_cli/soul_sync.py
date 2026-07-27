@@ -75,51 +75,94 @@ def list_fleet_soul_files() -> list:
     return files
 
 
+def _read_soul_file(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8") if path.is_file() else ""
+    except OSError:
+        return ""
+
+
+def _personal_soul_from_default_root() -> tuple[str, str, str]:
+    """If this process is on a named profile with a seed Soul, borrow default.
+
+    Common Brain failure: Titus lives in ``~/.centurion/SOUL.md`` (Settings /
+    deploy), while sticky ``active_profile`` points Chat at
+    ``~/.centurion/profiles/<name>/SOUL.md`` still holding the product seed.
+    """
+    try:
+        from centurion_constants import get_default_centurion_root, get_centurion_home
+    except Exception:
+        return "", "", ""
+
+    try:
+        current = get_centurion_home().resolve()
+        root = get_default_centurion_root().resolve()
+    except Exception:
+        return "", "", ""
+
+    if current == root or current.parent.name != "profiles":
+        return "", "", ""
+
+    default_soul = root / "SOUL.md"
+    text = _read_soul_file(default_soul)
+    if text.strip() and not is_generic_seed_soul(text):
+        return text, str(default_soul), "default_soul_md"
+
+    souls = root / "souls"
+    if souls.is_dir():
+        files = [p for p in souls.glob("*_SOUL.md") if p.is_file()]
+        files.sort(key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True)
+        for fleet_path in files:
+            fleet_text = _read_soul_file(fleet_path)
+            if fleet_text.strip() and not is_generic_seed_soul(fleet_text):
+                return fleet_text, str(fleet_path), "default_fleet_souls"
+    return "", "", ""
+
+
 def resolve_authoritative_soul_markdown() -> tuple[str, str, str]:
     """Pick the Soul body Chat and Settings should share.
 
     Returns ``(markdown, path, source)`` where source is ``soul_md``,
-    ``fleet_souls``, or ``empty``.
+    ``fleet_souls``, ``default_soul_md``, ``default_fleet_souls``, or ``empty``.
     """
     primary = soul_md_path()
-    primary_text = ""
-    if primary.exists():
-        try:
-            primary_text = primary.read_text(encoding="utf-8")
-        except OSError:
-            primary_text = ""
+    primary_text = _read_soul_file(primary)
 
     if primary_text.strip() and not is_generic_seed_soul(primary_text):
         return primary_text, str(primary), "soul_md"
 
     for fleet_path in list_fleet_soul_files():
-        try:
-            fleet_text = fleet_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
+        fleet_text = _read_soul_file(fleet_path)
         if not fleet_text.strip() or is_generic_seed_soul(fleet_text):
             continue
         return fleet_text, str(fleet_path), "fleet_souls"
+
+    default_text, default_path, default_source = _personal_soul_from_default_root()
+    if default_text.strip():
+        return default_text, default_path, default_source
 
     if primary_text.strip():
         return primary_text, str(primary), "soul_md"
     return "", str(primary), "empty"
 
 
+_PROMOTE_SOURCES = frozenset(
+    {"fleet_souls", "default_soul_md", "default_fleet_souls"}
+)
+
+
 def promote_authoritative_soul_to_primary() -> bool:
-    """If SOUL.md is still the seed but ``souls/`` has a real Soul, copy it up.
+    """If SOUL.md is still the seed, copy the owner's real Soul into place.
 
     Chat and Settings both read SOUL.md as primary — fleet deploy historically
-    only wrote ``souls/<id>_SOUL.md``, so the agent never saw Titus/Yeshi.
+    only wrote ``souls/<id>_SOUL.md``, and sticky profiles often keep a seed
+    while Titus lives under the default ``~/.centurion/SOUL.md``.
     """
     markdown, path, source = resolve_authoritative_soul_markdown()
-    if source != "fleet_souls" or not markdown.strip():
+    if source not in _PROMOTE_SOURCES or not markdown.strip():
         return False
     primary = soul_md_path()
-    try:
-        existing = primary.read_text(encoding="utf-8") if primary.exists() else ""
-    except OSError:
-        existing = ""
+    existing = _read_soul_file(primary)
     if existing.strip() == markdown.strip():
         return False
     primary.parent.mkdir(parents=True, exist_ok=True)
