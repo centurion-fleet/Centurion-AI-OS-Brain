@@ -544,7 +544,47 @@ fn resume_session(session_id: &str) -> Result<(String, Vec<ChatMessage>), String
     Ok((tip, parse_bridge_messages(&messages)))
 }
 
-fn session_row(summary: &SessionSummary, active: bool) -> gtk::ListBoxRow {
+fn rename_session(session_id: &str, title: &str) -> Result<String, String> {
+    let response = run_bridge_json(
+        "session_rename",
+        serde_json::json!({ "session_id": session_id, "title": title }),
+    )?;
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not rename that conversation.")
+            .to_owned());
+    }
+    Ok(response
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or(title)
+        .to_owned())
+}
+
+fn delete_session(session_id: &str) -> Result<(), String> {
+    let response = run_bridge_json(
+        "session_delete",
+        serde_json::json!({ "session_id": session_id }),
+    )?;
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not delete that conversation.")
+            .to_owned());
+    }
+    Ok(())
+}
+
+fn session_row(
+    summary: &SessionSummary,
+    active: bool,
+    is_sending: Rc<RefCell<bool>>,
+    on_rename: Rc<dyn Fn(SessionSummary)>,
+    on_delete: Rc<dyn Fn(SessionSummary)>,
+) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.set_activatable(true);
     row.set_selectable(true);
@@ -557,7 +597,7 @@ fn session_row(summary: &SessionSummary, active: bool) -> gtk::ListBoxRow {
     box_.set_margin_top(8);
     box_.set_margin_bottom(8);
     box_.set_margin_start(10);
-    box_.set_margin_end(10);
+    box_.set_margin_end(4);
 
     let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     let title = gtk::Label::builder()
@@ -577,6 +617,72 @@ fn session_row(summary: &SessionSummary, active: bool) -> gtk::ListBoxRow {
                 .build(),
         );
     }
+
+    let menu_button = gtk::MenuButton::builder()
+        .icon_name("view-more-symbolic")
+        .css_classes(["flat", "circular"])
+        .tooltip_text("Rename or delete")
+        .valign(gtk::Align::Center)
+        .build();
+    // Stop row activation when opening the menu.
+    menu_button.set_focus_on_click(false);
+
+    let popover = gtk::Popover::new();
+    let menu_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    menu_box.set_margin_top(4);
+    menu_box.set_margin_bottom(4);
+    menu_box.set_margin_start(4);
+    menu_box.set_margin_end(4);
+    let rename_btn = gtk::Button::with_label("Rename…");
+    rename_btn.add_css_class("flat");
+    rename_btn.set_halign(gtk::Align::Fill);
+    let delete_btn = gtk::Button::with_label("Delete…");
+    delete_btn.add_css_class("flat");
+    delete_btn.add_css_class("destructive-action");
+    delete_btn.set_halign(gtk::Align::Fill);
+    menu_box.append(&rename_btn);
+    menu_box.append(&delete_btn);
+    popover.set_child(Some(&menu_box));
+    menu_button.set_popover(Some(&popover));
+
+    let summary_rename = summary.clone();
+    let on_rename = on_rename.clone();
+    let is_sending_rename = is_sending.clone();
+    let popover_rename = popover.clone();
+    rename_btn.connect_clicked(move |_| {
+        if *is_sending_rename.borrow() {
+            return;
+        }
+        popover_rename.popdown();
+        on_rename(summary_rename.clone());
+    });
+
+    let summary_delete = summary.clone();
+    let on_delete = on_delete.clone();
+    let is_sending_delete = is_sending.clone();
+    let popover_delete = popover.clone();
+    delete_btn.connect_clicked(move |_| {
+        if *is_sending_delete.borrow() {
+            return;
+        }
+        popover_delete.popdown();
+        on_delete(summary_delete.clone());
+    });
+
+    // Right-click opens the same menu.
+    let right_click = gtk::GestureClick::new();
+    right_click.set_button(3);
+    let menu_button_rc = menu_button.clone();
+    let is_sending_rc = is_sending.clone();
+    right_click.connect_pressed(move |_, _, _, _| {
+        if *is_sending_rc.borrow() {
+            return;
+        }
+        menu_button_rc.popup();
+    });
+    row.add_controller(right_click);
+
+    title_row.append(&menu_button);
     box_.append(&title_row);
 
     if !summary.preview.is_empty() && summary.preview != summary.title {
@@ -1229,46 +1335,14 @@ pub fn build() -> gtk::Box {
         }
     });
 
+    let refresh_sessions_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(RefCell::new(None));
     let refresh_sessions: Rc<dyn Fn()> = Rc::new({
-        let session_list = session_list.clone();
-        let session_stack = session_stack.clone();
-        let session_id = session_id.clone();
+        let slot = refresh_sessions_slot.clone();
         move || {
-            let session_list = session_list.clone();
-            let session_stack = session_stack.clone();
-            let session_id = session_id.clone();
-            let (tx, rx) = mpsc::channel::<Vec<SessionSummary>>();
-            thread::spawn(move || {
-                let _ = tx.send(list_sessions());
-            });
-            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(sessions) => {
-                    while let Some(child) = session_list.first_child() {
-                        session_list.remove(&child);
-                    }
-                    let active = session_id.borrow().clone();
-                    if sessions.is_empty() {
-                        session_stack.set_visible_child_name("empty");
-                    } else {
-                        session_stack.set_visible_child_name("list");
-                        let mut active_row: Option<gtk::ListBoxRow> = None;
-                        for summary in &sessions {
-                            let is_active = active.as_deref() == Some(summary.id.as_str());
-                            let row = session_row(summary, is_active);
-                            if is_active {
-                                active_row = Some(row.clone());
-                            }
-                            session_list.append(&row);
-                        }
-                        if let Some(row) = active_row {
-                            session_list.select_row(Some(&row));
-                        }
-                    }
-                    glib::ControlFlow::Break
-                }
-                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-            });
+            if let Some(refresh) = slot.borrow().clone() {
+                refresh();
+            }
         }
     });
 
@@ -1305,6 +1379,246 @@ pub fn build() -> gtk::Box {
             session_list.set_sensitive(!sending);
         }
     });
+
+    let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
+        Rc::new(RefCell::new(None));
+
+    let clear_approval: Rc<dyn Fn()> = Rc::new({
+        let approval_box = approval_box.clone();
+        let approval_buttons = approval_buttons.clone();
+        move || {
+            while let Some(child) = approval_buttons.first_child() {
+                approval_buttons.remove(&child);
+            }
+            approval_box.set_visible(false);
+        }
+    });
+
+    let start_new_chat: Rc<dyn Fn()> = Rc::new({
+        let messages = messages.clone();
+        let session_id = session_id.clone();
+        let refresh_messages = refresh_messages.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let clear_approval = clear_approval.clone();
+        let set_sending = set_sending.clone();
+        let assistant_name = assistant_name.clone();
+        let follow_bottom = follow_bottom.clone();
+        move || {
+            clear_approval();
+            set_sending(false);
+            set_error(None);
+            *assistant_name.borrow_mut() = load_assistant_display_name();
+            messages.borrow_mut().clear();
+            *session_id.borrow_mut() = None;
+            let path = session_store_path();
+            let _ = std::fs::remove_file(&path);
+            follow_bottom.set(true);
+            refresh_messages();
+            let messages = messages.clone();
+            let session_id = session_id.clone();
+            let refresh_messages = refresh_messages.clone();
+            let refresh_sessions = refresh_sessions.clone();
+            let set_error = set_error.clone();
+            let (tx, rx) = mpsc::channel::<Result<String, String>>();
+            thread::spawn(move || {
+                let _ = tx.send(ensure_session_id());
+            });
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(Ok(sid)) => {
+                    *session_id.borrow_mut() = Some(sid);
+                    messages.borrow_mut().clear();
+                    refresh_messages();
+                    refresh_sessions();
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    set_error(Some(error));
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        }
+    });
+
+    let prompt_rename_session: Rc<dyn Fn(SessionSummary)> = Rc::new({
+        let container = container.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let is_sending = is_sending.clone();
+        move |summary: SessionSummary| {
+            if *is_sending.borrow() {
+                return;
+            }
+            let entry = gtk::Entry::builder()
+                .text(&summary.title)
+                .hexpand(true)
+                .build();
+            let dialog = adw::AlertDialog::builder()
+                .heading("Rename conversation")
+                .body("Choose a name for this chat.")
+                .extra_child(&entry)
+                .close_response("cancel")
+                .default_response("save")
+                .build();
+            dialog.add_response("cancel", "Cancel");
+            dialog.add_response("save", "Save");
+            dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+            let refresh_sessions = refresh_sessions.clone();
+            let set_error = set_error.clone();
+            let session_key = summary.id.clone();
+            dialog.connect_response(None, move |_dialog, response| {
+                if response != "save" {
+                    return;
+                }
+                let title = entry.text().trim().to_string();
+                if title.is_empty() {
+                    set_error(Some("Enter a conversation name.".to_owned()));
+                    return;
+                }
+                set_error(None);
+                let refresh_sessions = refresh_sessions.clone();
+                let set_error = set_error.clone();
+                let session_key = session_key.clone();
+                let (tx, rx) = mpsc::channel::<Result<String, String>>();
+                thread::spawn(move || {
+                    let _ = tx.send(rename_session(&session_key, &title));
+                });
+                glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                    Ok(Ok(_)) => {
+                        refresh_sessions();
+                        glib::ControlFlow::Break
+                    }
+                    Ok(Err(error)) => {
+                        set_error(Some(error));
+                        glib::ControlFlow::Break
+                    }
+                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                });
+            });
+            dialog.present(Some(&container));
+        }
+    });
+
+    let prompt_delete_session: Rc<dyn Fn(SessionSummary)> = Rc::new({
+        let container = container.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let is_sending = is_sending.clone();
+        let session_id = session_id.clone();
+        let start_new_chat = start_new_chat.clone();
+        move |summary: SessionSummary| {
+            if *is_sending.borrow() {
+                return;
+            }
+            let dialog = adw::AlertDialog::builder()
+                .heading("Delete conversation?")
+                .body(format!(
+                    "Delete “{}”? This cannot be undone.",
+                    summary.title
+                ))
+                .close_response("cancel")
+                .default_response("cancel")
+                .build();
+            dialog.add_response("cancel", "Cancel");
+            dialog.add_response("delete", "Delete");
+            dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
+            let refresh_sessions = refresh_sessions.clone();
+            let set_error = set_error.clone();
+            let session_id = session_id.clone();
+            let start_new_chat = start_new_chat.clone();
+            let target_id = summary.id.clone();
+            dialog.connect_response(None, move |_dialog, response| {
+                if response != "delete" {
+                    return;
+                }
+                set_error(None);
+                let was_active = session_id.borrow().as_deref() == Some(target_id.as_str());
+                let refresh_sessions = refresh_sessions.clone();
+                let set_error = set_error.clone();
+                let start_new_chat = start_new_chat.clone();
+                let target_id = target_id.clone();
+                let (tx, rx) = mpsc::channel::<Result<(), String>>();
+                thread::spawn(move || {
+                    let _ = tx.send(delete_session(&target_id));
+                });
+                glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                    Ok(Ok(())) => {
+                        if was_active {
+                            start_new_chat();
+                        } else {
+                            refresh_sessions();
+                        }
+                        glib::ControlFlow::Break
+                    }
+                    Ok(Err(error)) => {
+                        set_error(Some(error));
+                        glib::ControlFlow::Break
+                    }
+                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                });
+            });
+            dialog.present(Some(&container));
+        }
+    });
+
+    *refresh_sessions_slot.borrow_mut() = Some(Rc::new({
+        let session_list = session_list.clone();
+        let session_stack = session_stack.clone();
+        let session_id = session_id.clone();
+        let is_sending = is_sending.clone();
+        let prompt_rename_session = prompt_rename_session.clone();
+        let prompt_delete_session = prompt_delete_session.clone();
+        move || {
+            let session_list = session_list.clone();
+            let session_stack = session_stack.clone();
+            let session_id = session_id.clone();
+            let is_sending = is_sending.clone();
+            let prompt_rename_session = prompt_rename_session.clone();
+            let prompt_delete_session = prompt_delete_session.clone();
+            let (tx, rx) = mpsc::channel::<Vec<SessionSummary>>();
+            thread::spawn(move || {
+                let _ = tx.send(list_sessions());
+            });
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(sessions) => {
+                    while let Some(child) = session_list.first_child() {
+                        session_list.remove(&child);
+                    }
+                    let active = session_id.borrow().clone();
+                    if sessions.is_empty() {
+                        session_stack.set_visible_child_name("empty");
+                    } else {
+                        session_stack.set_visible_child_name("list");
+                        let mut active_row: Option<gtk::ListBoxRow> = None;
+                        for summary in &sessions {
+                            let is_active = active.as_deref() == Some(summary.id.as_str());
+                            let row = session_row(
+                                summary,
+                                is_active,
+                                is_sending.clone(),
+                                prompt_rename_session.clone(),
+                                prompt_delete_session.clone(),
+                            );
+                            if is_active {
+                                active_row = Some(row.clone());
+                            }
+                            session_list.append(&row);
+                        }
+                        if let Some(row) = active_row {
+                            session_list.select_row(Some(&row));
+                        }
+                    }
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        }
+    }));
 
     // Initial session + history + sidebar load (bridge stays off the UI thread).
     {
@@ -1348,70 +1662,15 @@ pub fn build() -> gtk::Box {
     refresh_messages();
     refresh_sessions();
 
-    let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
-        Rc::new(RefCell::new(None));
-
-    let clear_approval: Rc<dyn Fn()> = Rc::new({
-        let approval_box = approval_box.clone();
-        let approval_buttons = approval_buttons.clone();
-        move || {
-            while let Some(child) = approval_buttons.first_child() {
-                approval_buttons.remove(&child);
-            }
-            approval_box.set_visible(false);
-        }
-    });
-
     // New chat
     {
-        let messages = messages.clone();
-        let session_id = session_id.clone();
-        let refresh_messages = refresh_messages.clone();
-        let refresh_sessions = refresh_sessions.clone();
-        let set_error = set_error.clone();
-        let clear_approval = clear_approval.clone();
-        let set_sending = set_sending.clone();
+        let start_new_chat = start_new_chat.clone();
         let is_sending = is_sending.clone();
-        let assistant_name = assistant_name.clone();
-        let follow_bottom = follow_bottom.clone();
         new_chat_button.connect_clicked(move |_| {
             if *is_sending.borrow() {
                 return;
             }
-            clear_approval();
-            set_sending(false);
-            set_error(None);
-            *assistant_name.borrow_mut() = load_assistant_display_name();
-            messages.borrow_mut().clear();
-            *session_id.borrow_mut() = None;
-            let path = session_store_path();
-            let _ = std::fs::remove_file(&path);
-            follow_bottom.set(true);
-            refresh_messages();
-            let messages = messages.clone();
-            let session_id = session_id.clone();
-            let refresh_messages = refresh_messages.clone();
-            let refresh_sessions = refresh_sessions.clone();
-            let set_error = set_error.clone();
-            let (tx, rx) = mpsc::channel::<Result<String, String>>();
-            thread::spawn(move || {
-                let _ = tx.send(ensure_session_id());
-            });
-            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(Ok(sid)) => {
-                    *session_id.borrow_mut() = Some(sid);
-                    messages.borrow_mut().clear();
-                    refresh_messages();
-                    refresh_sessions();
-                    glib::ControlFlow::Break
-                }
-                Ok(Err(error)) => {
-                    set_error(Some(error));
-                    glib::ControlFlow::Break
-                }
-                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-            });
+            start_new_chat();
         });
     }
 

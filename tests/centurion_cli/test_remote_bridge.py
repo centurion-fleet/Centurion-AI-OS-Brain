@@ -154,6 +154,31 @@ def test_remote_bridge_session_new_and_list(tmp_path, monkeypatch):
     assert any(row["id"] == created["session_id"] for row in listed["sessions"])
 
 
+def test_remote_bridge_session_rename_and_delete(tmp_path, monkeypatch):
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    created = handle_request({"id": "r-1", "action": "session_new", "title": "Draft"})
+    assert created["ok"] is True
+    sid = created["session_id"]
+
+    renamed = handle_request(
+        {"id": "r-2", "action": "session_rename", "session_id": sid, "title": "Titus notes"}
+    )
+    assert renamed["ok"] is True
+    assert renamed["title"] == "Titus notes"
+
+    listed = handle_request({"id": "r-3", "action": "session_list", "source": "remote"})
+    assert any(
+        row["id"] == sid and row.get("title") == "Titus notes" for row in listed["sessions"]
+    )
+
+    deleted = handle_request({"id": "r-4", "action": "session_delete", "session_id": sid})
+    assert deleted["ok"] is True
+    assert deleted["deleted"] is True
+
+    listed_after = handle_request({"id": "r-5", "action": "session_list", "source": "remote"})
+    assert all(row["id"] != sid for row in listed_after["sessions"])
+
+
 def test_remote_bridge_approval_respond_action(monkeypatch):
     calls = []
 

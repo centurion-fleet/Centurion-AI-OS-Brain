@@ -143,6 +143,10 @@ def handle_request(
         return _handle_session_resume(request, request_id)
     if action == "session_history":
         return _handle_session_history(request, request_id)
+    if action == "session_rename":
+        return _handle_session_rename(request, request_id)
+    if action == "session_delete":
+        return _handle_session_delete(request, request_id)
     if action == "approval_respond":
         return _handle_approval_respond(request, request_id)
     if action == "license_status":
@@ -1492,6 +1496,122 @@ def _handle_session_history(request: dict[str, Any], request_id: str) -> dict[st
         }
     except Exception as exc:
         return _error_response(request_id, action="session_history", exc=exc)
+
+
+def _handle_session_rename(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_state import SessionDB
+
+        session_id = str(request.get("session_id") or "").strip()
+        title = str(request.get("title") or "").strip()
+        if not session_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_rename",
+                "code": "INVALID_REQUEST",
+                "error": "session_id is required.",
+                "message": "session_id is required.",
+                "retryable": False,
+            }
+        if not title:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_rename",
+                "code": "INVALID_REQUEST",
+                "error": "title is required.",
+                "message": "Enter a conversation name.",
+                "retryable": False,
+            }
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(session_id)
+            try:
+                updated = db.set_session_title(tip, title)
+            except ValueError as exc:
+                return {
+                    "id": request_id,
+                    "ok": False,
+                    "action": "session_rename",
+                    "code": "INVALID_REQUEST",
+                    "error": str(exc),
+                    "message": str(exc),
+                    "retryable": False,
+                }
+            if not updated:
+                return {
+                    "id": request_id,
+                    "ok": False,
+                    "action": "session_rename",
+                    "code": "NOT_FOUND",
+                    "error": "Conversation not found.",
+                    "message": "Conversation not found.",
+                    "retryable": False,
+                }
+            saved = db.get_session_title(tip) or title
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_rename",
+            "session_id": tip,
+            "title": saved,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_rename", exc=exc)
+
+
+def _handle_session_delete(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_constants import get_centurion_home
+        from centurion_state import SessionDB
+
+        session_id = str(request.get("session_id") or "").strip()
+        if not session_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_delete",
+                "code": "INVALID_REQUEST",
+                "error": "session_id is required.",
+                "message": "session_id is required.",
+                "retryable": False,
+            }
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(session_id)
+            sessions_dir = get_centurion_home() / "sessions"
+            deleted = db.delete_session(tip, sessions_dir=sessions_dir)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        if not deleted:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_delete",
+                "code": "NOT_FOUND",
+                "error": "Conversation not found.",
+                "message": "Conversation not found.",
+                "retryable": False,
+                "deleted": False,
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_delete",
+            "session_id": tip,
+            "deleted": True,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_delete", exc=exc)
 
 
 def _handle_approval_respond(request: dict[str, Any], request_id: str) -> dict[str, Any]:
