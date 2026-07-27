@@ -125,29 +125,53 @@ fi
 echo "Installing user systemd unit for centurion-remote…"
 mkdir -p "${SYSTEMD_DIR}"
 
+# Side effects (advertise-host file) first — never write human messages into the unit.
+ADVERTISE_HOST="${CENTURION_REMOTE_ADVERTISE_HOST:-}"
+ADVERTISE_FILE="${HOME}/.centurion/remote/advertise-host"
+if [[ -z "${ADVERTISE_HOST}" && -f "${ADVERTISE_FILE}" ]]; then
+  ADVERTISE_HOST="$(tr -d '[:space:]' < "${ADVERTISE_FILE}" || true)"
+fi
+if [[ -n "${ADVERTISE_HOST}" ]]; then
+  mkdir -p "${HOME}/.centurion/remote"
+  printf '%s\n' "${ADVERTISE_HOST}" > "${ADVERTISE_FILE}"
+  chmod 0644 "${ADVERTISE_FILE}" || true
+  echo "Persisted advertise host → ${ADVERTISE_FILE}"
+fi
+
+# Inject [Service] overrides *before* [Install]. Appending after [Install] put
+# WorkingDirectory/Environment/ExecStart in the wrong section (Brain failure).
+SERVICE_EXTRA="$(mktemp)"
 {
-  sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
-    "${DESKTOP_NATIVE}/packaging/systemd/centurion-remote.service"
   printf 'WorkingDirectory=%s\n' "${ROOT}"
   printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
   printf 'Environment=CENTURION_AI_REPO=%s\n' "${ROOT}"
   printf 'ReadWritePaths=%s\n' "${ROOT}"
-  # Away-from-home advertise host: env at install time, or persistent file.
-  ADVERTISE_HOST="${CENTURION_REMOTE_ADVERTISE_HOST:-}"
-  ADVERTISE_FILE="${HOME}/.centurion/remote/advertise-host"
-  if [[ -z "${ADVERTISE_HOST}" && -f "${ADVERTISE_FILE}" ]]; then
-    ADVERTISE_HOST="$(tr -d '[:space:]' < "${ADVERTISE_FILE}" || true)"
-  fi
   if [[ -n "${ADVERTISE_HOST}" ]]; then
-    mkdir -p "${HOME}/.centurion/remote"
-    printf '%s\n' "${ADVERTISE_HOST}" > "${ADVERTISE_FILE}"
-    chmod 0644 "${ADVERTISE_FILE}" || true
     printf 'Environment=CENTURION_REMOTE_ADVERTISE_HOST=%s\n' "${ADVERTISE_HOST}"
-    echo "Persisted advertise host → ${ADVERTISE_FILE}"
   fi
   printf 'ExecStart=\n'
   printf 'ExecStart=%%h/.local/bin/centurion-remote serve --name "Sovereign AI Brain" --python %s\n' "${PYTHON_BIN}"
-} > "${SYSTEMD_DIR}/centurion-remote.service"
+} > "${SERVICE_EXTRA}"
+
+UNIT_BASE="$(mktemp)"
+sed 's|ExecStart=/usr/bin/centurion-remote|ExecStart=%h/.local/bin/centurion-remote|' \
+  "${DESKTOP_NATIVE}/packaging/systemd/centurion-remote.service" > "${UNIT_BASE}"
+
+awk -v extra_file="${SERVICE_EXTRA}" '
+  BEGIN {
+    while ((getline line < extra_file) > 0) {
+      extra = extra line "\n"
+    }
+    close(extra_file)
+  }
+  /^\[Install\]/ {
+    printf "%s", extra
+    print
+    next
+  }
+  { print }
+' "${UNIT_BASE}" > "${SYSTEMD_DIR}/centurion-remote.service"
+rm -f "${SERVICE_EXTRA}" "${UNIT_BASE}"
 
 # Fail fast if the bridge module is missing on the chosen interpreter.
 if ! "${PYTHON_BIN}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
