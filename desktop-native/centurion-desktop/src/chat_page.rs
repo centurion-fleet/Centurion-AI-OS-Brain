@@ -622,13 +622,12 @@ fn load_assistant_display_name() -> String {
 }
 
 fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow, message_list: &gtk::ListBox) {
+    // Fedora Brain ships an older GTK4 — ListBox::scroll_to is unavailable there.
+    // Pin via the ScrolledWindow adjustment; follow-bottom wiring keeps chasing
+    // as new rows are laid out.
     if let Some(child) = message_list.last_child() {
         if let Ok(row) = child.downcast::<gtk::ListBoxRow>() {
-            message_list.scroll_to(
-                &row,
-                gtk::ListScrollFlags::NONE,
-                None::<gtk::ScrollInfo>,
-            );
+            message_list.select_row(Some(&row));
         }
     }
     let adj = message_scroll.vadjustment();
