@@ -80,6 +80,7 @@ def test_product_identity_lock_is_positive_only():
     from agent.prompt_builder import PRODUCT_IDENTITY_LOCK
 
     assert "Centurion Fleet" in PRODUCT_IDENTITY_LOCK
+    assert "YOUR NAME" in PRODUCT_IDENTITY_LOCK or "personal name" in PRODUCT_IDENTITY_LOCK.lower()
     assert "Hermes" not in PRODUCT_IDENTITY_LOCK
     assert "Nous" not in PRODUCT_IDENTITY_LOCK
 
@@ -129,6 +130,104 @@ def test_empty_markdown_save_does_not_wipe_soul(tmp_path, monkeypatch):
     assert after["personalitySummary"] == "Direct and warm."
     assert after["neverDo"] == ["Soften bad news"]
     assert (home / "SOUL.md.bak").exists()
+
+
+def test_empty_name_field_does_not_wipe_existing_name(tmp_path, monkeypatch):
+    """Desktop Settings used to send name='' and erase ## Name on every Save."""
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    from centurion_cli.soul_sync import read_soul, write_soul
+
+    write_soul(
+        {
+            "name": "Titus",
+            "personalitySummary": "Direct and warm.",
+        }
+    )
+    existing = read_soul()["markdown"]
+    write_soul({"name": ""}, markdown=existing)
+    soul = read_soul()
+    assert soul["name"] == "Titus"
+    assert "## Name" in soul["markdown"]
+    assert "Titus" in soul["markdown"]
+
+
+def test_soul_put_rejects_missing_personal_name(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    from centurion_cli.remote_bridge import _handle_soul_put
+
+    result = _handle_soul_put(
+        {
+            "soul": {"name": ""},
+            "markdown": "# Soul\n\nNo personal name here.\n",
+        },
+        "req-1",
+    )
+    assert result["ok"] is False
+    assert "personal Name" in result["message"]
+
+
+def test_soul_get_includes_resolved_name(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "SOUL.md").write_text(
+        "# SOUL.md — Titus\n\nYou are Titus, a Centurion of Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+
+    from centurion_cli.remote_bridge import _handle_soul_get
+
+    result = _handle_soul_get("req-2")
+    assert result["ok"] is True
+    assert result["soul"]["resolvedName"] == "Titus"
+    assert result["soul"]["displayName"] == "Titus"
+
+
+def test_fleet_soul_promoted_when_primary_is_seed(tmp_path, monkeypatch):
+    """Deploy historically wrote souls/*_SOUL.md but Chat only read SOUL.md."""
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "SOUL.md").write_text(
+        "You are Centurion AI OS, an intelligent AI assistant created by Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+    souls = home / "souls"
+    souls.mkdir()
+    (souls / "prefect_SOUL.md").write_text(
+        "# SOUL.md — Titus\n\n"
+        "## 1. Core Identity\n\n"
+        "You are Titus, Prefect of Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+
+    from agent.prompt_builder import load_soul_md, resolve_centurion_display_name
+    from centurion_cli.soul_sync import read_soul
+
+    assert resolve_centurion_display_name() == "Titus"
+    loaded = load_soul_md()
+    assert loaded is not None
+    assert "Titus" in loaded
+    assert "Prefect" in loaded
+    soul = read_soul()
+    assert soul["name"] == "Titus"
+    assert "Titus" in (home / "SOUL.md").read_text(encoding="utf-8")
+
+
+def test_sanitize_rewrites_product_default_name_reply():
+    from centurion_cli.remote_bridge import _sanitize_remote_reply
+
+    raw = "Centurion. A Centurion of the Centurion fleet"
+    out = _sanitize_remote_reply(raw, "Titus")
+    assert out.startswith("My name is Titus")
+    assert "Centurion Fleet" in out
+    assert not out.lower().startswith("centurion.")
 
 
 def test_empty_markdown_only_save_raises(tmp_path, monkeypatch):

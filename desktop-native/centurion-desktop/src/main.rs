@@ -2461,11 +2461,30 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .get("soul")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({}));
-        let name = soul
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
+        let name = {
+            let structured = soul
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            if !structured.is_empty() && !structured.eq_ignore_ascii_case("centurion") {
+                structured
+            } else {
+                let resolved = soul
+                    .get("resolvedName")
+                    .or_else(|| soul.get("displayName"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_owned();
+                if !resolved.is_empty() && !resolved.eq_ignore_ascii_case("centurion") {
+                    resolved
+                } else {
+                    String::new()
+                }
+            }
+        };
         let markdown = soul
             .get("markdown")
             .and_then(|v| v.as_str())
@@ -2474,7 +2493,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
 
         let name_entry = gtk::Entry::builder()
             .text(&name)
-            .placeholder_text("e.g. Titus")
+            .placeholder_text("Required — e.g. Titus")
             .hexpand(true)
             .build();
 
@@ -2503,13 +2522,29 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             &gtk::Label::builder()
                 .label(
                     "Name your Centurion — this is who they are every time they answer. \
-                     The Soul below shapes how they speak and behave. Changes apply on \
-                     the next message (Brain Chat reloads Soul every turn).",
+                     The Name field is required (e.g. Titus). The Soul below shapes how \
+                     they speak and behave. Changes apply on the next message.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .build(),
         );
+        let soul_path = soul
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_owned();
+        if !soul_path.is_empty() {
+            content.append(
+                &gtk::Label::builder()
+                    .label(&format!("Primary Soul file: {soul_path}"))
+                    .wrap(true)
+                    .xalign(0.0)
+                    .css_classes(["caption", "dim-label"])
+                    .build(),
+            );
+        }
         content.append(
             &gtk::Label::builder()
                 .label("Name")
@@ -2542,16 +2577,33 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 let (start, end) = buffer.bounds();
                 let text = buffer.text(&start, &end, false);
                 let name_text = name_entry.text().to_string();
+                let trimmed_name = name_text.trim();
+                if trimmed_name.is_empty() || trimmed_name.eq_ignore_ascii_case("centurion") {
+                    soul_row.set_subtitle(
+                        "Set a personal Name (e.g. Titus) — then Save again.",
+                    );
+                    let warn = adw::AlertDialog::builder()
+                        .heading("Name required")
+                        .body(
+                            "Type a personal name in the Name field (for example Titus). \
+                             Without it, Chat can only answer as Centurion.",
+                        )
+                        .close_response("ok")
+                        .build();
+                    warn.add_response("ok", "OK");
+                    warn.present(Some(parent));
+                    return;
+                }
                 match run_bridge_action(
                     "soul_put",
                     serde_json::json!({
-                        "soul": { "name": name_text.trim() },
+                        "soul": { "name": trimmed_name },
                         "markdown": text.as_str(),
                     }),
                 ) {
                     Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                         // Prior chat turns may have claimed Hermes — clear the
-                        // Brain session so the next message loads Titus cleanly.
+                        // Brain session so the next message loads the new Soul cleanly.
                         crate::chat_page::clear_desktop_chat_session();
                         refresh_soul_row(&soul_row);
                     }

@@ -26,6 +26,159 @@ def soul_md_path():
     return get_centurion_home() / "SOUL.md"
 
 
+def souls_dir_path():
+    """Fleet deploy writes per-Centurion docs here (``*_SOUL.md``)."""
+    return get_centurion_home() / "souls"
+
+
+def is_generic_seed_soul(markdown: str) -> bool:
+    """True when SOUL.md is still the product default, not an owner Soul."""
+    text = (markdown or "").strip()
+    if not text:
+        return True
+    lower = text.lower()
+    # Legacy first-run seed (pre-structured markers).
+    if lower.startswith("you are centurion ai os"):
+        return True
+    # Current DEFAULT_SOUL_MD — managed block whose ## Name is Centurion and
+    # personality still describes the product default.
+    has_managed = _BEGIN in text and _END in text
+    if has_managed and "your sovereign's soul" in lower:
+        from agent.prompt_builder import (
+            _clean_display_name,
+            _is_usable_personal_name,
+            resolve_centurion_display_name,
+        )
+
+        structured = markdown_to_structured(text)
+        name = _clean_display_name(str(structured.get("name") or ""))
+        if _is_usable_personal_name(name):
+            return False
+        # Prose may still carry a personal name outside the managed block.
+        if _is_usable_personal_name(resolve_centurion_display_name(text)):
+            return False
+        personality = str(structured.get("personalitySummary") or "").lower()
+        if "centurion ai os" in personality or "unless the owner renames you" in personality:
+            return True
+        if len(text) < 900 and "centurion ai os" in lower:
+            return True
+    return False
+
+
+def list_fleet_soul_files() -> list:
+    """Return ``souls/*_SOUL.md`` paths, richest (largest) first."""
+    root = souls_dir_path()
+    if not root.is_dir():
+        return []
+    files = [p for p in root.glob("*_SOUL.md") if p.is_file()]
+    files.sort(key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True)
+    return files
+
+
+def resolve_authoritative_soul_markdown() -> tuple[str, str, str]:
+    """Pick the Soul body Chat and Settings should share.
+
+    Returns ``(markdown, path, source)`` where source is ``soul_md``,
+    ``fleet_souls``, or ``empty``.
+    """
+    primary = soul_md_path()
+    primary_text = ""
+    if primary.exists():
+        try:
+            primary_text = primary.read_text(encoding="utf-8")
+        except OSError:
+            primary_text = ""
+
+    if primary_text.strip() and not is_generic_seed_soul(primary_text):
+        return primary_text, str(primary), "soul_md"
+
+    for fleet_path in list_fleet_soul_files():
+        try:
+            fleet_text = fleet_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not fleet_text.strip() or is_generic_seed_soul(fleet_text):
+            continue
+        return fleet_text, str(fleet_path), "fleet_souls"
+
+    if primary_text.strip():
+        return primary_text, str(primary), "soul_md"
+    return "", str(primary), "empty"
+
+
+def promote_authoritative_soul_to_primary() -> bool:
+    """If SOUL.md is still the seed but ``souls/`` has a real Soul, copy it up.
+
+    Chat and Settings both read SOUL.md as primary — fleet deploy historically
+    only wrote ``souls/<id>_SOUL.md``, so the agent never saw Titus/Yeshi.
+    """
+    markdown, path, source = resolve_authoritative_soul_markdown()
+    if source != "fleet_souls" or not markdown.strip():
+        return False
+    primary = soul_md_path()
+    try:
+        existing = primary.read_text(encoding="utf-8") if primary.exists() else ""
+    except OSError:
+        existing = ""
+    if existing.strip() == markdown.strip():
+        return False
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    if existing.strip():
+        backup = primary.with_name("SOUL.md.bak")
+        try:
+            backup.write_text(existing, encoding="utf-8")
+        except OSError:
+            pass
+    primary.write_text(markdown, encoding="utf-8")
+    try:
+        primary.chmod(0o600)
+    except OSError:
+        pass
+    _persist_agent_name(markdown, None)
+    _invalidate_cached_system_prompts()
+    return True
+
+
+def ensure_personal_name_on_disk(markdown: str | None = None) -> str:
+    """If Soul prose has a personal name but ## Name / agent_name do not, heal disk."""
+    from agent.prompt_builder import (
+        _clean_display_name,
+        _is_usable_personal_name,
+        resolve_centurion_display_name,
+    )
+
+    path = soul_md_path()
+    if markdown is None:
+        try:
+            markdown = path.read_text(encoding="utf-8") if path.exists() else ""
+        except OSError:
+            markdown = ""
+    resolved = resolve_centurion_display_name(markdown)
+    if not _is_usable_personal_name(resolved):
+        return markdown or ""
+
+    structured = markdown_to_structured(markdown or "")
+    structured = _enrich_structured_from_markdown(structured, markdown or "")
+    current = _clean_display_name(str(structured.get("name") or ""))
+    if current == resolved and "## Name" in (markdown or ""):
+        _persist_agent_name(markdown, {"name": resolved})
+        return markdown or ""
+
+    # Rewrite managed ## Name so Settings + Chat share one primary document.
+    fields = dict(structured)
+    fields["name"] = resolved
+    updated = merge_structured_into_soul_md(fields, existing=markdown or "")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(updated, encoding="utf-8")
+        path.chmod(0o600)
+    except OSError:
+        return markdown or ""
+    _persist_agent_name(updated, fields)
+    _invalidate_cached_system_prompts()
+    return updated
+
+
 def structured_to_markdown(fields: dict[str, Any]) -> str:
     """Render iOS-style structured fields to the managed SOUL.md section."""
     name = str(fields.get("name") or fields.get("displayName") or "").strip()
@@ -142,12 +295,23 @@ def read_soul() -> dict[str, Any]:
         ensure_centurion_home()
     except Exception:
         pass
+    # Fleet deploy may have left the real Soul under souls/ while SOUL.md
+    # stayed the product seed — promote so Settings and Chat share one file.
+    try:
+        promote_authoritative_soul_to_primary()
+    except Exception:
+        pass
     path = soul_md_path()
     markdown = path.read_text(encoding="utf-8") if path.exists() else ""
+    try:
+        markdown = ensure_personal_name_on_disk(markdown)
+    except Exception:
+        pass
     structured = markdown_to_structured(markdown)
     structured = _enrich_structured_from_markdown(structured, markdown)
     structured["path"] = str(path)
     structured["exists"] = path.exists()
+    structured["source"] = "soul_md" if markdown.strip() else "empty"
     return structured
 
 
@@ -203,13 +367,18 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
         # Merge structured patches onto whatever the markdown already encodes
         # so a Name-only update does not wipe Personality / rules.
         existing_fields = markdown_to_structured(markdown)
+        # Freeform Souls often put the name only in prose / title — enrich
+        # before merge so an empty Name field in Settings cannot erase it.
+        existing_fields = _enrich_structured_from_markdown(existing_fields, markdown)
         merged = dict(existing_fields)
         for key, value in fields.items():
             if key == "markdown":
                 continue
             if value is None:
                 continue
-            if isinstance(value, str) and not value.strip() and key != "name":
+            # Empty strings never overwrite — including name. An empty Name
+            # box in Desktop Settings used to wipe ## Name on every Save.
+            if isinstance(value, str) and not value.strip():
                 continue
             merged[key] = value
         content = merge_structured_into_soul_md(merged, existing=markdown)

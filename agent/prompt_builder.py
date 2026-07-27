@@ -132,13 +132,13 @@ DEFAULT_AGENT_IDENTITY = (
 # Always injected first. Keep this POSITIVE only — naming rival brands (even to
 # deny them) causes fine-tuned models to echo those brands in replies.
 PRODUCT_IDENTITY_LOCK = (
-    "PRODUCT IDENTITY (non-negotiable): You are Centurion AI OS on this owner's "
-    "private brain, created by Centurion Fleet. "
-    "Your personal name comes from the owner's Soul (## Name / agent_name). "
-    "If a personal name is set, that is who you are when asked your name — "
-    "you are still a Centurion of Centurion Fleet. "
-    "If no personal name is set, your name is Centurion. "
-    "Answer with your personal name and Centurion Fleet only. "
+    "PRODUCT IDENTITY (non-negotiable): You are the owner's Centurion on this "
+    "private brain (Centurion AI OS / Centurion Fleet). "
+    "Your spoken personal name comes ONLY from the owner's Soul (## Name) and "
+    "the YOUR NAME lock below — that is who you are when asked your name. "
+    "Never answer with the product word \"Centurion\" as your personal name "
+    "when a personal name is set in Soul. "
+    "You remain a Centurion of Centurion Fleet either way. "
     "Do not discuss model brands, weight names, or other products as your identity. "
     "Do not volunteer comparisons to other assistants.\n"
     "SOUL DOCUMENT: the owner's SOUL.md under CENTURION_HOME defines your "
@@ -1526,6 +1526,10 @@ def load_soul_md() -> Optional[str]:
     such as ``pretend to be`` are normal in identity docs ("never pretend
     to be Hermes") — scan warn-only; never replace the Soul with a BLOCKED
     stub.
+
+    If SOUL.md is still the product seed but ``souls/*_SOUL.md`` has a real
+    fleet Soul (e.g. Titus from deploy), that document is promoted and loaded
+    so Chat matches Settings.
     """
     try:
         from centurion_cli.config import ensure_centurion_home
@@ -1533,13 +1537,32 @@ def load_soul_md() -> Optional[str]:
     except Exception as e:
         logger.debug("Could not ensure CENTURION_HOME before loading SOUL.md: %s", e)
 
-    soul_path = get_centurion_home() / "SOUL.md"
-    if not soul_path.exists():
+    try:
+        from centurion_cli.soul_sync import (
+            ensure_personal_name_on_disk,
+            promote_authoritative_soul_to_primary,
+            resolve_authoritative_soul_markdown,
+        )
+
+        promote_authoritative_soul_to_primary()
+        content, _path, _source = resolve_authoritative_soul_markdown()
+        if content.strip():
+            content = ensure_personal_name_on_disk(content)
+    except Exception as e:
+        logger.debug("Authoritative Soul resolve failed, falling back to SOUL.md: %s", e)
+        soul_path = get_centurion_home() / "SOUL.md"
+        if not soul_path.exists():
+            return None
+        try:
+            content = soul_path.read_text(encoding="utf-8").strip()
+        except Exception as read_exc:
+            logger.debug("Could not read SOUL.md from %s: %s", soul_path, read_exc)
+            return None
+
+    content = (content or "").strip()
+    if not content:
         return None
     try:
-        content = soul_path.read_text(encoding="utf-8").strip()
-        if not content:
-            return None
         findings = _scan_for_threats(content, scope="context")
         if findings:
             logger.warning(
@@ -1550,7 +1573,7 @@ def load_soul_md() -> Optional[str]:
         content = _truncate_content(content, "SOUL.md")
         return content
     except Exception as e:
-        logger.debug("Could not read SOUL.md from %s: %s", soul_path, e)
+        logger.debug("Could not prepare SOUL.md content: %s", e)
         return None
 
 

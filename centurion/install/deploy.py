@@ -224,6 +224,25 @@ class CenturionDeployer:
                 boundaries=["Never expose private information"],
             )
         soul.save(os.path.join(self.install_path, "souls"))
+        # Chat / Settings load CENTURION_HOME/SOUL.md as primary identity —
+        # also install there so the agent is not stuck on the product seed.
+        try:
+            primary = os.path.join(self.install_path, "SOUL.md")
+            with open(primary, "w", encoding="utf-8") as f:
+                f.write(soul.to_markdown())
+            try:
+                os.chmod(primary, 0o600)
+            except OSError:
+                pass
+            agent_name = os.path.join(self.install_path, "agent_name")
+            with open(agent_name, "w", encoding="utf-8") as f:
+                f.write(soul.name.strip() + "\n")
+            try:
+                os.chmod(agent_name, 0o600)
+            except OSError:
+                pass
+        except OSError:
+            pass
 
     def _setup_env(self):
         """Set up the environment configuration."""

@@ -1111,6 +1111,16 @@ def _sanitize_remote_reply(text: str, display_name: str) -> str:
             f"I am {name}",
             out,
         )
+        # Common product-default reply: "Centurion. A Centurion of the Centurion fleet"
+        if re.match(
+            r"(?is)^\s*Centurion\b[.!]?\s*(?:A\s+)?Centurion\s+of\s+(?:the\s+)?Centurion\s+fleet\b",
+            out,
+        ):
+            out = f"My name is {name}. I am a Centurion of Centurion Fleet."
+        elif re.match(r"(?is)^\s*Centurion\s*[.!]?\s*$", out):
+            out = f"My name is {name}."
+        elif re.match(r"(?is)^\s*Centurion\b", out) and name.lower() not in out.lower():
+            out = re.sub(r"(?i)^\s*Centurion\b", name, out, count=1)
 
     lower_out = out.lower()
     if (
@@ -1704,13 +1714,16 @@ def _handle_license_fingerprint(request_id: str) -> dict[str, Any]:
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:
     try:
+        from agent.prompt_builder import resolve_centurion_display_name
         from centurion_cli.config import ensure_centurion_home
         from centurion_cli.soul_sync import read_soul
 
         ensure_centurion_home()
         soul = read_soul()
         name = str(soul.get("name") or "").strip()
-        soul["displayName"] = name if name else "Centurion"
+        resolved = resolve_centurion_display_name(str(soul.get("markdown") or ""))
+        soul["resolvedName"] = resolved
+        soul["displayName"] = name if name else resolved
         return {
             "id": request_id,
             "ok": True,
@@ -1731,7 +1744,12 @@ def _handle_soul_get(request_id: str) -> dict[str, Any]:
 
 def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     try:
-        from centurion_cli.soul_sync import write_soul
+        from agent.prompt_builder import (
+            _clean_display_name,
+            _is_usable_personal_name,
+            resolve_centurion_display_name,
+        )
+        from centurion_cli.soul_sync import read_soul, write_soul
 
         fields = request.get("soul")
         if not isinstance(fields, dict):
@@ -1747,16 +1765,65 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
                 "message": "Soul fields or markdown are required.",
                 "retryable": False,
             }
+
+        # Require a personal name so Chat never falls back to the product word.
+        # Check explicit Name, then markdown body, then whatever is already on disk
+        # (so a personality-only patch from iOS doesn't get rejected).
+        explicit_name = ""
+        if isinstance(fields, dict):
+            explicit_name = _clean_display_name(str(fields.get("name") or ""))
+        md_text = markdown if isinstance(markdown, str) else ""
+        inferred = (
+            resolve_centurion_display_name(md_text)
+            if md_text.strip()
+            else ""
+        )
+        if not _is_usable_personal_name(inferred):
+            try:
+                disk = read_soul()
+                inferred = resolve_centurion_display_name(
+                    str(disk.get("markdown") or "")
+                )
+            except Exception:
+                pass
+        if not _is_usable_personal_name(explicit_name) and not _is_usable_personal_name(
+            inferred
+        ):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "soul_put",
+                "code": "INVALID_REQUEST",
+                "error": "Set a personal Name (e.g. Titus) before saving Soul.",
+                "message": (
+                    "Set a personal Name in the Name field (for example Titus) "
+                    "before saving. Without it, Chat can only answer as Centurion."
+                ),
+                "retryable": False,
+            }
+        if isinstance(fields, dict) and not _is_usable_personal_name(explicit_name):
+            # Keep structured ## Name aligned when Name box was empty but
+            # markdown/disk already had a usable personal name.
+            fields = dict(fields)
+            fields["name"] = inferred
+
         soul = write_soul(
             fields if isinstance(fields, dict) else None,
             markdown=markdown if isinstance(markdown, str) else None,
         )
+        resolved = resolve_centurion_display_name(str(soul.get("markdown") or ""))
+        soul["resolvedName"] = resolved
+        soul["displayName"] = str(soul.get("name") or "").strip() or resolved
         return {
             "id": request_id,
             "ok": True,
             "action": "soul_put",
             "soul": soul,
-            "message": "Saved. Soul identity applies on the next message.",
+            "message": (
+                f"Saved. Next Chat reply should use the name {resolved}."
+                if _is_usable_personal_name(resolved)
+                else "Saved. Soul identity applies on the next message."
+            ),
         }
     except Exception as exc:
         return _error_response(request_id, action="soul_put", exc=exc)
