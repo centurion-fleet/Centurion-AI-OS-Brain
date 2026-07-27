@@ -145,6 +145,14 @@ def handle_request(
         return _handle_session_history(request, request_id)
     if action == "approval_respond":
         return _handle_approval_respond(request, request_id)
+    if action == "license_status":
+        return _handle_license_status(request_id)
+    if action == "license_activate":
+        return _handle_license_activate(request, request_id)
+    if action == "license_redeem":
+        return _handle_license_redeem(request, request_id)
+    if action == "license_fingerprint":
+        return _handle_license_fingerprint(request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -174,6 +182,30 @@ def _handle_chat(
             "message": "Message text is required.",
             "retryable": False,
         }
+
+    # Product license gate — same rules as CLI/gateway (session boundary).
+    try:
+        from centurion.license.enforcement import (
+            EnforcementMode,
+            gate_agent_turn,
+            locked_user_message,
+        )
+
+        decision = gate_agent_turn()
+        if decision.mode in {EnforcementMode.LOCKED, EnforcementMode.RESTRICTED}:
+            msg = locked_user_message(decision) or decision.message
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "chat",
+                "code": "LICENSE_BLOCKED",
+                "error": msg,
+                "message": msg,
+                "license_mode": decision.mode.value,
+                "retryable": False,
+            }
+    except Exception:
+        pass
 
     session_id = str(request.get("session_id") or "").strip() or None
     using_default_agent = run_agent is None
@@ -916,13 +948,26 @@ def _ensure_remote_session(*, title: str | None = None) -> str:
 
 def _remote_display_name() -> str:
     try:
+        from centurion_cli.profiles import apply_sticky_profile_home
+
+        apply_sticky_profile_home()
+    except Exception:
+        pass
+    try:
         from agent.prompt_builder import (
             _clean_display_name,
+            _is_usable_personal_name,
             agent_name_path,
             resolve_centurion_display_name,
         )
+        from centurion_cli.soul_sync import read_soul
 
-        name = resolve_centurion_display_name()
+        soul = read_soul()
+        soul_name = _clean_display_name(str(soul.get("name") or ""))
+        if _is_usable_personal_name(soul_name):
+            name = soul_name
+        else:
+            name = resolve_centurion_display_name(str(soul.get("markdown") or ""))
         # Backfill sticky file so later turns stay locked to the Soul name.
         if name and name != "Centurion":
             path = agent_name_path()
@@ -1000,7 +1045,7 @@ def _sanitize_remote_reply(text: str, display_name: str) -> str:
     kept: list[str] = []
     for part in parts:
         lower = part.lower()
-        if "hermes" in lower or "nous" in lower:
+        if re.search(r"\bhermes\b", lower) or re.search(r"\bnous\b", lower):
             continue
         kept.append(part)
     out = " ".join(kept).strip()
@@ -1019,7 +1064,12 @@ def _sanitize_remote_reply(text: str, display_name: str) -> str:
             out,
         )
 
-    if not out or "hermes" in out.lower() or "nous" in out.lower():
+    lower_out = out.lower()
+    if (
+        not out
+        or re.search(r"\bhermes\b", lower_out)
+        or re.search(r"\bnous\b", lower_out)
+    ):
         out = f"My name is {name}. I am a Centurion of Centurion Fleet."
     return out.strip()
 
@@ -1466,6 +1516,142 @@ def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str,
         }
     except Exception as exc:
         return _error_response(request_id, action="oversight_put", exc=exc)
+
+
+def _handle_license_status(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion.license.balance import summarize_balance
+        from centurion.license.enforcement import (
+            EnforcementMode,
+            evaluate,
+            locked_user_message,
+        )
+        from centurion.license.fingerprint import fingerprint_short
+        from centurion.license.store import load_entitlement
+
+        ent = load_entitlement()
+        decision = evaluate(ent)
+        paid, target, remaining = summarize_balance(ent)
+        agent_allowed = decision.mode in {
+            EnforcementMode.ALLOW,
+            EnforcementMode.WARN,
+        }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "license_status",
+            "license": {
+                "state": ent.state,
+                "tier": ent.tier,
+                "license_id": ent.license_id,
+                "fingerprint": fingerprint_short(ent.machine_fingerprint),
+                "mode": decision.mode.value,
+                "agent_allowed": agent_allowed,
+                "message": locked_user_message(decision) or decision.message,
+                "balance_paid_gbp": paid,
+                "balance_target_gbp": target,
+                "balance_remaining_gbp": remaining,
+                "customer_name": ent.customer_name,
+                "shipment_id": ent.shipment_id,
+            },
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="license_status", exc=exc)
+
+
+def _handle_license_activate(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion.license.activate import activate_from_server, activate_trial
+        from centurion.license.enforcement import EnforcementMode, evaluate
+
+        # Block activate only when permanently owned (no-op); otherwise allow.
+        decision = evaluate()
+        _ = decision  # status is always available; activate is an unlock path
+
+        tier = str(request.get("tier") or "trial").strip().lower()
+        if tier == "trial":
+            result = activate_trial(
+                days=int(request.get("days") or 14),
+                offline=bool(request.get("offline", False)),
+            )
+        else:
+            result = activate_from_server(
+                tier=tier,
+                activation_code=request.get("activation_code") or request.get("code"),
+                api_key=request.get("api_key"),
+            )
+        if not result.ok:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "license_activate",
+                "error": result.error or "activation_failed",
+                "message": result.error or "Activation failed",
+                "retryable": True,
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "license_activate",
+            "message": result.message,
+            "state": result.entitlement.state if result.entitlement else None,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="license_activate", exc=exc)
+
+
+def _handle_license_redeem(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion.license.activate import redeem_outright_token
+
+        token = str(request.get("token") or "").strip()
+        if not token:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "license_redeem",
+                "error": "token_required",
+                "message": "A proof-of-purchase token is required.",
+                "retryable": False,
+            }
+        result = redeem_outright_token(
+            token,
+            offline_attestation=request.get("attestation"),
+        )
+        if not result.ok:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "license_redeem",
+                "error": result.error or "redeem_failed",
+                "message": result.error or "Redeem failed",
+                "retryable": True,
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "license_redeem",
+            "message": result.message,
+            "state": result.entitlement.state if result.entitlement else None,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="license_redeem", exc=exc)
+
+
+def _handle_license_fingerprint(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion.license.fingerprint import collect_identity_parts, compute_fingerprint
+
+        parts = collect_identity_parts()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "license_fingerprint",
+            "fingerprint": compute_fingerprint(parts=parts),
+            "parts": {k: (v[:12] + "…" if len(v) > 20 else v) for k, v in parts.items()},
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="license_fingerprint", exc=exc)
 
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:

@@ -145,9 +145,41 @@ def read_soul() -> dict[str, Any]:
     path = soul_md_path()
     markdown = path.read_text(encoding="utf-8") if path.exists() else ""
     structured = markdown_to_structured(markdown)
+    structured = _enrich_structured_from_markdown(structured, markdown)
     structured["path"] = str(path)
     structured["exists"] = path.exists()
     return structured
+
+
+def _enrich_structured_from_markdown(
+    structured: dict[str, Any], markdown: str
+) -> dict[str, Any]:
+    """Fill name/personality from fleet-style SOUL.md when ## Name is absent."""
+    from agent.prompt_builder import (
+        _clean_display_name,
+        _infer_name_from_markdown,
+        _is_usable_personal_name,
+    )
+
+    out = dict(structured)
+    name = _clean_display_name(str(out.get("name") or ""))
+    if not _is_usable_personal_name(name):
+        inferred = _infer_name_from_markdown(markdown)
+        if _is_usable_personal_name(inferred):
+            out["name"] = inferred
+    if not str(out.get("personalitySummary") or "").strip():
+        sections = _split_sections(markdown)
+        for key, body in sections.items():
+            if "core identity" in key:
+                out["personalitySummary"] = body.strip()
+                break
+        if not str(out.get("personalitySummary") or "").strip():
+            for key, body in sections.items():
+                if "personality" in key:
+                    out["personalitySummary"] = body.strip()
+                    break
+    out["markdown"] = markdown or out.get("markdown") or ""
+    return out
 
 
 def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = None) -> dict[str, Any]:

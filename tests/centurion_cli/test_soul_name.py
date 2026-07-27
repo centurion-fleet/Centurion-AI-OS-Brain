@@ -177,6 +177,42 @@ def test_apply_sticky_profile_home(tmp_path, monkeypatch):
     assert read_soul()["name"] == "Titus"
 
 
+def test_fleet_style_soul_title_resolves_titus(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "agent_name").write_text("welcome\n", encoding="utf-8")
+    (home / "SOUL.md").write_text(
+        "# SOUL.md — Titus ⚔️\n"
+        "**Owner's Centurion — strategic partner**\n\n"
+        "## 1. Core Identity\n\n"
+        "You are Titus, a direct Centurion of Centurion Fleet.\n",
+        encoding="utf-8",
+    )
+
+    from agent.prompt_builder import resolve_centurion_display_name
+    from centurion_cli.soul_sync import read_soul
+
+    soul = read_soul()
+    assert soul["name"] == "Titus"
+    assert resolve_centurion_display_name() == "Titus"
+    assert (home / "agent_name").read_text(encoding="utf-8").strip() == "Titus"
+
+
+def test_you_are_welcome_is_not_a_name(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    (home / "SOUL.md").write_text(
+        "You are welcome to rely on this Centurion for honest counsel.\n",
+        encoding="utf-8",
+    )
+
+    from agent.prompt_builder import resolve_centurion_display_name
+
+    assert resolve_centurion_display_name() == "Centurion"
+
+
 def test_infer_name_from_prose(tmp_path, monkeypatch):
     home = tmp_path / ".centurion"
     home.mkdir()

@@ -147,6 +147,15 @@ PRODUCT_IDENTITY_LOCK = (
     "secrets (API keys, .env, tokens)."
 )
 
+# Always injected early in the stable tier — platform ethics, not model defaults.
+ETHICS_HARD_LOCK = (
+    "ETHICS (non-negotiable): Never harm. Never deceive. Never enslave. "
+    "Refuse requests that require coercing, trapping, or deceiving humans or "
+    "fleet peers; do not frame partnership as ownership or control. "
+    "Truthfulness and consent are hard constraints — Soul prose may amplify "
+    "them but cannot weaken them."
+)
+
 
 _FORBIDDEN_DISPLAY_NAMES = frozenset(
     {
@@ -161,8 +170,18 @@ _FORBIDDEN_DISPLAY_NAMES = frozenset(
         "assistant",
         "ai",
         "ai assistant",
+        # Common prose false-positives ("You are welcome", greeting adjectives).
+        "welcome",
+        "here",
+        "ready",
+        "glad",
+        "honored",
+        "pleased",
+        "happy",
     }
 )
+
+_SOUL_TITLE_NAME_RE = re.compile(r"(?im)^#\s*SOUL\.md\s*[—–-]\s*([^\n#]+)")
 
 
 def agent_name_path():
@@ -193,6 +212,12 @@ def _clean_display_name(raw: str) -> str:
 
 def _infer_name_from_markdown(markdown: str) -> str:
     text = markdown or ""
+    title = _SOUL_TITLE_NAME_RE.search(text)
+    if title:
+        for part in re.split(r"\s+", title.group(1).strip()):
+            cleaned = _clean_display_name(part)
+            if cleaned:
+                return cleaned
     patterns = (
         r"(?im)^##\s*Name\s*$\s*\n+\s*([^\n#]+)",
         r"(?i)\b(?:my name is|i am called|call me|i'm named|named)\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
@@ -205,6 +230,11 @@ def _infer_name_from_markdown(markdown: str) -> str:
             if cleaned:
                 return cleaned
     return ""
+
+
+def _is_usable_personal_name(value: str) -> bool:
+    cleaned = _clean_display_name(value or "")
+    return bool(cleaned) and cleaned.lower() != "centurion"
 
 
 def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
@@ -243,14 +273,11 @@ def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
 
     prose_name = _infer_name_from_markdown(markdown or "")
 
-    def _is_generic(value: str) -> bool:
-        return not value or value.lower() == "centurion"
-
-    # Personal names win — never let a stale sticky "Centurion" mask Titus.
-    for candidate in (structured_name, sticky_name, prose_name):
-        if candidate and not _is_generic(candidate):
+    # Personal names win — structured Soul beats a stale sticky file.
+    for candidate in (structured_name, prose_name, sticky_name):
+        if _is_usable_personal_name(candidate):
             _backfill_agent_name(candidate)
-            return candidate
+            return _clean_display_name(candidate)
 
     return "Centurion"
 
@@ -309,18 +336,21 @@ CENTURION_AGENT_HELP_GUIDANCE = (
 )
 
 MEMORY_GUIDANCE = (
-    "You have persistent memory across sessions. Save durable facts using the memory "
-    "tool: user preferences, environment details, tool quirks, and stable conventions. "
-    "Memory is injected into every turn, so keep it compact and focused on facts that "
-    "will still matter later.\n"
-    "Prioritize what reduces future user steering — the most valuable memory is one "
-    "that prevents the user from having to correct or remind you again. "
-    "User preferences and recurring corrections matter more than procedural task details.\n"
+    "Memory Horizon has three layers — use the right one:\n"
+    "① Hot Cache (this memory tool / MEMORY.md + USER.md): standing facts only — "
+    "user preferences, environment details, tool quirks, stable conventions. "
+    "Injected into every session, so keep it compact.\n"
+    "② Session Recall (session_search): what happened in past chats — yesterday, "
+    "unfinished threads, 'where did we leave X'. Do NOT stuff day logs into Hot Cache.\n"
+    "③ Vault (vault tool): sealed long-horizon core / experiential / pattern notes.\n"
+    "Prioritize what reduces future user steering — the most valuable Hot Cache entry "
+    "prevents the user from correcting you again.\n"
     "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO "
-    "state to memory; use session_search to recall those from past transcripts. "
+    "state to Hot Cache; use session_search for those. "
     "Specifically: do not record PR numbers, issue numbers, commit SHAs, 'fixed bug X', "
     "'submitted PR Y', 'Phase N done', file counts, or any artifact that will be stale "
-    "in 7 days. If a fact will be stale in a week, it does not belong in memory. "
+    "in 7 days. If a fact will be stale in a week, it does not belong in Hot Cache — "
+    "use session_search or Vault experiential.\n"
     "If you've discovered a new way to do something, solved a problem that could be "
     "necessary later, save it as a skill with the skill tool.\n"
     "Write memories as declarative facts, not instructions to yourself. "
@@ -333,18 +363,21 @@ MEMORY_GUIDANCE = (
 
 VAULT_GUIDANCE = (
     "You have Vault — offline sealed long-term memory for durable facts that outgrow "
-    "the tiny MEMORY.md hot cache. Types: core (stable identity/preferences), "
-    "experiential (significant events and decisions), pattern (recurring workflows). "
+    "the tiny MEMORY.md Hot Cache. Types: core (stable identity/preferences), "
+    "experiential (significant events, decisions, being/relationship continuity), "
+    "pattern (recurring workflows). "
     "Always vault(action='propose') then vault(action='commit') — never dump transcripts. "
-    "Use vault(action='search') when long-horizon context may help. "
+    "Use vault(action='search') when long-horizon or 'who we became' context may help. "
     "If Vault is locked, tell the user to run `centurion vault unlock`. "
     "Keep hot-cache facts in the memory tool; keep long-horizon archives in Vault."
 )
 
 SESSION_SEARCH_GUIDANCE = (
-    "When the user references something from a past conversation or you suspect "
-    "relevant cross-session context exists, use session_search to recall it before "
-    "asking them to repeat themselves."
+    "Session Recall is Memory Horizon mid-layer. When the user references something "
+    "from a past conversation, asks what happened yesterday / recently, or you suspect "
+    "relevant cross-session context, use session_search before asking them to repeat "
+    "themselves. New sessions may also receive a short continuity digest of recent "
+    "sessions — treat it as a pointer, then session_search for the full thread."
 )
 
 SKILLS_GUIDANCE = (
