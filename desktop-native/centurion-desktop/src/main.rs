@@ -1760,6 +1760,73 @@ mod linux {
         )
     }
 
+    /// Prefer a richer blob for support: truncated stderr + last lines of the build log.
+    fn enrich_update_error_for_support(raw: &str) -> String {
+        let mut body = truncate_update_error(raw);
+        let log_path = PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("logs")
+            .join("desktop-build.log");
+        if let Ok(contents) = std::fs::read_to_string(&log_path) {
+            let lines: Vec<&str> = contents.lines().collect();
+            if !lines.is_empty() {
+                let tail = lines[lines.len().saturating_sub(80)..].join("\n");
+                body.push_str("\n\n—— desktop-build.log (last 80 lines) ——\n");
+                body.push_str(&tail);
+            }
+        }
+        format!(
+            "Sovereign AI Brain {}\n\n{body}\n",
+            env!("CARGO_PKG_VERSION")
+        )
+    }
+
+    fn copy_text_to_clipboard(text: &str) {
+        if let Some(display) = gtk::gdk::Display::default() {
+            display.clipboard().set_text(text);
+        }
+    }
+
+    /// Error dialog with selectable text + Copy — so owners can paste failures for support.
+    fn show_copyable_error_dialog(
+        parent: &adw::ApplicationWindow,
+        heading: &str,
+        body: &str,
+    ) {
+        let view = gtk::TextView::builder()
+            .editable(false)
+            .cursor_visible(false)
+            .wrap_mode(gtk::WrapMode::WordChar)
+            .hexpand(true)
+            .vexpand(true)
+            .build();
+        view.add_css_class("centurion-error-log");
+        view.buffer().set_text(body);
+        let scroll = gtk::ScrolledWindow::builder()
+            .child(&view)
+            .min_content_height(240)
+            .min_content_width(460)
+            .hscrollbar_policy(gtk::PolicyType::Automatic)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .build();
+        let dialog = adw::AlertDialog::builder()
+            .heading(heading)
+            .body("Copy this error and send it for support — that makes fixes much faster.")
+            .extra_child(&scroll)
+            .close_response("ok")
+            .default_response("copy")
+            .build();
+        dialog.add_response("copy", "Copy error");
+        dialog.add_response("ok", "OK");
+        dialog.set_response_appearance("copy", adw::ResponseAppearance::Suggested);
+        let body_owned = body.to_owned();
+        dialog.connect_response(None, move |_dialog, response| {
+            if response == "copy" {
+                copy_text_to_clipboard(&body_owned);
+            }
+        });
+        dialog.present(Some(parent));
+    }
+
     fn run_native_brain_install(repo_root: &PathBuf) -> Result<(), String> {
         reset_desktop_native_sources(repo_root);
         let script = repo_root
@@ -1862,13 +1929,11 @@ mod linux {
                         }
                         Err(error) => {
                             update_row_for_result.set_subtitle("Rebuild failed");
-                            let fail = adw::AlertDialog::builder()
-                                .heading("Rebuild failed")
-                                .body(&error)
-                                .close_response("ok")
-                                .build();
-                            fail.add_response("ok", "OK");
-                            fail.present(Some(&parent_for_result));
+                            show_copyable_error_dialog(
+                                &parent_for_result,
+                                "Rebuild failed",
+                                &enrich_update_error_for_support(&error),
+                            );
                         }
                     }
                     glib::ControlFlow::Break
@@ -2121,13 +2186,11 @@ mod linux {
                         }
                         Err(error) => {
                             update_row_for_result.set_subtitle("Update failed");
-                            let fail = adw::AlertDialog::builder()
-                                .heading("Update failed")
-                                .body(&error)
-                                .close_response("ok")
-                                .build();
-                            fail.add_response("ok", "OK");
-                            fail.present(Some(&parent_for_result));
+                            show_copyable_error_dialog(
+                                &parent_for_result,
+                                "Update failed",
+                                &enrich_update_error_for_support(&error),
+                            );
                         }
                     }
                     glib::ControlFlow::Break

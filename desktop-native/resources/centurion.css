@@ -200,3 +200,9 @@ stackswitcher button {
   border-radius: 999px;
   background: alpha(@centurion_interactive, 0.10);
 }
+
+.centurion-error-log {
+  font-family: monospace;
+  font-size: 12px;
+  padding: 8px;
+}
