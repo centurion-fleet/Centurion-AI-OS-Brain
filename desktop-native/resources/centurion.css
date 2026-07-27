@@ -178,3 +178,25 @@ stackswitcher button {
   padding: 4px 10px;
   background: alpha(@centurion_interactive, 0.10);
 }
+
+.centurion-chat-intents {
+  padding-top: 2px;
+}
+
+.centurion-chat-intent {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-weight: 600;
+  background: alpha(@centurion_ink, 0.05);
+}
+
+.centurion-chat-intent:checked {
+  background: @centurion_ink;
+  color: @centurion_canvas;
+}
+
+.centurion-chat-attach-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: alpha(@centurion_interactive, 0.10);
+}

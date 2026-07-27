@@ -5,6 +5,7 @@
 
 use adw::prelude::*;
 use gtk4 as gtk;
+use gtk::gio;
 use libadwaita as adw;
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
@@ -79,6 +80,217 @@ impl ChatHandle {
         self.input.grab_focus();
         let len = body.chars().count() as i32;
         self.input.set_position(len);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChatIntent {
+    Talk,
+    ProposeFirst,
+}
+
+#[derive(Clone, Debug)]
+#[derive(Clone, Debug)]
+struct PendingAttachment {
+    path: PathBuf,
+    filename: String,
+}
+
+const PLAN_ARTIFACT_FENCE: &str = "plan-artifact";
+
+fn frame_propose_first(user_text: &str) -> String {
+    format!(
+        "[Sovereign AI Remote — Propose first]\n\
+         The user wants a plan before any consequential action.\n\n\
+         For this turn only:\n\
+         - Draft a concrete plan. Do not implement, send, edit project files, run mutating commands, or take external actions.\n\
+         - You may inspect read-only context if needed.\n\
+         - Reply briefly in plain language, then end with a fenced JSON block exactly like this:\n\n\
+         ```{PLAN_ARTIFACT_FENCE}\n\
+         {{\"title\":\"Short plan title\",\"goal\":\"What success looks like\",\"steps\":[\"Step 1\",\"Step 2\"],\"risks\":[\"Risk if any\"],\"open_questions\":[\"Question if any\"],\"summary\":\"One or two sentence summary for Home\"}}\n\
+         ```\n\n\
+         Omit empty arrays. Keep steps actionable and short.\n\n\
+         User message:\n\
+         {user_text}"
+    )
+}
+
+fn extract_plan_artifact_block(response: &str) -> Option<String> {
+    let open = format!("```{PLAN_ARTIFACT_FENCE}");
+    let start = response.find(&open)?;
+    let after = &response[start + open.len()..];
+    let close = after.find("```")?;
+    Some(after[..close].trim().to_owned())
+}
+
+fn strip_plan_artifact(response: &str) -> String {
+    let open = format!("```{PLAN_ARTIFACT_FENCE}");
+    let Some(start) = response.find(&open) else {
+        return response.trim().to_owned();
+    };
+    let mut result = response[..start].to_owned();
+    let after_open = &response[start + open.len()..];
+    if let Some(close) = after_open.find("```") {
+        result.push_str(&after_open[close + 3..]);
+    }
+    result.trim().to_owned()
+}
+
+fn plan_payload_from_response(response: &str, user_request: &str) -> Value {
+    if let Some(block) = extract_plan_artifact_block(response) {
+        if let Ok(value) = serde_json::from_str::<Value>(&block) {
+            if let Some(obj) = value.as_object() {
+                let title = obj
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let goal = obj
+                    .get("goal")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let summary = obj
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let steps = obj
+                    .get("steps")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|s| s.as_str().map(|t| t.trim().to_owned()))
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>();
+                let risks = obj
+                    .get("risks")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|s| s.as_str().map(|t| t.trim().to_owned()))
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>();
+                let questions = obj
+                    .get("open_questions")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|s| s.as_str().map(|t| t.trim().to_owned()))
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>();
+                let related = obj
+                    .get("related_mission")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                let resolved_title = if !title.is_empty() {
+                    title.to_owned()
+                } else if !goal.is_empty() {
+                    goal.chars().take(72).collect()
+                } else {
+                    "Proposed plan".to_owned()
+                };
+                return serde_json::json!({
+                    "title": resolved_title,
+                    "goal": goal,
+                    "summary": if summary.is_empty() { goal } else { summary },
+                    "steps": steps,
+                    "risks": risks,
+                    "open_questions": questions,
+                    "related_mission": if related.is_empty() { Value::Null } else { Value::String(related.to_owned()) },
+                    "status": "pending_review",
+                });
+            }
+        }
+    }
+
+    // Fallback when the model omits the fence.
+    let trimmed = response.trim();
+    let steps: Vec<String> = trimmed
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with('#')
+                && !line.starts_with("```")
+        })
+        .take(8)
+        .map(|line| {
+            line.trim_start_matches(|c: char| {
+                c == '-' || c == '*' || c == '.' || c.is_ascii_digit() || c.is_whitespace()
+            })
+            .trim()
+            .to_owned()
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    let title_seed = user_request.trim();
+    let title = if title_seed.is_empty() {
+        "Proposed plan".to_owned()
+    } else {
+        format!("Plan: {}", title_seed.chars().take(60).collect::<String>())
+    };
+    serde_json::json!({
+        "title": title,
+        "goal": trimmed.chars().take(240).collect::<String>(),
+        "summary": trimmed.chars().take(280).collect::<String>(),
+        "steps": steps,
+        "risks": [],
+        "open_questions": [],
+        "status": "pending_review",
+    })
+}
+
+fn put_plan_artifact(plan: Value) -> Result<Value, String> {
+    let response = run_bridge_action("plan_put", serde_json::json!({ "plan": plan }))
+        .ok_or_else(|| "Could not save the plan.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(response)
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not save the plan.")
+            .to_owned())
+    }
+}
+
+fn format_attachment_outbound(user_text: &str, attachments: &[PendingAttachment]) -> String {
+    if attachments.is_empty() {
+        return user_text.to_owned();
+    }
+    let mut lines = vec![
+        "[Attachments — local paths on this brain; use read_file / vision tools as needed]".to_owned(),
+    ];
+    for item in attachments {
+        lines.push(format!("- {} ({})", item.path.display(), item.filename));
+    }
+    lines.push(String::new());
+    if user_text.trim().is_empty() {
+        lines.push("Please review the attached files.".to_owned());
+    } else {
+        lines.push(user_text.to_owned());
+    }
+    lines.join("\n")
+}
+
+fn format_user_display(user_text: &str, attachments: &[PendingAttachment]) -> String {
+    if attachments.is_empty() {
+        return user_text.to_owned();
+    }
+    let names = attachments
+        .iter()
+        .map(|a| a.filename.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if user_text.trim().is_empty() {
+        format!("📎 {names}")
+    } else {
+        format!("📎 {names}\n\n{user_text}")
     }
 }
 
@@ -1292,12 +1504,120 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     error_label.set_visible(false);
     bottom.append(&error_label);
 
+    // Intent chips: Talk (default) | Propose first
+    let intent = Rc::new(Cell::new(ChatIntent::Talk));
+    let intent_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    intent_row.set_margin_start(16);
+    intent_row.set_margin_end(16);
+    intent_row.set_margin_bottom(4);
+    intent_row.add_css_class("centurion-chat-intents");
+    let talk_btn = gtk::ToggleButton::with_label("Talk");
+    talk_btn.add_css_class("centurion-chat-intent");
+    talk_btn.set_active(true);
+    let propose_btn = gtk::ToggleButton::with_label("Propose first");
+    propose_btn.add_css_class("centurion-chat-intent");
+    propose_btn.set_tooltip_text(Some(
+        "Ask for a plan only — review it on Home under Plans / Needs your choice.",
+    ));
+    {
+        let intent = intent.clone();
+        let propose_btn = propose_btn.clone();
+        talk_btn.connect_toggled(move |b| {
+            if b.is_active() {
+                intent.set(ChatIntent::Talk);
+                propose_btn.set_active(false);
+            } else if !propose_btn.is_active() {
+                b.set_active(true);
+            }
+        });
+    }
+    {
+        let intent = intent.clone();
+        let talk_btn = talk_btn.clone();
+        propose_btn.connect_toggled(move |b| {
+            if b.is_active() {
+                intent.set(ChatIntent::ProposeFirst);
+                talk_btn.set_active(false);
+            } else if !talk_btn.is_active() {
+                b.set_active(true);
+            }
+        });
+    }
+    intent_row.append(&talk_btn);
+    intent_row.append(&propose_btn);
+    bottom.append(&intent_row);
+
+    // Attachment chips
+    let attachments: Rc<RefCell<Vec<PendingAttachment>>> = Rc::new(RefCell::new(Vec::new()));
+    let attachment_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    attachment_row.set_margin_start(16);
+    attachment_row.set_margin_end(16);
+    attachment_row.set_margin_bottom(4);
+    attachment_row.set_visible(false);
+    attachment_row.add_css_class("centurion-chat-attachments");
+    bottom.append(&attachment_row);
+
+    // Attachment chip list (rebuild on add/remove)
+    let refresh_attachments: Rc<dyn Fn()> = Rc::new({
+        let attachment_row = attachment_row.clone();
+        let attachments = attachments.clone();
+        let refresh_attachments: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+        let refresh_attachments_outer = refresh_attachments.clone();
+        let paint = Rc::new({
+            let attachment_row = attachment_row.clone();
+            let attachments = attachments.clone();
+            let refresh_attachments = refresh_attachments.clone();
+            move || {
+                while let Some(child) = attachment_row.first_child() {
+                    attachment_row.remove(&child);
+                }
+                let items = attachments.borrow().clone();
+                attachment_row.set_visible(!items.is_empty());
+                for (index, item) in items.iter().enumerate() {
+                    let chip = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+                    chip.add_css_class("centurion-chat-attach-chip");
+                    chip.append(
+                        &gtk::Label::builder()
+                            .label(&format!("📎 {}", item.filename))
+                            .build(),
+                    );
+                    let remove = gtk::Button::from_icon_name("window-close-symbolic");
+                    remove.add_css_class("flat");
+                    remove.set_tooltip_text(Some("Remove attachment"));
+                    let attachments = attachments.clone();
+                    let refresh_attachments = refresh_attachments.clone();
+                    remove.connect_clicked(move |_| {
+                        {
+                            let mut list = attachments.borrow_mut();
+                            if index < list.len() {
+                                list.remove(index);
+                            }
+                        }
+                        if let Some(f) = refresh_attachments.borrow().as_ref() {
+                            f();
+                        }
+                    });
+                    chip.append(&remove);
+                    attachment_row.append(&chip);
+                }
+            }
+        });
+        *refresh_attachments_outer.borrow_mut() = Some(paint.clone());
+        paint
+    });
+
     let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     input_row.set_margin_start(16);
     input_row.set_margin_end(16);
-    input_row.set_margin_top(10);
+    input_row.set_margin_top(6);
     input_row.set_margin_bottom(16);
     input_row.set_vexpand(false);
+
+    let attach_button = gtk::Button::from_icon_name("mail-attachment-symbolic");
+    attach_button.set_tooltip_text(Some("Attach files"));
+    attach_button.add_css_class("flat");
+    attach_button.set_valign(gtk::Align::Center);
+    attach_button.set_size_request(44, 44);
 
     let input = gtk::Entry::builder()
         .placeholder_text("Type a message to your Centurion…")
@@ -1317,11 +1637,70 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     sending_spinner.set_visible(false);
     sending_spinner.set_valign(gtk::Align::Center);
 
+    input_row.append(&attach_button);
     input_row.append(&input);
     input_row.append(&send_button);
     input_row.append(&sending_spinner);
     bottom.append(&input_row);
     chat_column.append(&bottom);
+
+    {
+        let attachments = attachments.clone();
+        let refresh_attachments = refresh_attachments.clone();
+        let input = input.clone();
+        attach_button.connect_clicked(move |_| {
+            let Some(root) = input.root() else {
+                return;
+            };
+            let Ok(window) = root.downcast::<gtk::Window>() else {
+                return;
+            };
+            let dialog = gtk::FileDialog::builder()
+                .title("Attach files")
+                .modal(true)
+                .build();
+            let attachments = attachments.clone();
+            let refresh_attachments = refresh_attachments.clone();
+            dialog.open_multiple(
+                Some(&window),
+                None::<&gio::Cancellable>,
+                move |result| {
+                    let Ok(model) = result else {
+                        return;
+                    };
+                    let n = model.n_items();
+                    let mut added = false;
+                    for i in 0..n {
+                        let Some(obj) = model.item(i) else {
+                            continue;
+                        };
+                        let Ok(file) = obj.downcast::<gio::File>() else {
+                            continue;
+                        };
+                        let Some(path) = file.path() else {
+                            continue;
+                        };
+                        let filename = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.display().to_string());
+                        let already = attachments
+                            .borrow()
+                            .iter()
+                            .any(|a| a.path == path);
+                        if already {
+                            continue;
+                        }
+                        attachments.borrow_mut().push(PendingAttachment { path, filename });
+                        added = true;
+                    }
+                    if added {
+                        refresh_attachments();
+                    }
+                },
+            );
+        });
+    }
 
     paned.set_end_child(Some(&chat_column));
     container.append(&paned);
@@ -1941,14 +2320,19 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let follow_bottom = follow_bottom.clone();
         let assistant_name = assistant_name.clone();
         let title = title.clone();
+        let intent = intent.clone();
+        let attachments = attachments.clone();
+        let refresh_attachments = refresh_attachments.clone();
         move || {
             if *is_sending.borrow() {
                 return;
             }
             let text = input.text().to_string();
-            if text.trim().is_empty() {
+            let pending = attachments.borrow().clone();
+            if text.trim().is_empty() && pending.is_empty() {
                 return;
             }
+            let propose_first = intent.get() == ChatIntent::ProposeFirst;
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
             let _ = honor_soul_session_reset(&session_id, &messages);
@@ -1956,15 +2340,23 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             *assistant_name.borrow_mut() = load_assistant_display_name();
             title.set_label(&format!("Chat with {}", assistant_name.borrow()));
             input.set_text("");
+            attachments.borrow_mut().clear();
+            refresh_attachments();
             follow_bottom.set(true);
             messages.borrow_mut().push(ChatMessage {
                 role: ChatRole::User,
-                content: text.clone(),
+                content: format_user_display(&text, &pending),
             });
             refresh_messages();
             set_error(None);
             clear_approval();
             set_sending(true);
+
+            let mut outbound = format_attachment_outbound(&text, &pending);
+            if propose_first {
+                outbound = frame_propose_first(&outbound);
+            }
+            let user_request = text.clone();
 
             let (event_tx, event_rx) = mpsc::channel::<WorkerEvent>();
             let (approval_tx, approval_rx) = mpsc::channel::<ApprovalDecision>();
@@ -1986,7 +2378,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         }
                     },
                 };
-                run_chat_turn(sid, text, event_tx, approval_rx);
+                run_chat_turn(sid, outbound, event_tx, approval_rx);
             });
 
             let messages = messages.clone();
@@ -2013,9 +2405,30 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             Ok(turn) => {
                                 save_session_id(&turn.session_id);
                                 *session_id.borrow_mut() = Some(turn.session_id);
+                                let mut display = if propose_first {
+                                    strip_plan_artifact(&turn.text)
+                                } else {
+                                    turn.text.clone()
+                                };
+                                if propose_first {
+                                    let plan =
+                                        plan_payload_from_response(&turn.text, &user_request);
+                                    thread::spawn(move || {
+                                        let _ = put_plan_artifact(plan);
+                                    });
+                                    if display.trim().is_empty() {
+                                        display = "I've drafted a plan for your review on Home — open Plans, Needs your choice, or Documents when you're ready.".to_owned();
+                                    } else if !display.to_lowercase().contains("home")
+                                        && !display.to_lowercase().contains("plan")
+                                    {
+                                        display.push_str(
+                                            "\n\nYou can review this plan on Home under Plans, Needs your choice, or Documents.",
+                                        );
+                                    }
+                                }
                                 messages.borrow_mut().push(ChatMessage {
                                     role: ChatRole::Assistant,
-                                    content: turn.text,
+                                    content: display,
                                 });
                                 follow_bottom.set(true);
                                 refresh_messages();
