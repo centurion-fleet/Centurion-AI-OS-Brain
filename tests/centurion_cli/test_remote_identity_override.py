@@ -26,8 +26,21 @@ def test_remote_identity_ephemeral_names_titus_without_rivals():
     text = _remote_identity_ephemeral("Titus")
     assert "Titus" in text
     assert "Centurion Fleet" in text
+    assert "SOUL.md" in text
     assert "Hermes" not in text
     assert "Nous" not in text
+
+
+def test_scrub_replaces_wrong_personal_name_claims():
+    from centurion_cli.remote_bridge import _scrub_foreign_identity_history
+
+    history = [
+        {"role": "assistant", "content": "My name is Centurion. How can I help?"},
+    ]
+    cleaned = _scrub_foreign_identity_history(history, "Titus")
+    assert cleaned[0]["content"] == (
+        "My name is Titus. I am a Centurion of Centurion Fleet."
+    )
 
 
 def test_sanitize_strips_rival_brand_sentences():

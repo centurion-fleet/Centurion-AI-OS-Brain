@@ -884,10 +884,15 @@ fn load_assistant_display_name() -> String {
     }
 }
 
-fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow, message_list: &gtk::ListBox) {
+fn scroll_chat_to_latest(
+    message_scroll: &gtk::ScrolledWindow,
+    message_list: &gtk::ListBox,
+    programmatic: &Rc<Cell<bool>>,
+) {
     // Fedora Brain ships an older GTK4 — ListBox::scroll_to is unavailable there.
     // Pin via the ScrolledWindow adjustment; follow-bottom wiring keeps chasing
     // as new rows are laid out.
+    programmatic.set(true);
     if let Some(child) = message_list.last_child() {
         if let Ok(row) = child.downcast::<gtk::ListBoxRow>() {
             message_list.select_row(Some(&row));
@@ -896,84 +901,81 @@ fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow, message_list: &gt
     let adj = message_scroll.vadjustment();
     let target = (adj.upper() - adj.page_size()).max(adj.lower());
     adj.set_value(target);
+    programmatic.set(false);
 }
 
 fn schedule_scroll_to_latest(
     message_scroll: &gtk::ScrolledWindow,
     message_list: &gtk::ListBox,
     follow_bottom: &Rc<Cell<bool>>,
+    programmatic: &Rc<Cell<bool>>,
 ) {
     follow_bottom.set(true);
-    scroll_chat_to_latest(message_scroll, message_list);
+    scroll_chat_to_latest(message_scroll, message_list, programmatic);
 
-    let message_scroll = message_scroll.clone();
-    let message_list = message_list.clone();
-    let follow_bottom = follow_bottom.clone();
-    glib::idle_add_local_once({
+    for delay_ms in [16u64, 50, 120, 250, 500] {
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
         let follow_bottom = follow_bottom.clone();
-        move || {
+        let programmatic = programmatic.clone();
+        glib::timeout_add_local_once(Duration::from_millis(delay_ms), move || {
             follow_bottom.set(true);
-            scroll_chat_to_latest(&message_scroll, &message_list);
-        }
-    });
-    glib::timeout_add_local_once(Duration::from_millis(50), {
-        let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
-        let follow_bottom = follow_bottom.clone();
-        move || {
-            follow_bottom.set(true);
-            scroll_chat_to_latest(&message_scroll, &message_list);
-        }
-    });
-    glib::timeout_add_local_once(Duration::from_millis(200), {
-        let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
-        let follow_bottom = follow_bottom.clone();
-        move || {
-            follow_bottom.set(true);
-            scroll_chat_to_latest(&message_scroll, &message_list);
-        }
-    });
+            scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
+        });
+    }
 }
 
 fn wire_follow_bottom_scroll(
     message_scroll: &gtk::ScrolledWindow,
     follow_bottom: Rc<Cell<bool>>,
+    programmatic: Rc<Cell<bool>>,
 ) {
     let adj = message_scroll.vadjustment();
-    let suppressing = Rc::new(Cell::new(false));
 
     adj.connect_changed({
         let follow_bottom = follow_bottom.clone();
-        let suppressing = suppressing.clone();
+        let programmatic = programmatic.clone();
         move |adj| {
-            if !follow_bottom.get() || suppressing.get() {
+            if !follow_bottom.get() {
                 return;
             }
             let target = (adj.upper() - adj.page_size()).max(adj.lower());
             if (adj.value() - target).abs() > 1.0 {
-                suppressing.set(true);
+                programmatic.set(true);
                 adj.set_value(target);
-                suppressing.set(false);
+                programmatic.set(false);
             }
         }
     });
 
     adj.connect_value_changed({
         let follow_bottom = follow_bottom.clone();
-        let suppressing = suppressing.clone();
+        let programmatic = programmatic.clone();
         move |adj| {
-            if suppressing.get() {
+            if programmatic.get() {
                 return;
             }
             let target = (adj.upper() - adj.page_size()).max(adj.lower());
             // If the user scrolls away from the bottom, stop chasing until
             // the next send/reply arms follow again.
-            follow_bottom.set(adj.value() >= target - 72.0);
+            follow_bottom.set(adj.value() >= target - 48.0);
         }
     });
+}
+
+/// Settings → Soul save clears ``desktop_chat_session`` on disk. Honor that in
+/// the live Chat tab so the next turn starts a clean session with the new Soul
+/// instead of continuing a stale in-memory session id.
+fn honor_soul_session_reset(
+    session_id: &Rc<RefCell<Option<String>>>,
+    messages: &Rc<RefCell<Vec<ChatMessage>>>,
+) -> bool {
+    if session_id.borrow().is_some() && load_session_id().is_none() {
+        *session_id.borrow_mut() = None;
+        messages.borrow_mut().clear();
+        return true;
+    }
+    false
 }
 
 /// Build the Chat tab page (bubble UI + always-visible composer).
@@ -1052,13 +1054,11 @@ pub fn build() -> gtk::Box {
     paned.set_start_child(Some(&sidebar));
 
     // ── Main chat pane ────────────────────────────────────────────────
-    let overlay = gtk::Overlay::new();
-    overlay.set_vexpand(true);
-    overlay.set_hexpand(true);
-
-    let main = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    main.set_vexpand(true);
-    main.set_hexpand(true);
+    // Vertical stack (not Overlay): the composer sits in normal layout so
+    // "scroll to latest" lands above the input — not under it.
+    let chat_column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    chat_column.set_vexpand(true);
+    chat_column.set_hexpand(true);
 
     let assistant_name = Rc::new(RefCell::new(load_assistant_display_name()));
 
@@ -1085,7 +1085,7 @@ pub fn build() -> gtk::Box {
             .css_classes(["dim-label"])
             .build(),
     );
-    main.append(&top);
+    chat_column.append(&top);
 
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
     let session_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(load_session_id()));
@@ -1098,8 +1098,7 @@ pub fn build() -> gtk::Box {
     message_list.set_margin_start(12);
     message_list.set_margin_end(12);
     message_list.set_margin_top(4);
-    // Leave room so the last bubble is not hidden under the overlaid composer.
-    message_list.set_margin_bottom(120);
+    message_list.set_margin_bottom(12);
 
     let message_scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
@@ -1110,14 +1109,16 @@ pub fn build() -> gtk::Box {
         .build();
     message_scroll.set_child(Some(&message_list));
     let follow_bottom = Rc::new(Cell::new(true));
-    wire_follow_bottom_scroll(&message_scroll, follow_bottom.clone());
-    main.append(&message_scroll);
-    overlay.set_child(Some(&main));
+    let programmatic_scroll = Rc::new(Cell::new(false));
+    wire_follow_bottom_scroll(
+        &message_scroll,
+        follow_bottom.clone(),
+        programmatic_scroll.clone(),
+    );
+    chat_column.append(&message_scroll);
 
     let bottom = gtk::Box::new(gtk::Orientation::Vertical, 0);
     bottom.add_css_class("centurion-chat-composer");
-    bottom.set_halign(gtk::Align::Fill);
-    bottom.set_valign(gtk::Align::End);
     bottom.set_hexpand(true);
     bottom.set_vexpand(false);
 
@@ -1184,9 +1185,9 @@ pub fn build() -> gtk::Box {
     input_row.append(&send_button);
     input_row.append(&sending_spinner);
     bottom.append(&input_row);
-    overlay.add_overlay(&bottom);
+    chat_column.append(&bottom);
 
-    paned.set_end_child(Some(&overlay));
+    paned.set_end_child(Some(&chat_column));
     container.append(&paned);
 
     let refresh_messages: Rc<dyn Fn()> = Rc::new({
@@ -1196,6 +1197,7 @@ pub fn build() -> gtk::Box {
         let assistant_name = assistant_name.clone();
         let title = title.clone();
         let follow_bottom = follow_bottom.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
@@ -1218,7 +1220,12 @@ pub fn build() -> gtk::Box {
                     message_list.append(&message_row(message, &name));
                 }
             }
-            schedule_scroll_to_latest(&message_scroll, &message_list, &follow_bottom);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &message_list,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
         }
     });
 
@@ -1547,6 +1554,8 @@ pub fn build() -> gtk::Box {
         let clear_approval = clear_approval.clone();
         let pending_approval_tx = pending_approval_tx.clone();
         let follow_bottom = follow_bottom.clone();
+        let assistant_name = assistant_name.clone();
+        let title = title.clone();
         move || {
             if *is_sending.borrow() {
                 return;
@@ -1555,6 +1564,12 @@ pub fn build() -> gtk::Box {
             if text.trim().is_empty() {
                 return;
             }
+            // Soul save clears the on-disk session pointer — drop the stale
+            // in-memory session so the next turn loads the new SOUL.md cleanly.
+            let _ = honor_soul_session_reset(&session_id, &messages);
+            // Always refresh the title from disk so Settings → Name shows up.
+            *assistant_name.borrow_mut() = load_assistant_display_name();
+            title.set_label(&format!("Chat with {}", assistant_name.borrow()));
             input.set_text("");
             follow_bottom.set(true);
             messages.borrow_mut().push(ChatMessage {
@@ -1570,7 +1585,11 @@ pub fn build() -> gtk::Box {
             let (approval_tx, approval_rx) = mpsc::channel::<ApprovalDecision>();
             *pending_approval_tx.borrow_mut() = Some(approval_tx);
 
-            let sid_for_worker = session_id.borrow().clone();
+            // Re-read pointer after Soul reset; create a new session if needed.
+            let sid_for_worker = session_id.borrow().clone().or_else(load_session_id);
+            if let Some(ref sid) = sid_for_worker {
+                *session_id.borrow_mut() = Some(sid.clone());
+            }
             thread::spawn(move || {
                 let sid = match sid_for_worker {
                     Some(sid) => sid,

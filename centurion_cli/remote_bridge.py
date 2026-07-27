@@ -993,13 +993,38 @@ def _remote_display_name() -> str:
 
 def _remote_identity_ephemeral(display_name: str) -> str:
     name = (display_name or "").strip() or "Centurion"
-    return (
-        f"IDENTITY (highest priority this turn): Your name is {name}. "
-        f"{name} is a Centurion of Centurion Fleet on this owner's private brain. "
-        f"When asked your name, answer only: {name}. "
-        f"Describe yourself only as {name}, a Centurion of Centurion Fleet. "
-        f"Do not name other products, model families, or assistants."
-    )
+    personality = ""
+    try:
+        from centurion_cli.soul_sync import read_soul
+
+        soul = read_soul()
+        personality = str(soul.get("personalitySummary") or "").strip()
+        if not personality:
+            # First chunk of freeform Soul body when structured Personality is empty.
+            md = str(soul.get("markdown") or "")
+            for line in md.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or stripped.startswith("<!--"):
+                    continue
+                personality = stripped
+                break
+        if len(personality) > 400:
+            personality = personality[:400].rstrip() + "…"
+    except Exception:
+        personality = ""
+
+    lines = [
+        f"IDENTITY (highest priority this turn): Your name is {name}.",
+        f"{name} is a Centurion of Centurion Fleet on this owner's private brain.",
+        f"When asked your name, answer only: {name}.",
+        f"Describe yourself only as {name}, a Centurion of Centurion Fleet.",
+        "Your Soul document (SOUL.md on this brain) is authoritative for how you "
+        "speak and behave — follow it. If asked for your Soul, quote SOUL.md.",
+        "Do not name other products, model families, or assistants.",
+    ]
+    if personality:
+        lines.append(f"Soul personality (from SOUL.md): {personality}")
+    return " ".join(lines)
 
 
 def _scrub_foreign_identity_history(
@@ -1010,6 +1035,7 @@ def _scrub_foreign_identity_history(
     if not history:
         return history
     name = (display_name or "").strip() or "Centurion"
+    name_l = name.lower()
     cleaned: list[dict[str, Any]] = []
     for msg in history:
         if not isinstance(msg, dict):
@@ -1020,7 +1046,29 @@ def _scrub_foreign_identity_history(
             cleaned.append(msg)
             continue
         lower = content.lower()
-        if "hermes" in lower or "nous" in lower:
+        foreign = any(
+            token in lower
+            for token in (
+                "hermes",
+                "nous research",
+                "nousresearch",
+                "i'm claude",
+                "i am claude",
+                "i'm chatgpt",
+                "i am chatgpt",
+                "i'm gpt",
+                "as an ai language model",
+            )
+        )
+        # Prior turns that used a different personal name (or only the product
+        # default) confuse the model — pin them to the current Soul name.
+        claims_other_name = False
+        if name_l != "centurion":
+            if re.search(r"\bmy name is\b", lower) and name_l not in lower:
+                claims_other_name = True
+            if re.search(r"\bi(?:'m| am)\b.{0,40}\bcenturion\b", lower) and name_l not in lower:
+                claims_other_name = True
+        if foreign or claims_other_name:
             cleaned.append(
                 {
                     **msg,
