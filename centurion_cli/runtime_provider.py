@@ -1653,11 +1653,33 @@ def resolve_runtime_provider(
             "requested_provider": requested_provider,
         }
 
+    from centurion_cli.auth import AuthError
+    from centurion_cli.openrouter_retired import (
+        is_openrouter_base_url,
+        is_openrouter_provider,
+        retired_provider_message,
+    )
+
+    if provider == "openrouter" or is_openrouter_provider(provider):
+        raise AuthError(
+            retired_provider_message(),
+            provider="openrouter",
+            code="provider_retired",
+        )
+
     runtime = _resolve_openrouter_runtime(
         requested_provider=requested_provider,
         explicit_api_key=explicit_api_key,
         explicit_base_url=explicit_base_url,
     )
+    # Final legacy fallback historically routed through the aggregator.
+    # Refuse aggregator URLs; otherwise treat as custom/openai-api.
+    if is_openrouter_base_url(runtime.get("base_url")) or runtime.get("provider") == "openrouter":
+        raise AuthError(
+            retired_provider_message(),
+            provider="openrouter",
+            code="provider_retired",
+        )
     runtime["requested_provider"] = requested_provider
     return runtime
 

@@ -89,6 +89,15 @@ enum ColorTheme {
         })
     }
 
+    /// Caution / needs attention — amber (e.g. linked but thinking unhealthy).
+    static func warning() -> Color {
+        Color(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor(red: 0.984, green: 0.749, blue: 0.141, alpha: 1.0)   // #fbbf24
+                : UIColor(red: 0.851, green: 0.580, blue: 0.020, alpha: 1.0)   // #d99405
+        })
+    }
+
     // MARK: - Chat specific
 
     static func chatInput() -> Color {

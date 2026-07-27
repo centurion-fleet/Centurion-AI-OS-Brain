@@ -1,6 +1,7 @@
 """Curated direct-API model catalog for Centurion Remote (iPhone).
 
-OpenRouter is intentionally excluded — remote paths must never route through it.
+Retired aggregators are intentionally excluded — remote paths must never
+route through them.
 """
 
 from __future__ import annotations
@@ -8,6 +9,8 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass
 from typing import Any
+
+from centurion_cli.openrouter_retired import is_openrouter_provider
 
 _BLOCKED_PROVIDERS = frozenset({"openrouter", "openrouter/*", "nous", "openai"})
 
@@ -159,13 +162,15 @@ _BY_ID: dict[str, RemoteConnector] = {entry.id: entry for entry in _CATALOG}
 
 
 def is_openrouter_blocked(provider: str) -> bool:
-    """Block OpenRouter / subscription / ambiguous ``openai`` remaps on Remote."""
+    """Block retired aggregators / subscription / ambiguous ``openai`` remaps on Remote."""
     lowered = (provider or "").strip().lower()
     if not lowered:
         return False
+    if is_openrouter_provider(lowered):
+        return True
     if lowered in _BLOCKED_PROVIDERS:
         return True
-    return lowered.startswith("openrouter/") or lowered.startswith("nous/")
+    return lowered.startswith("nous/")
 
 
 def get_connector(connector_id: str) -> RemoteConnector | None:

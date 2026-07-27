@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -124,6 +125,26 @@ def handle_request(
         return _handle_plan_save_template(request, request_id)
     if action == "memory_horizon_snapshot":
         return _handle_memory_horizon_snapshot(request_id)
+    if action == "gateway_status":
+        return _handle_gateway_status(request_id)
+    if action == "gateway_start":
+        return _handle_gateway_lifecycle(request_id, "start")
+    if action == "gateway_stop":
+        return _handle_gateway_lifecycle(request_id, "stop")
+    if action == "gateway_restart":
+        return _handle_gateway_lifecycle(request_id, "restart")
+    if action == "gateway_platform_set":
+        return _handle_gateway_platform_set(request, request_id)
+    if action == "session_list":
+        return _handle_session_list(request, request_id)
+    if action == "session_new":
+        return _handle_session_new(request, request_id)
+    if action == "session_resume":
+        return _handle_session_resume(request, request_id)
+    if action == "session_history":
+        return _handle_session_history(request, request_id)
+    if action == "approval_respond":
+        return _handle_approval_respond(request, request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -140,7 +161,7 @@ def _handle_chat(
     request: dict[str, Any],
     *,
     request_id: str,
-    run_agent: Callable[[str], str] | None,
+    run_agent: Callable[..., str] | None,
 ) -> dict[str, Any]:
     text = request.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -154,8 +175,15 @@ def _handle_chat(
             "retryable": False,
         }
 
+    session_id = str(request.get("session_id") or "").strip() or None
+    using_default_agent = run_agent is None
     if run_agent is None:
         run_agent = _run_agent_quiet
+    if using_default_agent and not session_id:
+        try:
+            session_id = _ensure_remote_session()
+        except Exception:
+            session_id = None
 
     routed_connector_id = None
     routed_display_name = ""
@@ -172,7 +200,15 @@ def _handle_chat(
         routed_connector_id = None
 
     try:
-        response = run_agent(text.strip())
+        # Prefer session-aware signature; fall back for test doubles.
+        try:
+            response = run_agent(
+                text.strip(),
+                session_id=session_id,
+                request_id=request_id,
+            )
+        except TypeError:
+            response = run_agent(text.strip())
         record_successful_turn()
         payload = {
             "id": request_id,
@@ -180,6 +216,8 @@ def _handle_chat(
             "action": "chat",
             "text": response or "",
         }
+        if session_id:
+            payload["session_id"] = session_id
         if routed_connector_id:
             payload["routed_connector_id"] = routed_connector_id
             payload["routed_display_name"] = routed_display_name
@@ -732,29 +770,644 @@ def _attempt_lkg_retry(
         return None
 
 
-def _run_agent_quiet(text: str) -> str:
-    """Run one agent turn without polluting stdout (bridge response must be pure JSON)."""
+def _run_agent_quiet(
+    text: str,
+    *,
+    session_id: str | None = None,
+    request_id: str | None = None,
+) -> str:
+    """Run one agent turn without polluting stdout (bridge response must be pure JSON).
+
+    When remote events are enabled (NDJSON on stdout), approval prompts are
+    emitted as ``{"centurion_event":"approval_request",...}`` lines and the
+    final response is still a single JSON object on stdout. Stderr stays quiet.
+    """
     import logging
     import os
     from contextlib import redirect_stderr, redirect_stdout
 
-    from centurion_cli.oneshot import _run_agent
     from centurion_cli.oversight import should_enable_remote_yolo
 
     logging.disable(logging.CRITICAL)
-    # Only max-autonomy (or approvals.mode=off) gets YOLO on remote chat.
-    # Lower levels rely on host approval / deny paths instead of auto-approving.
-    if should_enable_remote_yolo():
+    yolo = should_enable_remote_yolo()
+    if yolo:
         os.environ.setdefault("CENTURION_YOLO_MODE", "1")
     else:
         os.environ.pop("CENTURION_YOLO_MODE", None)
+        # Treat remote chat as an interactive gateway-like approval context so
+        # dangerous tools block for phone Approve/Deny instead of auto-approving.
+        os.environ["CENTURION_GATEWAY_SESSION"] = "1"
+        os.environ["CENTURION_SESSION_PLATFORM"] = "remote"
     os.environ.setdefault("CENTURION_ACCEPT_HOOKS", "1")
     os.environ["CENTURION_DISABLE_OPENROUTER"] = "1"
     os.environ["CENTURION_PLATFORM"] = "remote"
-    with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stdout(
-        devnull
-    ), redirect_stderr(devnull):
-        return _run_agent(text) or ""
+
+    approval_key = f"remote:{request_id or session_id or 'turn'}"
+    events_enabled = os.environ.get("CENTURION_REMOTE_EVENTS", "").strip() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+    notify_registered = False
+    if not yolo and events_enabled:
+        from tools.approval import (
+            register_gateway_notify,
+            set_current_session_key,
+            unregister_gateway_notify,
+        )
+
+        set_current_session_key(approval_key)
+
+        def _emit_approval(data: dict) -> None:
+            event = {
+                "centurion_event": "approval_request",
+                "approval_id": approval_key,
+                "session_key": approval_key,
+                "command": data.get("command") or "",
+                "description": data.get("description") or "",
+                "pattern_key": data.get("pattern_key") or "",
+                "choices": ["once", "session", "always", "deny"],
+            }
+            # Write to the real stdout FD so redirect_stdout(devnull) cannot
+            # swallow approval events during the agent turn.
+            os.write(1, (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+
+        register_gateway_notify(approval_key, _emit_approval)
+        notify_registered = True
+        _start_approval_stdin_reader(approval_key)
+
+    try:
+        # Always silence agent library stdout; approval events write to FD 1
+        # directly so they bypass redirect_stdout.
+        with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stdout(
+            devnull
+        ), redirect_stderr(devnull):
+            return _run_remote_agent_turn(text, session_id=session_id) or ""
+    finally:
+        if notify_registered:
+            from tools.approval import unregister_gateway_notify
+
+            unregister_gateway_notify(approval_key)
+
+
+_approval_stdin_started = False
+_approval_stdin_lock = None
+
+
+def _start_approval_stdin_reader(default_session_key: str) -> None:
+    """Read follow-up approval_respond lines from stdin while the agent runs."""
+    global _approval_stdin_started, _approval_stdin_lock
+    import threading
+
+    if _approval_stdin_lock is None:
+        _approval_stdin_lock = threading.Lock()
+    with _approval_stdin_lock:
+        if _approval_stdin_started:
+            return
+        _approval_stdin_started = True
+
+    def _loop() -> None:
+        from tools.approval import resolve_gateway_approval
+
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if str(payload.get("action") or "").strip().lower() != "approval_respond":
+                continue
+            session_key = str(payload.get("session_key") or default_session_key).strip()
+            choice = str(payload.get("choice") or "deny").strip().lower()
+            resolve_all = bool(payload.get("all") or payload.get("resolve_all"))
+            if session_key and choice:
+                resolve_gateway_approval(session_key, choice, resolve_all=resolve_all)
+
+    threading.Thread(target=_loop, name="remote-approval-stdin", daemon=True).start()
+
+
+def _ensure_remote_session(*, title: str | None = None) -> str:
+    import uuid
+
+    from centurion_state import SessionDB
+
+    session_id = f"remote_{uuid.uuid4().hex[:16]}"
+    db = SessionDB()
+    try:
+        db.create_session(session_id, source="remote")
+        if title:
+            try:
+                db.set_session_title(session_id, title)
+            except Exception:
+                pass
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+    return session_id
+
+
+def _remote_display_name() -> str:
+    try:
+        from agent.prompt_builder import (
+            _clean_display_name,
+            agent_name_path,
+            resolve_centurion_display_name,
+        )
+
+        name = resolve_centurion_display_name()
+        # Backfill sticky file so later turns stay locked to the Soul name.
+        if name and name != "Centurion":
+            path = agent_name_path()
+            try:
+                current = (
+                    _clean_display_name(path.read_text(encoding="utf-8"))
+                    if path.exists()
+                    else ""
+                )
+                if current != name:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(name + "\n", encoding="utf-8")
+                    try:
+                        path.chmod(0o600)
+                    except OSError:
+                        pass
+            except Exception:
+                pass
+        return name
+    except Exception:
+        return "Centurion"
+
+
+def _remote_identity_ephemeral(display_name: str) -> str:
+    name = (display_name or "").strip() or "Centurion"
+    return (
+        f"IDENTITY (highest priority this turn): Your name is {name}. "
+        f"{name} is a Centurion of Centurion Fleet on this owner's private brain. "
+        f"When asked your name, answer only: {name}. "
+        f"Describe yourself only as {name}, a Centurion of Centurion Fleet. "
+        f"Do not name other products, model families, or assistants."
+    )
+
+
+def _scrub_foreign_identity_history(
+    history: list[dict[str, Any]] | None,
+    display_name: str,
+) -> list[dict[str, Any]] | None:
+    """Rewrite assistant turns that used foreign branding so they cannot stick."""
+    if not history:
+        return history
+    name = (display_name or "").strip() or "Centurion"
+    cleaned: list[dict[str, Any]] = []
+    for msg in history:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = msg.get("content")
+        if role != "assistant" or not isinstance(content, str):
+            cleaned.append(msg)
+            continue
+        lower = content.lower()
+        if "hermes" in lower or "nous" in lower:
+            cleaned.append(
+                {
+                    **msg,
+                    "content": (
+                        f"My name is {name}. I am a Centurion of Centurion Fleet."
+                    ),
+                }
+            )
+        else:
+            cleaned.append(msg)
+    return cleaned
+
+
+def _sanitize_remote_reply(text: str, display_name: str) -> str:
+    """Strip rival-brand echoes from Brain replies before the UI shows them."""
+    name = (display_name or "").strip() or "Centurion"
+    if not text:
+        return text
+
+    # Drop any sentence that still names rival brands (even as denials).
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    kept: list[str] = []
+    for part in parts:
+        lower = part.lower()
+        if "hermes" in lower or "nous" in lower:
+            continue
+        kept.append(part)
+    out = " ".join(kept).strip()
+
+    # If the owner chose a personal name, correct "My name is Centurion" slips.
+    if name.lower() != "centurion":
+        out = re.sub(r"(?i)\bmy name is Centurion\b", f"My name is {name}", out)
+        out = re.sub(
+            r"(?i)\bname(?:d)?(?:\s+confirmed)?\s*:?\s*Centurion\b",
+            f"Name confirmed: {name}",
+            out,
+        )
+        out = re.sub(
+            r"(?i)\bI am Centurion\b(?!\s+(?:AI|Fleet|of))",
+            f"I am {name}",
+            out,
+        )
+
+    if not out or "hermes" in out.lower() or "nous" in out.lower():
+        out = f"My name is {name}. I am a Centurion of Centurion Fleet."
+    return out.strip()
+
+
+def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
+    """Session-aware remote chat turn using AIAgent.run_conversation."""
+    import os
+
+    from centurion_cli.config import load_config
+    from centurion_cli.runtime_provider import resolve_runtime_provider
+    from centurion_cli.tools_config import _get_platform_tools
+    from centurion_cli.fallback_config import get_fallback_chain
+    from run_agent import AIAgent
+
+    cfg = load_config()
+    model_cfg = cfg.get("model") or {}
+    if isinstance(model_cfg, str):
+        cfg_model = model_cfg
+    else:
+        cfg_model = model_cfg.get("default") or model_cfg.get("model") or ""
+    env_model = os.getenv("CENTURION_INFERENCE_MODEL", "").strip()
+    effective_model = env_model or cfg_model
+
+    effective_provider = None
+    runtime = resolve_runtime_provider(
+        requested=effective_provider,
+        target_model=effective_model or None,
+    )
+    toolsets_list = sorted(_get_platform_tools(cfg, "telegram"))
+    _fb = get_fallback_chain(cfg)
+
+    history = None
+    session_db = None
+    try:
+        from centurion_state import SessionDB
+
+        session_db = SessionDB()
+        if session_id:
+            tip = session_db.resolve_resume_session_id(session_id)
+            history = session_db.get_messages_as_conversation(tip, include_ancestors=True)
+            session_id = tip
+        else:
+            session_id = _ensure_remote_session()
+    except Exception:
+        session_db = None
+        history = None
+
+    display_name = _remote_display_name()
+    history = _scrub_foreign_identity_history(history, display_name)
+    identity_ephemeral = _remote_identity_ephemeral(display_name)
+    api_user_message = (
+        f"[Identity for this reply: your name is {display_name}. "
+        f"{display_name} is a Centurion of Centurion Fleet. "
+        f"Answer in those terms only.]\n\n"
+        f"{text}"
+    )
+
+    # Brain Chat shares CENTURION_HOME with Telegram/gateway — load hot-cache
+    # memory + providers so existing customers keep continuity. Vault prefetch
+    # stays config-gated inside agent init.
+    agent = AIAgent(
+        api_key=runtime.get("api_key"),
+        base_url=runtime.get("base_url"),
+        provider=runtime.get("provider"),
+        api_mode=runtime.get("api_mode"),
+        model=effective_model,
+        enabled_toolsets=toolsets_list,
+        quiet_mode=True,
+        platform="remote",
+        session_id=session_id,
+        session_db=session_db,
+        credential_pool=runtime.get("credential_pool"),
+        fallback_model=_fb or None,
+        skip_memory=False,
+        load_soul_identity=True,
+        ephemeral_system_prompt=identity_ephemeral,
+    )
+    agent.suppress_status_output = True
+    agent.stream_delta_callback = None
+    agent.tool_gen_callback = None
+
+    result = agent.run_conversation(
+        user_message=api_user_message,
+        conversation_history=history or None,
+        task_id=session_id,
+        persist_user_message=text,
+    )
+    if isinstance(result, dict):
+        raw = str(result.get("final_response") or result.get("response") or "")
+    else:
+        raw = str(result or "")
+    return _sanitize_remote_reply(raw, display_name)
+
+def _handle_gateway_status(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.gateway import get_gateway_runtime_snapshot
+        from gateway.status import read_runtime_status
+
+        snapshot = get_gateway_runtime_snapshot()
+        runtime = read_runtime_status() or {}
+        platforms_runtime = runtime.get("platforms") or {}
+        platforms: list[dict[str, Any]] = []
+        try:
+            from gateway.config import load_gateway_config
+
+            gateway_config = load_gateway_config()
+            for platform, pconfig in (gateway_config.platforms or {}).items():
+                name = getattr(platform, "value", str(platform))
+                runtime_info = platforms_runtime.get(name) or {}
+                platforms.append(
+                    {
+                        "name": name,
+                        "enabled": bool(getattr(pconfig, "enabled", False)),
+                        "connected": bool(
+                            runtime_info.get("connected")
+                            or runtime_info.get("status") == "connected"
+                        ),
+                        "status": runtime_info.get("status")
+                        or ("enabled" if getattr(pconfig, "enabled", False) else "disabled"),
+                        "label": name.replace("_", " ").title(),
+                    }
+                )
+        except Exception:
+            for name, runtime_info in platforms_runtime.items():
+                if not isinstance(runtime_info, dict):
+                    runtime_info = {}
+                platforms.append(
+                    {
+                        "name": name,
+                        "enabled": True,
+                        "connected": bool(runtime_info.get("connected")),
+                        "status": runtime_info.get("status") or "unknown",
+                        "label": name.replace("_", " ").title(),
+                    }
+                )
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "gateway_status",
+            "status": {
+                "running": bool(snapshot.running),
+                "service_running": bool(snapshot.service_running),
+                "service_installed": bool(snapshot.service_installed),
+                "manager": snapshot.manager,
+                "pids": list(snapshot.gateway_pids),
+                "gateway_state": runtime.get("gateway_state"),
+                "platforms": platforms,
+            },
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="gateway_status", exc=exc)
+
+
+def _handle_gateway_lifecycle(request_id: str, operation: str) -> dict[str, Any]:
+    try:
+        import os
+        from contextlib import redirect_stderr, redirect_stdout
+
+        from centurion_cli import gateway as gateway_cli
+
+        with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stdout(
+            devnull
+        ), redirect_stderr(devnull):
+            if operation == "start":
+                if gateway_cli.supports_systemd_services():
+                    gateway_cli.systemd_start(system=False)
+                else:
+                    raise RuntimeError(
+                        "Gateway start is only supported via systemd on this host."
+                    )
+            elif operation == "stop":
+                if gateway_cli.supports_systemd_services():
+                    gateway_cli.systemd_stop(system=False)
+                else:
+                    gateway_cli.stop_profile_gateway()
+            elif operation == "restart":
+                if gateway_cli.supports_systemd_services():
+                    try:
+                        gateway_cli.systemd_stop(system=False)
+                    except Exception:
+                        pass
+                    gateway_cli.systemd_start(system=False)
+                else:
+                    raise RuntimeError("Gateway restart requires systemd on this host.")
+            else:
+                raise ValueError(f"unsupported gateway operation: {operation}")
+
+        status = _handle_gateway_status(request_id)
+        status["action"] = f"gateway_{operation}"
+        status["message"] = f"Gateway {operation} requested."
+        return status
+    except Exception as exc:
+        return _error_response(request_id, action=f"gateway_{operation}", exc=exc)
+
+
+def _handle_gateway_platform_set(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.config import load_config, save_config
+
+        platform = str(request.get("platform") or "").strip().lower()
+        if not platform:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "gateway_platform_set",
+                "code": "INVALID_REQUEST",
+                "error": "platform is required.",
+                "message": "platform is required.",
+                "retryable": False,
+            }
+        enabled = bool(request.get("enabled"))
+        restart = bool(request.get("restart", True))
+        config = load_config()
+        block = config.get(platform)
+        if not isinstance(block, dict):
+            block = {}
+        block["enabled"] = enabled
+        config[platform] = block
+        save_config(config)
+
+        restarted = False
+        if restart:
+            life = _handle_gateway_lifecycle(request_id, "restart")
+            restarted = bool(life.get("ok"))
+        status = _handle_gateway_status(request_id)
+        status["action"] = "gateway_platform_set"
+        status["restarted"] = restarted
+        status["message"] = f"{platform} {'enabled' if enabled else 'disabled'}."
+        return status
+    except Exception as exc:
+        return _error_response(request_id, action="gateway_platform_set", exc=exc)
+
+
+def _handle_session_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_state import SessionDB
+
+        limit = int(request.get("limit") or 20)
+        source = str(request.get("source") or "remote").strip() or None
+        db = SessionDB()
+        try:
+            rows = db.list_sessions_rich(
+                source=source,
+                limit=max(1, min(limit, 100)),
+                order_by_last_active=True,
+            )
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        sessions = [
+            {
+                "id": row.get("id"),
+                "title": row.get("title") or "",
+                "preview": row.get("preview") or "",
+                "last_active": row.get("last_active"),
+                "message_count": row.get("message_count") or 0,
+                "source": row.get("source") or source,
+            }
+            for row in rows
+        ]
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_list",
+            "sessions": sessions,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_list", exc=exc)
+
+
+def _handle_session_new(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        title = str(request.get("title") or "").strip() or None
+        session_id = _ensure_remote_session(title=title)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_new",
+            "session_id": session_id,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_new", exc=exc)
+
+
+def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_state import SessionDB
+
+        session_id = str(request.get("session_id") or "").strip()
+        if not session_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_resume",
+                "code": "INVALID_REQUEST",
+                "error": "session_id is required.",
+                "message": "session_id is required.",
+                "retryable": False,
+            }
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(session_id)
+            messages = db.get_messages_as_conversation(tip, include_ancestors=True)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_resume",
+            "session_id": tip,
+            "messages": messages,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_resume", exc=exc)
+
+
+def _handle_session_history(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_state import SessionDB
+
+        session_id = str(request.get("session_id") or "").strip()
+        if not session_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_history",
+                "code": "INVALID_REQUEST",
+                "error": "session_id is required.",
+                "message": "session_id is required.",
+                "retryable": False,
+            }
+        limit = int(request.get("limit") or 200)
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(session_id)
+            messages = db.get_messages_as_conversation(tip, include_ancestors=True)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        if limit > 0 and len(messages) > limit:
+            messages = messages[-limit:]
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_history",
+            "session_id": tip,
+            "messages": messages,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_history", exc=exc)
+
+
+def _handle_approval_respond(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from tools.approval import resolve_gateway_approval
+
+        session_key = str(
+            request.get("session_key") or request.get("approval_id") or ""
+        ).strip()
+        choice = str(request.get("choice") or "").strip().lower()
+        if not session_key or not choice:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "approval_respond",
+                "code": "INVALID_REQUEST",
+                "error": "session_key and choice are required.",
+                "message": "session_key and choice are required.",
+                "retryable": False,
+            }
+        resolve_all = bool(request.get("all") or request.get("resolve_all"))
+        resolved = resolve_gateway_approval(session_key, choice, resolve_all=resolve_all)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "approval_respond",
+            "resolved": resolved,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="approval_respond", exc=exc)
 
 
 def _handle_oversight_get(request_id: str) -> dict[str, Any]:
@@ -817,9 +1470,11 @@ def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str,
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:
     try:
+        from agent.prompt_builder import resolve_centurion_display_name
         from centurion_cli.soul_sync import read_soul
 
         soul = read_soul()
+        soul["displayName"] = resolve_centurion_display_name(soul.get("markdown"))
         return {
             "id": request_id,
             "ok": True,
@@ -857,7 +1512,7 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
             "ok": True,
             "action": "soul_put",
             "soul": soul,
-            "message": "Saved. Soul changes apply on the next conversation.",
+            "message": "Saved. Soul identity applies on the next message.",
         }
     except Exception as exc:
         return _error_response(request_id, action="soul_put", exc=exc)
@@ -1262,7 +1917,18 @@ def _handle_plan_save_template(request: dict[str, Any], request_id: str) -> dict
 
 
 def _read_request() -> dict[str, Any]:
-    raw = sys.stdin.read()
+    import os
+
+    # Evented chat keeps stdin open for approval_respond follow-ups, so the
+    # initial request must be one JSON line (not a full-stream read).
+    if os.environ.get("CENTURION_REMOTE_EVENTS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        raw = sys.stdin.readline()
+    else:
+        raw = sys.stdin.read()
     value = json.loads(raw)
     if not isinstance(value, dict):
         raise ValueError("request must be a JSON object")
@@ -1274,6 +1940,13 @@ def main(argv: list[str] | None = None) -> int:
         description="Local bridge used by the native Centurion remote service."
     )
     parser.parse_args(argv)
+
+    try:
+        from centurion_cli.profiles import apply_sticky_profile_home
+
+        apply_sticky_profile_home()
+    except Exception:
+        pass
 
     try:
         request = _read_request()

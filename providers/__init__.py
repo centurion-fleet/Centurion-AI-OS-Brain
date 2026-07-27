@@ -57,6 +57,11 @@ def register_provider(profile: ProviderProfile) -> None:
     plugins under ``$CENTURION_HOME/plugins/model-providers/`` can override
     bundled profiles without editing repo code.
     """
+    # Hard block — even a user plugin that calls register_provider("openrouter")
+    # must not reintroduce the retired aggregator.
+    if (getattr(profile, "name", "") or "").strip().lower() == "openrouter":
+        logger.info("Refusing to register retired provider profile: openrouter")
+        return
     _REGISTRY[profile.name] = profile
     for alias in profile.aliases:
         _ALIASES[alias] = profile.name
@@ -153,10 +158,15 @@ def _discover_providers() -> None:
         return
     _discovered = True
 
+    # Retired aggregators must never enter the registry (doctor, setup, /model).
+    _SKIP_PROVIDER_DIRS = frozenset({"openrouter"})
+
     # 1. Bundled plugins — shipped with centurion-os.
     if _BUNDLED_PLUGINS_DIR.is_dir():
         for child in sorted(_BUNDLED_PLUGINS_DIR.iterdir()):
             if not child.is_dir() or child.name.startswith(("_", ".")):
+                continue
+            if child.name in _SKIP_PROVIDER_DIRS:
                 continue
             _import_plugin_dir(child, "bundled")
 
@@ -167,6 +177,12 @@ def _discover_providers() -> None:
     if user_dir is not None:
         for child in sorted(user_dir.iterdir()):
             if not child.is_dir() or child.name.startswith(("_", ".")):
+                continue
+            if child.name in _SKIP_PROVIDER_DIRS:
+                logger.info(
+                    "Skipping retired provider plugin %s",
+                    child.name,
+                )
                 continue
             _import_plugin_dir(child, "user")
 

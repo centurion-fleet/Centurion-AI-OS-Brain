@@ -177,6 +177,30 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
             )
 
     if stored_prompt:
+        # Brain/remote: always rebuild so SOUL.md name + personality are
+        # applied before every answer (new AIAgent per turn otherwise
+        # reuses a frozen prompt and model branding can stick).
+        _platform = (getattr(agent, "platform", None) or "").lower()
+        if _platform in ("remote", "desktop", "brain"):
+            logger.info(
+                "Rebuilding system prompt for %s session %s so SOUL.md "
+                "identity is applied this turn.",
+                _platform,
+                agent.session_id,
+            )
+            agent._cached_system_prompt = agent._build_system_prompt(system_message)
+            if agent._session_db and agent.session_id:
+                try:
+                    agent._session_db.update_system_prompt(
+                        agent.session_id, agent._cached_system_prompt
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to persist rebuilt system prompt for session %s: %s",
+                        agent.session_id,
+                        exc,
+                    )
+            return
         # Continuing session — reuse the exact system prompt from the
         # previous turn so the Anthropic cache prefix matches.
         agent._cached_system_prompt = stored_prompt
@@ -482,14 +506,24 @@ def run_conversation(
     # ── System prompt (cached per session for prefix caching) ──
     # Built once on first call, reused for all subsequent calls.
     # Only rebuilt after context compression events (which invalidate
-    # the cache and reload memory from disk).
+    # the cache and reload memory from disk), when SOUL.md changes, or
+    # on Brain/remote turns (always reload SOUL so name + personality
+    # are applied before every answer).
     #
     # For continuing sessions (gateway creates a fresh AIAgent per
     # message), we load the stored system prompt from the session DB
-    # instead of rebuilding.  Rebuilding would pick up memory changes
-    # from disk that the model already knows about (it wrote them!),
-    # producing a different system prompt and breaking the Anthropic
-    # prefix cache.
+    # instead of rebuilding — unless SOUL.md changed (soul_put clears
+    # stored prompts) or this is a remote/Brain turn.
+    if agent._cached_system_prompt is not None:
+        try:
+            from agent.prompt_builder import soul_identity_fingerprint
+
+            _fp = soul_identity_fingerprint()
+            if getattr(agent, "_soul_fp", None) not in (None, _fp):
+                agent._cached_system_prompt = None
+        except Exception:
+            pass
+
     if agent._cached_system_prompt is None:
         _restore_or_build_system_prompt(agent, system_message, conversation_history)
 

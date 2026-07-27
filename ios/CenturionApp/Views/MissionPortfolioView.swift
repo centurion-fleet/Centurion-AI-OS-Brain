@@ -80,21 +80,24 @@ struct MissionPortfolioView: View {
 
     /// Count of unseen items per category
     private var badgeCounts: [PulseCategory: Int] {
-        let plans = Date(timeIntervalSinceReferenceDate: lastSeenPlans)
-        let wins = Date(timeIntervalSinceReferenceDate: lastSeenWins)
-        let outputs = Date(timeIntervalSinceReferenceDate: lastSeenOutputs)
-        let decisions = Date(timeIntervalSinceReferenceDate: lastSeenDecisions)
-        let thoughts = Date(timeIntervalSinceReferenceDate: lastSeenThoughts)
-        return [
-            .live: (swarmStore.heroSwarms.contains {
-                $0.pulse == .active || $0.pulse == .attention || $0.pulse == .waiting || $0.pulse == .blocked
-            } || liveActivity != nil) ? 1 : 0,
-            .plans: planStore.pendingReview.filter { $0.createdAt > plans }.count,
-            .wins: completedLoops.filter { $0.completedAt > wins }.count,
-            .outputs: self.outputs.filter { $0.createdAt > outputs }.count,
-            .decisions: self.decisions.filter { $0.createdAt > decisions }.count,
-            .pulse: self.thoughts.filter { $0.timestamp > thoughts }.count,
-        ]
+        PulseBadgeCounts.counts(
+            feed: PulseFeedMapper.Feed(
+                liveActivity: liveActivity,
+                wins: completedLoops,
+                outputs: outputs,
+                decisions: decisions,
+                thoughts: thoughts
+            ),
+            swarmStore: swarmStore,
+            planStore: planStore,
+            lastSeen: .init(
+                plans: lastSeenPlans,
+                wins: lastSeenWins,
+                outputs: lastSeenOutputs,
+                decisions: lastSeenDecisions,
+                thoughts: lastSeenThoughts
+            )
+        )
     }
 
     /// Mark a category as seen — clear its badge

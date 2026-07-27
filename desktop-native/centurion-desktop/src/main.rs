@@ -15,6 +15,16 @@ mod adrian;
     clippy::too_many_lines
 )]
 mod adrian_dialog;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
+mod chat_page;
 
 #[cfg(target_os = "linux")]
 #[allow(
@@ -85,6 +95,8 @@ mod linux {
         catalog: Option<serde_json::Value>,
         result: Option<serde_json::Value>,
         message: Option<String>,
+        #[serde(default)]
+        summary: Option<String>,
         code: Option<String>,
         #[serde(default)]
         configured: Option<bool>,
@@ -109,11 +121,22 @@ mod linux {
         #[serde(default)]
         behind: u64,
         #[serde(default)]
+        branch_behind: u64,
+        #[serde(default)]
         os_version: Option<String>,
         #[serde(default)]
         message: Option<String>,
         #[serde(default)]
         recommended_command: Option<String>,
+        /// "full" (OS + screen) or "rebuild_screen" (local checkout newer than binary).
+        #[serde(default)]
+        update_action: Option<String>,
+        #[serde(default)]
+        screen_rebuild_available: bool,
+        #[serde(default)]
+        screen_checkout_version: Option<String>,
+        #[serde(default)]
+        screen_installed_version: Option<String>,
     }
 
     impl RemoteSupervisor {
@@ -145,12 +168,7 @@ mod linux {
                 .stderr(Stdio::inherit())
                 .env(
                     "CENTURION_HOME",
-                    std::env::var("CENTURION_HOME").unwrap_or_else(|_| {
-                        format!(
-                            "{}/.centurion",
-                            std::env::var("HOME").unwrap_or_else(|_| ".".to_owned())
-                        )
-                    }),
+                    crate::chat_page::resolve_centurion_home(),
                 )
                 .spawn()
                 .map_err(|error| format!("Could not start your Centurion: {error}"))?;
@@ -206,14 +224,27 @@ mod linux {
         TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
     }
 
+    /// True when at least one iPhone is approved or waiting for approval.
+    fn any_iphones_linked() -> bool {
+        let output = Command::new(centurion_remote_bin())
+            .args(["devices", "--json"])
+            .output();
+        let listing = output
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| serde_json::from_slice::<DeviceListing>(&output.stdout).ok());
+        match listing {
+            Some(listing) => !listing.approved.is_empty() || !listing.pending.is_empty(),
+            None => false,
+        }
+    }
+
     #[derive(Debug, Default, Clone)]
     struct LinkAddresses {
-        magic_dns: Option<String>,
-        tailscale_ip: Option<String>,
         lan_ips: Vec<String>,
     }
 
-    fn is_tailscale_ip(ip: &str) -> bool {
+    fn is_tailscale_cgnat(ip: &str) -> bool {
         let parts: Vec<u8> = ip
             .split('.')
             .filter_map(|part| part.parse().ok())
@@ -221,70 +252,70 @@ mod linux {
         parts.len() == 4 && parts[0] == 100 && (64..=127).contains(&parts[1])
     }
 
+    /// LAN-only discovery. Prefer wired ethernet when both Wi‑Fi and eth are up.
+    /// Away access uses a Centurion-hosted relay later — not Tailscale / advertise-host in Unbox QR.
     fn discover_link_addresses() -> LinkAddresses {
         let mut addresses = LinkAddresses::default();
+        let mut ethernet_ips = Vec::new();
+        let mut other_ips = Vec::new();
 
-        if let Ok(output) = Command::new("tailscale").args(["ip", "-4"]).output() {
-            if output.status.success() {
-                let ip = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-                if !ip.is_empty() {
-                    addresses.tailscale_ip = Some(ip);
-                }
-            }
-        }
-
-        if let Ok(output) = Command::new("tailscale")
-            .args(["status", "--json"])
+        // Prefer `ip -o -4 addr show` so we can rank eth* / enp* / eno* ahead of wlan*.
+        if let Ok(output) = Command::new("ip")
+            .args(["-o", "-4", "addr", "show"])
             .output()
         {
             if output.status.success() {
-                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                    if addresses.magic_dns.is_none() {
-                        if let Some(dns) = value
-                            .get("Self")
-                            .and_then(|self_node| self_node.get("DNSName"))
-                            .and_then(|v| v.as_str())
-                        {
-                            let trimmed = dns.trim_end_matches('.').to_owned();
-                            if !trimmed.is_empty() {
-                                addresses.magic_dns = Some(trimmed);
-                            }
-                        }
+                for line in String::from_utf8_lossy(&output.stdout).lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    // Format: INDEX: IFACE    inet ADDR/MASK …
+                    if parts.len() < 4 {
+                        continue;
                     }
-                    if addresses.tailscale_ip.is_none() {
-                        if let Some(ip) = value
-                            .get("Self")
-                            .and_then(|self_node| self_node.get("TailscaleIPs"))
-                            .and_then(|ips| ips.as_array())
-                            .and_then(|ips| ips.first())
-                            .and_then(|v| v.as_str())
+                    let iface = parts[1];
+                    let addr_cidr = parts[3];
+                    let ip = addr_cidr.split('/').next().unwrap_or("");
+                    if ip.is_empty()
+                        || ip.starts_with("127.")
+                        || is_tailscale_cgnat(ip)
+                        || ip.contains(':')
+                    {
+                        continue;
+                    }
+                    let wired = iface.starts_with("eth")
+                        || iface.starts_with("enp")
+                        || iface.starts_with("eno")
+                        || iface.starts_with("enx");
+                    if wired {
+                        if !ethernet_ips.iter().any(|existing: &String| existing == ip) {
+                            ethernet_ips.push(ip.to_owned());
+                        }
+                    } else if !other_ips.iter().any(|existing: &String| existing == ip) {
+                        other_ips.push(ip.to_owned());
+                    }
+                }
+            }
+        }
+
+        if ethernet_ips.is_empty() && other_ips.is_empty() {
+            if let Ok(output) = Command::new("hostname").args(["-I"]).output() {
+                if output.status.success() {
+                    for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+                        if token.contains(':')
+                            || token.starts_with("127.")
+                            || is_tailscale_cgnat(token)
                         {
-                            addresses.tailscale_ip = Some(ip.to_owned());
+                            continue;
+                        }
+                        if !other_ips.iter().any(|existing| existing == token) {
+                            other_ips.push(token.to_owned());
                         }
                     }
                 }
             }
         }
 
-        if let Ok(output) = Command::new("hostname").args(["-I"]).output() {
-            if output.status.success() {
-                for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
-                    if token.contains(':') || token.starts_with("127.") {
-                        continue;
-                    }
-                    if is_tailscale_ip(token) {
-                        if addresses.tailscale_ip.is_none() {
-                            addresses.tailscale_ip = Some(token.to_owned());
-                        }
-                        continue;
-                    }
-                    if !addresses.lan_ips.iter().any(|existing| existing == token) {
-                        addresses.lan_ips.push(token.to_owned());
-                    }
-                }
-            }
-        }
-
+        addresses.lan_ips.extend(ethernet_ips);
+        addresses.lan_ips.extend(other_ips);
         addresses
     }
 
@@ -331,19 +362,30 @@ mod linux {
             .unwrap_or_else(|| "centurion-remote".to_owned())
     }
 
-    fn mint_remote_pairing_string() -> Result<String, String> {
+    #[derive(Debug, Clone)]
+    struct MintedPairing {
+        id: String,
+        connection_string: String,
+        qr_png: Vec<u8>,
+    }
+
+    /// Host for Unbox & Go QR — always a LAN IPv4, never tunnel advertise-host.
+    fn resolve_lan_pairing_host() -> String {
         let addresses = discover_link_addresses();
-        let host = std::env::var("CENTURION_REMOTE_ADVERTISE_HOST")
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .or_else(|| addresses.lan_ips.first().cloned())
-            .or_else(|| addresses.magic_dns.clone())
-            .or_else(|| addresses.tailscale_ip.clone())
-            .unwrap_or_else(|| "127.0.0.1".to_owned());
+        addresses
+            .lan_ips
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "127.0.0.1".to_owned())
+    }
+
+    fn mint_remote_pairing() -> Result<MintedPairing, String> {
+        // Unbox QR always embeds the LAN address so the phone pairs on Wi‑Fi
+        // without depending on a tunnel hostname.
+        let host = resolve_lan_pairing_host();
 
         let output = Command::new(centurion_remote_bin())
-            .args(["remote-pair", "--host", &host, "--json"])
+            .args(["remote-pair", "--host", &host, "--json", "--include-qr"])
             .output()
             .map_err(|error| format!("Could not run centurion-remote: {error}"))?;
         if !output.status.success() {
@@ -355,21 +397,285 @@ mod linux {
         }
         let value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("Invalid remote-pair JSON: {error}"))?;
-        value
+        let connection = value
             .get("connection_string")
             .and_then(|v| v.as_str())
             .map(str::to_owned)
-            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())
+            .ok_or_else(|| "remote-pair response missing connection_string".to_owned())?;
+        let id = value
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let qr_b64 = value
+            .get("qr_png_base64")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "remote-pair response missing qr_png_base64".to_owned())?;
+        let qr_png = glib::base64_decode(qr_b64);
+        if qr_png.is_empty() {
+            return Err("Could not decode QR PNG from remote-pair".to_owned());
+        }
+        Ok(MintedPairing {
+            id,
+            connection_string: connection,
+            qr_png,
+        })
     }
 
-    fn refresh_link_addresses(container: &gtk::Box) {
+    fn revoke_remote_pairing_token(id: &str) {
+        if id.is_empty() {
+            return;
+        }
+        let _ = Command::new(centurion_remote_bin())
+            .args(["remote-revoke", id])
+            .output();
+    }
+
+    fn qr_image_from_png(png: &[u8], pixel_size: i32) -> gtk::Image {
+        // glib 0.22: `Bytes::from` only accepts borrowed slices; owned data
+        // must use `from_owned` (requires Send — Vec<u8> is fine).
+        let bytes = glib::Bytes::from_owned(png.to_vec());
+        match gtk::gdk::Texture::from_bytes(&bytes) {
+            Ok(texture) => {
+                let image = gtk::Image::from_paintable(Some(&texture));
+                image.set_pixel_size(pixel_size);
+                image
+            }
+            Err(_) => gtk::Image::from_icon_name("image-missing"),
+        }
+    }
+
+    /// Apply a mint result to the QR window widgets (main-thread only).
+    fn apply_pairing_mint_result(
+        minted: Result<MintedPairing, String>,
+        qr_holder: &gtk::Box,
+        status: &gtk::Label,
+        text_reveal: &gtk::Label,
+        token_id: &RefCell<String>,
+        connection: &RefCell<String>,
+    ) {
+        match minted {
+            Ok(minted) => {
+                let previous = token_id.borrow().clone();
+                if !previous.is_empty() && previous != minted.id {
+                    revoke_remote_pairing_token(&previous);
+                }
+                *token_id.borrow_mut() = minted.id;
+                *connection.borrow_mut() = minted.connection_string.clone();
+                while let Some(child) = qr_holder.first_child() {
+                    qr_holder.remove(&child);
+                }
+                qr_holder.append(&qr_image_from_png(&minted.qr_png, 360));
+                status.set_label("Point your iPhone camera at this QR code");
+                if text_reveal.is_visible() {
+                    text_reveal.set_label(&minted.connection_string);
+                }
+            }
+            Err(error) => {
+                let plain = if error.contains("not found") {
+                    "Could not create a pairing code. Is Centurion installed on this brain?"
+                        .to_owned()
+                } else {
+                    "Could not create a pairing code. Try again in a moment.".to_owned()
+                };
+                status.set_label(&plain);
+            }
+        }
+    }
+
+    /// Full-screen QR pairing page: scan-first UX with auto-rotated tokens.
+    /// Minting stays on the GTK main thread (no idle_add / Send wrappers).
+    fn show_pairing_qr_window(parent: &adw::ApplicationWindow) {
+        let window = adw::Window::builder()
+            .title("Link iPhone")
+            .transient_for(parent)
+            .modal(true)
+            .default_width(720)
+            .default_height(960)
+            .build();
+
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        content.set_margin_top(40);
+        content.set_margin_bottom(40);
+        content.set_margin_start(40);
+        content.set_margin_end(40);
+        content.set_halign(gtk::Align::Center);
+        content.set_valign(gtk::Align::Center);
+
+        content.append(
+            &gtk::Label::builder()
+                .label("Link your iPhone")
+                .css_classes(["title-1"])
+                .build(),
+        );
+        content.append(
+            &gtk::Label::builder()
+                .label("Open Sovereign AI Remote on this Wi‑Fi → Scan this code")
+                .css_classes(["title-3"])
+                .wrap(true)
+                .justify(gtk::Justification::Center)
+                .build(),
+        );
+
+        let qr_holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        qr_holder.set_halign(gtk::Align::Center);
+        content.append(&qr_holder);
+
+        let status = gtk::Label::builder()
+            .label("Preparing pairing code…")
+            .css_classes(["dim-label"])
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .build();
+        content.append(&status);
+
+        let text_reveal = gtk::Label::builder()
+            .label("")
+            .selectable(true)
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .visible(false)
+            .build();
+        content.append(&text_reveal);
+
+        let actions = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        actions.set_halign(gtk::Align::Center);
+        let copy = gtk::Button::with_label("Copy code");
+        copy.add_css_class("flat");
+        let show_text = gtk::Button::with_label("Show text");
+        show_text.add_css_class("flat");
+        let refresh = gtk::Button::with_label("Refresh code");
+        refresh.add_css_class("suggested-action");
+        let done = gtk::Button::with_label("Done");
+        actions.append(&copy);
+        actions.append(&show_text);
+        actions.append(&refresh);
+        actions.append(&done);
+        content.append(&actions);
+
+        content.append(
+            &gtk::Label::builder()
+                .label(
+                    "The code refreshes every few minutes. Paste remains available if the camera cannot be used.",
+                )
+                .css_classes(["dim-label"])
+                .wrap(true)
+                .justify(gtk::Justification::Center)
+                .build(),
+        );
+
+        let header = adw::HeaderBar::new();
+        let toolbar = adw::ToolbarView::new();
+        toolbar.add_top_bar(&header);
+        toolbar.set_content(Some(&content));
+        window.set_content(Some(&toolbar));
+
+        let token_id = Rc::new(RefCell::new(String::new()));
+        let connection = Rc::new(RefCell::new(String::new()));
+
+        let remint = Rc::new({
+            let qr_holder = qr_holder.clone();
+            let status = status.clone();
+            let text_reveal = text_reveal.clone();
+            let token_id = token_id.clone();
+            let connection = connection.clone();
+            move || {
+                apply_pairing_mint_result(
+                    mint_remote_pairing(),
+                    &qr_holder,
+                    &status,
+                    &text_reveal,
+                    &token_id,
+                    &connection,
+                );
+            }
+        });
+
+        remint();
+
+        copy.connect_clicked({
+            let connection = connection.clone();
+            move |_| {
+                let text = connection.borrow().clone();
+                if text.starts_with("token:") {
+                    copy_to_clipboard(&text);
+                }
+            }
+        });
+        show_text.connect_clicked({
+            let text_reveal = text_reveal.clone();
+            let connection = connection.clone();
+            move |button| {
+                if text_reveal.is_visible() {
+                    text_reveal.set_visible(false);
+                    button.set_label("Show text");
+                } else {
+                    text_reveal.set_label(&connection.borrow());
+                    text_reveal.set_visible(true);
+                    button.set_label("Hide text");
+                }
+            }
+        });
+        refresh.connect_clicked({
+            let remint = remint.clone();
+            move |_| remint()
+        });
+        done.connect_clicked({
+            let window = window.clone();
+            move |_| window.close()
+        });
+
+        // Rotate every 3 minutes. `_local` keeps the closure on the GTK thread
+        // (widgets are !Send — do not use idle_add / timeout_add without _local).
+        glib::timeout_add_seconds_local(180, {
+            let window = window.clone();
+            let remint = remint.clone();
+            move || {
+                if !window.is_visible() {
+                    return glib::ControlFlow::Break;
+                }
+                remint();
+                glib::ControlFlow::Continue
+            }
+        });
+
+        // Unbox: dismiss full-screen QR once an iPhone is linked.
+        glib::timeout_add_seconds_local(2, {
+            let window = window.clone();
+            let status = status.clone();
+            move || {
+                if !window.is_visible() {
+                    return glib::ControlFlow::Break;
+                }
+                if any_iphones_linked() {
+                    status.set_label("iPhone linked — you can close this screen.");
+                    window.close();
+                    return glib::ControlFlow::Break;
+                }
+                glib::ControlFlow::Continue
+            }
+        });
+
+        window.connect_close_request({
+            let token_id = token_id.clone();
+            move |_| {
+                let _ = token_id;
+                glib::Propagation::Proceed
+            }
+        });
+
+        window.fullscreen();
+        window.present();
+    }
+
+    fn refresh_link_addresses(container: &gtk::Box, parent: Option<&adw::ApplicationWindow>) {
         while let Some(child) = container.first_child() {
             container.remove(&child);
         }
 
         container.append(
             &gtk::Label::builder()
-                .label("Remote pairing")
+                .label("Unbox pairing")
                 .css_classes(["title-4"])
                 .xalign(0.0)
                 .build(),
@@ -378,7 +684,7 @@ mod linux {
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "1. Generate a pairing code  ·  2. Paste it in Sovereign AI Remote  ·  3. Approve the iPhone under Devices.",
+                    "Your Centurion shows a QR on first boot. On the same Wi‑Fi, open Sovereign AI Remote and scan it.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -386,92 +692,38 @@ mod linux {
                 .build(),
         );
 
-        let pairing_row = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        pairing_row.set_margin_top(4);
-        let pairing_value = gtk::Label::builder()
-            .label("No pairing code yet — tap Generate.")
-            .selectable(true)
-            .wrap(true)
-            .xalign(0.0)
-            .build();
-        let pairing_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let generate = gtk::Button::with_label("Generate pairing code");
-        generate.add_css_class("suggested-action");
-        let copy = gtk::Button::with_label("Copy");
-        copy.add_css_class("flat");
-        copy.set_sensitive(false);
-        pairing_actions.append(&generate);
-        pairing_actions.append(&copy);
-        pairing_row.append(&pairing_value);
-        pairing_row.append(&pairing_actions);
-        container.append(&pairing_row);
-
-        let pairing_value_gen = pairing_value.clone();
-        let copy_gen = copy.clone();
-        generate.connect_clicked(move |_| match mint_remote_pairing_string() {
-            Ok(connection) => {
-                pairing_value_gen.set_label(&connection);
-                copy_gen.set_sensitive(true);
-                copy_to_clipboard(&connection);
-                pairing_value_gen.set_tooltip_text(Some("Copied to clipboard"));
-            }
-            Err(error) => {
-                let plain = if error.contains("not found") {
-                    "Could not create a pairing code. Is Centurion installed on this brain?".to_owned()
-                } else {
-                    "Could not create a pairing code. Try again in a moment.".to_owned()
-                };
-                pairing_value_gen.set_label(&plain);
-                copy_gen.set_sensitive(false);
-            }
-        });
-        let pairing_value_copy = pairing_value.clone();
-        copy.connect_clicked(move |_| {
-            let text = pairing_value_copy.label();
-            if text.starts_with("token:") {
-                copy_to_clipboard(&text);
-            }
-        });
+        let link = gtk::Button::with_label("Show pairing QR again");
+        link.add_css_class("suggested-action");
+        link.set_margin_top(4);
+        if let Some(parent) = parent {
+            let parent = parent.clone();
+            link.connect_clicked(move |_| show_pairing_qr_window(&parent));
+        } else {
+            link.set_sensitive(false);
+        }
+        container.append(&link);
 
         let addresses = discover_link_addresses();
         if let Some(lan) = addresses.lan_ips.first() {
             container.append(
                 &gtk::Label::builder()
-                    .label("Same network (optional)")
+                    .label("On your network")
                     .css_classes(["title-4"])
                     .xalign(0.0)
                     .margin_top(12)
                     .build(),
             );
             container.append(&build_link_address_row(
-                "Wi‑Fi",
+                "LAN address",
                 &format!("{lan}:9119"),
                 false,
             ));
         }
 
-        let has_mesh = addresses.magic_dns.is_some() || addresses.tailscale_ip.is_some();
-        if has_mesh {
-            container.append(
-                &gtk::Label::builder()
-                    .label("Advanced — optional mesh")
-                    .css_classes(["title-4"])
-                    .xalign(0.0)
-                    .margin_top(12)
-                    .build(),
-            );
-            if let Some(dns) = addresses.magic_dns.as_deref() {
-                container.append(&build_link_address_row("Tailscale MagicDNS", dns, false));
-            }
-            if let Some(ip) = addresses.tailscale_ip.as_deref() {
-                container.append(&build_link_address_row("Tailscale IP", ip, false));
-            }
-        }
-
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Away from home: make this brain reachable (secure tunnel or firewall rule). Crypto Chat stays end-to-end encrypted between your iPhone and this Centurion.",
+                    "Away-from-home access comes later via a Centurion-hosted relay — no router setup for Unbox.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -517,7 +769,7 @@ mod linux {
 
         let link_addresses = gtk::Box::new(gtk::Orientation::Vertical, 8);
         link_addresses.set_margin_top(8);
-        refresh_link_addresses(&link_addresses);
+        refresh_link_addresses(&link_addresses, None);
         status_card.append(&link_addresses);
 
         status_card.append(&thinking_title);
@@ -590,6 +842,7 @@ mod linux {
         settings.set_margin_top(32);
         settings.set_margin_start(32);
         settings.set_margin_end(32);
+        settings.set_margin_bottom(32);
         settings.append(
             &gtk::Label::builder()
                 .label("Settings")
@@ -597,8 +850,14 @@ mod linux {
                 .xalign(0.0)
                 .build(),
         );
-        let settings_list = gtk::ListBox::new();
-        settings_list.add_css_class("boxed-list");
+
+        // Each section is its own PreferencesGroup. Earlier we appended section
+        // labels to the page *before* a single list, so Autonomy/Soul/Telegram
+        // visually sat under "Support Tools" and the middle headers looked empty.
+        let brain_group = adw::PreferencesGroup::builder()
+            .title("Brain")
+            .description("Screen app, updates, and how your Centurion thinks")
+            .build();
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
@@ -607,27 +866,33 @@ mod linux {
             .icon_name("network-wireless-symbolic")
             .activatable(true)
             .build();
-        settings_list.append(&pairing_settings_row);
-        settings_list.append(
+        brain_group.add(&pairing_settings_row);
+        brain_group.add(
             &adw::ActionRow::builder()
                 .title("Version")
                 .subtitle(&format!(
-                    "Desktop app {} — Centurion AI OS updates separately below",
+                    "Screen app {} — use Check for update below for brain software",
                     env!("CARGO_PKG_VERSION")
                 ))
                 .icon_name("dialog-information-symbolic")
                 .build(),
         );
         let update_row = adw::ActionRow::builder()
-            .title("Check for updates")
-            .subtitle("Updates Centurion AI OS on this brain (not this desktop app binary)")
+            .title("Check for update")
+            .subtitle("Checks published brain software — branch screen fixes use Rebuild")
             .icon_name("software-update-available-symbolic")
             .build();
         let update_check_button = gtk::Button::with_label("Check");
         update_check_button.add_css_class("suggested-action");
         update_check_button.set_valign(gtk::Align::Center);
+        let rebuild_screen_button = gtk::Button::with_label("Rebuild screen");
+        rebuild_screen_button.set_tooltip_text(Some(
+            "Rebuild this screen app from the Centurion folder on this brain (does not need an iPhone).",
+        ));
+        rebuild_screen_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&rebuild_screen_button);
         update_row.add_suffix(&update_check_button);
-        settings_list.append(&update_row);
+        brain_group.add(&update_row);
 
         let thinking_settings_row = adw::ActionRow::builder()
             .title("Thinking Service")
@@ -641,30 +906,27 @@ mod linux {
         change_thinking_button.set_valign(gtk::Align::Center);
         thinking_settings_row.add_suffix(&restore_thinking_button);
         thinking_settings_row.add_suffix(&change_thinking_button);
-        settings_list.append(&thinking_settings_row);
+        brain_group.add(&thinking_settings_row);
 
         let backup_thinking_row = adw::ActionRow::builder()
             .title("Backup Thinking Services")
             .subtitle("No backup thinking services configured.")
             .icon_name("view-list-symbolic")
             .build();
-        settings_list.append(&backup_thinking_row);
+        brain_group.add(&backup_thinking_row);
 
         let setup_thinking_row = adw::ActionRow::builder()
             .title("Set up how your Centurion thinks")
             .subtitle("Run centurion setup on this computer for first-time configuration.")
             .icon_name("system-run-symbolic")
             .build();
-        settings_list.append(&setup_thinking_row);
+        brain_group.add(&setup_thinking_row);
+        settings.append(&brain_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("You & Oversight")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let you_group = adw::PreferencesGroup::builder()
+            .title("You & Oversight")
+            .description("Autonomy, personality, memory, and reporting")
+            .build();
         let autonomy_row = adw::ActionRow::builder()
             .title("Autonomy Level")
             .subtitle("Balanced (default) — follow with light interpretation")
@@ -673,7 +935,7 @@ mod linux {
         let autonomy_button = gtk::Button::with_label("Adjust");
         autonomy_button.set_valign(gtk::Align::Center);
         autonomy_row.add_suffix(&autonomy_button);
-        settings_list.append(&autonomy_row);
+        you_group.add(&autonomy_row);
 
         let soul_row = adw::ActionRow::builder()
             .title("Your Sovereign's Soul")
@@ -683,7 +945,7 @@ mod linux {
         let soul_button = gtk::Button::with_label("View / Edit");
         soul_button.set_valign(gtk::Align::Center);
         soul_row.add_suffix(&soul_button);
-        settings_list.append(&soul_row);
+        you_group.add(&soul_row);
 
         let memory_horizon_row = adw::ActionRow::builder()
             .title("Memory Horizon")
@@ -693,7 +955,7 @@ mod linux {
         let memory_horizon_button = gtk::Button::with_label("View");
         memory_horizon_button.set_valign(gtk::Align::Center);
         memory_horizon_row.add_suffix(&memory_horizon_button);
-        settings_list.append(&memory_horizon_row);
+        you_group.add(&memory_horizon_row);
 
         let oversight_row = adw::ActionRow::builder()
             .title("Reporting & Oversight")
@@ -703,16 +965,13 @@ mod linux {
         let oversight_button = gtk::Button::with_label("Adjust");
         oversight_button.set_valign(gtk::Align::Center);
         oversight_row.add_suffix(&oversight_button);
-        settings_list.append(&oversight_row);
+        you_group.add(&oversight_row);
+        settings.append(&you_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("Transition")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let transition_group = adw::PreferencesGroup::builder()
+            .title("Transition")
+            .description("One-time moves from earlier Centurion setups")
+            .build();
         let telegram_history_row = adw::ActionRow::builder()
             .title("Bring over Telegram history")
             .subtitle(
@@ -723,16 +982,13 @@ mod linux {
         let telegram_bring_button = gtk::Button::with_label("Bring over");
         telegram_bring_button.set_valign(gtk::Align::Center);
         telegram_history_row.add_suffix(&telegram_bring_button);
-        settings_list.append(&telegram_history_row);
+        transition_group.add(&telegram_history_row);
+        settings.append(&transition_group);
 
-        settings.append(
-            &gtk::Label::builder()
-                .label("Support Tools")
-                .css_classes(["title-4"])
-                .xalign(0.0)
-                .margin_top(12)
-                .build(),
-        );
+        let support_group = adw::PreferencesGroup::builder()
+            .title("Support Tools")
+            .description("Health checks and help for your advisor")
+            .build();
         let support_health_row = adw::ActionRow::builder()
             .title("Run Health Check")
             .subtitle("Check thinking service and configuration")
@@ -757,9 +1013,9 @@ mod linux {
         support_health_row.add_suffix(&health_check_button);
         support_bundle_row.add_suffix(&bundle_button);
         support_lookup_row.add_suffix(&lookup_button);
-        settings_list.append(&support_health_row);
-        settings_list.append(&support_bundle_row);
-        settings_list.append(&support_lookup_row);
+        support_group.add(&support_health_row);
+        support_group.add(&support_bundle_row);
+        support_group.add(&support_lookup_row);
 
         let adrian_row = adw::ActionRow::builder()
             .title("Talk to Adrian")
@@ -769,20 +1025,44 @@ mod linux {
         let adrian_button = gtk::Button::with_label("Open");
         adrian_button.set_valign(gtk::Align::Center);
         adrian_row.add_suffix(&adrian_button);
-        settings_list.append(&adrian_row);
+        support_group.add(&adrian_row);
+        settings.append(&support_group);
 
-        settings.append(&settings_list);
+        // ScrolledWindow only scrolls if the child keeps its natural height.
+        // vexpand/fill on the child clips content instead of scrolling (Brain
+        // touch screens then look like Settings just "ends" mid-row).
+        settings.set_vexpand(false);
+        settings.set_hexpand(true);
+        settings.set_valign(gtk::Align::Start);
+
+        let settings_scroll = gtk::ScrolledWindow::builder()
+            .child(&settings)
+            .vexpand(true)
+            .hexpand(true)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .kinetic_scrolling(true)
+            .overlay_scrolling(false) // always show a scrollbar so scroll is discoverable on touch
+            .min_content_height(240)
+            .build();
 
         let chat = build_chat_page();
 
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
             .transition_duration(180)
+            .vexpand(true)
+            .hexpand(true)
             .build();
         stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&devices, Some("devices"), "Devices");
-        stack.add_titled(&settings, Some("settings"), "Settings");
+        stack.add_titled(&settings_scroll, Some("settings"), "Settings");
+        home.set_vexpand(true);
+        chat.set_vexpand(true);
+        devices.set_vexpand(true);
+        settings_scroll.set_vexpand(true);
+        settings_scroll.set_hexpand(true);
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
@@ -802,6 +1082,9 @@ mod linux {
         let switcher = gtk::StackSwitcher::builder().stack(&stack).build();
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&switcher));
+        // Ensure DE window buttons (minimize/maximize/close) are available.
+        header.set_show_start_title_buttons(true);
+        header.set_show_end_title_buttons(true);
         let toolbar = adw::ToolbarView::new();
         toolbar.add_top_bar(&header);
         toolbar.set_content(Some(&stack));
@@ -811,31 +1094,55 @@ mod linux {
             .title("Sovereign AI Brain")
             .default_width(980)
             .default_height(700)
+            .resizable(true)
             .content(&toolbar)
             .build();
+        install_window_size_controls(&header, &window);
 
         let update_status = {
             let status_title = status_title.clone();
             let status_detail = status_detail.clone();
             let link_addresses = link_addresses.clone();
+            let window = window.clone();
             let supervisor = supervisor.clone();
             move || match supervisor.borrow_mut().ensure_running() {
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "Generate a remote pairing code below and paste it into Sovereign AI Remote.",
+                        "On the same Wi‑Fi, open Sovereign AI Remote and scan the pairing QR.",
                     );
-                    refresh_link_addresses(&link_addresses);
+                    refresh_link_addresses(&link_addresses, Some(&window));
                 }
                 Err(error) => {
                     status_title.set_label("Your Centurion needs attention");
                     status_detail.set_label(&error);
-                    refresh_link_addresses(&link_addresses);
+                    refresh_link_addresses(&link_addresses, Some(&window));
                 }
             }
         };
 
         update_status();
+        // Unbox & Go: virgin Brain auto-opens full-screen LAN QR once remote is up.
+        // Serve may need a moment after spawn — retry briefly.
+        {
+            let window = window.clone();
+            let attempts = Rc::new(RefCell::new(0_u32));
+            glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+                let mut n = attempts.borrow_mut();
+                *n += 1;
+                if any_iphones_linked() {
+                    return glib::ControlFlow::Break;
+                }
+                if remote_listener_active() {
+                    show_pairing_qr_window(&window);
+                    return glib::ControlFlow::Break;
+                }
+                if *n >= 10 {
+                    return glib::ControlFlow::Break;
+                }
+                glib::ControlFlow::Continue
+            });
+        }
         refresh_thinking_status(&thinking_detail, &thinking_settings_row);
         refresh_backup_thinking_services(&backup_thinking_row);
         refresh_autonomy_row(&autonomy_row);
@@ -850,7 +1157,12 @@ mod linux {
         let memory_horizon_poll_row = memory_horizon_row.clone();
         let oversight_poll_row = oversight_row.clone();
         glib::timeout_add_seconds_local(30, move || {
-            refresh_thinking_status(&thinking_poll_detail, &thinking_poll_row);
+            // Skip live probe on the poll so Settings refresh does not stall the UI.
+            refresh_thinking_status_inner(
+                &thinking_poll_detail,
+                &thinking_poll_row,
+                true,
+            );
             refresh_backup_thinking_services(&backup_poll_row);
             refresh_autonomy_row(&autonomy_poll_row);
             refresh_soul_row(&soul_poll_row);
@@ -860,8 +1172,9 @@ mod linux {
         });
         restore_thinking_button.connect_clicked({
             let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
             move |_| {
-                if let Some(response) = run_provider_command(&["restore", "--json"]) {
+                if let Some(response) = run_provider_command(&["restore"]) {
                     let message = response
                         .message
                         .or_else(|| {
@@ -874,6 +1187,7 @@ mod linux {
                         })
                         .unwrap_or_else(|| "Restore finished.".to_owned());
                     thinking_settings_row.set_subtitle(&message);
+                    refresh_thinking_status(&thinking_detail, &thinking_settings_row);
                 }
             }
         });
@@ -882,6 +1196,27 @@ mod linux {
             let thinking_detail = thinking_detail.clone();
             let window = window.clone();
             move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        let setup_thinking_button = gtk::Button::with_label("Set up");
+        setup_thinking_button.add_css_class("suggested-action");
+        setup_thinking_button.set_valign(gtk::Align::Center);
+        setup_thinking_row.add_suffix(&setup_thinking_button);
+        setup_thinking_row.set_subtitle(
+            "Choose your thinking service and access code for this brain.",
+        );
+        setup_thinking_button.connect_clicked({
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
+            let window = window.clone();
+            move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        let backup_manage_button = gtk::Button::with_label("Details");
+        backup_manage_button.set_valign(gtk::Align::Center);
+        backup_thinking_row.add_suffix(&backup_manage_button);
+        backup_manage_button.connect_clicked({
+            let window = window.clone();
+            let backup_thinking_row = backup_thinking_row.clone();
+            move |_| show_backup_thinking_dialog(&window, &backup_thinking_row)
         });
         pairing_settings_row.connect_activated({
             let stack = stack.clone();
@@ -926,6 +1261,11 @@ mod linux {
             let update_row = update_row.clone();
             move |_| show_update_check_dialog(&window, &update_row)
         });
+        rebuild_screen_button.connect_clicked({
+            let window = window.clone();
+            let update_row = update_row.clone();
+            move |_| run_screen_rebuild(&window, &update_row)
+        });
         bundle_button.connect_clicked({
             let window = window.clone();
             move |_| show_support_bundle_dialog(&window)
@@ -959,20 +1299,21 @@ mod linux {
         });
         restart.connect_clicked({
             let link_addresses = link_addresses.clone();
+            let window = window.clone();
             move |_| {
                 let result = supervisor.borrow_mut().restart();
                 match result {
                     Ok(()) => {
                         status_title.set_label("Your Centurion is ready");
                         status_detail.set_label(
-                            "The private iPhone connection has restarted. Generate or reuse a remote pairing code below.",
+                            "The private iPhone connection has restarted. Tap Link iPhone to show a fresh QR code.",
                         );
-                        refresh_link_addresses(&link_addresses);
+                        refresh_link_addresses(&link_addresses, Some(&window));
                     }
                     Err(error) => {
                         status_title.set_label("Restart did not complete");
                         status_detail.set_label(&error);
-                        refresh_link_addresses(&link_addresses);
+                        refresh_link_addresses(&link_addresses, Some(&window));
                     }
                 }
             }
@@ -982,80 +1323,62 @@ mod linux {
     }
 
     fn build_chat_page() -> gtk::Box {
-        use gio::prelude::*;
-        use vte4::TerminalExt;
-        use vte4::prelude::TerminalExtManual;
+        let page = crate::chat_page::build();
+        page.set_vexpand(true);
+        page.set_hexpand(true);
+        page
+    }
 
-        let container = gtk::Box::new(gtk::Orientation::Vertical, 12);
-        container.set_margin_top(16);
-        container.set_margin_bottom(16);
-        container.set_margin_start(16);
-        container.set_margin_end(16);
-        container.set_vexpand(true);
-        container.set_hexpand(true);
-
-        container.append(
-            &gtk::Label::builder()
-                .label("Your Centurion")
-                .css_classes(["title-1"])
-                .xalign(0.0)
-                .build(),
-        );
-        container.append(
-            &gtk::Label::builder()
-                .label("Talk with your Centurion here — the same conversation you would have on this computer.")
-                .wrap(true)
-                .xalign(0.0)
-                .css_classes(["dim-label"])
-                .build(),
-        );
-
-        let scrolled = gtk::ScrolledWindow::builder()
-            .vexpand(true)
-            .hexpand(true)
-            .focusable(true)
-            .build();
-        let terminal = vte4::Terminal::new();
-        terminal.set_vexpand(true);
-        terminal.set_hexpand(true);
-        terminal.set_cursor_blink_mode(vte4::CursorBlinkMode::On);
-        terminal.set_input_enabled(true);
-        scrolled.set_child(Some(&terminal));
-        container.append(&scrolled);
-
-        let chat_spawned = Rc::new(RefCell::new(false));
-        let spawn_chat = {
-            let terminal = terminal.clone();
-            let chat_spawned = chat_spawned.clone();
-            move || {
-                if *chat_spawned.borrow() {
-                    return;
-                }
-                *chat_spawned.borrow_mut() = true;
-
-                let mut envv: Vec<String> = std::env::vars()
-                    .map(|(key, value)| format!("{key}={value}"))
-                    .collect();
-                envv.push("CENTURION_TUI_INLINE=1".to_owned());
-                envv.push("CENTURION_TUI_DISABLE_MOUSE=1".to_owned());
-                let env_refs: Vec<&str> = envv.iter().map(String::as_str).collect();
-
-                terminal.spawn_async(
-                    vte4::PtyFlags::DEFAULT,
-                    None::<&str>,
-                    &["centurion", "--tui"],
-                    &env_refs,
-                    glib::SpawnFlags::SEARCH_PATH,
-                    || {},
-                    -1,
-                    None::<&gio::Cancellable>,
-                    |_result| {},
-                );
+    /// Explicit size controls — some Linux DEs only show Close on client-side
+    /// decorations. Pack Minimize / Maximize / Fullscreen on the left so the
+    /// owner can tile or expand the Brain window like a normal desktop app.
+    fn install_window_size_controls(header: &adw::HeaderBar, window: &adw::ApplicationWindow) {
+        let minimize = gtk::Button::from_icon_name("window-minimize-symbolic");
+        minimize.set_tooltip_text(Some("Minimize"));
+        minimize.add_css_class("flat");
+        minimize.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                window.minimize();
             }
-        };
+        });
 
-        spawn_chat();
-        container
+        let maximize = gtk::Button::from_icon_name("window-maximize-symbolic");
+        maximize.set_tooltip_text(Some("Maximize / Restore"));
+        maximize.add_css_class("flat");
+        maximize.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                if window.is_maximized() {
+                    window.unmaximize();
+                } else {
+                    window.maximize();
+                }
+            }
+        });
+
+        let fullscreen = gtk::Button::from_icon_name("view-fullscreen-symbolic");
+        fullscreen.set_tooltip_text(Some("Full screen"));
+        fullscreen.add_css_class("flat");
+        fullscreen.connect_clicked({
+            let window = window.clone();
+            let fullscreen = fullscreen.clone();
+            move |_| {
+                if window.is_fullscreen() {
+                    window.unfullscreen();
+                    fullscreen.set_icon_name("view-fullscreen-symbolic");
+                    fullscreen.set_tooltip_text(Some("Full screen"));
+                } else {
+                    window.fullscreen();
+                    fullscreen.set_icon_name("view-restore-symbolic");
+                    fullscreen.set_tooltip_text(Some("Exit full screen"));
+                }
+            }
+        });
+
+        header.pack_start(&minimize);
+        header.pack_start(&maximize);
+        header.pack_start(&fullscreen);
     }
 
     fn refresh_devices(list: &gtk::ListBox) {
@@ -1168,7 +1491,7 @@ mod linux {
             let list_refresh = list.clone();
             let remote = centurion_remote.clone();
             revoke.connect_clicked(move |button| {
-                let confirm = adw::MessageDialog::builder()
+                let confirm = adw::AlertDialog::builder()
                     .heading("Remove this iPhone?")
                     .body(&format!(
                         "Remove {device_name}? They’ll need a new pairing code to link again."
@@ -1179,18 +1502,13 @@ mod linux {
                 confirm.add_response("cancel", "Cancel");
                 confirm.add_response("revoke", "Remove");
                 confirm.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
-                if let Some(root) = button.root() {
-                    if let Ok(window) = root.downcast::<gtk::Window>() {
-                        confirm.set_transient_for(Some(&window));
-                    }
-                }
+                let parent_widget = button.root();
                 let button = button.clone();
                 let fingerprint = fingerprint.clone();
                 let list_refresh = list_refresh.clone();
                 let remote = remote.clone();
-                confirm.connect_response(None, move |dialog, response| {
+                confirm.connect_response(None, move |_dialog, response| {
                     if response != "revoke" {
-                        dialog.close();
                         return;
                     }
                     button.set_sensitive(false);
@@ -1200,24 +1518,18 @@ mod linux {
                         .is_ok_and(|status| status.success());
                     if revoked {
                         refresh_devices(&list_refresh);
-                        if let Some(root) = button.root() {
-                            if let Ok(window) = root.downcast::<gtk::Window>() {
-                                let done = adw::MessageDialog::builder()
-                                    .heading("iPhone removed")
-                                    .body("They’ll need a new pairing code to link again.")
-                                    .close_response("ok")
-                                    .build();
-                                done.add_response("ok", "OK");
-                                done.set_transient_for(Some(&window));
-                                done.present();
-                            }
-                        }
+                        let done = adw::AlertDialog::builder()
+                            .heading("iPhone removed")
+                            .body("They’ll need a new pairing code to link again.")
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(button.root().as_ref());
                     } else {
                         button.set_sensitive(true);
                     }
-                    dialog.close();
                 });
-                confirm.present();
+                confirm.present(parent_widget.as_ref());
             });
             row.add_suffix(&revoke);
             list.append(&row);
@@ -1227,7 +1539,7 @@ mod linux {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones linked yet")
-                    .subtitle("On Home: generate a pairing code → paste in Sovereign AI Remote → approve here.")
+                    .subtitle("Scan the QR on Home with Sovereign AI Remote (same Wi‑Fi).")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -1251,8 +1563,10 @@ mod linux {
     }
 
     fn run_provider_command(args: &[&str]) -> Option<ProviderCliResponse> {
-        let mut command_args = vec!["provider"];
-        command_args.extend_from_slice(args);
+        // `--json` belongs on the parent `provider` parser, before the subcommand.
+        let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+        let mut command_args = vec!["provider", "--json"];
+        command_args.extend_from_slice(&rest);
         let output = Command::new(centurion_binary())
             .args(command_args)
             .output()
@@ -1264,7 +1578,7 @@ mod linux {
 
     fn run_provider_save_key(connector_id: &str, access_code: &str) -> Option<ProviderCliResponse> {
         let mut child = Command::new(centurion_binary())
-            .args(["provider", "save-key", connector_id, "-", "--json"])
+            .args(["provider", "--json", "save-key", connector_id, "-"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1278,23 +1592,66 @@ mod linux {
     }
 
     fn run_support_command(args: &[&str]) -> Option<ProviderCliResponse> {
-        let mut command_args = vec!["support"];
-        command_args.extend_from_slice(args);
+        // `--json` belongs on the parent `support` parser, before the subcommand.
+        let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+        let mut command_args = vec!["support", "--json"];
+        command_args.extend_from_slice(&rest);
         let output = Command::new(centurion_binary())
             .args(command_args)
             .output()
-            .ok()
-            .filter(|output| output.status.success())?;
+            .ok()?;
+        // Parse even on non-zero exit so lookup/health can surface `message`.
         serde_json::from_slice(&output.stdout).ok()
     }
 
     fn run_update_check() -> Option<UpdateCheckPayload> {
         let output = Command::new(centurion_binary())
-            .args(["update", "--check", "--json"])
+            .args([
+                "update",
+                "--check",
+                "--json",
+                "--screen-version",
+                env!("CARGO_PKG_VERSION"),
+            ])
             .output()
             .ok()?;
         // Parse JSON even when exit status is non-zero (network / unavailable).
         serde_json::from_slice(&output.stdout).ok()
+    }
+
+    /// Resolve the Centurion AI OS checkout that contains `install-user.sh`.
+    fn resolve_centurion_repo_root() -> Result<PathBuf, String> {
+        let candidates: Vec<PathBuf> = {
+            let mut list = Vec::new();
+            if let Ok(env_root) = std::env::var("CENTURION_AI_REPO") {
+                let trimmed = env_root.trim();
+                if !trimmed.is_empty() {
+                    list.push(PathBuf::from(trimmed));
+                }
+            }
+            if let Ok(home) = std::env::var("HOME") {
+                let home = PathBuf::from(home);
+                list.push(home.join("Centurion-AI-OS").join("Centurion-AI-OS"));
+                list.push(home.join("Centurion-AI-OS"));
+                list.push(home.join(".centurion").join("Centurion-AI-OS"));
+            }
+            list
+        };
+
+        for root in candidates {
+            let script = root
+                .join("desktop-native")
+                .join("scripts")
+                .join("install-user.sh");
+            if script.is_file() {
+                return Ok(root);
+            }
+        }
+        Err(
+            "Could not find the Centurion software folder on this brain.\n\n\
+             Ask your advisor to install the Centurion checkout, then try again."
+                .to_owned(),
+        )
     }
 
     fn run_os_update() -> Result<String, String> {
@@ -1306,8 +1663,7 @@ mod linux {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         if output.status.success() {
             Ok(if stdout.is_empty() {
-                "Centurion AI OS update finished. Restart this app if the desktop shell looks stale."
-                    .to_owned()
+                "Brain software update finished.".to_owned()
             } else {
                 stdout
             })
@@ -1317,33 +1673,181 @@ mod linux {
             } else if !stdout.is_empty() {
                 stdout
             } else {
-                "Update failed.".to_owned()
+                "Brain software update failed.".to_owned()
             })
         }
     }
 
+    fn run_native_brain_install(repo_root: &PathBuf) -> Result<(), String> {
+        let script = repo_root
+            .join("desktop-native")
+            .join("scripts")
+            .join("install-user.sh");
+        if !script.is_file() {
+            return Err(format!(
+                "Update script missing at {}.",
+                script.display()
+            ));
+        }
+        let output = Command::new("bash")
+            .arg(&script)
+            .current_dir(repo_root)
+            .env("CENTURION_AI_REPO", repo_root.as_os_str())
+            .output()
+            .map_err(|error| format!("Could not start screen update: {error}"))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            Err(if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "Screen app update failed.".to_owned()
+            })
+        }
+    }
+
+    fn restart_centurion_remote_best_effort() {
+        let _ = Command::new("systemctl")
+            .args(["--user", "restart", "centurion-remote.service"])
+            .output();
+    }
+
+    /// Rebuild only the screen app + remote from the local checkout (no OS update).
+    fn run_screen_rebuild_pipeline() -> Result<String, String> {
+        let repo_root = resolve_centurion_repo_root()?;
+        run_native_brain_install(&repo_root)?;
+        restart_centurion_remote_best_effort();
+        Ok(format!(
+            "Screen app rebuilt from {}.\n\nQuit and reopen Sovereign AI Brain to load it.\n\
+             Brain Chat is local on this computer — no iPhone pairing required.",
+            repo_root.display()
+        ))
+    }
+
+    fn run_screen_rebuild(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        // No progress AlertDialog — stacking a modal then replacing it left
+        // response buttons dead on the Brain (Wayland / touch). Subtitle is enough.
+        update_row.set_subtitle("Rebuilding this screen…");
+        let parent_for_result = parent.clone();
+        let update_row_for_result = update_row.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_screen_rebuild_pipeline());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(result) => {
+                    match result {
+                        Ok(body) => {
+                            update_row_for_result
+                                .set_subtitle("Rebuild finished — quit to load new screen");
+                            let done = adw::AlertDialog::builder()
+                                .heading("Screen rebuilt")
+                                .body(&body)
+                                .close_response("later")
+                                .default_response("quit")
+                                .build();
+                            done.add_response("later", "Later");
+                            done.add_response("quit", "Quit now");
+                            done.set_response_appearance(
+                                "quit",
+                                adw::ResponseAppearance::Suggested,
+                            );
+                            let parent_for_quit = parent_for_result.clone();
+                            done.connect_response(None, move |_dialog, response| {
+                                if response == "quit" {
+                                    if let Some(app) = parent_for_quit.application() {
+                                        app.quit();
+                                    } else {
+                                        parent_for_quit.close();
+                                    }
+                                }
+                            });
+                            done.present(Some(&parent_for_result));
+                        }
+                        Err(error) => {
+                            update_row_for_result.set_subtitle("Rebuild failed");
+                            let fail = adw::AlertDialog::builder()
+                                .heading("Rebuild failed")
+                                .body(&error)
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.present(Some(&parent_for_result));
+                        }
+                    }
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    update_row_for_result.set_subtitle("Rebuild failed");
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    }
+
+    /// Full Brain update: OS package, then desktop + remote binaries.
+    fn run_full_brain_update_pipeline() -> Result<String, String> {
+        let os_message = run_os_update()?;
+        let repo_root = resolve_centurion_repo_root()?;
+        run_native_brain_install(&repo_root)?;
+        restart_centurion_remote_best_effort();
+        Ok(format!(
+            "{os_message}\n\nScreen app and private connection were rebuilt."
+        ))
+    }
+
     fn show_update_check_dialog(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
-        update_row.set_subtitle("Checking for Centurion AI OS updates…");
-        let Some(payload) = run_update_check() else {
+        update_row.set_subtitle("Checking for updates…");
+        let parent = parent.clone();
+        let update_row = update_row.clone();
+        // Worker thread must not capture GTK widgets (!Send). Poll the result
+        // on the main loop instead of glib::idle_add_once from the worker.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_update_check());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+            match rx.try_recv() {
+                Ok(payload) => {
+                    present_update_check_result(&parent, &update_row, payload);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    present_update_check_result(&parent, &update_row, None);
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    }
+
+    fn present_update_check_result(
+        parent: &adw::ApplicationWindow,
+        update_row: &adw::ActionRow,
+        payload: Option<UpdateCheckPayload>,
+    ) {
+        let Some(payload) = payload else {
             update_row.set_subtitle("Could not check for updates.");
-            let dialog = adw::MessageDialog::builder()
-                .heading("Check for updates")
+            let dialog = adw::AlertDialog::builder()
+                .heading("Check for update")
                 .body(
-                    "Could not check for Centurion AI OS updates on this brain.\n\n\
+                    "Could not check for updates on this brain.\n\n\
                      Make sure Centurion is installed, then try again.",
                 )
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
-            dialog.set_transient_for(Some(parent));
-            dialog.present();
+            dialog.present(Some(parent));
             return;
         };
 
-        let os_version = payload
-            .os_version
-            .as_deref()
-            .unwrap_or("unknown");
+        let os_version = payload.os_version.as_deref().unwrap_or("unknown");
         let message = payload
             .message
             .clone()
@@ -1351,51 +1855,109 @@ mod linux {
 
         match payload.status.as_str() {
             "up_to_date" => {
-                update_row.set_subtitle(&format!("Centurion AI OS {os_version} — up to date"));
-                let dialog = adw::MessageDialog::builder()
+                update_row.set_subtitle(&format!("Brain software {os_version} — up to date"));
+                let dialog = adw::AlertDialog::builder()
                     .heading("You're up to date")
                     .body(&format!(
-                        "Your brain software is current (v{os_version}).\n\n{message}"
+                        "Published brain software is current (v{os_version}).\n\n{message}\n\n\
+                         If Chat or this screen still looks wrong, rebuild from the Centurion \
+                         folder on this brain (no iPhone needed)."
                     ))
                     .close_response("ok")
+                    .default_response("rebuild")
                     .build();
                 dialog.add_response("ok", "OK");
-                dialog.set_transient_for(Some(parent));
-                dialog.present();
+                dialog.add_response("rebuild", "Rebuild this screen");
+                dialog.set_response_appearance("rebuild", adw::ResponseAppearance::Suggested);
+                let parent_for_cb = parent.clone();
+                let update_row_for_cb = update_row.clone();
+                dialog.connect_response(None, move |_dialog, response| {
+                    if response == "rebuild" {
+                        let parent = parent_for_cb.clone();
+                        let update_row = update_row_for_cb.clone();
+                        glib::idle_add_local_once(move || {
+                            run_screen_rebuild(&parent, &update_row);
+                        });
+                    }
+                });
+                dialog.present(Some(parent));
             }
             "update_available" => {
-                update_row.set_subtitle(&format!(
-                    "Update available for Centurion AI OS {os_version}"
-                ));
-                let body = format!(
-                    "{message}\n\nAn update is available. It may take a few minutes; \
-                     Sovereign AI Remote may briefly disconnect while services restart."
-                );
-                let dialog = adw::MessageDialog::builder()
-                    .heading("Update available")
-                    .body(&body)
-                    .close_response("cancel")
-                    .default_response("update")
-                    .build();
-                dialog.add_response("cancel", "Not now");
-                dialog.add_response("update", "Update now");
-                dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
-                dialog.set_transient_for(Some(parent));
-                let parent = parent.clone();
-                let update_row = update_row.clone();
-                dialog.connect_response(None, move |dialog, response| {
-                    if response != "update" {
-                        dialog.close();
-                        return;
-                    }
-                    dialog.close();
-                    confirm_and_run_os_update(&parent, &update_row);
-                });
-                dialog.present();
+                let action = payload
+                    .update_action
+                    .as_deref()
+                    .unwrap_or("full");
+                let screen_only = action == "rebuild_screen"
+                    || (payload.screen_rebuild_available && payload.behind == 0);
+                if screen_only {
+                    update_row.set_subtitle(&format!(
+                        "Screen update available ({})",
+                        payload
+                            .screen_checkout_version
+                            .as_deref()
+                            .unwrap_or(os_version)
+                    ));
+                    let body = format!(
+                        "{message}\n\nRebuild this screen from the Centurion folder on this \
+                         brain. No published main update is required."
+                    );
+                    let dialog = adw::AlertDialog::builder()
+                        .heading("Screen update available")
+                        .body(&body)
+                        .close_response("cancel")
+                        .default_response("rebuild")
+                        .build();
+                    dialog.add_response("cancel", "Not now");
+                    dialog.add_response("rebuild", "Rebuild this screen");
+                    dialog.set_response_appearance(
+                        "rebuild",
+                        adw::ResponseAppearance::Suggested,
+                    );
+                    let parent_for_cb = parent.clone();
+                    let update_row_for_cb = update_row.clone();
+                    dialog.connect_response(None, move |_dialog, response| {
+                        if response == "rebuild" {
+                            let parent = parent_for_cb.clone();
+                            let update_row = update_row_for_cb.clone();
+                            glib::idle_add_local_once(move || {
+                                run_screen_rebuild(&parent, &update_row);
+                            });
+                        }
+                    });
+                    dialog.present(Some(parent));
+                } else {
+                    update_row.set_subtitle(&format!("Update available (v{os_version})"));
+                    let body = format!(
+                        "{message}\n\nAn update is available. This updates brain software and \
+                         this screen. It may take several minutes; Sovereign AI Remote may \
+                         briefly disconnect."
+                    );
+                    let dialog = adw::AlertDialog::builder()
+                        .heading("Update available")
+                        .body(&body)
+                        .close_response("cancel")
+                        .default_response("update")
+                        .build();
+                    dialog.add_response("cancel", "Not now");
+                    dialog.add_response("update", "Update now");
+                    dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
+                    let parent_for_cb = parent.clone();
+                    let update_row_for_cb = update_row.clone();
+                    dialog.connect_response(None, move |_dialog, response| {
+                        if response == "update" {
+                            let parent = parent_for_cb.clone();
+                            let update_row = update_row_for_cb.clone();
+                            glib::idle_add_local_once(move || {
+                                run_full_brain_update(&parent, &update_row);
+                            });
+                        }
+                    });
+                    dialog.present(Some(parent));
+                }
             }
             _ => {
                 update_row.set_subtitle("Updates managed outside this app");
-                let dialog = adw::MessageDialog::builder()
+                let dialog = adw::AlertDialog::builder()
                     .heading("Cannot update from this app")
                     .body(&format!(
                         "{message}\n\nAsk your advisor if updates are managed for this brain."
@@ -1403,84 +1965,74 @@ mod linux {
                     .close_response("ok")
                     .build();
                 dialog.add_response("ok", "OK");
-                dialog.set_transient_for(Some(parent));
-                dialog.present();
+                dialog.present(Some(parent));
             }
         }
     }
 
-    fn confirm_and_run_os_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
-        let confirm = adw::MessageDialog::builder()
-            .heading("Update Centurion AI OS?")
-            .body(
-                "This updates Centurion AI OS on this brain and may take several minutes. \
-                 Services such as the gateway may restart.\n\n\
-                 The Sovereign AI Brain desktop app binary is not rebuilt by this action.",
-            )
-            .close_response("cancel")
-            .default_response("confirm")
-            .build();
-        confirm.add_response("cancel", "Cancel");
-        confirm.add_response("confirm", "Update now");
-        confirm.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
-        confirm.set_transient_for(Some(parent));
-        let parent = parent.clone();
-        let update_row = update_row.clone();
-        confirm.connect_response(None, move |dialog, response| {
-            if response != "confirm" {
-                dialog.close();
-                return;
-            }
-            dialog.close();
-            update_row.set_subtitle("Updating Centurion AI OS…");
-            let progress = adw::MessageDialog::builder()
-                .heading("Updating…")
-                .body("Please wait. This can take several minutes.")
-                .close_response("ok")
-                .build();
-            progress.add_response("ok", "Hide");
-            progress.set_transient_for(Some(&parent));
-            progress.present();
-
-            let parent_for_result = parent.clone();
-            let update_row_for_result = update_row.clone();
-            let progress_for_result = progress.clone();
-            std::thread::spawn(move || {
-                let result = run_os_update();
-                glib::idle_add_once(move || {
-                    progress_for_result.close();
+    /// One-confirm full Brain update (OS + screen + remote).
+    fn run_full_brain_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+        update_row.set_subtitle("Updating brain software and this screen…");
+        let parent_for_result = parent.clone();
+        let update_row_for_result = update_row.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_full_brain_update_pipeline());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(result) => {
                     match result {
                         Ok(body) => {
                             update_row_for_result
-                                .set_subtitle("Centurion AI OS update finished");
-                            let done = adw::MessageDialog::builder()
+                                .set_subtitle("Update finished — quit to load new screen");
+                            let done = adw::AlertDialog::builder()
                                 .heading("Update complete")
                                 .body(&format!(
-                                    "{body}\n\nYour brain software was updated. \
+                                    "{body}\n\nQuit and reopen Sovereign AI Brain to load the new screen. \
                                      Sovereign AI Remote may reconnect automatically."
                                 ))
-                                .close_response("ok")
+                                .close_response("later")
+                                .default_response("quit")
                                 .build();
-                            done.add_response("ok", "OK");
-                            done.set_transient_for(Some(&parent_for_result));
-                            done.present();
+                            done.add_response("later", "Later");
+                            done.add_response("quit", "Quit now");
+                            done.set_response_appearance(
+                                "quit",
+                                adw::ResponseAppearance::Suggested,
+                            );
+                            let parent_for_quit = parent_for_result.clone();
+                            done.connect_response(None, move |_dialog, response| {
+                                if response == "quit" {
+                                    if let Some(app) = parent_for_quit.application() {
+                                        app.quit();
+                                    } else {
+                                        parent_for_quit.close();
+                                    }
+                                }
+                            });
+                            done.present(Some(&parent_for_result));
                         }
                         Err(error) => {
                             update_row_for_result.set_subtitle("Update failed");
-                            let fail = adw::MessageDialog::builder()
+                            let fail = adw::AlertDialog::builder()
                                 .heading("Update failed")
                                 .body(&error)
                                 .close_response("ok")
                                 .build();
                             fail.add_response("ok", "OK");
-                            fail.set_transient_for(Some(&parent_for_result));
-                            fail.present();
+                            fail.present(Some(&parent_for_result));
                         }
                     }
-                });
-            });
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    update_row_for_result.set_subtitle("Update failed");
+                    glib::ControlFlow::Break
+                }
+            }
         });
-        confirm.present();
     }
 
     fn run_telegram_summary(args: &[&str]) -> Option<serde_json::Value> {
@@ -1496,10 +2048,7 @@ mod linux {
     }
 
     fn bridge_python() -> String {
-        std::env::var("CENTURION_PYTHON")
-            .ok()
-            .filter(|p| !p.is_empty())
-            .unwrap_or_else(|| "python3".to_owned())
+        crate::chat_page::resolve_bridge_python()
     }
 
     fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
@@ -1514,6 +2063,7 @@ mod linux {
         let payload = serde_json::Value::Object(body).to_string();
         let mut child = Command::new(bridge_python())
             .args(["-m", "centurion_cli.remote_bridge"])
+            .env("CENTURION_HOME", crate::chat_page::resolve_centurion_home())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -1526,7 +2076,7 @@ mod linux {
         if !output.status.success() && output.stdout.is_empty() {
             return None;
         }
-        serde_json::from_slice(&output.stdout).ok()
+        crate::chat_page::parse_bridge_stdout(&output.stdout)
     }
 
     fn autonomy_label(level: &str) -> &'static str {
@@ -1556,20 +2106,34 @@ mod linux {
             row.set_subtitle("Could not read your Sovereign's Soul.");
             return;
         };
+        let name = payload
+            .pointer("/soul/name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
         let summary = payload
             .pointer("/soul/personalitySummary")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .trim();
+        if !name.is_empty() {
+            if summary.is_empty() {
+                row.set_subtitle(&format!("{name} — tap to shape Soul"));
+            } else {
+                let clipped: String = summary.chars().take(48).collect();
+                row.set_subtitle(&format!("{name} · {clipped}"));
+            }
+            return;
+        }
         if summary.is_empty() {
             let exists = payload
                 .pointer("/soul/exists")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             row.set_subtitle(if exists {
-                "Soul document on this Centurion"
+                "Soul document on this Centurion — set a Name"
             } else {
-                "Not set yet — shape personality and rules"
+                "Not set yet — give your Centurion a name"
             });
         } else {
             let clipped: String = summary.chars().take(72).collect();
@@ -1598,6 +2162,14 @@ mod linux {
             row.set_subtitle("Could not read Memory Horizon.");
             return;
         };
+        if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            let message = payload
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not read Memory Horizon.");
+            row.set_subtitle(message);
+            return;
+        }
         let hot = payload
             .pointer("/snapshot/hot_cache/fill_ratio")
             .and_then(|v| v.as_f64())
@@ -1717,20 +2289,18 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             recall_fill * 100.0,
         );
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Memory Horizon")
             .body(&body)
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
         dialog.set_default_response(Some("close"));
-        dialog.set_transient_for(Some(parent));
         let row = row.clone();
-        dialog.connect_response(None, move |dialog, _| {
+        dialog.connect_response(None, move |_dialog, _| {
             refresh_memory_horizon_row(&row);
-            dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn refresh_oversight_row(row: &adw::ActionRow) {
@@ -1771,7 +2341,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             })
             .unwrap_or_else(|| "balanced".to_owned());
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Autonomy Level")
             .body(
                 "How much freedom your Centurion has. Changes apply on the next conversation.\n\n\
@@ -1795,34 +2365,94 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 dialog.set_default_response(Some(id));
             }
         }
-        dialog.set_transient_for(Some(parent));
         let autonomy_row = autonomy_row.clone();
         let oversight_row = oversight_row.clone();
         dialog.connect_response(None, move |dialog, response| {
             if matches!(response, "strict" | "balanced" | "proactive" | "high") {
-                let _ = run_bridge_action(
+                match run_bridge_action(
                     "oversight_put",
                     serde_json::json!({
                         "oversight": { "autonomy_level": response },
                         "apply_level_preset": true,
                     }),
-                );
-                refresh_autonomy_row(&autonomy_row);
-                refresh_oversight_row(&oversight_row);
+                ) {
+                    Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                        refresh_autonomy_row(&autonomy_row);
+                        refresh_oversight_row(&oversight_row);
+                    }
+                    Some(payload) => {
+                        let message = payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not save autonomy level.");
+                        autonomy_row.set_subtitle(message);
+                    }
+                    None => {
+                        autonomy_row.set_subtitle("Could not save autonomy level.");
+                    }
+                }
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
-        let markdown = run_bridge_action("soul_get", serde_json::json!({}))
-            .and_then(|p| {
-                p.pointer("/soul/markdown")
+        let payload = match run_bridge_action("soul_get", serde_json::json!({})) {
+            Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => payload,
+            Some(payload) => {
+                let message = payload
+                    .get("message")
+                    .or_else(|| payload.get("error"))
                     .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-            })
-            .unwrap_or_default();
+                    .unwrap_or("Could not read your Sovereign's Soul from disk.");
+                let fail = adw::AlertDialog::builder()
+                    .heading("Could not load Soul")
+                    .body(&format!(
+                        "{message}\n\nYour Soul file was not changed. \
+                         Try restarting Sovereign AI Brain after an update."
+                    ))
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(parent));
+                return;
+            }
+            None => {
+                let fail = adw::AlertDialog::builder()
+                    .heading("Could not load Soul")
+                    .body(
+                        "The Brain bridge did not respond. Your Soul file on disk was not \
+                         changed — close Settings, run install-user.sh again if you just \
+                         updated, then reopen Soul.",
+                    )
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(parent));
+                return;
+            }
+        };
+        let soul = payload
+            .get("soul")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        let name = soul
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let markdown = soul
+            .get("markdown")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+
+        let name_entry = gtk::Entry::builder()
+            .text(&name)
+            .placeholder_text("e.g. Titus")
+            .hexpand(true)
+            .build();
 
         let buffer = gtk::TextBuffer::new(None::<&gtk::TextTagTable>);
         buffer.set_text(&markdown);
@@ -1834,7 +2464,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .build();
         let scrolled = gtk::ScrolledWindow::builder()
             .child(&view)
-            .min_content_height(280)
+            .min_content_height(240)
             .min_content_width(480)
             .hexpand(true)
             .vexpand(true)
@@ -1848,16 +2478,32 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         content.append(
             &gtk::Label::builder()
                 .label(
-                    "This changes how your Centurion speaks and behaves. \
-                     Changes may take time to fully take effect — they apply on the next conversation.",
+                    "Name your Centurion — this is who they are every time they answer. \
+                     The Soul below shapes how they speak and behave. Changes apply on \
+                     the next message (Brain Chat reloads Soul every turn).",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .build(),
         );
+        content.append(
+            &gtk::Label::builder()
+                .label("Name")
+                .xalign(0.0)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+        content.append(&name_entry);
+        content.append(
+            &gtk::Label::builder()
+                .label("Soul document")
+                .xalign(0.0)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
         content.append(&scrolled);
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Your Sovereign's Soul")
             .close_response("cancel")
             .extra_child(&content)
@@ -1866,21 +2512,40 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("save", "Save Changes");
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("save"));
-        dialog.set_transient_for(Some(parent));
         let soul_row = soul_row.clone();
         dialog.connect_response(None, move |dialog, response| {
             if response == "save" {
                 let (start, end) = buffer.bounds();
                 let text = buffer.text(&start, &end, false);
-                let _ = run_bridge_action(
+                let name_text = name_entry.text().to_string();
+                match run_bridge_action(
                     "soul_put",
-                    serde_json::json!({ "markdown": text.as_str() }),
-                );
-                refresh_soul_row(&soul_row);
+                    serde_json::json!({
+                        "soul": { "name": name_text.trim() },
+                        "markdown": text.as_str(),
+                    }),
+                ) {
+                    Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                        // Prior chat turns may have claimed Hermes — clear the
+                        // Brain session so the next message loads Titus cleanly.
+                        crate::chat_page::clear_desktop_chat_session();
+                        refresh_soul_row(&soul_row);
+                    }
+                    Some(payload) => {
+                        let message = payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not save your Sovereign's Soul.");
+                        soul_row.set_subtitle(message);
+                    }
+                    None => {
+                        soul_row.set_subtitle("Could not save your Sovereign's Soul.");
+                    }
+                }
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_oversight_dialog(
@@ -1984,7 +2649,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         );
         content.append(&list);
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Reporting & Oversight")
             .close_response("cancel")
             .extra_child(&content)
@@ -1993,7 +2658,6 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("save", "Save");
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("save"));
-        dialog.set_transient_for(Some(parent));
 
         let oversight_row = oversight_row.clone();
         let autonomy_row = autonomy_row.clone();
@@ -2005,7 +2669,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     3 => "after_significant_actions",
                     _ => "when_needed",
                 };
-                let _ = run_bridge_action(
+                match run_bridge_action(
                     "oversight_put",
                     serde_json::json!({
                         "oversight": {
@@ -2016,13 +2680,28 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         },
                         "apply_level_preset": false,
                     }),
-                );
-                refresh_oversight_row(&oversight_row);
-                refresh_autonomy_row(&autonomy_row);
+                ) {
+                    Some(payload)
+                        if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) =>
+                    {
+                        refresh_oversight_row(&oversight_row);
+                        refresh_autonomy_row(&autonomy_row);
+                    }
+                    Some(payload) => {
+                        let message = payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not save oversight preferences.");
+                        oversight_row.set_subtitle(message);
+                    }
+                    None => {
+                        oversight_row.set_subtitle("Could not save oversight preferences.");
+                    }
+                }
             }
             dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_telegram_history_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
@@ -2075,7 +2754,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             ),
         };
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading(&heading)
             .body(&body)
             .close_response("cancel")
@@ -2088,9 +2767,9 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         } else {
             dialog.set_default_response(Some("cancel"));
         }
-        dialog.set_transient_for(Some(parent));
         let row = row.clone();
-        dialog.connect_response(None, move |dialog, response| {
+        let parent_for_cb = parent.clone();
+        dialog.connect_response(None, move |_dialog, response| {
             if response == "bring" {
                 if let Some(result) = run_telegram_summary(&[]) {
                     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -2108,7 +2787,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         row.set_subtitle(&format!(
                             "Brought over {messages} messages — saved on this Centurion."
                         ));
-                        let done = adw::MessageDialog::builder()
+                        let done = adw::AlertDialog::builder()
                             .heading("Telegram history saved")
                             .body(if path.is_empty() {
                                 format!("Brought over {messages} messages onto this Centurion.")
@@ -2120,8 +2799,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                             .close_response("ok")
                             .build();
                         done.add_response("ok", "OK");
-                        done.set_transient_for(dialog.transient_for().as_ref());
-                        done.present();
+                        done.present(Some(&parent_for_cb));
                     } else {
                         let message = result
                             .get("message")
@@ -2133,13 +2811,25 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     row.set_subtitle("Could not bring over Telegram history.");
                 }
             }
-            dialog.close();
         });
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn refresh_thinking_status(detail: &gtk::Label, settings_row: &adw::ActionRow) {
-        let Some(response) = run_provider_command(&["status", "--json"]) else {
+        refresh_thinking_status_inner(detail, settings_row, false);
+    }
+
+    fn refresh_thinking_status_inner(
+        detail: &gtk::Label,
+        settings_row: &adw::ActionRow,
+        skip_probe: bool,
+    ) {
+        let args: &[&str] = if skip_probe {
+            &["status", "--skip-probe"]
+        } else {
+            &["status"]
+        };
+        let Some(response) = run_provider_command(args) else {
             detail.set_label("Thinking service status is unavailable.");
             settings_row.set_subtitle("Could not read thinking service status.");
             return;
@@ -2163,7 +2853,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
     }
 
     fn refresh_backup_thinking_services(row: &adw::ActionRow) {
-        let Some(response) = run_support_command(&["backups", "--json"]) else {
+        let Some(response) = run_support_command(&["backups"]) else {
             row.set_subtitle("Could not read backup thinking services.");
             return;
         };
@@ -2198,56 +2888,125 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         }
     }
 
+    fn show_backup_thinking_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
+        let body = match run_support_command(&["backups"]) {
+            Some(response) => {
+                let backups = response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.get("backups"))
+                    .and_then(|value| value.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if backups.is_empty() {
+                    "No backup thinking services are configured yet.\n\n\
+                     Backups come from your fallback thinking chain in Centurion config. \
+                     Set a primary service under Thinking Service — Change, then ask your \
+                     advisor to add fallbacks if you want automatic failover."
+                        .to_owned()
+                } else {
+                    let mut lines = vec![
+                        "These services stand by if your primary thinking service is unavailable:"
+                            .to_owned(),
+                        String::new(),
+                    ];
+                    for entry in &backups {
+                        let label = entry
+                            .get("label")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Backup");
+                        let provider = entry
+                            .get("provider")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
+                        let model = entry.get("model").and_then(|v| v.as_str()).unwrap_or("?");
+                        lines.push(format!("• {label} ({provider} / {model})"));
+                    }
+                    lines.join("\n")
+                }
+            }
+            None => "Could not read backup thinking services. Is Centurion AI OS installed?"
+                .to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Backup Thinking Services")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.set_default_response(Some("close"));
+        let row = row.clone();
+        dialog.connect_response(None, move |dialog, _| {
+            refresh_backup_thinking_services(&row);
+            dialog.close();
+        });
+        dialog.present(Some(parent));
+    }
+
     fn show_change_thinking_dialog(
         parent: &adw::ApplicationWindow,
         settings_row: &adw::ActionRow,
         detail: &gtk::Label,
     ) {
-        let connectors: Vec<ThinkingConnectorOption> =
-            run_provider_command(&["catalog", "--json"])
-                .and_then(|response| response.catalog)
-                .and_then(|catalog| {
-                    catalog
-                        .get("text_models")
-                        .and_then(|value| value.as_array())
-                        .cloned()
+        show_change_thinking_dialog_inner(parent, settings_row, detail, None);
+    }
+
+    fn show_change_thinking_dialog_inner(
+        parent: &adw::ApplicationWindow,
+        settings_row: &adw::ActionRow,
+        detail: &gtk::Label,
+        initial_error: Option<String>,
+    ) {
+        let connectors_raw = run_provider_command(&["catalog"]);
+        let active_connector_id = connectors_raw
+            .as_ref()
+            .and_then(|response| response.catalog.as_ref())
+            .and_then(|catalog| catalog.get("active_connector_id"))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned);
+        let connectors: Vec<ThinkingConnectorOption> = connectors_raw
+            .and_then(|response| response.catalog)
+            .and_then(|catalog| {
+                catalog
+                    .get("text_models")
+                    .and_then(|value| value.as_array())
+                    .cloned()
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|row| {
+                let id = row.get("id")?.as_str()?.to_owned();
+                let display_name = row
+                    .get("display_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(id.as_str())
+                    .to_owned();
+                let needs_key = row
+                    .get("needs_key")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let best_for = row
+                    .get("best_for")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned();
+                Some(ThinkingConnectorOption {
+                    id,
+                    display_name,
+                    needs_key,
+                    best_for,
                 })
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|row| {
-                    let id = row.get("id")?.as_str()?.to_owned();
-                    let display_name = row
-                        .get("display_name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(id.as_str())
-                        .to_owned();
-                    let needs_key = row
-                        .get("needs_key")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true);
-                    let best_for = row
-                        .get("best_for")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_owned();
-                    Some(ThinkingConnectorOption {
-                        id,
-                        display_name,
-                        needs_key,
-                        best_for,
-                    })
-                })
-                .collect();
+            })
+            .collect();
 
         if connectors.is_empty() {
-            let dialog = adw::MessageDialog::builder()
+            let dialog = adw::AlertDialog::builder()
                 .heading("Change thinking service")
                 .body("Could not load the curated thinking-service catalog. Is Centurion AI OS installed?")
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
-            dialog.set_transient_for(Some(parent));
-            dialog.present();
+            dialog.present(Some(parent));
             return;
         }
 
@@ -2257,11 +3016,17 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             .collect();
         let service_drop = gtk::DropDown::from_strings(&labels);
         let mut initial = 0_u32;
-        for (index, connector) in connectors.iter().enumerate() {
-            // Prefer a row that already has an access code configured.
-            if !connector.needs_key {
+        if let Some(active_id) = active_connector_id.as_deref() {
+            if let Some(index) = connectors.iter().position(|c| c.id == active_id) {
                 initial = index as u32;
-                break;
+            }
+        } else {
+            for (index, connector) in connectors.iter().enumerate() {
+                // Prefer a row that already has an access code configured.
+                if !connector.needs_key {
+                    initial = index as u32;
+                    break;
+                }
             }
         }
         service_drop.set_selected(initial);
@@ -2323,7 +3088,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             move |dropdown| update_hint(dropdown.selected())
         });
 
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Change thinking service")
             .body(
                 "Pick a curated thinking service. Access codes are saved only on this brain — never kept on your iPhone.",
@@ -2337,11 +3102,11 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
         let error_label = gtk::Label::builder()
-            .label("")
+            .label(initial_error.as_deref().unwrap_or(""))
             .xalign(0.0)
             .wrap(true)
             .css_classes(["error"])
-            .visible(false)
+            .visible(initial_error.is_some())
             .build();
         extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
         extra.append(&service_drop);
@@ -2350,26 +3115,44 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         extra.append(&key_entry);
         extra.append(&error_label);
         dialog.set_extra_child(Some(&extra));
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
 
         let settings_row = settings_row.clone();
         let detail = detail.clone();
+        let parent = parent.clone();
         dialog.connect_response(None, move |dialog, response| {
             if response != "apply" {
                 dialog.close();
                 return;
             }
+            // AlertDialog closes after a response — on failure, reopen
+            // with the error so the owner can correct the access code without hunting Settings.
+            let reopen_with_error = {
+                let parent = parent.clone();
+                let settings_row = settings_row.clone();
+                let detail = detail.clone();
+                move |message: String| {
+                    glib::idle_add_local_once(move || {
+                        show_change_thinking_dialog_inner(
+                            &parent,
+                            &settings_row,
+                            &detail,
+                            Some(message),
+                        );
+                    });
+                }
+            };
+
             let selected = service_drop.selected() as usize;
             let Some(connector) = connectors.get(selected) else {
-                error_label.set_label("Pick a thinking service.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Pick a thinking service.".to_owned());
                 return;
             };
             let access_code = key_entry.text().to_string();
             if connector.needs_key && access_code.trim().is_empty() {
-                error_label.set_label("Access code is required for this thinking service.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Access code is required for this thinking service.".to_owned());
                 return;
             }
             if !access_code.trim().is_empty() {
@@ -2379,13 +3162,13 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         let message = save_response
                             .message
                             .unwrap_or_else(|| "Could not save access code.".to_owned());
-                        error_label.set_label(&message);
-                        error_label.set_visible(true);
+                        dialog.close();
+                        reopen_with_error(message);
                         return;
                     }
                     None => {
-                        error_label.set_label("Could not save access code.");
-                        error_label.set_visible(true);
+                        dialog.close();
+                        reopen_with_error("Could not save access code.".to_owned());
                         return;
                     }
                 }
@@ -2415,44 +3198,44 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                     refresh_thinking_status(&detail, &settings_row);
                     dialog.close();
                 } else {
-                    error_label.set_label(&message);
-                    error_label.set_visible(true);
+                    dialog.close();
+                    reopen_with_error(message);
                 }
             } else {
-                error_label.set_label("Could not apply thinking service change.");
-                error_label.set_visible(true);
+                dialog.close();
+                reopen_with_error("Could not apply thinking service change.".to_owned());
             }
         });
     }
 
     fn show_support_health_dialog(parent: &adw::ApplicationWindow) {
-        let body = if let Some(response) = run_support_command(&["health", "--json"]) {
+        let body = if let Some(response) = run_support_command(&["health"]) {
+            let ok = response.ok;
             response
                 .message
-                .or_else(|| {
-                    response.result.and_then(|value| {
-                        value
-                            .get("summary")
-                            .and_then(|m| m.as_str())
-                            .map(str::to_owned)
-                    })
+                .or(response.summary)
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| {
+                    if ok {
+                        "Health check completed.".to_owned()
+                    } else {
+                        "Health check could not complete.".to_owned()
+                    }
                 })
-                .unwrap_or_else(|| "Health check completed.".to_owned())
         } else {
-            "Could not run health check.".to_owned()
+            "Could not run health check. Is Centurion AI OS installed?".to_owned()
         };
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Health Check")
             .body(&body)
             .close_response("ok")
             .build();
         dialog.add_response("ok", "OK");
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_support_bundle_dialog(parent: &adw::ApplicationWindow) {
-        let (heading, body) = if let Some(response) = run_support_command(&["bundle", "--json"]) {
+        let (heading, body) = if let Some(response) = run_support_command(&["bundle"]) {
             if let Some(code) = response.code {
                 (
                     "Support Code".to_owned(),
@@ -2475,18 +3258,17 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 "Could not create a support code.".to_owned(),
             )
         };
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading(&heading)
             .body(&body)
             .close_response("ok")
             .build();
         dialog.add_response("ok", "OK");
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        dialog.present(Some(parent));
     }
 
     fn show_support_lookup_dialog(parent: &adw::ApplicationWindow) {
-        let dialog = adw::MessageDialog::builder()
+        let dialog = adw::AlertDialog::builder()
             .heading("Look Up Support Code")
             .body("Enter the support code from an iPhone or a previous bundle.")
             .close_response("cancel")
@@ -2496,17 +3278,16 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.add_response("lookup", "Look Up");
         let code_entry = gtk::Entry::builder().placeholder_text("ABC-123").build();
         dialog.set_extra_child(Some(&code_entry));
-        dialog.set_transient_for(Some(parent));
-        dialog.present();
+        let parent = parent.clone();
+        dialog.present(Some(&parent));
 
-        dialog.connect_response(None, move |dialog, response| {
+        dialog.connect_response(None, move |_dialog, response| {
             if response != "lookup" {
-                dialog.close();
                 return;
             }
             let code = code_entry.text().to_string();
-            let result_dialog =
-                if let Some(cli_response) = run_support_command(&["show", &code, "--json"]) {
+            let result_dialog = match run_support_command(&["show", &code]) {
+                Some(cli_response) if cli_response.ok => {
                     let body = cli_response
                         .message
                         .filter(|text| !text.trim().is_empty())
@@ -2519,22 +3300,30 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                             })
                         })
                         .unwrap_or_else(|| "Support bundle found.".to_owned());
-                    adw::MessageDialog::builder()
+                    adw::AlertDialog::builder()
                         .heading(format!("Support Code {code}"))
                         .body(&body)
                         .close_response("ok")
                         .build()
-                } else {
-                    adw::MessageDialog::builder()
-                        .heading("Support Code Not Found")
-                        .body("That code is missing or has expired.")
-                        .close_response("ok")
-                        .build()
-                };
+                }
+                Some(cli_response) => adw::AlertDialog::builder()
+                    .heading("Support Code Not Found")
+                    .body(
+                        cli_response
+                            .message
+                            .unwrap_or_else(|| "That code is missing or has expired.".to_owned())
+                            .as_str(),
+                    )
+                    .close_response("ok")
+                    .build(),
+                None => adw::AlertDialog::builder()
+                    .heading("Support Code Not Found")
+                    .body("That code is missing or has expired.")
+                    .close_response("ok")
+                    .build(),
+            };
             result_dialog.add_response("ok", "OK");
-            result_dialog.set_transient_for(dialog.transient_for().as_ref());
-            result_dialog.present();
-            dialog.close();
+            result_dialog.present(Some(&parent));
         });
     }
 

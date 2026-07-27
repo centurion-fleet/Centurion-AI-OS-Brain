@@ -15,7 +15,8 @@ class TestRegistry:
         assert get_provider_profile("kimi").name == "kimi-coding"
         assert get_provider_profile("moonshot").name == "kimi-coding"
         assert get_provider_profile("kimi-coding-cn").name == "kimi-coding-cn"
-        assert get_provider_profile("or").name == "openrouter"
+        assert get_provider_profile("or") is None  # retired aggregator alias
+        assert get_provider_profile("openrouter") is None
         assert get_provider_profile("nous-portal").name == "nous"
         assert get_provider_profile("qwen").name == "qwen-oauth"
         assert get_provider_profile("qwen-portal").name == "qwen-oauth"
@@ -92,6 +93,7 @@ class TestKimiProfile:
         assert tl["reasoning_effort"] == "medium"
 
 
+@pytest.mark.skip(reason="OpenRouter provider retired from Centurion")
 class TestOpenRouterProfile:
     def test_extra_body_with_prefs(self):
         p = get_provider_profile("openrouter")

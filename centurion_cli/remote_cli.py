@@ -3,6 +3,7 @@ CLI wrapper for centurion-remote pairing tokens.
 
 Usage:
     centurion remote pair [--host HOST] [--label LABEL] [--json]
+                          [--qr | --no-qr] [--qr-png PATH] [--include-qr]
     centurion remote tokens [--json]
     centurion remote revoke <id>
 """
@@ -53,6 +54,15 @@ def remote_command(args) -> int:
             argv.extend(["--host", host])
         if getattr(args, "json", False):
             argv.append("--json")
+        if getattr(args, "qr", False):
+            argv.append("--qr")
+        if getattr(args, "no_qr", False):
+            argv.append("--no-qr")
+        qr_png = getattr(args, "qr_png", None)
+        if qr_png:
+            argv.extend(["--qr-png", str(qr_png)])
+        if getattr(args, "include_qr", False):
+            argv.append("--include-qr")
         return _run_remote(argv)
     if action == "tokens":
         argv = ["remote-tokens"]

@@ -233,6 +233,7 @@ final class MissionStore: ObservableObject {
         }
         do {
             let fields: [String: Any] = [
+                "name": soul.name,
                 "personalitySummary": soul.personalitySummary,
                 "tone": soul.tone,
                 "communicationStyle": soul.communicationStyle,
@@ -387,6 +388,7 @@ final class MissionStore: ObservableObject {
 
     private static func soulDocument(fromHost payload: [String: Any]) -> SoulDocument? {
         var doc = SoulDocument()
+        doc.name = payload["name"] as? String ?? ""
         doc.personalitySummary = payload["personalitySummary"] as? String ?? ""
         doc.tone = payload["tone"] as? String ?? ""
         doc.communicationStyle = payload["communicationStyle"] as? String ?? ""
@@ -401,11 +403,12 @@ final class MissionStore: ObservableObject {
     }
 
     private static func hostLooksRicher(_ payload: [String: Any], than local: SoulDocument) -> Bool {
+        let hostName = (payload["name"] as? String ?? "").count
         let hostSummary = (payload["personalitySummary"] as? String ?? "").count
         let hostAlways = (payload["alwaysDo"] as? [String] ?? []).count
         let hostNever = (payload["neverDo"] as? [String] ?? []).count
-        let localScore = local.personalitySummary.count + local.alwaysDo.count + local.neverDo.count
-        return (hostSummary + hostAlways + hostNever) > localScore
+        let localScore = local.name.count + local.personalitySummary.count + local.alwaysDo.count + local.neverDo.count
+        return (hostName + hostSummary + hostAlways + hostNever) > localScore
     }
 
     // MARK: - Legacy migration

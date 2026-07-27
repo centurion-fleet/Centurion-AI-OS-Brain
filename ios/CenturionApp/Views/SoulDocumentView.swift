@@ -136,6 +136,13 @@ struct SoulDocumentView: View {
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
 
+                if !soul.name.isEmpty {
+                    Text(soul.displayName)
+                        .font(.title2.weight(.semibold))
+                        .foregroundColor(ColorTheme.accent())
+                        .multilineTextAlignment(.center)
+                }
+
                 Text("How your companion speaks and behaves")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())

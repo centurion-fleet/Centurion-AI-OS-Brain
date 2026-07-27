@@ -78,7 +78,7 @@ struct WelcomeOnboardingView: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Link your Centurion",
-                subtitle: "Paste the pairing code from your Centurion computer. It works from anywhere once the code can reach home. Same Wi‑Fi is optional when you’re nearby."
+                subtitle: "Scan the QR code on your Centurion's screen. It works from anywhere once TCP 9119 is reachable. Paste remains available as a fallback. Same Wi‑Fi is optional when you’re nearby."
             )
 
             AtmosphericSurface {

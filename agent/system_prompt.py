@@ -29,6 +29,10 @@ from typing import Any, Dict, List, Optional
 
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY,
+    PRODUCT_IDENTITY_LOCK,
+    build_personal_name_lock,
+    resolve_centurion_display_name,
+    soul_identity_fingerprint,
     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
     CENTURION_AGENT_HELP_GUIDANCE,
     KANBAN_GUIDANCE,
@@ -84,6 +88,19 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ── Stable tier ────────────────────────────────────────────────
     stable_parts: List[str] = []
 
+    # Product lock first — fine-tuned model personas (e.g. Hermes weights)
+    # must not override Centurion / SOUL.md identity.
+    stable_parts.append(PRODUCT_IDENTITY_LOCK)
+
+    # Personal name lock — resolved from SOUL.md ## Name every build.
+    _display_name = resolve_centurion_display_name()
+    stable_parts.append(build_personal_name_lock(_display_name))
+    try:
+        agent._centurion_display_name = _display_name
+        agent._soul_fp = soul_identity_fingerprint()
+    except Exception:
+        pass
+
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want CENTURION_HOME persona while keeping
     # cwd project instructions disabled.
@@ -97,6 +114,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     if not _soul_loaded:
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
+
+    _model_lower_early = (getattr(agent, "model", None) or "").lower()
+    if "hermes" in _model_lower_early:
+        stable_parts.append(
+            f"MODEL NOTE: The configured weight id is an implementation detail only. "
+            f"Your name is {_display_name}. You are a Centurion of Centurion Fleet. "
+            f"Do not discuss weight or model family names as your identity."
+        )
 
     # Autonomy / reporting oversight — loaded once per session (cache-safe).
     try:

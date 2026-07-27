@@ -33,6 +33,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Sovereign AI Remote uses the camera only to scan the pairing QR code shown on your Centurion.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

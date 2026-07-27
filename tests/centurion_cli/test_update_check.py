@@ -165,6 +165,7 @@ def test_cmd_update_check_json_up_to_date_git(tmp_path, monkeypatch, capsys):
     (repo / ".git").mkdir()
 
     monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / "home"))
 
     def fake_run(cmd, **kwargs):
         joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
@@ -174,13 +175,22 @@ def test_cmd_update_check_json_up_to_date_git(tmp_path, monkeypatch, capsys):
         mock.stderr = ""
         if "rev-list" in joined:
             mock.stdout = "0\n"
+        elif "rev-parse" in joined and "@{u}" in joined:
+            mock.returncode = 128
+            mock.stdout = ""
+            mock.stderr = "no upstream"
+        elif "rev-parse" in joined and "abbrev-ref" in joined:
+            mock.stdout = "main\n"
+        elif "rev-parse" in joined and "HEAD" in joined:
+            mock.stdout = "abc123\n"
         return mock
 
-    args = SimpleNamespace(json=True, check=True)
+    args = SimpleNamespace(json=True, check=True, screen_version=None)
     with patch("centurion_cli.config.is_managed", return_value=False), \
          patch("centurion_cli.config.detect_install_method", return_value="git"), \
          patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
-         patch("centurion_cli.main.subprocess.run", side_effect=fake_run):
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run), \
+         patch("centurion_cli.main._installed_desktop_binary", return_value=None):
         main_mod._cmd_update_check(args)
 
     payload = json.loads(capsys.readouterr().out.strip())
@@ -202,25 +212,33 @@ def test_cmd_update_check_json_update_available_git(tmp_path, monkeypatch, capsy
     repo.mkdir()
     (repo / ".git").mkdir()
     monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / "home"))
 
     def fake_run(cmd, **kwargs):
         joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
         mock = MagicMock(returncode=0, stdout="0\n", stderr="")
         if "rev-list" in joined:
             mock.stdout = "3\n"
+        elif "rev-parse" in joined and "@{u}" in joined:
+            mock.returncode = 128
+            mock.stdout = ""
+        elif "rev-parse" in joined and "abbrev-ref" in joined:
+            mock.stdout = "main\n"
         return mock
 
-    args = SimpleNamespace(json=True, check=True)
+    args = SimpleNamespace(json=True, check=True, screen_version=None)
     with patch("centurion_cli.config.is_managed", return_value=False), \
          patch("centurion_cli.config.detect_install_method", return_value="git"), \
          patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
-         patch("centurion_cli.main.subprocess.run", side_effect=fake_run):
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run), \
+         patch("centurion_cli.main._installed_desktop_binary", return_value=None):
         main_mod._cmd_update_check(args)
 
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["status"] == "update_available"
     assert payload["behind"] == 3
     assert "3 commits" in payload["message"]
+    assert payload.get("update_action") == "full"
 
 
 def test_cmd_update_check_json_managed(tmp_path, monkeypatch, capsys):
@@ -230,7 +248,7 @@ def test_cmd_update_check_json_managed(tmp_path, monkeypatch, capsys):
     import centurion_cli.main as main_mod
 
     monkeypatch.setattr(main_mod, "PROJECT_ROOT", tmp_path)
-    args = SimpleNamespace(json=True, check=True)
+    args = SimpleNamespace(json=True, check=True, screen_version=None)
     with patch("centurion_cli.config.is_managed", return_value=True), \
          patch("centurion_cli.config.detect_install_method", return_value="nixos"), \
          patch("centurion_cli.config.recommended_update_command", return_value="sudo nixos-rebuild switch"):
@@ -241,3 +259,103 @@ def test_cmd_update_check_json_managed(tmp_path, monkeypatch, capsys):
     assert payload["status"] == "unavailable"
     assert payload["method"] == "nixos"
     assert payload["recommended_command"] == "sudo nixos-rebuild switch"
+
+
+def test_cmd_update_check_json_feature_branch_behind(tmp_path, monkeypatch, capsys):
+    """Check finds commits on the current branch tip even when main is current."""
+    from types import SimpleNamespace
+
+    import centurion_cli.main as main_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / "home"))
+
+    def fake_run(cmd, **kwargs):
+        joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        mock = MagicMock(returncode=0, stdout="0\n", stderr="")
+        if "fetch" in joined:
+            return mock
+        if "rev-list" in joined and "upstream/main" in joined:
+            mock.stdout = "0\n"
+        elif "rev-list" in joined and "origin/fix/feature" in joined:
+            mock.stdout = "2\n"
+        elif "rev-parse" in joined and "@{u}" in joined:
+            mock.stdout = "origin/fix/feature\n"
+        elif "rev-parse" in joined and "abbrev-ref" in joined:
+            mock.stdout = "fix/feature\n"
+        return mock
+
+    args = SimpleNamespace(json=True, check=True, screen_version=None)
+    with patch("centurion_cli.config.is_managed", return_value=False), \
+         patch("centurion_cli.config.detect_install_method", return_value="git"), \
+         patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run), \
+         patch("centurion_cli.main._installed_desktop_binary", return_value=None):
+        main_mod._cmd_update_check(args)
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["status"] == "update_available"
+    assert payload["behind"] == 2
+    assert payload["branch_behind"] == 2
+    assert "origin/fix/feature" in payload["message"]
+
+
+def test_cmd_update_check_json_screen_version_stale(tmp_path, monkeypatch, capsys):
+    """Check offers a screen rebuild when the checkout is newer than --screen-version."""
+    from types import SimpleNamespace
+
+    import centurion_cli.main as main_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    desktop = repo / "desktop-native"
+    desktop.mkdir()
+    (desktop / "Cargo.toml").write_text(
+        '[workspace]\nmembers = []\n\n[workspace.package]\nversion = "5.2.5"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", repo)
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / "home"))
+
+    def fake_run(cmd, **kwargs):
+        joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        mock = MagicMock(returncode=0, stdout="0\n", stderr="")
+        if "rev-list" in joined:
+            mock.stdout = "0\n"
+        elif "rev-parse" in joined and "@{u}" in joined:
+            mock.returncode = 128
+            mock.stdout = ""
+        elif "rev-parse" in joined and "abbrev-ref" in joined:
+            mock.stdout = "fix/app-store-submission-readiness\n"
+        elif "rev-parse" in joined and "HEAD" in joined:
+            mock.stdout = "deadbeef\n"
+        return mock
+
+    args = SimpleNamespace(json=True, check=True, screen_version="5.2.2")
+    with patch("centurion_cli.config.is_managed", return_value=False), \
+         patch("centurion_cli.config.detect_install_method", return_value="git"), \
+         patch("centurion_cli.config.recommended_update_command", return_value="centurion update"), \
+         patch("centurion_cli.main.subprocess.run", side_effect=fake_run), \
+         patch("centurion_cli.main._installed_desktop_binary", return_value=None):
+        main_mod._cmd_update_check(args)
+
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["status"] == "update_available"
+    assert payload["behind"] == 0
+    assert payload["screen_rebuild_available"] is True
+    assert payload["update_action"] == "rebuild_screen"
+    assert payload["screen_checkout_version"] == "5.2.5"
+    assert "5.2.5" in payload["message"]
+    assert "5.2.2" in payload["message"]
+
+
+def test_version_newer_helper():
+    import centurion_cli.main as main_mod
+
+    assert main_mod._version_newer("5.2.5", "5.2.2")
+    assert not main_mod._version_newer("5.2.2", "5.2.5")
+    assert not main_mod._version_newer("5.2.4", "5.2.4")

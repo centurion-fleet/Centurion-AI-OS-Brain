@@ -112,4 +112,6 @@ openrouter = OpenRouterProfile(
     ),
 )
 
-register_provider(openrouter)
+# Retired — discovery skips this plugin and register_provider refuses the name.
+# Kept as a stub so older imports do not crash.
+# register_provider(openrouter)

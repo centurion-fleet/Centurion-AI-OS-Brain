@@ -7,6 +7,8 @@ struct SoulDocument: Codable {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
 
+    /// Personal name the owner gave this Centurion (e.g. Titus).
+    var name: String = ""
     var personalitySummary: String = ""
     var tone: String = ""
     var communicationStyle: String = ""
@@ -17,15 +19,25 @@ struct SoulDocument: Codable {
     var responseLength: String = ""
 
     var isValid: Bool {
-        !personalitySummary.isEmpty
+        !name.isEmpty
+            || !personalitySummary.isEmpty
             || !tone.isEmpty
             || !communicationStyle.isEmpty
             || !alwaysDo.isEmpty
             || !neverDo.isEmpty
     }
 
+    /// Display name for UI — never Hermes/provider branding.
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "Centurion" }
+        if trimmed.localizedCaseInsensitiveContains("hermes") { return "Centurion" }
+        return trimmed
+    }
+
     static func preview() -> SoulDocument {
         var soul = SoulDocument()
+        soul.name = "Titus"
         soul.personalitySummary = "A direct, warm companion who leads with headlines and respects my time."
         soul.tone = "Direct and warm"
         soul.communicationStyle = "Headlines first, details on request. No filler."
@@ -51,6 +63,30 @@ struct SoulDocument: Codable {
         if !alreadyHas {
             alwaysDo.append(rule)
         }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, createdAt, updatedAt, name
+        case personalitySummary, tone, communicationStyle, pushbackStyle
+        case alwaysDo, neverDo, uncertaintyStyle, responseLength
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 2
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        personalitySummary = try c.decodeIfPresent(String.self, forKey: .personalitySummary) ?? ""
+        tone = try c.decodeIfPresent(String.self, forKey: .tone) ?? ""
+        communicationStyle = try c.decodeIfPresent(String.self, forKey: .communicationStyle) ?? ""
+        pushbackStyle = try c.decodeIfPresent(String.self, forKey: .pushbackStyle) ?? ""
+        alwaysDo = try c.decodeIfPresent([String].self, forKey: .alwaysDo) ?? []
+        neverDo = try c.decodeIfPresent([String].self, forKey: .neverDo) ?? []
+        uncertaintyStyle = try c.decodeIfPresent(String.self, forKey: .uncertaintyStyle) ?? ""
+        responseLength = try c.decodeIfPresent(String.self, forKey: .responseLength) ?? ""
     }
 }
 
@@ -109,6 +145,13 @@ struct SoulQuestion: Identifiable {
 
     static func allQuestions() -> [SoulQuestion] {
         [
+            SoulQuestion(
+                stage: .voice,
+                question: "What is your Centurion's name?",
+                hint: "A personal name you choose — sticky for life. Not Hermes or a model brand.",
+                placeholder: "e.g. Titus",
+                inputType: .text
+            ),
             SoulQuestion(
                 stage: .voice,
                 question: "In one or two sentences, who is your Sovereign?",

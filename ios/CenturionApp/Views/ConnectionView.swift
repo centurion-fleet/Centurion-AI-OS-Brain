@@ -495,6 +495,8 @@ struct ConnectionPairingSheet: View {
     @State private var connectionString = ""
     @State private var showManualEntry = false
     @State private var showNetworkFind = false
+    @State private var showQRScanner = false
+    @State private var showPasteFallback = false
     @State private var manualHost = ""
     @State private var manualPort = "9119"
 
@@ -523,6 +525,18 @@ struct ConnectionPairingSheet: View {
                         .foregroundColor(ColorTheme.accent())
                 }
             }
+            .fullScreenCover(isPresented: $showQRScanner) {
+                QRScannerView(
+                    onCode: { code in
+                        showQRScanner = false
+                        Haptics.lightTap()
+                        connectionManager.connectRemote(connectionString: code)
+                    },
+                    onCancel: {
+                        showQRScanner = false
+                    }
+                )
+            }
             .onChange(of: connectionManager.connectionState) { _, newState in
                 // Stay open for pairing approval; only auto-close on a stable link.
                 if newState == .connected {
@@ -542,31 +556,49 @@ struct ConnectionPairingSheet: View {
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Link to your Centurion",
-                    subtitle: "Paste the pairing code from your Centurion computer. Sovereign AI Remote saves it securely and finishes linking."
+                    subtitle: "Scan the QR code on your Centurion's screen. Sovereign AI Remote saves it securely and finishes linking."
                 )
 
-                TextField("Paste pairing code", text: $connectionString, axis: .vertical)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(2...4)
-                    .padding(Spacing.sm)
-                    .background(ColorTheme.surface())
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                Button("Link") {
+                Button {
                     Haptics.lightTap()
-                    connectionManager.connectRemote(connectionString: connectionString)
+                    showQRScanner = true
+                } label: {
+                    Label("Scan QR code", systemImage: "qrcode.viewfinder")
                 }
                 .buttonStyle(CenturionPrimaryButtonStyle())
-                .disabled(
-                    connectionString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
-                .accessibilityLabel("Link with pairing code")
+                .accessibilityLabel("Scan QR code on Centurion")
 
-                Text("On your Centurion computer: open Sovereign AI Brain → generate a remote pairing code → paste it here.")
+                Text("On your Centurion computer: open Sovereign AI Brain → Link iPhone — show QR.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
+
+                Button {
+                    showPasteFallback.toggle()
+                } label: {
+                    Text(showPasteFallback ? "Hide paste option" : "Paste code instead")
+                }
+                .buttonStyle(CenturionGhostButtonStyle())
+
+                if showPasteFallback {
+                    TextField("Paste pairing code", text: $connectionString, axis: .vertical)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .lineLimit(2...4)
+                        .padding(Spacing.sm)
+                        .background(ColorTheme.surface())
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                    Button("Link with pasted code") {
+                        Haptics.lightTap()
+                        connectionManager.connectRemote(connectionString: connectionString)
+                    }
+                    .buttonStyle(CenturionPrimaryButtonStyle())
+                    .disabled(
+                        connectionString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                    .accessibilityLabel("Link with pasted pairing code")
+                }
 
                 Divider()
 

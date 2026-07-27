@@ -102,6 +102,7 @@ class TestKimiProfileParity:
         assert profile["reasoning_effort"] == legacy["reasoning_effort"] == "medium"
 
 
+@pytest.mark.skip(reason="OpenRouter provider retired from Centurion")
 class TestOpenRouterProfileParity:
     def test_provider_preferences(self, transport):
         prefs = {"allow": ["anthropic"]}

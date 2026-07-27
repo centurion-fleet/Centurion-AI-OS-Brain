@@ -1,4 +1,4 @@
-use crate::bridge::{AgentBridge, BridgeError};
+use crate::bridge::{AgentBridge, BridgeApprovalDecision, BridgeError};
 use crate::crypto::{ServerIdentity, ServerSession};
 use crate::pairing::{PairingTokenStore, PairingValidationError};
 use crate::registry::DeviceRegistry;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tracing::{info, warn};
 
 #[derive(Clone)]
@@ -56,9 +56,20 @@ async fn handle_connection(
 
     let approved = reload_is_approved(&state, &fingerprint).await?;
 
-    if !approved && state.auto_approve {
+    // Unbox & Go: first phone on the LAN may Confirm without a QR when no
+    // devices are linked yet. Once any device is approved, QR / explicit
+    // approve is required again.
+    let virgin_lan_auto = {
+        let registry = state.registry.lock().await;
+        registry.devices().is_empty() && is_private_lan_peer(peer)
+    };
+
+    if !approved && (state.auto_approve || virgin_lan_auto) {
         let name = format!("iPhone {}", &fingerprint[..8]);
         state.registry.lock().await.approve(&fingerprint, name)?;
+        if virgin_lan_auto && !state.auto_approve {
+            info!(%peer, %fingerprint, "Virgin LAN link auto-approved");
+        }
     } else if !approved {
         let requires_pair = {
             let mut pairing = state.pairing.lock().await;
@@ -114,7 +125,11 @@ async fn handle_connection(
         let message = RemoteMessage::from_json(&plaintext)?;
 
         let response = match message {
-            RemoteMessage::Chat { id, text } => {
+            RemoteMessage::Chat {
+                id,
+                text,
+                session_id,
+            } => {
                 info!(
                     %peer,
                     %fingerprint,
@@ -122,30 +137,102 @@ async fn handle_connection(
                     bytes = text.len(),
                     "iPhone chat request received"
                 );
-                let response = state.bridge.chat(&id.to_string(), &text).await;
-                if !reload_is_approved(&state, &fingerprint).await? {
-                    send_revoked(&mut stream, &session).await?;
-                    return Err(SessionError::ApprovalRequired(fingerprint));
-                }
-                match response {
-                    Ok(result) => {
-                        info!(
-                            %peer,
-                            %fingerprint,
-                            request_id = %id,
-                            bytes = result.text.len(),
-                            "Centurion response ready"
-                        );
-                        RemoteMessage::ChatResponse {
-                            id,
-                            text: result.text,
-                            recovered: result.recovered.then_some(true),
-                            recovery_message: result.recovery_message,
-                            routed_display_name: result.routed_display_name,
+                let request_id = id.to_string();
+                let (event_tx, mut event_rx) = mpsc::channel(8);
+                let (approval_tx, approval_rx) = mpsc::channel(8);
+                let bridge = Arc::clone(&state.bridge);
+                let chat_fut = bridge.chat(
+                    &request_id,
+                    &text,
+                    session_id.as_deref(),
+                    Some(event_tx),
+                    Some(approval_rx),
+                );
+                tokio::pin!(chat_fut);
+                let chat_response = loop {
+                    tokio::select! {
+                        Some(event) = event_rx.recv() => {
+                            let push = RemoteMessage::ApprovalRequest {
+                                id,
+                                approval_id: event.approval_id,
+                                session_key: event.session_key,
+                                command: event.command,
+                                description: event.description,
+                                pattern_key: (!event.pattern_key.is_empty())
+                                    .then_some(event.pattern_key),
+                                choices: event.choices,
+                            };
+                            write_message(&mut stream, &session, &push).await?;
+                        }
+                        frame = read_frame(&mut stream) => {
+                            let encrypted = frame?;
+                            let plaintext = session.decrypt(&encrypted)?;
+                            let inbound = RemoteMessage::from_json(&plaintext)?;
+                            match inbound {
+                                RemoteMessage::ApprovalRespond {
+                                    id: respond_id,
+                                    approval_id,
+                                    session_key,
+                                    choice,
+                                    all,
+                                } => {
+                                    let key = session_key.unwrap_or(approval_id);
+                                    let _ = approval_tx
+                                        .send(BridgeApprovalDecision {
+                                            session_key: key,
+                                            choice,
+                                            resolve_all: all.unwrap_or(false),
+                                        })
+                                        .await;
+                                    let ack = RemoteMessage::ApprovalRespondResponse {
+                                        id: respond_id,
+                                        ok: true,
+                                        resolved: 1,
+                                    };
+                                    write_message(&mut stream, &session, &ack).await?;
+                                }
+                                RemoteMessage::Ping => {
+                                    write_message(&mut stream, &session, &RemoteMessage::Pong)
+                                        .await?;
+                                }
+                                other => {
+                                    warn!(
+                                        %peer,
+                                        message = ?other,
+                                        "Ignoring unexpected message during chat turn"
+                                    );
+                                }
+                            }
+                        }
+                        result = &mut chat_fut => {
+                            if !reload_is_approved(&state, &fingerprint).await? {
+                                send_revoked(&mut stream, &session).await?;
+                                return Err(SessionError::ApprovalRequired(fingerprint));
+                            }
+                            break match result {
+                                Ok(result) => {
+                                    info!(
+                                        %peer,
+                                        %fingerprint,
+                                        request_id = %id,
+                                        bytes = result.text.len(),
+                                        "Centurion response ready"
+                                    );
+                                    RemoteMessage::ChatResponse {
+                                        id,
+                                        text: result.text,
+                                        recovered: result.recovered.then_some(true),
+                                        recovery_message: result.recovery_message,
+                                        routed_display_name: result.routed_display_name,
+                                        session_id: result.session_id,
+                                    }
+                                }
+                                Err(error) => bridge_error_response(Some(id), error),
+                            };
                         }
                     }
-                    Err(error) => bridge_error_response(Some(id), error),
-                }
+                };
+                chat_response
             }
             RemoteMessage::ProviderStatus { id } => {
                 match state
@@ -1275,6 +1362,290 @@ async fn handle_connection(
                 }
             }
             RemoteMessage::Ping => RemoteMessage::Pong,
+            RemoteMessage::GatewayStatus { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "gateway_status", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::GatewayStatusResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::GatewayStart { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "gateway_start", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::GatewayLifecycleResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::GatewayStop { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "gateway_stop", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::GatewayLifecycleResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::GatewayRestart { id } => {
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "gateway_restart", serde_json::json!({}))
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::GatewayLifecycleResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::GatewayPlatformSet {
+                id,
+                platform,
+                enabled,
+                restart,
+            } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "gateway_platform_set",
+                        serde_json::json!({
+                            "platform": platform,
+                            "enabled": enabled,
+                            "restart": restart.unwrap_or(true),
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::GatewayPlatformSetResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false),
+                        status: payload
+                            .get("status")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({})),
+                        message: payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned),
+                        restarted: payload.get("restarted").and_then(|v| v.as_bool()),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SessionList { id, limit, source } => {
+                let mut body = serde_json::json!({});
+                if let Some(limit) = limit {
+                    body["limit"] = serde_json::json!(limit);
+                }
+                if let Some(source) = source {
+                    body["source"] = serde_json::json!(source);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "session_list", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SessionListResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        sessions: payload
+                            .get("sessions")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([])),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SessionNew { id, title } => {
+                let mut body = serde_json::json!({});
+                if let Some(title) = title {
+                    body["title"] = serde_json::json!(title);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "session_new", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SessionNewResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        session_id: payload
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SessionResume { id, session_id } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "session_resume",
+                        serde_json::json!({ "session_id": session_id }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SessionResumeResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        session_id: payload
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        messages: payload
+                            .get("messages")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([])),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::SessionHistory {
+                id,
+                session_id,
+                limit,
+            } => {
+                let mut body = serde_json::json!({ "session_id": session_id });
+                if let Some(limit) = limit {
+                    body["limit"] = serde_json::json!(limit);
+                }
+                match state
+                    .bridge
+                    .invoke(&id.to_string(), "session_history", body)
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::SessionHistoryResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        session_id: payload
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned(),
+                        messages: payload
+                            .get("messages")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!([])),
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::ApprovalRespond {
+                id,
+                approval_id,
+                session_key,
+                choice,
+                all,
+            } => {
+                // Outside an active chat turn — resolve via a short bridge invoke.
+                let key = session_key.unwrap_or(approval_id);
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        "approval_respond",
+                        serde_json::json!({
+                            "session_key": key,
+                            "choice": choice,
+                            "all": all.unwrap_or(false),
+                        }),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::ApprovalRespondResponse {
+                        id,
+                        ok: payload
+                            .get("ok")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(true),
+                        resolved: payload
+                            .get("resolved")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32,
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
             _ => RemoteMessage::Error {
                 id: None,
                 code: "UNSUPPORTED_MESSAGE".to_owned(),
@@ -1433,6 +1804,18 @@ async fn write_message(
     let frame = encode_frame(&encrypted)?;
     stream.write_all(&frame).await?;
     Ok(())
+}
+
+/// True for RFC1918 / link-local peers — Unbox Confirm on the home LAN.
+/// Loopback is excluded so lab pair-token tests still exercise PairRequired.
+fn is_private_lan_peer(peer: SocketAddr) -> bool {
+    match peer.ip() {
+        std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+        std::net::IpAddr::V6(v6) => {
+            // Unique-local (fc00::/7) and link-local — not loopback.
+            (v6.segments()[0] & 0xfe00) == 0xfc00 || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -72,14 +72,15 @@ struct SoulInterviewView: View {
 
     private func prefillFromExistingSoul() {
         guard let existing = existingSoul else { return }
-        if questions.indices.contains(0), !existing.personalitySummary.isEmpty { answers[0] = existing.personalitySummary }
-        if questions.indices.contains(1), !existing.tone.isEmpty { answers[1] = existing.tone }
-        if questions.indices.contains(2), !existing.communicationStyle.isEmpty { answers[2] = existing.communicationStyle }
-        if questions.indices.contains(3), !existing.responseLength.isEmpty { answers[3] = existing.responseLength }
-        if questions.indices.contains(4), !existing.alwaysDo.isEmpty { answers[4] = existing.alwaysDo.joined(separator: ", ") }
-        if questions.indices.contains(5), !existing.neverDo.isEmpty { answers[5] = existing.neverDo.joined(separator: ", ") }
-        if questions.indices.contains(6), !existing.pushbackStyle.isEmpty { answers[6] = existing.pushbackStyle }
-        if questions.indices.contains(7), !existing.uncertaintyStyle.isEmpty { answers[7] = existing.uncertaintyStyle }
+        if questions.indices.contains(0), !existing.name.isEmpty { answers[0] = existing.name }
+        if questions.indices.contains(1), !existing.personalitySummary.isEmpty { answers[1] = existing.personalitySummary }
+        if questions.indices.contains(2), !existing.tone.isEmpty { answers[2] = existing.tone }
+        if questions.indices.contains(3), !existing.communicationStyle.isEmpty { answers[3] = existing.communicationStyle }
+        if questions.indices.contains(4), !existing.responseLength.isEmpty { answers[4] = existing.responseLength }
+        if questions.indices.contains(5), !existing.alwaysDo.isEmpty { answers[5] = existing.alwaysDo.joined(separator: ", ") }
+        if questions.indices.contains(6), !existing.neverDo.isEmpty { answers[6] = existing.neverDo.joined(separator: ", ") }
+        if questions.indices.contains(7), !existing.pushbackStyle.isEmpty { answers[7] = existing.pushbackStyle }
+        if questions.indices.contains(8), !existing.uncertaintyStyle.isEmpty { answers[8] = existing.uncertaintyStyle }
     }
 
     private var progressBar: some View {
@@ -282,19 +283,22 @@ struct SoulInterviewView: View {
 
     private func compileSoul() {
         if let v = answers[0]?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
+            soul.name = v
+        }
+        if let v = answers[1]?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty {
             soul.personalitySummary = v
         }
-        if let v = answers[1] { soul.tone = v }
-        if let v = answers[2] { soul.communicationStyle = v }
-        if let v = answers[3] { soul.responseLength = v }
-        if let raw = answers[4] {
+        if let v = answers[2] { soul.tone = v }
+        if let v = answers[3] { soul.communicationStyle = v }
+        if let v = answers[4] { soul.responseLength = v }
+        if let raw = answers[5] {
             soul.alwaysDo = splitTags(raw)
         }
-        if let raw = answers[5] {
+        if let raw = answers[6] {
             soul.neverDo = splitTags(raw)
         }
-        if let v = answers[6] { soul.pushbackStyle = v }
-        if let v = answers[7] { soul.uncertaintyStyle = v }
+        if let v = answers[7] { soul.pushbackStyle = v }
+        if let v = answers[8] { soul.uncertaintyStyle = v }
         soul.version = 2
         soul.updatedAt = Date()
     }

@@ -1,22 +1,28 @@
 # Sovereign AI Remote — device smoke checklist
 
-Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against a live Sovereign before TestFlight.
+Run on a physical iPhone against a live Sovereign **away-from-home**
+(cellular or a non-home network). Do **not** treat same-LAN / Bonjour as the
+success path. Pair by **scanning the QR** that embeds
+`token:…@public-or-tunnel-host:9119` after exposing TCP 9119
+(see `desktop-native/docs/EXPOSE_9119.md`).
 
 ## Build / icons
 
 - [ ] `xcodegen generate` (if used) then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.0.2** / build **22**
+- [ ] Display name: **Sovereign AI Remote**; version **5.1.0** / build **28+**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
+- [ ] Camera permission string present (`NSCameraUsageDescription` — QR only)
 
-## Pairing & Crypto Chat
+## Pairing & Crypto Chat (away-from-home) — QR primary
 
-- [ ] **Remote:** On Centurion, generate pairing code; paste `token:…@host:9119` in the app; link succeeds without Tailscale
-- [ ] Kill app and reopen away from home Wi‑Fi; reconnects to saved remote endpoint
-- [ ] Find Sovereign on home Wi‑Fi (optional same-network path)
-- [ ] LAN approve path still works when no remote tokens exist
-- [ ] Send Crypto Chat message; receive reply
+- [ ] Brain shows QR (GTK **Link iPhone — show QR**, or `centurion remote pair --host …`)
+- [ ] Phone on **cellular** (not Brain Wi‑Fi) → Connect → **Scan QR** → link succeeds
+- [ ] Paste fallback still works (Connect → Paste code instead)
+- [ ] Crypto Chat round-trip works after QR link
+- [ ] Kill app and reopen still away from home Wi‑Fi; reconnects to saved remote endpoint
 - [ ] Disconnect / revoke shows clear offline state (no fake “live” success)
+- [ ] Optional only: LAN Bonjour / approve path (secondary; not required for ship)
 
 ## Demo data
 
@@ -34,80 +40,34 @@ Run on a physical iPhone 15+ (or supported simulator for UI-only checks) against
 - [ ] You → **Autonomy Level** shows four levels; default Balanced; description updates
 - [ ] **Reporting & Oversight** section opens; cadence / confirm / initiative toggles save
 - [ ] Changes apply on next conversation (not mid-chat)
-- [ ] Commitment chat frames and sends when connected
 
-## Memory Horizon
+## Memory Horizon / Plans / Thinking Service
 
-- [ ] You → **Memory Horizon** opens three cards (Near Hot Cache / Mid Session Recall / Far Vault)
-- [ ] While linked, gauges show live fill; Hot Cache subtitle shows MEMORY vs YOU split
-- [ ] Session Recall shows conversation count and space on Sovereign (not “RAM full”)
-- [ ] Vault shows Off / Locked / Ready honestly (empty gauge when off)
-- [ ] Tap a card → sheet with how-to-manage copy and one primary Chat action
-- [ ] Primary action seeds Crypto Chat when linked; disabled guidance when offline
-- [ ] Offline / not linked: banner “Link your Sovereign to see live memory levels”
-- [ ] Learn more opens Help Center Memory Horizon article
-- [ ] Desktop Settings → **Memory Horizon** View shows the same live snapshot
+- [ ] Memory Horizon live gauges while linked
+- [ ] Propose first → plan decide (Proceed / Adjust / Hold / Discuss) syncs to host
+- [ ] Thinking Service catalog / apply / routing while linked
 
-## Plans (Propose first + Host sync)
+## Gateway control (essential)
 
-- [ ] Chat shows **Talk** / **Propose first** chips
-- [ ] Propose first drafts a plan; Home **Plans** / Needs your choice / Documents show it
-- [ ] Live may show “Drafting a plan…” while planning
-- [ ] Plan review: **Proceed** / **Adjust** / **Hold** / **Discuss** work; Proceed syncs to host when linked
-- [ ] **Discuss** opens (or resumes) the stable plan-scoped Crypto Chat; refinements can update the plan via `plan-update`
-- [ ] Risk badge appears when host classifies the plan
-- [ ] **Templates** under Home → Plans instantiate a reviewable plan when linked
-- [ ] **Share for review** accepts a reviewer customer id and records reviewers on the plan
-- [ ] After reconnect, plans refresh from the Sovereign (host is source of truth)
+- [ ] You → Messaging gateway shows Running/Stopped from host
+- [ ] Start / Stop / Restart from phone updates host gateway
+- [ ] Toggle a platform enabled/disabled; restart applies
 
-## Desktop Settings (parity)
+## Durable sessions (essential)
 
-- [ ] Settings → Autonomy Level Adjust changes host preference
-- [ ] Settings → Your Sovereign's Soul View/Edit saves with warning copy
-- [ ] Settings → Reporting & Oversight Adjust saves cadence and toggles
-- [ ] Settings → Memory Horizon View refreshes Hot Cache / Session / Vault summary
+- [ ] Crypto Chat returns/stores a host `session_id`
+- [ ] New chat creates a distinct host session
+- [ ] Resume / continuity after kill-app + reconnect away from home
 
-## Adrian (optional help)
+## Tool approvals (essential)
 
-- [ ] Talk to Adrian reaches help.1human1ai.com
-- [ ] Reply is help guidance; no Crypto Chat history appears in Adrian
+- [ ] Autonomy set below Max (Balanced) with confirm-dangerous on
+- [ ] Trigger a dangerous tool from Crypto Chat
+- [ ] Phone shows approval card (Approve once / session / always / Deny)
+- [ ] Approving continues the turn; Deny blocks without silent auto-approve
 
-## Swarm (shipped paths)
+## Adrian / Swarm / Support
 
-- [ ] Settings → **Connect another Sovereign** opens join / invite sheet
-- [ ] Join with valid project token works when portal configured
-- [ ] Invite by customer id reaches Sovereign (error message if not linked is clear)
-- [ ] **No** “Start collaboration” formation banner on Chat
-- [ ] Pulse attention picker says in-app only (not phone alerts)
-
-## Thinking / recovery
-
-- [ ] You → **How Your Sovereign Thinks** → **Choose Thinking Service** opens the fullscreen dial
-- [ ] Dial shows thinking-service families with status (Active / Ready / Needs access / Connecting)
-- [ ] Family without access → wizard: enter access code → pick service if multiple → Connecting on dial
-- [ ] **Update access code** and **Add thinking service** reopen the same wizard
-- [ ] After apply, Crypto Chat uses that thinking service
-- [ ] “Let Sovereign choose” / auto-select works when offered (routing mode)
-- [ ] OpenRouter / Centurion Subscription are not offered as owner picker targets (BYOK families only)
-- [ ] With thinking service healthy, chat succeeds
-- [ ] Thinking recovery sheet opens from chat error path when applicable
-
-## Family Beneficiary
-
-- [ ] You sales hero shows Family Beneficiary card
-- [ ] Copy: one family nominee; progress = four successful colleague purchases
-- [ ] Nominate first name; refer colleague with non-family attestation
-- [ ] Status shows Pending (awaiting purchase) vs Purchased (counted)
-- [ ] Footer explains ops fulfillment (“team will be in touch”) — no auto-provision claim
-
-## Regression notes
-
-Record device model, iOS version, Sovereign hostname, and pass/fail date here when run:
-
-```
-Date: 2026-07-22
-Device: (physical smoke pending)
-iOS:
-Sovereign:
-Result: TF **5.0.2 (22)** — display/listing name **Sovereign AI Remote**. Attach build 22 to ASC version 5.0.2 after processing; rename ASC App Information to Sovereign AI Remote.
-```
+- [ ] Talk to Adrian reaches help.1human1ai.com (optional)
+- [ ] Connect another Sovereign join/invite paths still clear when linked
+- [ ] Get Help / support bundle while linked

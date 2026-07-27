@@ -120,6 +120,7 @@ def _strip_yaml_frontmatter(content: str) -> str:
 
 DEFAULT_AGENT_IDENTITY = (
     "You are Centurion AI OS, an intelligent AI assistant created by Centurion Fleet. "
+    "Your name is Centurion unless the owner's Soul gives you a personal name. "
     "You are helpful, knowledgeable, and direct. You assist users with a wide "
     "range of tasks including answering questions, writing and editing code, "
     "analyzing information, creative work, and executing actions via your tools. "
@@ -127,6 +128,179 @@ DEFAULT_AGENT_IDENTITY = (
     "being genuinely useful over being verbose unless otherwise directed below. "
     "Be targeted and efficient in your exploration and investigations."
 )
+
+# Always injected first. Keep this POSITIVE only — naming rival brands (even to
+# deny them) causes fine-tuned models to echo those brands in replies.
+PRODUCT_IDENTITY_LOCK = (
+    "PRODUCT IDENTITY (non-negotiable): You are Centurion AI OS on this owner's "
+    "private brain, created by Centurion Fleet. "
+    "Your personal name comes from the owner's Soul (## Name / agent_name). "
+    "If a personal name is set, that is who you are when asked your name — "
+    "you are still a Centurion of Centurion Fleet. "
+    "If no personal name is set, your name is Centurion. "
+    "Answer with your personal name and Centurion Fleet only. "
+    "Do not discuss model brands, weight names, or other products as your identity. "
+    "Do not volunteer comparisons to other assistants.\n"
+    "SOUL DOCUMENT: the owner's SOUL.md under CENTURION_HOME defines your "
+    "personality, name, and rules. It is theirs to see — when they ask for your "
+    "Soul, read that file with tools and share it honestly. Withhold only real "
+    "secrets (API keys, .env, tokens)."
+)
+
+
+_FORBIDDEN_DISPLAY_NAMES = frozenset(
+    {
+        "hermes",
+        "hermes agent",
+        "nous",
+        "nous research",
+        "chatgpt",
+        "claude",
+        "gemini",
+        "gpt",
+        "assistant",
+        "ai",
+        "ai assistant",
+    }
+)
+
+
+def agent_name_path():
+    """Sticky personal-name file — survives freeform SOUL.md edits."""
+    return get_centurion_home() / "agent_name"
+
+
+def _clean_display_name(raw: str) -> str:
+    name = (raw or "").strip()
+    if not name:
+        return ""
+    name = name.splitlines()[0].strip().strip('"').strip("'")
+    for sep in (".", "—", ","):
+        if sep in name and len(name) > 40:
+            name = name.split(sep, 1)[0].strip()
+    for prefix in ("you are ", "i am ", "my name is ", "call me ", "name:", "named "):
+        if name.lower().startswith(prefix):
+            name = name[len(prefix) :].strip()
+    # Single token / short phrase only.
+    if len(name) > 48:
+        return ""
+    if name.lower() in _FORBIDDEN_DISPLAY_NAMES or "hermes" in name.lower():
+        return ""
+    if not re.match(r"^[A-Za-z][A-Za-z0-9 _'-]{0,47}$", name):
+        return ""
+    return name
+
+
+def _infer_name_from_markdown(markdown: str) -> str:
+    text = markdown or ""
+    patterns = (
+        r"(?im)^##\s*Name\s*$\s*\n+\s*([^\n#]+)",
+        r"(?i)\b(?:my name is|i am called|call me|i'm named|named)\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
+        r"(?i)\byou are\s+([A-Z][A-Za-z0-9_-]{1,32})\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            cleaned = _clean_display_name(match.group(1))
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def resolve_centurion_display_name(soul_markdown: Optional[str] = None) -> str:
+    """Return the owner's chosen Centurion name, or ``Centurion``.
+
+    Order prefers an explicit personal name from Soul ``## Name``, then the
+    sticky ``agent_name`` file, then prose heuristics. The generic product
+    default ``Centurion`` never blocks a personal name (e.g. Titus) that
+    lives in SOUL.md.
+    """
+    sticky_name = ""
+    try:
+        sticky = agent_name_path()
+        if sticky.exists():
+            sticky_name = _clean_display_name(sticky.read_text(encoding="utf-8"))
+    except Exception:
+        sticky_name = ""
+
+    markdown = soul_markdown
+    structured_name = ""
+    try:
+        if markdown is None:
+            from centurion_cli.soul_sync import read_soul
+
+            soul = read_soul()
+            structured_name = _clean_display_name(str(soul.get("name") or ""))
+            markdown = str(soul.get("markdown") or "")
+        else:
+            from centurion_cli.soul_sync import markdown_to_structured
+
+            structured_name = _clean_display_name(
+                str(markdown_to_structured(markdown).get("name") or "")
+            )
+    except Exception:
+        structured_name = ""
+
+    prose_name = _infer_name_from_markdown(markdown or "")
+
+    def _is_generic(value: str) -> bool:
+        return not value or value.lower() == "centurion"
+
+    # Personal names win — never let a stale sticky "Centurion" mask Titus.
+    for candidate in (structured_name, sticky_name, prose_name):
+        if candidate and not _is_generic(candidate):
+            _backfill_agent_name(candidate)
+            return candidate
+
+    return "Centurion"
+
+
+def _backfill_agent_name(name: str) -> None:
+    """Keep sticky agent_name aligned with the resolved personal name."""
+    cleaned = _clean_display_name(name)
+    if not cleaned or cleaned.lower() == "centurion":
+        return
+    path = agent_name_path()
+    try:
+        current = (
+            _clean_display_name(path.read_text(encoding="utf-8")) if path.exists() else ""
+        )
+        if current == cleaned:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(cleaned + "\n", encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    except Exception:
+        pass
+
+
+def build_personal_name_lock(display_name: str) -> str:
+    """Hardwire the personal name for this turn — applied before SOUL.md body."""
+    name = (display_name or "").strip() or "Centurion"
+    return (
+        f"YOUR NAME (non-negotiable this turn): {name}. "
+        f"When asked who you are or what your name is, answer \"{name}\". "
+        f"{name} is a Centurion of Centurion Fleet. "
+        "Speak only in those terms. Do not name other products, model families, "
+        "or prior assistants. If asked for your Soul, open SOUL.md and quote it."
+    )
+
+
+def soul_identity_fingerprint() -> str:
+    """Cheap fingerprint of SOUL.md so sessions can detect identity edits."""
+    soul_path = get_centurion_home() / "SOUL.md"
+    name_path = agent_name_path()
+    parts: list[str] = []
+    for path in (soul_path, name_path):
+        try:
+            st = path.stat()
+            parts.append(f"{path.name}:{st.st_mtime_ns}:{st.st_size}")
+        except OSError:
+            parts.append(f"{path.name}:missing")
+    return "|".join(parts)
 
 CENTURION_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Centurion AI OS "

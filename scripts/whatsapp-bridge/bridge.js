@@ -175,79 +175,259 @@ const recentlySentIds = new Set();
 const MAX_RECENT_IDS = 50;
 
 let sock = null;
-let connectionState = 'disconnected';
+let connectionState = 'disconnected'; // disconnected | connecting | connected | reconnecting
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let startingSocket = false;
+let socketGeneration = 0;
+
+const RECONNECT_BASE_MS = parseInt(process.env.WHATSAPP_RECONNECT_BASE_MS || '2000', 10);
+const RECONNECT_MAX_MS = parseInt(process.env.WHATSAPP_RECONNECT_MAX_MS || '60000', 10);
+const RECONNECT_MAX_ATTEMPTS = parseInt(process.env.WHATSAPP_RECONNECT_MAX_ATTEMPTS || '0', 10); // 0 = unlimited
+
+/** Human-readable labels for Baileys / WhatsApp stream close codes. */
+const DISCONNECT_REASON_LABELS = {
+  [DisconnectReason.loggedOut]: 'loggedOut',
+  [DisconnectReason.connectionClosed]: 'connectionClosed',
+  [DisconnectReason.connectionLost]: 'connectionLost',
+  [DisconnectReason.connectionReplaced]: 'connectionReplaced',
+  [DisconnectReason.timedOut]: 'timedOut',
+  [DisconnectReason.badSession]: 'badSession',
+  [DisconnectReason.restartRequired]: 'restartRequired',
+  [DisconnectReason.multideviceMismatch]: 'multideviceMismatch',
+  [DisconnectReason.forbidden]: 'forbidden',
+  [DisconnectReason.unavailableService]: 'unavailableService',
+};
+
+function disconnectReasonLabel(code) {
+  if (code == null) return 'unknown';
+  // Baileys maps both connectionLost and timedOut to 408.
+  if (code === 408) return 'connectionLost/timedOut';
+  if (code === DisconnectReason.connectionClosed) return 'connectionClosed';
+  return DISCONNECT_REASON_LABELS[code] || `code_${code}`;
+}
+
+function clearReconnectTimer() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function scheduleReconnect(reasonCode, detail = '') {
+  clearReconnectTimer();
+
+  if (PAIR_ONLY) {
+    console.error('❌ Pairing connection closed before success. Re-run pairing.');
+    process.exit(1);
+  }
+
+  if (
+    RECONNECT_MAX_ATTEMPTS > 0 &&
+    reconnectAttempts >= RECONNECT_MAX_ATTEMPTS
+  ) {
+    console.error(
+      `❌ Gave up after ${reconnectAttempts} reconnect attempts. ` +
+        `Last reason=${disconnectReasonLabel(reasonCode)} (${reasonCode}). ` +
+        'Restart the bridge (or clear the session if logged out).',
+    );
+    process.exit(1);
+  }
+
+  reconnectAttempts += 1;
+  connectionState = 'reconnecting';
+
+  // Fast path after pairing restart; otherwise exponential backoff + jitter.
+  let delayMs;
+  if (reasonCode === DisconnectReason.restartRequired) {
+    delayMs = 1000;
+  } else if (reasonCode === DisconnectReason.connectionReplaced) {
+    // Another WhatsApp Web / linked device took the socket — wait longer
+    // so we don't fight the other client in a tight loop.
+    delayMs = Math.min(RECONNECT_MAX_MS, 15000);
+  } else {
+    const exp = Math.min(
+      RECONNECT_MAX_MS,
+      RECONNECT_BASE_MS * (2 ** Math.min(reconnectAttempts - 1, 5)),
+    );
+    const jitter = Math.floor(Math.random() * Math.min(1000, exp * 0.2));
+    delayMs = exp + jitter;
+  }
+
+  const label = disconnectReasonLabel(reasonCode);
+  console.warn(
+    JSON.stringify({
+      event: 'connection_closed',
+      reason: label,
+      reasonCode: reasonCode ?? null,
+      detail: detail || undefined,
+      attempt: reconnectAttempts,
+      reconnectInMs: delayMs,
+    }),
+  );
+  console.log(
+    `⚠️  WhatsApp disconnected (${label}` +
+      `${reasonCode != null ? ` / ${reasonCode}` : ''}` +
+      `${detail ? `: ${detail}` : ''}). ` +
+      `Reconnecting in ${(delayMs / 1000).toFixed(1)}s ` +
+      `(attempt ${reconnectAttempts}` +
+      `${RECONNECT_MAX_ATTEMPTS > 0 ? `/${RECONNECT_MAX_ATTEMPTS}` : ''})...`,
+  );
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    startSocket().catch((err) => {
+      console.error('❌ Reconnect start failed:', err?.message || err);
+      scheduleReconnect(DisconnectReason.connectionLost, String(err?.message || err));
+    });
+  }, delayMs);
+}
 
 async function startSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-  const { version } = await fetchLatestBaileysVersion();
+  if (startingSocket) {
+    console.log('⏳ Socket start already in progress — skipping duplicate call.');
+    return;
+  }
+  startingSocket = true;
+  clearReconnectTimer();
+  connectionState = 'connecting';
+  const generation = ++socketGeneration;
 
-  sock = makeWASocket({
-    version,
-    auth: state,
-    logger,
-    printQRInTerminal: false,
-    browser: ['Centurion AI OS', 'Chrome', '120.0'],
-    syncFullHistory: false,
-    markOnlineOnConnect: false,
-    // Required for Baileys 7.x: without this, incoming messages that need
-    // E2EE session re-establishment are silently dropped (msg.message === null)
-    getMessage: async (key) => {
-      // We don't maintain a message store, so return a placeholder.
-      // This is enough for Baileys to complete the retry handshake.
-      return { conversation: '' };
-    },
-  });
+  const releaseStartLock = () => {
+    if (generation === socketGeneration) {
+      startingSocket = false;
+    }
+  };
 
-  sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
-
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      console.log('\n📱 Scan this QR code with WhatsApp on your phone:\n');
-      qrcode.generate(qr, { small: true });
-      console.log('\nWaiting for scan...\n');
+  try {
+    // Drop the previous socket listeners so a late 'close' from an old
+    // connection cannot schedule a second reconnect race.
+    if (sock) {
+      try {
+        sock.ev.removeAllListeners('connection.update');
+        sock.ev.removeAllListeners('creds.update');
+        sock.ev.removeAllListeners('messages.upsert');
+        sock.end?.(undefined);
+      } catch {}
+      sock = null;
     }
 
-    if (connection === 'close') {
-      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      connectionState = 'disconnected';
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const { version } = await fetchLatestBaileysVersion();
 
-      if (reason === DisconnectReason.loggedOut) {
-        console.log('❌ Logged out. Delete session and restart to re-authenticate.');
-        process.exit(1);
-      } else {
-        // 515 = restart requested (common after pairing). Always reconnect.
-        if (reason === 515) {
-          console.log('↻ WhatsApp requested restart (code 515). Reconnecting...');
-        } else {
-          console.log(`⚠️  Connection closed (reason: ${reason}). Reconnecting in 3s...`);
+    sock = makeWASocket({
+      version,
+      auth: state,
+      logger,
+      printQRInTerminal: false,
+      browser: ['Centurion AI OS', 'Chrome', '120.0'],
+      syncFullHistory: false,
+      // Defense-in-depth for history-sync spoofing (GHSA-qvv5-jq5g-4cgg).
+      shouldSyncHistoryMessage: () => false,
+      markOnlineOnConnect: false,
+      connectTimeoutMs: 60_000,
+      keepAliveIntervalMs: 25_000,
+      retryRequestDelayMs: 500,
+      // Without this, incoming messages that need E2EE session re-establishment
+      // can arrive with msg.message === null.
+      getMessage: async () => ({ conversation: '' }),
+    });
+
+    sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
+
+    sock.ev.on('connection.update', (update) => {
+      if (generation !== socketGeneration) return;
+
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log('\n📱 Scan this QR code with WhatsApp on your phone:\n');
+        qrcode.generate(qr, { small: true });
+        console.log('\nWaiting for scan...\n');
+      }
+
+      if (connection === 'connecting') {
+        connectionState = 'connecting';
+        return;
+      }
+
+      if (connection === 'close') {
+        const boom = new Boom(lastDisconnect?.error);
+        const reason = boom?.output?.statusCode;
+        const errMsg =
+          lastDisconnect?.error?.message ||
+          boom?.message ||
+          '';
+        connectionState = 'disconnected';
+        releaseStartLock();
+
+        // Fatal: user logged out from the phone — needs a fresh QR pair.
+        if (reason === DisconnectReason.loggedOut) {
+          console.error(
+            '❌ Logged out (DisconnectReason.loggedOut / 401). ' +
+              `Delete session dir and re-pair: ${SESSION_DIR}`,
+          );
+          process.exit(1);
         }
-        setTimeout(startSocket, reason === 515 ? 1000 : 3000);
+
+        // Fatal-ish: session files are corrupt / incompatible.
+        if (reason === DisconnectReason.badSession) {
+          console.error(
+            '❌ Bad session (DisconnectReason.badSession). ' +
+              `Delete ${SESSION_DIR} and re-pair with --pair-only.`,
+          );
+          process.exit(1);
+        }
+
+        if (reason === DisconnectReason.multideviceMismatch) {
+          console.error(
+            '❌ Multi-device mismatch. Re-pair this bridge as a linked device.',
+          );
+          process.exit(1);
+        }
+
+        // 408 connectionLost/timedOut and 428 connectionClosed are normal
+        // WhatsApp stream drops — reconnect with backoff.
+        scheduleReconnect(reason, errMsg);
+      } else if (connection === 'open') {
+        reconnectAttempts = 0;
+        connectionState = 'connected';
+        releaseStartLock();
+        console.log('✅ WhatsApp connected!');
+        if (PAIR_ONLY) {
+          console.log('✅ Pairing complete. Credentials saved.');
+          // Give Baileys a moment to flush creds, then exit cleanly
+          setTimeout(() => process.exit(0), 2000);
+        }
       }
-    } else if (connection === 'open') {
-      connectionState = 'connected';
-      console.log('✅ WhatsApp connected!');
-      if (PAIR_ONLY) {
-        console.log('✅ Pairing complete. Credentials saved.');
-        // Give Baileys a moment to flush creds, then exit cleanly
-        setTimeout(() => process.exit(0), 2000);
+    });
+
+    sock.ev.on('messages.upsert', async ({ messages, type, requestId }) => {
+      // In self-chat mode, your own messages commonly arrive as 'append' rather
+      // than 'notify'. Accept both and filter agent echo-backs below.
+      if (type !== 'notify' && type !== 'append') return;
+      if (generation !== socketGeneration) return;
+
+      // requestId on the *event* means the phone resent messages while we were
+      // offline — those are legitimate and must be processed (especially after
+      // 408/428 reconnects). GHSA-qvv5-jq5g-4cgg is patched in Baileys 6.7.23.
+      if (requestId && WHATSAPP_DEBUG) {
+        try {
+          console.log(JSON.stringify({
+            event: 'upsert_from_phone_catchup',
+            requestId,
+            count: messages?.length || 0,
+          }));
+        } catch {}
       }
-    }
-  });
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // In self-chat mode, your own messages commonly arrive as 'append' rather
-    // than 'notify'. Accept both and filter agent echo-backs below.
-    if (type !== 'notify' && type !== 'append') return;
+      const botIds = Array.from(new Set([
+        normalizeWhatsAppId(sock?.user?.id),
+        normalizeWhatsAppId(sock?.user?.lid),
+      ].filter(Boolean)));
 
-    const botIds = Array.from(new Set([
-      normalizeWhatsAppId(sock.user?.id),
-      normalizeWhatsAppId(sock.user?.lid),
-    ].filter(Boolean)));
-
-    for (const msg of messages) {
-      if (!msg.message) continue;
+      for (const msg of messages) {
+        if (!msg.message) continue;
 
       const chatId = msg.key.remoteJid;
       if (WHATSAPP_DEBUG) {
@@ -446,6 +626,14 @@ async function startSocket() {
       }
     }
   });
+  } catch (err) {
+    console.error('❌ Failed to start WhatsApp socket:', err?.message || err);
+    startingSocket = false;
+    scheduleReconnect(
+      DisconnectReason.connectionLost,
+      String(err?.message || err),
+    );
+  }
 }
 
 // HTTP server
@@ -700,6 +888,8 @@ app.get('/health', (req, res) => {
     status: connectionState,
     queueLength: messageQueue.length,
     uptime: process.uptime(),
+    reconnectAttempts,
+    baileys: '@whiskeysockets/baileys@6.7.23',
   });
 });
 

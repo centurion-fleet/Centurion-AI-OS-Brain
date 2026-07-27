@@ -7,8 +7,16 @@ struct ContentView: View {
     @EnvironmentObject private var messageService: MessageService
     @EnvironmentObject private var dataMode: AppDataMode
     @EnvironmentObject private var planStore: PlanStore
+    @EnvironmentObject private var swarmStore: SwarmStore
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
+
+    // Same last-seen keys as Home subsection pills — clearing a pill updates the tab badge.
+    @AppStorage("pulse_note_plans") private var lastSeenPlans: TimeInterval = 0
+    @AppStorage("pulse_note_wins") private var lastSeenWins: TimeInterval = 0
+    @AppStorage("pulse_note_outputs") private var lastSeenOutputs: TimeInterval = 0
+    @AppStorage("pulse_note_decisions") private var lastSeenDecisions: TimeInterval = 0
+    @AppStorage("pulse_note_pulse") private var lastSeenThoughts: TimeInterval = 0
 
     /// Badge only for real recovery — not for first-run “not linked yet”.
     private var showYouAttentionBadge: Bool {
@@ -23,6 +31,23 @@ struct ContentView: View {
             return true
         }
         return false
+    }
+
+    /// Sum of Home subsection “new” counts for the tab bar badge.
+    private var homeAttentionCount: Int {
+        PulseBadgeCounts.total(
+            connectionState: connectionManager.connectionState,
+            showsDemoContent: dataMode.showsDemoContent,
+            swarmStore: swarmStore,
+            planStore: planStore,
+            lastSeen: .init(
+                plans: lastSeenPlans,
+                wins: lastSeenWins,
+                outputs: lastSeenOutputs,
+                decisions: lastSeenDecisions,
+                thoughts: lastSeenThoughts
+            )
+        )
     }
 
     var body: some View {
@@ -41,6 +66,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Home", systemImage: "waveform.path.ecg")
             }
+            .badge(homeAttentionCount)
             .tag(1)
 
             DeferredTabContent(tag: 2, selection: $selectedTab, loadedTabs: $loadedTabs) {

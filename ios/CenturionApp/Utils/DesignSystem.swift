@@ -241,31 +241,46 @@ typealias AmberButtonStyle = CenturionPrimaryButtonStyle
 
 // MARK: - Connection Status Dot
 
-/// Connection status chip — green when linked, with an optional encryption lock.
+/// Connection status chip — green when linked, amber when linked but thinking needs attention.
 struct StatusDot: View {
     let isConnected: Bool
     var isEncrypted: Bool = false
+    /// When linked but the thinking service is unhealthy / unknown.
+    var needsAttention: Bool = false
 
     @State private var isPulsing = false
+
+    private var dotColor: Color {
+        if !isConnected { return ColorTheme.mutedText() }
+        if needsAttention { return ColorTheme.warning() }
+        return ColorTheme.success()
+    }
 
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(isConnected ? ColorTheme.success() : ColorTheme.mutedText())
+                .fill(dotColor)
                 .frame(width: 8, height: 8)
                 .overlay(
                     Circle()
-                        .stroke(isConnected ? ColorTheme.success() : Color.clear, lineWidth: 2)
+                        .stroke(isConnected ? dotColor : Color.clear, lineWidth: 2)
                         .scaleEffect(isPulsing ? 1.6 : 1.0)
                         .opacity(isPulsing ? 0.0 : 0.6)
                 )
             if isConnected && isEncrypted {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(ColorTheme.success())
+                    .foregroundColor(dotColor)
                     .accessibilityLabel("Crypto Chat encrypted")
             }
         }
+        .accessibilityLabel(
+            isConnected
+                ? (needsAttention
+                    ? "Linked, but thinking needs attention"
+                    : "Linked and ready")
+                : "Not linked"
+        )
         .onAppear {
             if isConnected {
                 withAnimation(Motion.heavy.repeatForever(autoreverses: false)) {

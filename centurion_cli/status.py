@@ -19,7 +19,7 @@ from centurion_cli.models import provider_label
 from centurion_cli.nous_subscription import get_nous_subscription_features
 from centurion_cli.runtime_provider import resolve_requested_provider
 from centurion_cli.vercel_auth import describe_vercel_auth
-from centurion_constants import OPENROUTER_MODELS_URL, display_pip_install
+from centurion_constants import display_pip_install
 from tools.tool_backend_helpers import managed_nous_tools_enabled
 
 def check_mark(ok: bool) -> str:
@@ -78,7 +78,7 @@ def _effective_provider_label() -> str:
     except AuthError:
         effective = requested or "auto"
 
-    if effective == "openrouter" and get_env_value("OPENAI_BASE_URL"):
+    if effective == "custom" and get_env_value("OPENAI_BASE_URL"):
         effective = "custom"
 
     return provider_label(effective)
@@ -124,7 +124,6 @@ def show_status(args):
 
     # Values may be a single env var name (str) or a tuple of alternates (first found wins).
     keys: dict[str, str | tuple[str, ...]] = {
-        "OpenRouter": "OPENROUTER_API_KEY",
         "OpenAI": "OPENAI_API_KEY",
         "Anthropic": ("ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"),
         "Google / Gemini": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
@@ -533,21 +532,6 @@ def show_status(args):
     if deep:
         print()
         print(color("◆ Deep Checks", Colors.CYAN, Colors.BOLD))
-        
-        # Check OpenRouter connectivity
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        if openrouter_key:
-            try:
-                import httpx
-                response = httpx.get(
-                    OPENROUTER_MODELS_URL,
-                    headers={"Authorization": f"Bearer {openrouter_key}"},
-                    timeout=10
-                )
-                ok = response.status_code == 200
-                print(f"  OpenRouter:   {check_mark(ok)} {'reachable' if ok else f'error ({response.status_code})'}")
-            except Exception as e:
-                print(f"  OpenRouter:   {check_mark(False)} error: {e}")
         
         # Check gateway port
         try:

@@ -1554,6 +1554,35 @@ def rename_profile(old_name: str, new_name: str) -> Path:
 # Profile env resolution (called from _apply_profile_override)
 # ---------------------------------------------------------------------------
 
+def apply_sticky_profile_home() -> None:
+    """Set ``CENTURION_HOME`` from ``active_profile`` when appropriate.
+
+    Matches ``_apply_profile_override()`` in ``centurion_cli/main.py`` so
+    stdio bridges (``remote_bridge``, desktop Settings) read/write the same
+    ``SOUL.md`` as an interactive ``centurion`` session. Safe to call multiple
+    times; no-op when a specific profile home is already set.
+    """
+    import os
+
+    centurion_home_env = os.environ.get("CENTURION_HOME", "").strip()
+    if centurion_home_env:
+        if Path(centurion_home_env).parent.name == "profiles":
+            return
+
+    try:
+        from centurion_constants import get_default_centurion_root
+
+        active_path = get_default_centurion_root() / "active_profile"
+        if not active_path.exists():
+            return
+        name = active_path.read_text(encoding="utf-8").strip()
+        if not name or name == "default":
+            return
+        os.environ["CENTURION_HOME"] = resolve_profile_env(name)
+    except (UnicodeDecodeError, OSError, ValueError, FileNotFoundError):
+        pass
+
+
 def resolve_profile_env(profile_name: str) -> str:
     """Resolve a profile name to a CENTURION_HOME path string.
 

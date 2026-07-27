@@ -189,7 +189,7 @@ def print_noninteractive_setup_guidance(reason: str | None = None) -> None:
     print_info("  centurion config set model.base_url http://localhost:8080/v1")
     print_info("  centurion config set model.default your-model-name")
     print()
-    print_info("Or set OPENROUTER_API_KEY / OPENAI_API_KEY in your environment.")
+    print_info("Or set ANTHROPIC_API_KEY / OPENAI_API_KEY in your environment.")
     print_info("Run 'centurion setup' in an interactive terminal to use the full wizard.")
     print()
 
@@ -377,11 +377,8 @@ def _print_setup_summary(config: dict, centurion_home):
     else:
         tool_status.append(("Vision (image analysis)", False, "run 'centurion setup' to configure"))
 
-    # Mixture of Agents — requires OpenRouter specifically (calls multiple models)
-    if get_env_value("OPENROUTER_API_KEY"):
-        tool_status.append(("Mixture of Agents", True, None))
-    else:
-        tool_status.append(("Mixture of Agents", False, "OPENROUTER_API_KEY"))
+    # Mixture of Agents — retired with aggregator backends
+    tool_status.append(("Mixture of Agents", False, "retired"))
 
     # Web tools (Exa, Parallel, Firecrawl, or Tavily)
     if subscription_features.web.managed_by_nous:
@@ -2690,19 +2687,18 @@ def _model_section_has_credentials(config: dict) -> bool:
             if _has_key(PROVIDER_REGISTRY[provider_id]):
                 return True
         if provider_id == "openrouter":
-            for env_var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
-                if get_env_value(env_var):
-                    return True
+            return False
 
-    # OpenRouter aggregator fallback (no provider declared in config).
-    for env_var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
-        if get_env_value(env_var):
-            return True
+    # Direct OpenAI API key (no aggregator fallback).
+    if get_env_value("OPENAI_API_KEY"):
+        return True
 
     for pid, pconfig in PROVIDER_REGISTRY.items():
         # Skip copilot in auto-detect: GH_TOKEN / GITHUB_TOKEN are
         # commonly set for git tooling.  Mirrors resolve_provider in auth.py.
         if pid == "copilot":
+            continue
+        if pid == "openrouter":
             continue
         if _has_key(pconfig):
             return True
@@ -3282,7 +3278,8 @@ def run_setup_wizard(args):
 
     active_provider = get_active_provider()
     is_existing = (
-        bool(get_env_value("OPENROUTER_API_KEY"))
+        bool(get_env_value("OPENAI_API_KEY"))
+        or bool(get_env_value("ANTHROPIC_API_KEY"))
         or bool(get_env_value("OPENAI_BASE_URL"))
         or active_provider is not None
     )

@@ -38,8 +38,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "5.0.2"
-        CURRENT_PROJECT_VERSION: "24"
+        MARKETING_VERSION: "5.1.0"
+        CURRENT_PROJECT_VERSION: "29"
     info:
       path: Info.plist
       properties:
@@ -54,6 +54,7 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: "Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi."
+        NSCameraUsageDescription: "Sovereign AI Remote uses the camera only to scan the pairing QR code shown on your Centurion."
         NSBonjourServices:
           - _centurion._tcp
         NSAppTransportSecurity:

@@ -477,7 +477,7 @@ def test_run_doctor_accepts_bare_custom_provider(monkeypatch, tmp_path):
     assert "model.provider 'custom' is not a recognised provider" not in out
 
 
-def test_run_doctor_flags_missing_credentials_for_active_openrouter_provider(monkeypatch, tmp_path):
+def test_run_doctor_flags_retired_aggregator_provider(monkeypatch, tmp_path):
     home = tmp_path / ".centurion"
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.yaml").write_text(
@@ -515,8 +515,11 @@ def test_run_doctor_flags_missing_credentials_for_active_openrouter_provider(mon
         doctor_mod.run_doctor(Namespace(fix=False))
 
     out = buf.getvalue()
-    assert "model.provider 'openrouter' is set but no API key is configured" in out
-    assert "No credentials found for provider 'openrouter'." in out
+    assert "retired aggregator" in out.lower()
+    assert "OpenRouter" not in out
+    assert "OPENROUTER" not in out
+    assert "direct API provider" in out or "centurion config set model.provider" in out
+    assert "Issues found" in out or "issue" in out.lower()
 
 
 @pytest.mark.parametrize(

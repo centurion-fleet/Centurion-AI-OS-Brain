@@ -97,6 +97,13 @@ def load_last_known_good() -> dict[str, Any] | None:
     model = str(data.get("model") or "").strip()
     if not provider or not model:
         return None
+    try:
+        from centurion_cli.openrouter_retired import is_openrouter_blocked
+
+        if is_openrouter_blocked(provider, str(data.get("base_url") or "")):
+            return None
+    except Exception:
+        pass
     return data
 
 
@@ -111,6 +118,13 @@ def save_last_known_good(
     model = model.strip()
     if not provider or not model:
         return
+    try:
+        from centurion_cli.openrouter_retired import is_openrouter_blocked
+
+        if is_openrouter_blocked(provider, base_url):
+            return
+    except Exception:
+        pass
 
     payload = {
         "provider": provider,
@@ -145,7 +159,12 @@ def _load_switch_context() -> tuple[str, str, str, Any, dict | None, list | None
         current_model = str(model_cfg) if model_cfg else ""
         current_base_url = ""
 
-    runtime = resolve_runtime_provider(requested=None)
+    runtime = {}
+    try:
+        runtime = resolve_runtime_provider(requested=None)
+    except Exception as exc:
+        logger.debug("resolve_runtime_provider failed in switch context: %s", exc)
+        runtime = {}
     if not current_provider:
         current_provider = str(runtime.get("provider") or "")
     if not current_model:
@@ -313,11 +332,12 @@ def _provider_allows_keyless(provider: str, base_url: str) -> bool:
 
 def _looks_anthropic(base_url: str, provider: str) -> bool:
     blob = f"{provider} {base_url}".lower()
-    return "anthropic" in blob and "openrouter" not in blob
+    return "anthropic" in blob and "openrouter.ai" not in blob
 
 
 def validate_switch(provider: str, model: str, *, probe: bool = True) -> ValidationResult:
-    from centurion_cli.remote_model_catalog import is_openrouter_blocked
+    from centurion_cli.openrouter_retired import is_openrouter_blocked, retired_provider_message
+    from centurion_cli.remote_model_catalog import is_openrouter_blocked as is_remote_blocked
 
     provider = (provider or "").strip()
     model = (model or "").strip()
@@ -328,15 +348,12 @@ def validate_switch(provider: str, model: str, *, probe: bool = True) -> Validat
             code=LLM_CONFIG_INVALID,
         )
 
-    if is_openrouter_blocked(provider):
+    if is_openrouter_blocked(provider) or is_remote_blocked(provider):
         return ValidationResult(
             ok=False,
             provider=provider,
             model=model,
-            message=(
-                "OpenRouter and subscription remaps are not available for Centurion "
-                "Remote / Sovereign BYOK. Use a direct thinking-service family."
-            ),
+            message=retired_provider_message(remote=True),
             code=LLM_CONFIG_INVALID,
         )
 
@@ -444,18 +461,15 @@ def commit_switch_result(result, *, probe: bool = True) -> ApplyResult:
 
 
 def apply_switch(provider: str, model: str, *, probe: bool = True) -> ApplyResult:
-    from centurion_cli.remote_model_catalog import is_openrouter_blocked
+    from centurion_cli.openrouter_retired import is_openrouter_blocked, retired_provider_message
+    from centurion_cli.remote_model_catalog import is_openrouter_blocked as is_remote_blocked
 
-    if is_openrouter_blocked(provider):
+    if is_openrouter_blocked(provider) or is_remote_blocked(provider):
         return ApplyResult(
             ok=False,
             provider=provider,
             model=model,
-            message=(
-                "OpenRouter and subscription remaps are not available for Centurion "
-                "Remote / Sovereign BYOK. Use a direct thinking-service family "
-                "(OpenAI API, Anthropic, Gemini, …)."
-            ),
+            message=retired_provider_message(remote=True),
             code=LLM_CONFIG_INVALID,
         )
 
@@ -483,6 +497,22 @@ def restore_last_known_good(*, probe: bool = True) -> ApplyResult:
         )
     provider = str(snapshot.get("provider") or "")
     model = str(snapshot.get("model") or "")
+    try:
+        from centurion_cli.openrouter_retired import (
+            is_openrouter_blocked,
+            retired_provider_message,
+        )
+
+        if is_openrouter_blocked(provider, str(snapshot.get("base_url") or "")):
+            return ApplyResult(
+                ok=False,
+                provider=provider,
+                model=model,
+                message=retired_provider_message(),
+                code=LLM_CONFIG_INVALID,
+            )
+    except Exception:
+        pass
     return apply_switch(provider, model, probe=probe)
 
 
@@ -505,9 +535,26 @@ def get_status(*, probe: bool = True) -> ProviderStatus:
         last_good=lkg,
     )
 
+    try:
+        from centurion_cli.openrouter_retired import (
+            is_openrouter_blocked,
+            retired_provider_message,
+        )
+
+        if is_openrouter_blocked(current_provider, current_base_url):
+            status.health = _HEALTH_BROKEN
+            status.health_message = retired_provider_message()
+            return status
+    except Exception:
+        pass
+
     if not current_provider or not current_model:
         status.health = _HEALTH_BROKEN
-        status.health_message = "No thinking service is configured yet."
+        status.health_message = (
+            "No thinking service is configured yet. "
+            "Choose a direct API provider (Anthropic, OpenAI, DeepSeek, Gemini, …) "
+            "and add its key on your Centurion."
+        )
         return status
 
     if not probe:
@@ -541,6 +588,18 @@ def classify_llm_error(error: BaseException) -> tuple[str, str]:
     """Map an exception to (code, user-facing message)."""
     message = str(error) or error.__class__.__name__
     lowered = message.lower()
+    code = getattr(error, "code", None) or ""
+
+    if code == "provider_retired" or "no longer available" in lowered:
+        try:
+            from centurion_cli.openrouter_retired import retired_provider_message
+
+            return LLM_CONFIG_INVALID, retired_provider_message()
+        except Exception:
+            return LLM_CONFIG_INVALID, (
+                "That thinking service is no longer available. "
+                "Choose a direct API provider on your Centurion."
+            )
 
     if any(
         token in lowered
@@ -549,6 +608,7 @@ def classify_llm_error(error: BaseException) -> tuple[str, str]:
             "api key not",
             "not configured",
             "no llm provider configured",
+            "no inference provider configured",
             "environment variable",
             "missing api key",
             "credential",
@@ -780,9 +840,11 @@ def apply_remote_switch(connector_id: str, *, probe: bool = True) -> ApplyResult
             code=LLM_CONFIG_INVALID,
         )
     if is_openrouter_blocked(connector.provider):
+        from centurion_cli.openrouter_retired import retired_provider_message
+
         return ApplyResult(
             ok=False,
-            message="OpenRouter is not available from Centurion Remote.",
+            message=retired_provider_message(remote=True),
             code=LLM_CONFIG_INVALID,
         )
     if connector.category == "creative":

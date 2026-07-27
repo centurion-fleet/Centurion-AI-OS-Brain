@@ -122,6 +122,7 @@ class TestKimiParity:
         assert kw.get("reasoning_effort") == "medium"
 
 
+@pytest.mark.skip(reason="OpenRouter provider retired from Centurion")
 class TestOpenRouterParity:
     """OpenRouter: provider preferences, reasoning in extra_body."""
 

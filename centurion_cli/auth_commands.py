@@ -28,7 +28,6 @@ from agent.credential_pool import (
 )
 import centurion_cli.auth as auth_mod
 from centurion_cli.auth import PROVIDER_REGISTRY
-from centurion_constants import OPENROUTER_BASE_URL
 from centurion_cli.secret_prompt import masked_secret_prompt
 
 
@@ -75,8 +74,10 @@ def _resolve_custom_provider_input(raw: str) -> str | None:
 
 def _normalize_provider(provider: str) -> str:
     normalized = (provider or "").strip().lower()
-    if normalized in {"or", "open-router"}:
-        return "openrouter"
+    if normalized in {"or", "open-router", "openrouter"}:
+        from centurion_cli.openrouter_retired import retired_provider_message
+
+        raise SystemExit(retired_provider_message())
     if normalized in {"grok-oauth", "xai-oauth", "x-ai-oauth", "xai-grok-oauth"}:
         return "xai-oauth"
     # Check if it matches a custom provider name
@@ -87,8 +88,6 @@ def _normalize_provider(provider: str) -> str:
 
 
 def _provider_base_url(provider: str) -> str:
-    if provider == "openrouter":
-        return OPENROUTER_BASE_URL
     if provider.startswith(CUSTOM_POOL_PREFIX):
         from agent.credential_pool import _get_custom_provider_config
 
@@ -162,7 +161,7 @@ def _format_exhausted_status(entry) -> str:
 
 def auth_add_command(args) -> None:
     provider = _normalize_provider(getattr(args, "provider", ""))
-    if provider not in PROVIDER_REGISTRY and provider != "openrouter" and not provider.startswith(CUSTOM_POOL_PREFIX):
+    if provider not in PROVIDER_REGISTRY and not provider.startswith(CUSTOM_POOL_PREFIX):
         raise SystemExit(f"Unknown provider: {provider}")
 
     requested_type = str(getattr(args, "auth_type", "") or "").strip().lower()
@@ -443,7 +442,6 @@ def auth_list_command(args) -> None:
     else:
         providers = sorted({
             *PROVIDER_REGISTRY.keys(),
-            "openrouter",
             *list_custom_pool_providers(),
         })
     for provider in providers:
@@ -656,7 +654,7 @@ def _interactive_auth() -> None:
 
 def _pick_provider(prompt: str = "Provider") -> str:
     """Prompt for a provider name with auto-complete hints."""
-    known = sorted(set(list(PROVIDER_REGISTRY.keys()) + ["openrouter"]))
+    known = sorted(set(PROVIDER_REGISTRY.keys()))
     custom_names = _get_custom_provider_names()
     if custom_names:
         custom_display = [name for name, _key, _provider_key in custom_names]
@@ -673,7 +671,7 @@ def _pick_provider(prompt: str = "Provider") -> str:
 
 def _interactive_add() -> None:
     provider = _pick_provider("Provider to add credential for")
-    if provider not in PROVIDER_REGISTRY and provider != "openrouter" and not provider.startswith(CUSTOM_POOL_PREFIX):
+    if provider not in PROVIDER_REGISTRY and not provider.startswith(CUSTOM_POOL_PREFIX):
         raise SystemExit(f"Unknown provider: {provider}")
 
     # For OAuth-capable providers, ask which type

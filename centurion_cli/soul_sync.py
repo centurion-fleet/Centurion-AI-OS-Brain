@@ -28,6 +28,7 @@ def soul_md_path():
 
 def structured_to_markdown(fields: dict[str, Any]) -> str:
     """Render iOS-style structured fields to the managed SOUL.md section."""
+    name = str(fields.get("name") or fields.get("displayName") or "").strip()
     personality = str(fields.get("personalitySummary") or fields.get("personality_summary") or "").strip()
     tone = str(fields.get("tone") or "").strip()
     communication = str(
@@ -53,6 +54,8 @@ def structured_to_markdown(fields: dict[str, Any]) -> str:
         "update this block. Content outside the markers is preserved.",
         "",
     ]
+    if name:
+        lines.extend(["## Name", "", name, ""])
     if personality:
         lines.extend(["## Personality", "", personality, ""])
     if tone:
@@ -85,7 +88,12 @@ def markdown_to_structured(markdown: str) -> dict[str, Any]:
     def body(title: str) -> str:
         return sections.get(title.lower(), "").strip()
 
+    name = body("name")
+    # First line of a freeform SOUL (no ## Name) may still be a short name
+    # when users wrote "You are Titus..." — leave extraction to prompt_builder.
+
     return {
+        "name": name,
         "personalitySummary": body("personality"),
         "tone": body("tone"),
         "communicationStyle": body("communication style"),
@@ -140,24 +148,104 @@ def write_soul(fields: dict[str, Any] | None = None, *, markdown: str | None = N
     """Write SOUL.md from structured fields and/or raw markdown override."""
     path = soul_md_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    disk_existing = path.read_text(encoding="utf-8") if path.exists() else ""
+
+    # Desktop Settings can open with an empty buffer when soul_get fails after
+    # an update — never let that clobber a good on-disk Soul document.
+    if markdown is not None and not markdown.strip() and disk_existing.strip():
+        if fields:
+            markdown = disk_existing
+        else:
+            raise ValueError(
+                "Refusing to save an empty Soul document over existing content. "
+                "Close Settings and try again after the Brain bridge is healthy."
+            )
 
     if markdown is not None and fields:
-        # Prefer structured merge when both provided — structured wins for managed block.
-        content = merge_structured_into_soul_md(fields, existing=markdown)
+        # Merge structured patches onto whatever the markdown already encodes
+        # so a Name-only update does not wipe Personality / rules.
+        existing_fields = markdown_to_structured(markdown)
+        merged = dict(existing_fields)
+        for key, value in fields.items():
+            if key == "markdown":
+                continue
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip() and key != "name":
+                continue
+            merged[key] = value
+        content = merge_structured_into_soul_md(merged, existing=markdown)
     elif markdown is not None:
         content = markdown
     elif fields is not None:
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
-        content = merge_structured_into_soul_md(fields, existing=existing)
+        content = merge_structured_into_soul_md(fields, existing=disk_existing)
     else:
         raise ValueError("soul_put requires structured fields or markdown")
+
+    if disk_existing.strip() and not content.strip():
+        raise ValueError(
+            "Refusing to wipe SOUL.md. Re-open Settings or edit the file directly."
+        )
+
+    if disk_existing.strip():
+        backup = path.with_name("SOUL.md.bak")
+        try:
+            backup.write_text(disk_existing, encoding="utf-8")
+            try:
+                backup.chmod(0o600)
+            except OSError:
+                pass
+        except OSError:
+            pass
 
     path.write_text(content, encoding="utf-8")
     try:
         path.chmod(0o600)
     except OSError:
         pass
+    _persist_agent_name(content, fields if isinstance(fields, dict) else None)
+    # Soul edits must take effect on the next agent turn — drop cached
+    # system prompts so continuing sessions rebuild identity from disk.
+    _invalidate_cached_system_prompts()
     return read_soul()
+
+
+def _persist_agent_name(content: str | None, fields: dict[str, Any] | None) -> None:
+    """Keep a sticky personal name file so Brain chat always resolves it."""
+    from agent.prompt_builder import _clean_display_name, _infer_name_from_markdown, agent_name_path
+
+    name = ""
+    if isinstance(fields, dict):
+        name = _clean_display_name(str(fields.get("name") or ""))
+    if not name and content:
+        try:
+            name = _clean_display_name(str(markdown_to_structured(content).get("name") or ""))
+        except Exception:
+            name = ""
+        if not name:
+            name = _infer_name_from_markdown(content)
+    path = agent_name_path()
+    try:
+        if name:
+            path.write_text(name + "\n", encoding="utf-8")
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
+        elif path.exists() and content is not None:
+            # Explicit empty name in a full rewrite — leave sticky unless cleared.
+            pass
+    except Exception:
+        pass
+
+
+def _invalidate_cached_system_prompts() -> None:
+    try:
+        from centurion_state import SessionDB
+
+        SessionDB().clear_system_prompts()
+    except Exception:
+        pass
 
 
 def _as_str_list(value: Any) -> list[str]:

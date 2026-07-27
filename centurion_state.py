@@ -756,6 +756,21 @@ class SessionDB:
             )
         self._execute_write(_do)
 
+    def clear_system_prompts(self) -> None:
+        """Null out stored system prompts so the next turn rebuilds from SOUL.md.
+
+        Used when SOUL.md / identity fields change — continuing gateway or
+        Brain sessions must pick up the new name and personality without
+        waiting for ``/new``.
+        """
+        def _do(conn):
+            conn.execute("UPDATE sessions SET system_prompt = NULL")
+
+        try:
+            self._execute_write(_do)
+        except Exception:
+            pass
+
     def update_system_prompt(self, session_id: str, system_prompt: str) -> None:
         """Store the full assembled system prompt snapshot."""
         def _do(conn):

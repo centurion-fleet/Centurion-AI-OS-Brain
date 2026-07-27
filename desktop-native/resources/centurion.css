@@ -58,6 +58,34 @@ button.link {
   background: alpha(@centurion_ink, 0.05);
 }
 
+.centurion-chat-user {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: alpha(@centurion_interactive, 0.12);
+}
+
+.centurion-chat-bot {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: alpha(@centurion_ink, 0.05);
+}
+
+.centurion-chat-system {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: @centurion_muted;
+}
+
+.centurion-chat-approval {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid @centurion_border;
+  background: alpha(@centurion_warm, 0.08);
+}
+
+
+
 button.pill {
   border-radius: 999px;
   padding: 6px 14px;
@@ -69,4 +97,17 @@ button.pill {
 stackswitcher button {
   min-height: 36px;
   min-width: 96px;
+}
+
+.centurion-chat-composer {
+  background: @window_bg_color;
+  border-top: 2px solid @centurion_border;
+  box-shadow: 0 -8px 24px alpha(@centurion_ink, 0.08);
+  min-height: 72px;
+}
+
+.centurion-chat-entry {
+  min-height: 44px;
+  font-size: 15px;
+  padding: 8px 12px;
 }

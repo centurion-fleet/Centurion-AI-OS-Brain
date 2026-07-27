@@ -83,6 +83,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "Hello".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -102,6 +103,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
             recovered: None,
             recovery_message: None,
             routed_display_name: None,
+            session_id: None,
         }
     );
 
@@ -166,6 +168,7 @@ async fn revoked_device_receives_error_on_next_message() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "After revoke".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -288,6 +291,85 @@ async fn remote_pair_token_approves_and_ready() {
 }
 
 #[tokio::test]
+async fn virgin_lan_confirm_auto_approves_without_token() {
+    sodiumoxide::init().expect("sodium");
+    let Some(lan_ip) = first_private_ipv4() else {
+        // CI / sandboxes without a private NIC skip this path.
+        return;
+    };
+    let listener = TcpListener::bind((lan_ip, 0)).await.expect("listener");
+    let address = listener.local_addr().expect("address");
+    let registry_path =
+        std::env::temp_dir().join(format!("centurion-loopback-virgin-{}.json", Uuid::new_v4()));
+    let pairing_path =
+        std::env::temp_dir().join(format!("centurion-loopback-virgin-tok-{}.json", Uuid::new_v4()));
+    let registry = DeviceRegistry::load(&registry_path).expect("registry");
+    // Active pairing tokens must not block first LAN Confirm on a virgin Brain.
+    let mut pairing_store = PairingTokenStore::load(&pairing_path).expect("pairing");
+    let (_record, _secret) = pairing_store
+        .create_token("unused-qr".to_owned())
+        .expect("token");
+    let sessions = SessionRegistry::new();
+    let server = tokio::spawn(server::run(
+        listener,
+        ServerState {
+            bridge: Arc::new(EchoBridge),
+            registry: Arc::new(Mutex::new(registry)),
+            pairing: Arc::new(Mutex::new(pairing_store)),
+            sessions,
+            identity: Arc::new(ServerIdentity::generate().expect("identity")),
+            auto_approve: false,
+        },
+    ));
+
+    let (client_public, client_secret) = kx::gen_keypair();
+    let mut stream = TcpStream::connect(address).await.expect("connect");
+    stream
+        .write_all(&encode_key_exchange(client_public.as_ref()).expect("handshake"))
+        .await
+        .expect("send handshake");
+
+    let mut server_handshake = [0_u8; KEY_EXCHANGE_FRAME_BYTES];
+    stream
+        .read_exact(&mut server_handshake)
+        .await
+        .expect("server handshake");
+    let server_public =
+        kx::PublicKey::from_slice(&decode_key_exchange(&server_handshake).expect("public key"))
+            .expect("server public key");
+    let (receive, _transmit) =
+        kx::client_session_keys(&client_public, &client_secret, &server_public)
+            .expect("session keys");
+    let receive = secretbox::Key::from_slice(receive.as_ref()).expect("receive key");
+
+    assert_eq!(
+        read_message(&mut stream, &receive).await,
+        RemoteMessage::Ready
+    );
+
+    server.abort();
+    let _ = std::fs::remove_file(registry_path);
+    let _ = std::fs::remove_file(pairing_path);
+}
+
+fn first_private_ipv4() -> Option<std::net::Ipv4Addr> {
+    let Ok(output) = std::process::Command::new("hostname").args(["-I"]).output() else {
+        return None;
+    };
+    if !output.status.success() {
+        return None;
+    }
+    for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+        if let Ok(ip) = token.parse::<std::net::Ipv4Addr>() {
+            if ip.is_private() {
+                return Some(ip);
+            }
+        }
+    }
+    None
+}
+
+#[tokio::test]
 async fn smoke_bind_echo_round_trip() {
     let Ok(bind) = std::env::var("CENTURION_REMOTE_SMOKE_BIND") else {
         return;
@@ -324,6 +406,7 @@ async fn smoke_bind_echo_round_trip() {
     let request = RemoteMessage::Chat {
         id: request_id,
         text: "Smoke".to_owned(),
+        session_id: None,
     }
     .to_json()
     .expect("request JSON");
@@ -343,6 +426,7 @@ async fn smoke_bind_echo_round_trip() {
             recovered: None,
             recovery_message: None,
             routed_display_name: None,
+            session_id: None,
         }
     );
 }
