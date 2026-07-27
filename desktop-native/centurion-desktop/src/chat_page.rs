@@ -1558,12 +1558,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     bottom.append(&attachment_row);
 
     // Attachment chip list (rebuild on add/remove)
-    let refresh_attachments: Rc<dyn Fn()> = Rc::new({
+    let refresh_attachments: Rc<dyn Fn()> = {
         let attachment_row = attachment_row.clone();
         let attachments = attachments.clone();
         let refresh_attachments: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
         let refresh_attachments_outer = refresh_attachments.clone();
-        let paint = Rc::new({
+        let paint: Rc<dyn Fn()> = Rc::new({
             let attachment_row = attachment_row.clone();
             let attachments = attachments.clone();
             let refresh_attachments = refresh_attachments.clone();
@@ -1593,7 +1593,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                 list.remove(index);
                             }
                         }
-                        if let Some(f) = refresh_attachments.borrow().as_ref() {
+                        let f = refresh_attachments.borrow().as_ref().cloned();
+                        if let Some(f) = f {
                             f();
                         }
                     });
@@ -1604,7 +1605,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
         *refresh_attachments_outer.borrow_mut() = Some(paint.clone());
         paint
-    });
+    };
 
     let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     input_row.set_margin_start(16);

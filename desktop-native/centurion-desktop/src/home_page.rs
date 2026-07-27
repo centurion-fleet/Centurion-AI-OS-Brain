@@ -1259,6 +1259,7 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                             let refresh_h = refresh_all.clone();
                             hold.connect_clicked(move |_| {
                                 if let Some(pid) = plan_id.clone() {
+                                    let refresh_h = refresh_h.clone();
                                     thread::spawn(move || {
                                         let _ = decide_plan(&pid, "hold");
                                     });
