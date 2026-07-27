@@ -2614,6 +2614,9 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
         dialog.set_default_response(Some("save"));
         let soul_row = soul_row.clone();
+        // Clone for the 'static response callback — a bare `&parent` does not
+        // compile on Linux (borrowed data escapes; broke Brain rebuilds in v5.2.25).
+        let parent_for_warn = parent.clone();
         dialog.connect_response(None, move |dialog, response| {
             if response == "save" {
                 let (start, end) = buffer.bounds();
@@ -2633,7 +2636,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                         .close_response("ok")
                         .build();
                     warn.add_response("ok", "OK");
-                    warn.present(Some(parent));
+                    warn.present(Some(&parent_for_warn));
                     return;
                 }
                 match run_bridge_action(
