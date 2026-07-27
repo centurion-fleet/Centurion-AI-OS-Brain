@@ -803,22 +803,12 @@ mod linux {
         support_links.append(&talk_to_adrian_link);
         status_card.append(&support_links);
 
-        let status = gtk::Box::new(gtk::Orientation::Vertical, 24);
-        status.set_margin_top(32);
-        status.set_margin_bottom(32);
-        status.set_margin_start(32);
-        status.set_margin_end(32);
-        status.append(&status_card);
-
-        let devices = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        devices.set_margin_top(32);
-        devices.set_margin_start(32);
-        devices.set_margin_end(32);
+        let devices_section = gtk::Box::new(gtk::Orientation::Vertical, 12);
         let devices_heading = gtk::Box::new(gtk::Orientation::Horizontal, 12);
         devices_heading.append(
             &gtk::Label::builder()
                 .label("Connected Devices")
-                .css_classes(["title-1"])
+                .css_classes(["title-2"])
                 .xalign(0.0)
                 .hexpand(true)
                 .build(),
@@ -826,27 +816,23 @@ mod linux {
         let refresh_devices_button = gtk::Button::from_icon_name("view-refresh-symbolic");
         refresh_devices_button.set_tooltip_text(Some("Refresh devices"));
         devices_heading.append(&refresh_devices_button);
-        devices.append(&devices_heading);
-        devices.append(
+        devices_section.append(&devices_heading);
+        devices_section.append(
             &gtk::Label::builder()
                 .label(
-                    "Link flow: generate a pairing code on Status → paste in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
+                    "Link flow: show the pairing QR under Status above → scan in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
                 )
                 .wrap(true)
                 .xalign(0.0)
                 .css_classes(["dim-label"])
                 .build(),
         );
-        let go_to_pairing = gtk::Button::with_label("Go to pairing");
-        go_to_pairing.add_css_class("suggested-action");
-        go_to_pairing.set_halign(gtk::Align::Start);
-        devices.append(&go_to_pairing);
         let device_list = gtk::ListBox::new();
         device_list.add_css_class("boxed-list");
         refresh_devices(&device_list);
         let refresh_list = device_list.clone();
         refresh_devices_button.connect_clicked(move |_| refresh_devices(&refresh_list));
-        devices.append(&device_list);
+        devices_section.append(&device_list);
 
         let settings = gtk::Box::new(gtk::Orientation::Vertical, 16);
         settings.set_margin_top(32);
@@ -861,6 +847,17 @@ mod linux {
                 .build(),
         );
 
+        settings.append(
+            &gtk::Label::builder()
+                .label("Status")
+                .css_classes(["title-2"])
+                .xalign(0.0)
+                .margin_top(8)
+                .build(),
+        );
+        settings.append(&status_card);
+        settings.append(&devices_section);
+
         // Each section is its own PreferencesGroup. Earlier we appended section
         // labels to the page *before* a single list, so Autonomy/Soul/Telegram
         // visually sat under "Support Tools" and the middle headers looked empty.
@@ -871,7 +868,7 @@ mod linux {
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
-                "Generate a code on Status, paste it in Sovereign AI Remote, then approve the iPhone under Devices.",
+                "Show the pairing QR for Sovereign AI Remote (same Wi‑Fi). Approve the phone under Connected Devices above.",
             )
             .icon_name("network-wireless-symbolic")
             .activatable(true)
@@ -1076,30 +1073,26 @@ mod linux {
             })
         };
 
-        stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&chat, Some("chat"), "Chat");
-        stack.add_titled(&status, Some("status"), "Status");
-        stack.add_titled(&devices, Some("devices"), "Devices");
+        stack.add_titled(&home, Some("home"), "Home");
         stack.add_titled(&settings_scroll, Some("settings"), "Settings");
-        stack.set_visible_child_name("home");
-        home.set_vexpand(true);
+        stack.set_visible_child_name("chat");
         chat.set_vexpand(true);
-        status.set_vexpand(true);
-        devices.set_vexpand(true);
+        home.set_vexpand(true);
         settings_scroll.set_vexpand(true);
         settings_scroll.set_hexpand(true);
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
         glib::timeout_add_seconds_local(5, move || {
-            if poll_stack.visible_child_name().as_deref() == Some("devices") {
+            if poll_stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&poll_list);
             }
             glib::ControlFlow::Continue
         });
         let tab_refresh_list = device_list.clone();
         stack.connect_visible_child_name_notify(move |stack| {
-            if stack.visible_child_name().as_deref() == Some("devices") {
+            if stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&tab_refresh_list);
             }
         });
@@ -1244,15 +1237,9 @@ mod linux {
             move |_| show_backup_thinking_dialog(&window, &backup_thinking_row)
         });
         pairing_settings_row.connect_activated({
-            let stack = stack.clone();
+            let window = window.clone();
             move |_| {
-                stack.set_visible_child_name("status");
-            }
-        });
-        go_to_pairing.connect_clicked({
-            let stack = stack.clone();
-            move |_| {
-                stack.set_visible_child_name("status");
+                show_pairing_qr_window(&window);
             }
         });
         autonomy_button.connect_clicked({
@@ -1564,7 +1551,7 @@ mod linux {
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones linked yet")
-                    .subtitle("Scan the QR on Status with Sovereign AI Remote (same Wi‑Fi).")
+                    .subtitle("Scan the pairing QR in Settings → Status with Sovereign AI Remote (same Wi‑Fi).")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -3603,7 +3590,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
         let hooks = AdrianDialogHooks {
             build_context: Rc::new(build_adrian_context),
             on_action: Rc::new(move |action_id: &str| match action_id {
-                "open_connect" => stack.set_visible_child_name("status"),
+                "open_connect" => stack.set_visible_child_name("settings"),
                 "open_get_help" => show_support_health_dialog(&window),
                 "try_auto_fix" => {
                     if let Some(response) = run_provider_command(&["restore", "--json"]) {
