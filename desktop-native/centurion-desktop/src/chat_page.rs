@@ -5,7 +5,7 @@
 
 use adw::prelude::*;
 use gtk4 as gtk;
-use gtk::gio;
+use gio;
 use libadwaita as adw;
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
@@ -94,6 +94,43 @@ enum ChatIntent {
 struct PendingAttachment {
     path: PathBuf,
     filename: String,
+}
+
+
+fn rebuild_attachment_chips(
+    attachment_row: &gtk::Box,
+    attachments: &Rc<RefCell<Vec<PendingAttachment>>>,
+) {
+    while let Some(child) = attachment_row.first_child() {
+        attachment_row.remove(&child);
+    }
+    let items = attachments.borrow().clone();
+    attachment_row.set_visible(!items.is_empty());
+    for (index, item) in items.iter().enumerate() {
+        let chip = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        chip.add_css_class("centurion-chat-attach-chip");
+        chip.append(
+            &gtk::Label::builder()
+                .label(&format!("📎 {}", item.filename))
+                .build(),
+        );
+        let remove = gtk::Button::from_icon_name("window-close-symbolic");
+        remove.add_css_class("flat");
+        remove.set_tooltip_text(Some("Remove attachment"));
+        let attachments = attachments.clone();
+        let attachment_row = attachment_row.clone();
+        remove.connect_clicked(move |_| {
+            {
+                let mut list = attachments.borrow_mut();
+                if index < list.len() {
+                    list.remove(index);
+                }
+            }
+            rebuild_attachment_chips(&attachment_row, &attachments);
+        });
+        chip.append(&remove);
+        attachment_row.append(&chip);
+    }
 }
 
 const PLAN_ARTIFACT_FENCE: &str = "plan-artifact";
@@ -1557,54 +1594,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     attachment_row.add_css_class("centurion-chat-attachments");
     bottom.append(&attachment_row);
 
-    // Attachment chip list (rebuild on add/remove)
     let refresh_attachments: Rc<dyn Fn()> = {
         let attachment_row = attachment_row.clone();
         let attachments = attachments.clone();
-        let refresh_attachments: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
-        let refresh_attachments_outer = refresh_attachments.clone();
-        let paint: Rc<dyn Fn()> = Rc::new({
-            let attachment_row = attachment_row.clone();
-            let attachments = attachments.clone();
-            let refresh_attachments = refresh_attachments.clone();
-            move || {
-                while let Some(child) = attachment_row.first_child() {
-                    attachment_row.remove(&child);
-                }
-                let items = attachments.borrow().clone();
-                attachment_row.set_visible(!items.is_empty());
-                for (index, item) in items.iter().enumerate() {
-                    let chip = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-                    chip.add_css_class("centurion-chat-attach-chip");
-                    chip.append(
-                        &gtk::Label::builder()
-                            .label(&format!("📎 {}", item.filename))
-                            .build(),
-                    );
-                    let remove = gtk::Button::from_icon_name("window-close-symbolic");
-                    remove.add_css_class("flat");
-                    remove.set_tooltip_text(Some("Remove attachment"));
-                    let attachments = attachments.clone();
-                    let refresh_attachments = refresh_attachments.clone();
-                    remove.connect_clicked(move |_| {
-                        {
-                            let mut list = attachments.borrow_mut();
-                            if index < list.len() {
-                                list.remove(index);
-                            }
-                        }
-                        let f = refresh_attachments.borrow().as_ref().cloned();
-                        if let Some(f) = f {
-                            f();
-                        }
-                    });
-                    chip.append(&remove);
-                    attachment_row.append(&chip);
-                }
-            }
-        });
-        *refresh_attachments_outer.borrow_mut() = Some(paint.clone());
-        paint
+        Rc::new(move || {
+            rebuild_attachment_chips(&attachment_row, &attachments);
+        })
     };
 
     let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -1650,10 +1645,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let refresh_attachments = refresh_attachments.clone();
         let input = input.clone();
         attach_button.connect_clicked(move |_| {
-            let Some(root) = input.root() else {
-                return;
-            };
-            let Ok(window) = root.downcast::<gtk::Window>() else {
+            let Some(window) = input.root().and_downcast::<gtk::Window>() else {
                 return;
             };
             let dialog = gtk::FileDialog::builder()
@@ -1662,44 +1654,39 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 .build();
             let attachments = attachments.clone();
             let refresh_attachments = refresh_attachments.clone();
-            dialog.open_multiple(
-                Some(&window),
-                None::<&gio::Cancellable>,
-                move |result| {
-                    let Ok(model) = result else {
-                        return;
+            dialog.open_multiple(Some(&window), gio::Cancellable::NONE, move |result| {
+                let Ok(model) = result else {
+                    return;
+                };
+                let n = model.n_items();
+                let mut added = false;
+                for i in 0..n {
+                    let Some(obj) = model.item(i) else {
+                        continue;
                     };
-                    let n = model.n_items();
-                    let mut added = false;
-                    for i in 0..n {
-                        let Some(obj) = model.item(i) else {
-                            continue;
-                        };
-                        let Ok(file) = obj.downcast::<gio::File>() else {
-                            continue;
-                        };
-                        let Some(path) = file.path() else {
-                            continue;
-                        };
-                        let filename = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.display().to_string());
-                        let already = attachments
-                            .borrow()
-                            .iter()
-                            .any(|a| a.path == path);
-                        if already {
-                            continue;
-                        }
-                        attachments.borrow_mut().push(PendingAttachment { path, filename });
-                        added = true;
+                    let Ok(file) = obj.downcast::<gio::File>() else {
+                        continue;
+                    };
+                    let Some(path) = file.path() else {
+                        continue;
+                    };
+                    let filename = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| path.display().to_string());
+                    let already = attachments.borrow().iter().any(|a| a.path == path);
+                    if already {
+                        continue;
                     }
-                    if added {
-                        refresh_attachments();
-                    }
-                },
-            );
+                    attachments
+                        .borrow_mut()
+                        .push(PendingAttachment { path, filename });
+                    added = true;
+                }
+                if added {
+                    refresh_attachments();
+                }
+            });
         });
     }
 
