@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Brain Settings updates are often launched from the GUI with a minimal PATH.
+if [[ -f "${HOME}/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/.cargo/env"
+fi
+export PATH="${HOME}/.cargo/bin:${HOME}/.local/bin:${PATH}"
+
 # User-local install for Track B (no RPM/sudo after build deps are present).
 # Installs centurion-remote + centurion-desktop, icons, and a working .desktop entry.
 

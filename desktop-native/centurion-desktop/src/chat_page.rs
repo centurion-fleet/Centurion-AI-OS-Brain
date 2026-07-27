@@ -135,6 +135,47 @@ pub fn resolve_bridge_python() -> String {
     "python3".to_owned()
 }
 
+/// Resolve the ``centurion`` CLI next to the Brain venv (not a stale ~/.local/bin shim).
+pub fn resolve_centurion_cli() -> String {
+    if let Ok(py) = std::env::var("CENTURION_PYTHON") {
+        let trimmed = py.trim();
+        if !trimmed.is_empty() {
+            if let Some(bin_dir) = PathBuf::from(trimmed).parent() {
+                let centurion = bin_dir.join("centurion");
+                if centurion.is_file() {
+                    return centurion.to_string_lossy().into_owned();
+                }
+            }
+        }
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
+        let root = PathBuf::from(repo.trim());
+        if !root.as_os_str().is_empty() {
+            candidates.push(root.join(".venv/bin/centurion"));
+            candidates.push(root.join("venv/bin/centurion"));
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let home = PathBuf::from(home);
+        candidates.push(home.join(".centurion/Centurion-AI-OS/venv/bin/centurion"));
+        candidates.push(home.join(".centurion/venv/bin/centurion"));
+        candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/.venv/bin/centurion"));
+        candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/venv/bin/centurion"));
+        candidates.push(home.join("Centurion-AI-OS/.venv/bin/centurion"));
+        candidates.push(home.join("Centurion-AI-OS/venv/bin/centurion"));
+        candidates.push(home.join(".local/bin/centurion"));
+    }
+
+    for path in candidates {
+        if path.is_file() {
+            return path.to_string_lossy().into_owned();
+        }
+    }
+    "centurion".to_owned()
+}
+
 fn session_store_path() -> PathBuf {
     PathBuf::from(resolve_centurion_home()).join("desktop_chat_session")
 }

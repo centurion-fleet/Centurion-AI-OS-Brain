@@ -172,6 +172,24 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _resolve_git_update_root() -> Path:
+    """Git checkout used for ``centurion update`` (honours ``CENTURION_AI_REPO``).
+
+    The Brain desktop sets ``CENTURION_AI_REPO`` to the user's checkout while the
+    ``centurion`` CLI may be imported from a venv elsewhere. Update checks and
+    pulls must target the checkout on disk, not the import path alone.
+    """
+    env = os.environ.get("CENTURION_AI_REPO", "").strip()
+    if env:
+        root = Path(env).expanduser().resolve()
+        if (root / ".git").is_dir():
+            return root
+        install_script = root / "desktop-native" / "scripts" / "install-user.sh"
+        if install_script.is_file():
+            return root
+    return PROJECT_ROOT
+
+
 # ---------------------------------------------------------------------------
 # Profile override — MUST happen before any centurion module import.
 #
@@ -8617,6 +8635,8 @@ def _cmd_update_check(args=None):
         recommended_update_command,
     )
 
+    update_root = _resolve_git_update_root()
+
     def emit(payload: dict, exit_code: int = 0) -> None:
         if as_json:
             print(json.dumps(payload))
@@ -8659,7 +8679,7 @@ def _cmd_update_check(args=None):
         emit(
             {
                 **base,
-                "method": detect_install_method(PROJECT_ROOT),
+                "method": detect_install_method(update_root),
                 "status": "unavailable",
                 "message": (
                     "This Centurion AI OS install is managed by a package manager. "
@@ -8669,7 +8689,7 @@ def _cmd_update_check(args=None):
         )
         return
 
-    method = detect_install_method(PROJECT_ROOT)
+    method = detect_install_method(update_root)
     if method == "pip":
         from centurion_cli.banner import check_via_pypi
 
@@ -8707,7 +8727,7 @@ def _cmd_update_check(args=None):
             )
         return
 
-    git_dir = PROJECT_ROOT / ".git"
+    git_dir = update_root / ".git"
     if not git_dir.exists():
         emit(
             {
@@ -8730,7 +8750,7 @@ def _cmd_update_check(args=None):
         print("→ Fetching from origin...")
     origin_fetch = subprocess.run(
         git_cmd + ["fetch", "origin"],
-        cwd=PROJECT_ROOT,
+        cwd=update_root,
         capture_output=True,
         text=True,
     )
@@ -8738,7 +8758,7 @@ def _cmd_update_check(args=None):
         print("→ Fetching from upstream...")
     upstream_fetch = subprocess.run(
         git_cmd + ["fetch", "upstream"],
-        cwd=PROJECT_ROOT,
+        cwd=update_root,
         capture_output=True,
         text=True,
     )
@@ -8771,21 +8791,21 @@ def _cmd_update_check(args=None):
         compare_branch = "origin/main"
 
     behind_main = _git_rev_list_count(
-        git_cmd, PROJECT_ROOT, f"HEAD..{compare_branch}"
+        git_cmd, update_root, f"HEAD..{compare_branch}"
     )
     if behind_main is None:
         behind_main = 0
 
     # Also compare against the current branch's upstream (feature branches).
     branch_behind = 0
-    branch_compare = _git_upstream_ref(git_cmd, PROJECT_ROOT)
+    branch_compare = _git_upstream_ref(git_cmd, update_root)
     if not branch_compare:
-        current_branch = _git_current_branch(git_cmd, PROJECT_ROOT)
+        current_branch = _git_current_branch(git_cmd, update_root)
         if current_branch:
             branch_compare = f"origin/{current_branch}"
     if branch_compare and branch_compare != compare_branch:
         counted = _git_rev_list_count(
-            git_cmd, PROJECT_ROOT, f"HEAD..{branch_compare}"
+            git_cmd, update_root, f"HEAD..{branch_compare}"
         )
         if counted is not None:
             branch_behind = counted
@@ -8798,7 +8818,7 @@ def _cmd_update_check(args=None):
         screen_installed,
         screen_reason,
     ) = _screen_rebuild_needed(
-        git_cmd, PROJECT_ROOT, screen_version=screen_version
+        git_cmd, update_root, screen_version=screen_version
     )
 
     base.update(
@@ -9105,6 +9125,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         else None
     )
     assume_yes = bool(getattr(args, "yes", False))
+    update_root = _resolve_git_update_root()
 
     print("⚕ Updating Centurion AI OS...")
     print()
@@ -9128,14 +9149,14 @@ def _cmd_update_impl(args, gateway_mode: bool):
     # Try git-based update first, fall back to ZIP download on Windows
     # when git file I/O is broken (antivirus, NTFS filter drivers, etc.)
     use_zip_update = False
-    git_dir = PROJECT_ROOT / ".git"
+    git_dir = update_root / ".git"
 
     if not git_dir.exists():
         if sys.platform == "win32":
             use_zip_update = True
         else:
             from centurion_cli.config import detect_install_method
-            method = detect_install_method(PROJECT_ROOT)
+            method = detect_install_method(update_root)
             if method == "pip":
                 _cmd_update_pip(args)
                 return
@@ -9157,7 +9178,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 "windows.appendAtomically",
                 "false",
             ],
-            cwd=PROJECT_ROOT,
+            cwd=update_root,
             check=False,
             capture_output=True,
         )
@@ -9168,7 +9189,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         git_cmd = ["git", "-c", "windows.appendAtomically=false"]
 
     # Detect if we're updating from a fork (before any branch logic)
-    origin_url = _get_origin_url(git_cmd, PROJECT_ROOT)
+    origin_url = _get_origin_url(git_cmd, update_root)
     is_fork = _is_fork(origin_url)
 
     if is_fork:
@@ -9187,7 +9208,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         print("→ Fetching updates...")
         fetch_result = subprocess.run(
             git_cmd + ["fetch", "origin"],
-            cwd=PROJECT_ROOT,
+            cwd=update_root,
             capture_output=True,
             text=True,
         )
@@ -9211,7 +9232,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Get current branch (returns literal "HEAD" when detached)
         result = subprocess.run(
             git_cmd + ["rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=PROJECT_ROOT,
+            cwd=update_root,
             capture_output=True,
             text=True,
             check=True,
@@ -9230,16 +9251,16 @@ def _cmd_update_impl(args, gateway_mode: bool):
             )
             print(f"  ⚠ Currently on {label} — switching to main for update...")
             # Stash before checkout so uncommitted work isn't lost
-            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, PROJECT_ROOT)
+            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, update_root)
             subprocess.run(
                 git_cmd + ["checkout", "main"],
-                cwd=PROJECT_ROOT,
+                cwd=update_root,
                 capture_output=True,
                 text=True,
                 check=True,
             )
         else:
-            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, PROJECT_ROOT)
+            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, update_root)
 
         prompt_for_restore = (
             auto_stash_ref is not None
@@ -9250,7 +9271,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Check if there are updates
         result = subprocess.run(
             git_cmd + ["rev-list", f"HEAD..origin/{branch}", "--count"],
-            cwd=PROJECT_ROOT,
+            cwd=update_root,
             capture_output=True,
             text=True,
             check=True,
@@ -9263,7 +9284,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if auto_stash_ref is not None:
                 _restore_stashed_changes(
                     git_cmd,
-                    PROJECT_ROOT,
+                    update_root,
                     auto_stash_ref,
                     prompt_user=prompt_for_restore,
                     input_fn=gw_input_fn,
@@ -9271,7 +9292,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if current_branch not in {"main", "HEAD"}:
                 subprocess.run(
                     git_cmd + ["checkout", current_branch],
-                    cwd=PROJECT_ROOT,
+                    cwd=update_root,
                     capture_output=True,
                     text=True,
                     check=False,
@@ -9304,11 +9325,11 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # orphan merge-conflict markers in centurion_cli/config.py bricked
         # every user who ran ``centurion update`` for the 7 minutes between
         # the bad commit and the fix landing).
-        pre_pull_sha = _capture_head_sha(git_cmd, PROJECT_ROOT)
+        pre_pull_sha = _capture_head_sha(git_cmd, update_root)
         try:
             pull_result = subprocess.run(
                 git_cmd + ["pull", "--ff-only", "origin", branch],
-                cwd=PROJECT_ROOT,
+                cwd=update_root,
                 capture_output=True,
                 text=True,
             )
@@ -9321,7 +9342,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 )
                 reset_result = subprocess.run(
                     git_cmd + ["reset", "--hard", f"origin/{branch}"],
-                    cwd=PROJECT_ROOT,
+                    cwd=update_root,
                     capture_output=True,
                     text=True,
                 )
@@ -9341,7 +9362,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # so the CLI stays bootable. The user can then retry ``centurion
             # update`` later once a fix lands upstream.
             syntax_ok, failing_path, syntax_error = _validate_critical_files_syntax(
-                PROJECT_ROOT
+                update_root
             )
             if not syntax_ok:
                 print()
@@ -9357,7 +9378,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     print(f"→ Rolling back to {pre_pull_sha[:10]}...")
                     rollback_result = subprocess.run(
                         git_cmd + ["reset", "--hard", pre_pull_sha],
-                        cwd=PROJECT_ROOT,
+                        cwd=update_root,
                         capture_output=True,
                         text=True,
                     )
@@ -9366,13 +9387,13 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         print("  Try ``centurion update`` again later once a fix lands.")
                     else:
                         print("  ✗ Rollback failed. Recover manually with:")
-                        print(f"    cd {PROJECT_ROOT} && git reset --hard {pre_pull_sha}")
+                        print(f"    cd {update_root} && git reset --hard {pre_pull_sha}")
                         if rollback_result.stderr.strip():
                             print(f"    ({rollback_result.stderr.strip().splitlines()[0]})")
                 else:
                     print()
                     print("  Could not capture pre-pull SHA — recover manually with:")
-                    print(f"    cd {PROJECT_ROOT} && git reflog && git reset --hard <prev-sha>")
+                    print(f"    cd {update_root} && git reflog && git reset --hard <prev-sha>")
                 sys.exit(1)
 
             update_succeeded = True
@@ -9388,7 +9409,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 else:
                     _restore_stashed_changes(
                         git_cmd,
-                        PROJECT_ROOT,
+                        update_root,
                         auto_stash_ref,
                         prompt_user=prompt_for_restore,
                         input_fn=gw_input_fn,
@@ -9399,7 +9420,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Clear stale .pyc bytecode cache — prevents ImportError on gateway
         # restart when updated source references names that didn't exist in
         # the old bytecode (e.g. get_centurion_home added to centurion_constants).
-        removed = _clear_bytecode_cache(PROJECT_ROOT)
+        removed = _clear_bytecode_cache(update_root)
         if removed:
             print(
                 f"  ✓ Cleared {removed} stale __pycache__ director{'y' if removed == 1 else 'ies'}"
@@ -9407,7 +9428,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         # Fork upstream sync logic (only for main branch on forks)
         if is_fork and branch == "main":
-            _sync_with_upstream_if_needed(git_cmd, PROJECT_ROOT)
+            _sync_with_upstream_if_needed(git_cmd, update_root)
 
         # Reinstall Python dependencies. Prefer .[all], but if one optional extra
         # breaks on this machine, keep base deps and reinstall the remaining extras
@@ -9418,7 +9439,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         install_group = "all"
 
         if uv_bin:
-            uv_env = {**os.environ, "VIRTUAL_ENV": str(PROJECT_ROOT / "venv")}
+            uv_env = {**os.environ, "VIRTUAL_ENV": str(update_root / "venv")}
             if _is_termux_env(uv_env):
                 uv_env.pop("PYTHONPATH", None)
                 uv_env.pop("PYTHONHOME", None)
@@ -9439,14 +9460,14 @@ def _cmd_update_impl(args, gateway_mode: bool):
             try:
                 subprocess.run(
                     pip_cmd + ["--version"],
-                    cwd=PROJECT_ROOT,
+                    cwd=update_root,
                     check=True,
                     capture_output=True,
                 )
             except subprocess.CalledProcessError:
                 subprocess.run(
                     [sys.executable, "-m", "ensurepip", "--upgrade", "--default-pip"],
-                    cwd=PROJECT_ROOT,
+                    cwd=update_root,
                     check=True,
                 )
             if _is_termux_env():
@@ -9460,7 +9481,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         _refresh_active_lazy_features()
 
         _update_node_dependencies()
-        _build_web_ui(PROJECT_ROOT / "web")
+        _build_web_ui(update_root / "web")
 
         print()
         print("✓ Code updated!")

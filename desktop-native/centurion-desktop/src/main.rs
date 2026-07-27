@@ -1555,11 +1555,28 @@ mod linux {
     }
 
     fn centurion_binary() -> String {
-        std::env::var("HOME")
-            .ok()
-            .map(|home| format!("{home}/.local/bin/centurion"))
-            .filter(|path| std::path::Path::new(path).is_file())
-            .unwrap_or_else(|| "centurion".to_owned())
+        crate::chat_page::resolve_centurion_cli()
+    }
+
+    fn prepare_centurion_cli() -> Command {
+        let mut command = Command::new(centurion_binary());
+        command.env("CENTURION_HOME", crate::chat_page::resolve_centurion_home());
+        if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
+            let trimmed = repo.trim();
+            if !trimmed.is_empty() {
+                let root = PathBuf::from(trimmed);
+                command.env("CENTURION_AI_REPO", trimmed);
+                if root.is_dir() {
+                    command.current_dir(&root);
+                }
+                return command;
+            }
+        }
+        if let Ok(root) = resolve_centurion_repo_root() {
+            command.env("CENTURION_AI_REPO", root.as_os_str());
+            command.current_dir(&root);
+        }
+        command
     }
 
     fn run_provider_command(args: &[&str]) -> Option<ProviderCliResponse> {
@@ -1567,7 +1584,7 @@ mod linux {
         let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
         let mut command_args = vec!["provider", "--json"];
         command_args.extend_from_slice(&rest);
-        let output = Command::new(centurion_binary())
+        let output = prepare_centurion_cli()
             .args(command_args)
             .output()
             .ok()?;
@@ -1577,7 +1594,7 @@ mod linux {
     }
 
     fn run_provider_save_key(connector_id: &str, access_code: &str) -> Option<ProviderCliResponse> {
-        let mut child = Command::new(centurion_binary())
+        let mut child = prepare_centurion_cli()
             .args(["provider", "--json", "save-key", connector_id, "-"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -1596,7 +1613,7 @@ mod linux {
         let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
         let mut command_args = vec!["support", "--json"];
         command_args.extend_from_slice(&rest);
-        let output = Command::new(centurion_binary())
+        let output = prepare_centurion_cli()
             .args(command_args)
             .output()
             .ok()?;
@@ -1605,7 +1622,7 @@ mod linux {
     }
 
     fn run_update_check() -> Option<UpdateCheckPayload> {
-        let output = Command::new(centurion_binary())
+        let output = prepare_centurion_cli()
             .args([
                 "update",
                 "--check",
@@ -1655,7 +1672,7 @@ mod linux {
     }
 
     fn run_os_update() -> Result<String, String> {
-        let output = Command::new(centurion_binary())
+        let output = prepare_centurion_cli()
             .args(["update", "-y"])
             .output()
             .map_err(|error| error.to_string())?;
@@ -1689,10 +1706,17 @@ mod linux {
                 script.display()
             ));
         }
+        let home = crate::chat_page::resolve_centurion_home();
+        let script_arg = script.to_string_lossy().replace('\'', "'\\''");
+        let repo_arg = repo_root.to_string_lossy().replace('\'', "'\\''");
+        let home_arg = home.replace('\'', "'\\''");
+        let shell_cmd = format!(
+            "export CENTURION_AI_REPO='{repo_arg}' CENTURION_HOME='{home_arg}'; \
+             exec bash '{script_arg}'"
+        );
         let output = Command::new("bash")
-            .arg(&script)
-            .current_dir(repo_root)
-            .env("CENTURION_AI_REPO", repo_root.as_os_str())
+            .arg("-lc")
+            .arg(shell_cmd)
             .output()
             .map_err(|error| format!("Could not start screen update: {error}"))?;
         if output.status.success() {
@@ -1793,13 +1817,28 @@ mod linux {
 
     /// Full Brain update: OS package, then desktop + remote binaries.
     fn run_full_brain_update_pipeline() -> Result<String, String> {
-        let os_message = run_os_update()?;
+        let os_result = run_os_update();
         let repo_root = resolve_centurion_repo_root()?;
-        run_native_brain_install(&repo_root)?;
-        restart_centurion_remote_best_effort();
-        Ok(format!(
-            "{os_message}\n\nScreen app and private connection were rebuilt."
-        ))
+        let install_result = run_native_brain_install(&repo_root);
+        if install_result.is_ok() {
+            restart_centurion_remote_best_effort();
+        }
+        match (os_result, install_result) {
+            (Ok(os_message), Ok(())) => Ok(format!(
+                "{os_message}\n\nScreen app and private connection were rebuilt."
+            )),
+            (Err(os_err), Ok(())) => Ok(format!(
+                "Screen app and private connection were rebuilt.\n\n\
+                 Brain software git update did not finish: {os_err}\n\
+                 If Chat and Soul look correct, you can ignore the git step."
+            )),
+            (Err(os_err), Err(install_err)) => Err(format!(
+                "{install_err}\n\nGit update also failed:\n{os_err}"
+            )),
+            (Ok(os_message), Err(install_err)) => Err(format!(
+                "{install_err}\n\n(Git step reported: {os_message})"
+            )),
+        }
     }
 
     fn show_update_check_dialog(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
@@ -2039,7 +2078,7 @@ mod linux {
         let mut command_args = vec!["telegram", "import"];
         command_args.extend_from_slice(args);
         command_args.push("--json");
-        let output = Command::new(centurion_binary())
+        let output = prepare_centurion_cli()
             .args(command_args)
             .output()
             .ok()?;

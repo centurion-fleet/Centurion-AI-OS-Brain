@@ -261,6 +261,23 @@ def test_cmd_update_check_json_managed(tmp_path, monkeypatch, capsys):
     assert payload["recommended_command"] == "sudo nixos-rebuild switch"
 
 
+def test_resolve_git_update_root_prefers_centurion_ai_repo(tmp_path, monkeypatch):
+    import centurion_cli.main as main_mod
+
+    pip_root = tmp_path / "site"
+    pip_root.mkdir()
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    (repo / "desktop-native" / "scripts").mkdir(parents=True)
+    (repo / "desktop-native" / "scripts" / "install-user.sh").write_text(
+        "#!/bin/bash\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(main_mod, "PROJECT_ROOT", pip_root)
+    monkeypatch.setenv("CENTURION_AI_REPO", str(repo))
+    assert main_mod._resolve_git_update_root() == repo.resolve()
+
+
 def test_cmd_update_check_json_feature_branch_behind(tmp_path, monkeypatch, capsys):
     """Check finds commits on the current branch tip even when main is current."""
     from types import SimpleNamespace
