@@ -146,6 +146,21 @@ def test_empty_markdown_only_save_raises(tmp_path, monkeypatch):
         write_soul(markdown="")
 
 
+def test_apply_sticky_profile_home_skips_missing_profile(tmp_path, monkeypatch):
+    root = tmp_path / ".centurion"
+    root.mkdir()
+    (root / "active_profile").write_text("missing\n", encoding="utf-8")
+    (root / "SOUL.md").write_text("## Name\n\nTitus\n", encoding="utf-8")
+    monkeypatch.delenv("CENTURION_HOME", raising=False)
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+    from centurion_cli.profiles import apply_sticky_profile_home
+    from centurion_cli.soul_sync import read_soul
+
+    apply_sticky_profile_home()
+    assert read_soul()["name"] == "Titus"
+
+
 def test_apply_sticky_profile_home(tmp_path, monkeypatch):
     root = tmp_path / ".centurion"
     profile = root / "profiles" / "legio"

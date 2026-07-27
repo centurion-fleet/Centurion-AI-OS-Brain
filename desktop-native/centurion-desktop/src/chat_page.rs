@@ -61,6 +61,15 @@ pub fn resolve_centurion_home() -> String {
             .unwrap_or_else(|_| PathBuf::from(".centurion"))
     };
 
+    let fallback = |path: PathBuf| -> String {
+        let root = default_root();
+        if path.is_dir() {
+            path.to_string_lossy().into_owned()
+        } else {
+            root.to_string_lossy().into_owned()
+        }
+    };
+
     if let Ok(home) = std::env::var("CENTURION_HOME") {
         let trimmed = home.trim();
         if !trimmed.is_empty() {
@@ -70,7 +79,7 @@ pub fn resolve_centurion_home() -> String {
                 .and_then(|parent| parent.file_name())
                 .is_some_and(|name| name == "profiles")
             {
-                return trimmed.to_owned();
+                return fallback(path);
             }
         }
     }
@@ -80,22 +89,63 @@ pub fn resolve_centurion_home() -> String {
     if let Ok(name) = std::fs::read_to_string(&active) {
         let name = name.trim();
         if !name.is_empty() && name != "default" {
-            return root
-                .join("profiles")
-                .join(name)
-                .to_string_lossy()
-                .into_owned();
+            return fallback(root.join("profiles").join(name));
         }
     }
 
     if let Ok(home) = std::env::var("CENTURION_HOME") {
         let trimmed = home.trim();
         if !trimmed.is_empty() {
-            return trimmed.to_owned();
+            let path = PathBuf::from(trimmed);
+            if path.is_dir() {
+                return trimmed.to_owned();
+            }
         }
     }
 
     root.to_string_lossy().into_owned()
+}
+
+/// Resolve the Centurion AI OS checkout used by the Python bridge.
+pub fn resolve_centurion_repo_root() -> Option<PathBuf> {
+    if let Ok(env_root) = std::env::var("CENTURION_AI_REPO") {
+        let trimmed = env_root.trim();
+        if !trimmed.is_empty() {
+            let root = PathBuf::from(trimmed);
+            let script = root
+                .join("desktop-native")
+                .join("scripts")
+                .join("install-user.sh");
+            if script.is_file() {
+                return Some(root);
+            }
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let home = PathBuf::from(home);
+        for root in [
+            home.join("Centurion-AI-OS").join("Centurion-AI-OS"),
+            home.join("Centurion-AI-OS"),
+            home.join(".centurion").join("Centurion-AI-OS"),
+        ] {
+            let script = root
+                .join("desktop-native")
+                .join("scripts")
+                .join("install-user.sh");
+            if script.is_file() {
+                return Some(root);
+            }
+        }
+    }
+    None
+}
+
+pub fn configure_bridge_command(command: &mut Command) {
+    command.env("CENTURION_HOME", resolve_centurion_home());
+    if let Some(root) = resolve_centurion_repo_root() {
+        command.env("CENTURION_AI_REPO", root.as_os_str());
+        command.current_dir(&root);
+    }
 }
 
 /// Resolve the Python that can `import centurion_cli` (venv preferred).
@@ -213,12 +263,14 @@ fn run_bridge_json(action: &str, extra: Value) -> Result<Value, String> {
         }
     }
     let payload = Value::Object(body).to_string();
-    let mut child = Command::new(resolve_bridge_python())
+    let mut child = Command::new(resolve_bridge_python());
+    child
         .args(["-m", "centurion_cli.remote_bridge"])
-        .env("CENTURION_HOME", resolve_centurion_home())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_bridge_command(&mut child);
+    let mut child = child
         .spawn()
         .map_err(|e| format!("Could not start Centurion chat bridge: {e}"))?;
     if let Some(mut stdin) = child.stdin.take() {
@@ -258,6 +310,38 @@ fn parse_final_json(stdout: &str) -> Option<Value> {
 pub fn parse_bridge_stdout(stdout: &[u8]) -> Option<Value> {
     let text = String::from_utf8_lossy(stdout);
     parse_final_json(&text)
+}
+
+/// Run one Settings/bridge action (Soul, Horizon, oversight, …).
+pub fn run_bridge_action(action: &str, extra: Value) -> Option<Value> {
+    let mut body = serde_json::Map::new();
+    body.insert("id".to_owned(), Value::String("desktop-settings".to_owned()));
+    body.insert(
+        "action".to_owned(),
+        Value::String(action.to_owned()),
+    );
+    if let Value::Object(map) = extra {
+        for (key, value) in map {
+            body.insert(key, value);
+        }
+    }
+    let payload = Value::Object(body).to_string();
+    let mut child = Command::new(resolve_bridge_python());
+    child
+        .args(["-m", "centurion_cli.remote_bridge"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_bridge_command(&mut child);
+    let mut child = child.spawn().ok()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(payload.as_bytes()).ok()?;
+    }
+    let output = child.wait_with_output().ok()?;
+    if !output.status.success() && output.stdout.is_empty() {
+        return None;
+    }
+    parse_bridge_stdout(&output.stdout)
 }
 
 fn ensure_session_id() -> Result<String, String> {
@@ -355,14 +439,15 @@ fn run_chat_turn(
         }
     };
 
-    let mut child = match Command::new(resolve_bridge_python())
+    let mut child = Command::new(resolve_bridge_python());
+    child
         .args(["-m", "centurion_cli.remote_bridge"])
-        .env("CENTURION_HOME", resolve_centurion_home())
         .env("CENTURION_REMOTE_EVENTS", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+    configure_bridge_command(&mut child);
+    let mut child = match child.spawn()
     {
         Ok(child) => child,
         Err(e) => {

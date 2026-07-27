@@ -136,6 +136,12 @@ def merge_structured_into_soul_md(fields: dict[str, Any], existing: str | None =
 
 def read_soul() -> dict[str, Any]:
     """Read host SOUL.md and return markdown + structured fields."""
+    try:
+        from centurion_cli.config import ensure_centurion_home
+
+        ensure_centurion_home()
+    except Exception:
+        pass
     path = soul_md_path()
     markdown = path.read_text(encoding="utf-8") if path.exists() else ""
     structured = markdown_to_structured(markdown)

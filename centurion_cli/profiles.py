@@ -1566,8 +1566,12 @@ def apply_sticky_profile_home() -> None:
 
     centurion_home_env = os.environ.get("CENTURION_HOME", "").strip()
     if centurion_home_env:
-        if Path(centurion_home_env).parent.name == "profiles":
-            return
+        path = Path(centurion_home_env)
+        if path.parent.name == "profiles":
+            if path.is_dir():
+                return
+            # Stale launcher/systemd pin to a removed profile — fall back.
+            os.environ.pop("CENTURION_HOME", None)
 
     try:
         from centurion_constants import get_default_centurion_root
@@ -1578,7 +1582,9 @@ def apply_sticky_profile_home() -> None:
         name = active_path.read_text(encoding="utf-8").strip()
         if not name or name == "default":
             return
-        os.environ["CENTURION_HOME"] = resolve_profile_env(name)
+        profile_dir = Path(resolve_profile_env(name))
+        if profile_dir.is_dir():
+            os.environ["CENTURION_HOME"] = str(profile_dir)
     except (UnicodeDecodeError, OSError, ValueError, FileNotFoundError):
         pass
 

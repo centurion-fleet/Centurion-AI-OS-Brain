@@ -1470,11 +1470,13 @@ def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str,
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:
     try:
-        from agent.prompt_builder import resolve_centurion_display_name
+        from centurion_cli.config import ensure_centurion_home
         from centurion_cli.soul_sync import read_soul
 
+        ensure_centurion_home()
         soul = read_soul()
-        soul["displayName"] = resolve_centurion_display_name(soul.get("markdown"))
+        name = str(soul.get("name") or "").strip()
+        soul["displayName"] = name if name else "Centurion"
         return {
             "id": request_id,
             "ok": True,
@@ -1482,7 +1484,15 @@ def _handle_soul_get(request_id: str) -> dict[str, Any]:
             "soul": soul,
         }
     except Exception as exc:
-        return _error_response(request_id, action="soul_get", exc=exc)
+        from centurion_cli.soul_sync import soul_md_path
+
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "soul_get",
+            "message": f"Could not read Soul at {soul_md_path()}: {exc}",
+            "error": str(exc),
+        }
 
 
 def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:

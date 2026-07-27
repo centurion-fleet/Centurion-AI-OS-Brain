@@ -2091,31 +2091,7 @@ mod linux {
     }
 
     fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
-        let mut body = serde_json::Map::new();
-        body.insert("id".to_owned(), serde_json::json!("desktop-settings"));
-        body.insert("action".to_owned(), serde_json::Value::String(action.to_owned()));
-        if let serde_json::Value::Object(map) = extra {
-            for (key, value) in map {
-                body.insert(key, value);
-            }
-        }
-        let payload = serde_json::Value::Object(body).to_string();
-        let mut child = Command::new(bridge_python())
-            .args(["-m", "centurion_cli.remote_bridge"])
-            .env("CENTURION_HOME", crate::chat_page::resolve_centurion_home())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .ok()?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(payload.as_bytes()).ok()?;
-        }
-        let output = child.wait_with_output().ok()?;
-        if !output.status.success() && output.stdout.is_empty() {
-            return None;
-        }
-        crate::chat_page::parse_bridge_stdout(&output.stdout)
+        crate::chat_page::run_bridge_action(action, extra)
     }
 
     fn autonomy_label(level: &str) -> &'static str {
@@ -2145,6 +2121,15 @@ mod linux {
             row.set_subtitle("Could not read your Sovereign's Soul.");
             return;
         };
+        if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            let message = payload
+                .get("message")
+                .or_else(|| payload.get("error"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not read your Sovereign's Soul.");
+            row.set_subtitle(message);
+            return;
+        }
         let name = payload
             .pointer("/soul/name")
             .and_then(|v| v.as_str())

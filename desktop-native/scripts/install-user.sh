@@ -48,21 +48,27 @@ do
 done
 
 # Pin Centurion Python + repo for Settings (Autonomy/Soul/Horizon) and Chat tab.
+# CENTURION_HOME is resolved at runtime (see resolve_centurion_home in the desktop
+# app) so a stale active_profile pin cannot hide ~/.centurion/SOUL.md.
 resolve_centurion_home_dir() {
-  if [[ -n "${CENTURION_HOME:-}" ]]; then
+  local root="${HOME}/.centurion"
+  if [[ -n "${CENTURION_HOME:-}" && -d "${CENTURION_HOME}" ]]; then
     printf '%s\n' "${CENTURION_HOME}"
     return
   fi
-  local ap="${HOME}/.centurion/active_profile"
+  local ap="${root}/active_profile"
   if [[ -f "${ap}" ]]; then
     local name
     name="$(tr -d '[:space:]' < "${ap}" || true)"
     if [[ -n "${name}" && "${name}" != "default" ]]; then
-      printf '%s\n' "${HOME}/.centurion/profiles/${name}"
-      return
+      local profile="${root}/profiles/${name}"
+      if [[ -d "${profile}" ]]; then
+        printf '%s\n' "${profile}"
+        return
+      fi
     fi
   fi
-  printf '%s\n' "${HOME}/.centurion"
+  printf '%s\n' "${root}"
 }
 CENTURION_HOME_DIR="$(resolve_centurion_home_dir)"
 
@@ -72,7 +78,7 @@ Type=Application
 Name=Sovereign AI Brain
 GenericName=Personal AI Brain
 Comment=Your private Sovereign AI Brain
-Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} CENTURION_HOME=${CENTURION_HOME_DIR} ${BIN_DIR}/centurion-desktop
+Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} ${BIN_DIR}/centurion-desktop
 Icon=com.centurion.desktop
 Terminal=false
 Categories=Utility;Network;
@@ -106,7 +112,6 @@ mkdir -p "${SYSTEMD_DIR}"
   printf 'WorkingDirectory=%s\n' "${ROOT}"
   printf 'Environment=TERMINAL_CWD=%s\n' "${ROOT}"
   printf 'Environment=CENTURION_AI_REPO=%s\n' "${ROOT}"
-  printf 'Environment=CENTURION_HOME=%s\n' "${CENTURION_HOME_DIR}"
   printf 'ReadWritePaths=%s\n' "${ROOT}"
   # Away-from-home advertise host: env at install time, or persistent file.
   ADVERTISE_HOST="${CENTURION_REMOTE_ADVERTISE_HOST:-}"
