@@ -111,3 +111,13 @@ stackswitcher button {
   font-size: 15px;
   padding: 8px 12px;
 }
+
+.centurion-chat-sidebar {
+  border-right: 1px solid @centurion_border;
+  background: alpha(@centurion_ink, 0.02);
+  min-width: 220px;
+}
+
+.centurion-session-active {
+  background: alpha(@centurion_interactive, 0.10);
+}

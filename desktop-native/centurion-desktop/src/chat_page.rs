@@ -53,6 +53,14 @@ struct ApprovalDecision {
     choice: String,
 }
 
+#[derive(Clone, Debug)]
+struct SessionSummary {
+    id: String,
+    title: String,
+    preview: String,
+    last_active_label: String,
+}
+
 /// Resolve CENTURION_HOME the same way the CLI honors ``active_profile``.
 pub fn resolve_centurion_home() -> String {
     let default_root = || -> PathBuf {
@@ -368,23 +376,9 @@ fn ensure_session_id() -> Result<String, String> {
     Ok(session_id)
 }
 
-fn load_history(session_id: &str) -> Vec<ChatMessage> {
-    let Ok(response) = run_bridge_json(
-        "session_history",
-        serde_json::json!({ "session_id": session_id }),
-    ) else {
-        return Vec::new();
-    };
-    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
-        return Vec::new();
-    }
-    let messages = response
-        .get("messages")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+fn parse_bridge_messages(messages: &[Value]) -> Vec<ChatMessage> {
     messages
-        .into_iter()
+        .iter()
         .filter_map(|msg| {
             let role = msg.get("role")?.as_str()?;
             let content = match msg.get("content") {
@@ -393,9 +387,11 @@ fn load_history(session_id: &str) -> Vec<ChatMessage> {
                     .iter()
                     .filter_map(|part| {
                         if let Some(text) = part.as_str() {
-                            return Some(text);
+                            return Some(text.to_owned());
                         }
-                        part.get("text").and_then(|v| v.as_str())
+                        part.get("text")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned)
                     })
                     .collect::<Vec<_>>()
                     .join("")
@@ -414,6 +410,188 @@ fn load_history(session_id: &str) -> Vec<ChatMessage> {
             Some(ChatMessage { role, content })
         })
         .collect()
+}
+
+fn load_history(session_id: &str) -> Vec<ChatMessage> {
+    let Ok(response) = run_bridge_json(
+        "session_history",
+        serde_json::json!({ "session_id": session_id }),
+    ) else {
+        return Vec::new();
+    };
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Vec::new();
+    }
+    let messages = response
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    parse_bridge_messages(&messages)
+}
+
+fn format_last_active(value: Option<&Value>) -> String {
+    let Some(value) = value else {
+        return String::new();
+    };
+    let secs = if let Some(n) = value.as_f64() {
+        n as i64
+    } else if let Some(n) = value.as_i64() {
+        n
+    } else if let Some(s) = value.as_str() {
+        // ISO-ish or plain epoch string — show a short slice.
+        if let Ok(n) = s.parse::<f64>() {
+            n as i64
+        } else if s.len() >= 16 {
+            return s[..16].replace('T', " ");
+        } else {
+            return s.to_owned();
+        }
+    } else {
+        return String::new();
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(secs);
+    let delta = (now - secs).max(0);
+    if delta < 60 {
+        "just now".to_owned()
+    } else if delta < 3600 {
+        format!("{}m ago", delta / 60)
+    } else if delta < 86400 {
+        format!("{}h ago", delta / 3600)
+    } else if delta < 86400 * 7 {
+        format!("{}d ago", delta / 86400)
+    } else {
+        format!("{}w ago", delta / (86400 * 7))
+    }
+}
+
+fn list_sessions() -> Vec<SessionSummary> {
+    let Ok(response) = run_bridge_json(
+        "session_list",
+        serde_json::json!({ "limit": 50, "source": "remote" }),
+    ) else {
+        return Vec::new();
+    };
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Vec::new();
+    }
+    let sessions = response
+        .get("sessions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    sessions
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.get("id")?.as_str()?.trim().to_owned();
+            if id.is_empty() {
+                return None;
+            }
+            let title = row
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            let preview = row
+                .get("preview")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            let display_title = if !title.is_empty() {
+                title
+            } else if !preview.is_empty() {
+                preview.chars().take(48).collect()
+            } else {
+                "Untitled chat".to_owned()
+            };
+            Some(SessionSummary {
+                id,
+                title: display_title,
+                preview,
+                last_active_label: format_last_active(row.get("last_active")),
+            })
+        })
+        .collect()
+}
+
+fn resume_session(session_id: &str) -> Result<(String, Vec<ChatMessage>), String> {
+    let response = run_bridge_json(
+        "session_resume",
+        serde_json::json!({ "session_id": session_id }),
+    )?;
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not open that conversation.")
+            .to_owned());
+    }
+    let tip = response
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(session_id)
+        .to_owned();
+    let messages = response
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok((tip, parse_bridge_messages(&messages)))
+}
+
+fn session_row(summary: &SessionSummary, active: bool) -> gtk::ListBoxRow {
+    let row = gtk::ListBoxRow::new();
+    row.set_activatable(true);
+    row.set_selectable(true);
+    row.set_widget_name(&summary.id);
+    if active {
+        row.add_css_class("centurion-session-active");
+    }
+
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    box_.set_margin_top(8);
+    box_.set_margin_bottom(8);
+    box_.set_margin_start(10);
+    box_.set_margin_end(10);
+
+    let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    let title = gtk::Label::builder()
+        .label(&summary.title)
+        .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .hexpand(true)
+        .css_classes(["heading"])
+        .build();
+    title_row.append(&title);
+    if !summary.last_active_label.is_empty() {
+        title_row.append(
+            &gtk::Label::builder()
+                .label(&summary.last_active_label)
+                .xalign(1.0)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+    }
+    box_.append(&title_row);
+
+    if !summary.preview.is_empty() && summary.preview != summary.title {
+        box_.append(
+            &gtk::Label::builder()
+                .label(&summary.preview)
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+    }
+
+    row.set_child(Some(&box_));
+    row
 }
 
 fn run_chat_turn(
@@ -720,6 +898,46 @@ fn scroll_chat_to_latest(message_scroll: &gtk::ScrolledWindow, message_list: &gt
     adj.set_value(target);
 }
 
+fn schedule_scroll_to_latest(
+    message_scroll: &gtk::ScrolledWindow,
+    message_list: &gtk::ListBox,
+    follow_bottom: &Rc<Cell<bool>>,
+) {
+    follow_bottom.set(true);
+    scroll_chat_to_latest(message_scroll, message_list);
+
+    let message_scroll = message_scroll.clone();
+    let message_list = message_list.clone();
+    let follow_bottom = follow_bottom.clone();
+    glib::idle_add_local_once({
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let follow_bottom = follow_bottom.clone();
+        move || {
+            follow_bottom.set(true);
+            scroll_chat_to_latest(&message_scroll, &message_list);
+        }
+    });
+    glib::timeout_add_local_once(Duration::from_millis(50), {
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let follow_bottom = follow_bottom.clone();
+        move || {
+            follow_bottom.set(true);
+            scroll_chat_to_latest(&message_scroll, &message_list);
+        }
+    });
+    glib::timeout_add_local_once(Duration::from_millis(200), {
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let follow_bottom = follow_bottom.clone();
+        move || {
+            follow_bottom.set(true);
+            scroll_chat_to_latest(&message_scroll, &message_list);
+        }
+    });
+}
+
 fn wire_follow_bottom_scroll(
     message_scroll: &gtk::ScrolledWindow,
     follow_bottom: Rc<Cell<bool>>,
@@ -764,8 +982,76 @@ pub fn build() -> gtk::Box {
     container.set_vexpand(true);
     container.set_hexpand(true);
 
-    // Overlay pins the composer to the bottom of the allocated page area.
-    // Nested ToolbarView/Stack layouts were clipping the entry off-screen.
+    let paned = gtk::Paned::new(gtk::Orientation::Horizontal);
+    paned.set_vexpand(true);
+    paned.set_hexpand(true);
+    paned.set_wide_handle(true);
+    paned.set_resize_start_child(false);
+    paned.set_shrink_start_child(false);
+    paned.set_resize_end_child(true);
+    paned.set_shrink_end_child(false);
+    paned.set_position(280);
+
+    // ── Conversation sidebar ──────────────────────────────────────────
+    let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    sidebar.set_size_request(240, -1);
+    sidebar.add_css_class("centurion-chat-sidebar");
+    sidebar.set_vexpand(true);
+
+    let sidebar_header = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    sidebar_header.set_margin_top(12);
+    sidebar_header.set_margin_start(12);
+    sidebar_header.set_margin_end(12);
+    sidebar_header.set_margin_bottom(8);
+    sidebar_header.append(
+        &gtk::Label::builder()
+            .label("Conversations")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build(),
+    );
+    let new_chat_button = gtk::Button::with_label("New chat");
+    new_chat_button.set_halign(gtk::Align::Fill);
+    new_chat_button.add_css_class("suggested-action");
+    new_chat_button.set_tooltip_text(Some(
+        "Start a fresh conversation on this brain.",
+    ));
+    sidebar_header.append(&new_chat_button);
+    sidebar.append(&sidebar_header);
+
+    let session_list = gtk::ListBox::new();
+    session_list.set_selection_mode(gtk::SelectionMode::Browse);
+    session_list.add_css_class("navigation-sidebar");
+    session_list.set_vexpand(true);
+
+    let session_empty = gtk::Label::builder()
+        .label("No past conversations yet.\nSend a message to begin.")
+        .wrap(true)
+        .justify(gtk::Justification::Center)
+        .css_classes(["dim-label"])
+        .margin_top(24)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+
+    let session_stack = gtk::Stack::new();
+    session_stack.set_vexpand(true);
+    session_stack.set_hexpand(true);
+    let session_scroll = gtk::ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .child(&session_list)
+        .build();
+    session_stack.add_named(&session_scroll, Some("list"));
+    session_stack.add_named(&session_empty, Some("empty"));
+    session_stack.set_visible_child_name("empty");
+    sidebar.append(&session_stack);
+
+    paned.set_start_child(Some(&sidebar));
+
+    // ── Main chat pane ────────────────────────────────────────────────
     let overlay = gtk::Overlay::new();
     overlay.set_vexpand(true);
     overlay.set_hexpand(true);
@@ -791,26 +1077,20 @@ pub fn build() -> gtk::Box {
     top.append(
         &gtk::Label::builder()
             .label(
-                "Local chat on this brain — Soul, name, and Memory Horizon \
-                 (hot cache + past conversations on this computer) load with each answer. \
-                 Message box is at the bottom.",
+                "Local chat on this brain — pick a past conversation on the left, \
+                 or start a new one. Soul and Memory Horizon load with each answer.",
             )
             .wrap(true)
             .xalign(0.0)
             .css_classes(["dim-label"])
             .build(),
     );
-    let new_chat_button = gtk::Button::with_label("New chat");
-    new_chat_button.set_halign(gtk::Align::Start);
-    new_chat_button.set_tooltip_text(Some(
-        "Start a fresh conversation on this brain (clears the on-screen transcript).",
-    ));
-    top.append(&new_chat_button);
     main.append(&top);
 
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
     let session_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(load_session_id()));
     let is_sending = Rc::new(RefCell::new(false));
+    let switching = Rc::new(Cell::new(false));
 
     let message_list = gtk::ListBox::new();
     message_list.set_selection_mode(gtk::SelectionMode::None);
@@ -819,7 +1099,7 @@ pub fn build() -> gtk::Box {
     message_list.set_margin_end(12);
     message_list.set_margin_top(4);
     // Leave room so the last bubble is not hidden under the overlaid composer.
-    message_list.set_margin_bottom(96);
+    message_list.set_margin_bottom(120);
 
     let message_scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
@@ -906,7 +1186,8 @@ pub fn build() -> gtk::Box {
     bottom.append(&input_row);
     overlay.add_overlay(&bottom);
 
-    container.append(&overlay);
+    paned.set_end_child(Some(&overlay));
+    container.append(&paned);
 
     let refresh_messages: Rc<dyn Fn()> = Rc::new({
         let message_list = message_list.clone();
@@ -918,7 +1199,6 @@ pub fn build() -> gtk::Box {
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
-            follow_bottom.set(true);
             while let Some(child) = message_list.first_child() {
                 message_list.remove(&child);
             }
@@ -938,31 +1218,49 @@ pub fn build() -> gtk::Box {
                     message_list.append(&message_row(message, &name));
                 }
             }
-            scroll_chat_to_latest(&message_scroll, &message_list);
-            let message_scroll = message_scroll.clone();
-            let message_list = message_list.clone();
-            let follow_bottom = follow_bottom.clone();
-            glib::idle_add_local_once({
-                let message_scroll = message_scroll.clone();
-                let message_list = message_list.clone();
-                let follow_bottom = follow_bottom.clone();
-                move || {
-                    follow_bottom.set(true);
-                    scroll_chat_to_latest(&message_scroll, &message_list);
-                }
+            schedule_scroll_to_latest(&message_scroll, &message_list, &follow_bottom);
+        }
+    });
+
+    let refresh_sessions: Rc<dyn Fn()> = Rc::new({
+        let session_list = session_list.clone();
+        let session_stack = session_stack.clone();
+        let session_id = session_id.clone();
+        move || {
+            let session_list = session_list.clone();
+            let session_stack = session_stack.clone();
+            let session_id = session_id.clone();
+            let (tx, rx) = mpsc::channel::<Vec<SessionSummary>>();
+            thread::spawn(move || {
+                let _ = tx.send(list_sessions());
             });
-            glib::timeout_add_local_once(Duration::from_millis(50), {
-                let message_scroll = message_scroll.clone();
-                let message_list = message_list.clone();
-                let follow_bottom = follow_bottom.clone();
-                move || {
-                    follow_bottom.set(true);
-                    scroll_chat_to_latest(&message_scroll, &message_list);
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(sessions) => {
+                    while let Some(child) = session_list.first_child() {
+                        session_list.remove(&child);
+                    }
+                    let active = session_id.borrow().clone();
+                    if sessions.is_empty() {
+                        session_stack.set_visible_child_name("empty");
+                    } else {
+                        session_stack.set_visible_child_name("list");
+                        let mut active_row: Option<gtk::ListBoxRow> = None;
+                        for summary in &sessions {
+                            let is_active = active.as_deref() == Some(summary.id.as_str());
+                            let row = session_row(summary, is_active);
+                            if is_active {
+                                active_row = Some(row.clone());
+                            }
+                            session_list.append(&row);
+                        }
+                        if let Some(row) = active_row {
+                            session_list.select_row(Some(&row));
+                        }
+                    }
+                    glib::ControlFlow::Break
                 }
-            });
-            glib::timeout_add_local_once(Duration::from_millis(200), move || {
-                follow_bottom.set(true);
-                scroll_chat_to_latest(&message_scroll, &message_list);
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
             });
         }
     });
@@ -984,6 +1282,8 @@ pub fn build() -> gtk::Box {
         let sending_spinner = sending_spinner.clone();
         let input = input.clone();
         let is_sending = is_sending.clone();
+        let new_chat_button = new_chat_button.clone();
+        let session_list = session_list.clone();
         move |sending: bool| {
             *is_sending.borrow_mut() = sending;
             send_button.set_visible(!sending);
@@ -994,28 +1294,44 @@ pub fn build() -> gtk::Box {
                 sending_spinner.stop();
             }
             input.set_sensitive(!sending);
+            new_chat_button.set_sensitive(!sending);
+            session_list.set_sensitive(!sending);
         }
     });
 
+    // Initial session + history + sidebar load (bridge stays off the UI thread).
     {
         let messages = messages.clone();
         let session_id = session_id.clone();
         let refresh_messages = refresh_messages.clone();
-        let (tx, rx) = mpsc::channel::<(String, Vec<ChatMessage>)>();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let (tx, rx) =
+            mpsc::channel::<Result<(String, Vec<ChatMessage>), String>>();
         thread::spawn(move || {
-            let Ok(sid) = ensure_session_id() else {
-                return;
-            };
-            let history = load_history(&sid);
-            let _ = tx.send((sid, history));
+            match ensure_session_id() {
+                Ok(sid) => {
+                    let history = load_history(&sid);
+                    let _ = tx.send(Ok((sid, history)));
+                }
+                Err(err) => {
+                    let _ = tx.send(Err(err));
+                }
+            }
         });
         glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-            Ok((sid, history)) => {
+            Ok(Ok((sid, history))) => {
                 *session_id.borrow_mut() = Some(sid);
                 if !history.is_empty() {
                     *messages.borrow_mut() = history;
                 }
                 refresh_messages();
+                refresh_sessions();
+                glib::ControlFlow::Break
+            }
+            Ok(Err(error)) => {
+                set_error(Some(error));
+                refresh_sessions();
                 glib::ControlFlow::Break
             }
             Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -1023,6 +1339,7 @@ pub fn build() -> gtk::Box {
         });
     }
     refresh_messages();
+    refresh_sessions();
 
     let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
         Rc::new(RefCell::new(None));
@@ -1038,15 +1355,18 @@ pub fn build() -> gtk::Box {
         }
     });
 
+    // New chat
     {
         let messages = messages.clone();
         let session_id = session_id.clone();
         let refresh_messages = refresh_messages.clone();
+        let refresh_sessions = refresh_sessions.clone();
         let set_error = set_error.clone();
         let clear_approval = clear_approval.clone();
         let set_sending = set_sending.clone();
         let is_sending = is_sending.clone();
         let assistant_name = assistant_name.clone();
+        let follow_bottom = follow_bottom.clone();
         new_chat_button.connect_clicked(move |_| {
             if *is_sending.borrow() {
                 return;
@@ -1059,10 +1379,12 @@ pub fn build() -> gtk::Box {
             *session_id.borrow_mut() = None;
             let path = session_store_path();
             let _ = std::fs::remove_file(&path);
+            follow_bottom.set(true);
             refresh_messages();
             let messages = messages.clone();
             let session_id = session_id.clone();
             let refresh_messages = refresh_messages.clone();
+            let refresh_sessions = refresh_sessions.clone();
             let set_error = set_error.clone();
             let (tx, rx) = mpsc::channel::<Result<String, String>>();
             thread::spawn(move || {
@@ -1073,6 +1395,7 @@ pub fn build() -> gtk::Box {
                     *session_id.borrow_mut() = Some(sid);
                     messages.borrow_mut().clear();
                     refresh_messages();
+                    refresh_sessions();
                     glib::ControlFlow::Break
                 }
                 Ok(Err(error)) => {
@@ -1081,6 +1404,70 @@ pub fn build() -> gtk::Box {
                 }
                 Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        });
+    }
+
+    // Switch conversation from sidebar
+    {
+        let messages = messages.clone();
+        let session_id = session_id.clone();
+        let refresh_messages = refresh_messages.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let clear_approval = clear_approval.clone();
+        let is_sending = is_sending.clone();
+        let switching = switching.clone();
+        let follow_bottom = follow_bottom.clone();
+        let assistant_name = assistant_name.clone();
+        session_list.connect_row_activated(move |_, row| {
+            if *is_sending.borrow() || switching.get() {
+                return;
+            }
+            let target_id = row.widget_name().to_string();
+            if target_id.is_empty() {
+                return;
+            }
+            if session_id.borrow().as_deref() == Some(target_id.as_str()) {
+                return;
+            }
+            switching.set(true);
+            clear_approval();
+            set_error(None);
+            let messages = messages.clone();
+            let session_id = session_id.clone();
+            let refresh_messages = refresh_messages.clone();
+            let refresh_sessions = refresh_sessions.clone();
+            let set_error = set_error.clone();
+            let switching = switching.clone();
+            let follow_bottom = follow_bottom.clone();
+            let assistant_name = assistant_name.clone();
+            let (tx, rx) = mpsc::channel::<Result<(String, Vec<ChatMessage>), String>>();
+            thread::spawn(move || {
+                let _ = tx.send(resume_session(&target_id));
+            });
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(Ok((sid, history))) => {
+                    save_session_id(&sid);
+                    *session_id.borrow_mut() = Some(sid);
+                    *messages.borrow_mut() = history;
+                    *assistant_name.borrow_mut() = load_assistant_display_name();
+                    follow_bottom.set(true);
+                    refresh_messages();
+                    refresh_sessions();
+                    switching.set(false);
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    set_error(Some(error));
+                    switching.set(false);
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    switching.set(false);
+                    glib::ControlFlow::Break
+                }
             });
         });
     }
@@ -1152,12 +1539,14 @@ pub fn build() -> gtk::Box {
         let session_id = session_id.clone();
         let input = input.clone();
         let refresh_messages = refresh_messages.clone();
+        let refresh_sessions = refresh_sessions.clone();
         let set_error = set_error.clone();
         let set_sending = set_sending.clone();
         let is_sending = is_sending.clone();
         let show_approval = show_approval.clone();
         let clear_approval = clear_approval.clone();
         let pending_approval_tx = pending_approval_tx.clone();
+        let follow_bottom = follow_bottom.clone();
         move || {
             if *is_sending.borrow() {
                 return;
@@ -1167,6 +1556,7 @@ pub fn build() -> gtk::Box {
                 return;
             }
             input.set_text("");
+            follow_bottom.set(true);
             messages.borrow_mut().push(ChatMessage {
                 role: ChatRole::User,
                 content: text.clone(),
@@ -1198,11 +1588,13 @@ pub fn build() -> gtk::Box {
             let messages = messages.clone();
             let session_id = session_id.clone();
             let refresh_messages = refresh_messages.clone();
+            let refresh_sessions = refresh_sessions.clone();
             let set_error = set_error.clone();
             let set_sending = set_sending.clone();
             let show_approval = show_approval.clone();
             let clear_approval = clear_approval.clone();
             let pending_approval_tx = pending_approval_tx.clone();
+            let follow_bottom = follow_bottom.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
                 match event_rx.try_recv() {
                     Ok(WorkerEvent::Approval(request)) => {
@@ -1221,7 +1613,9 @@ pub fn build() -> gtk::Box {
                                     role: ChatRole::Assistant,
                                     content: turn.text,
                                 });
+                                follow_bottom.set(true);
                                 refresh_messages();
+                                refresh_sessions();
                             }
                             Err(err) => set_error(Some(err)),
                         }
