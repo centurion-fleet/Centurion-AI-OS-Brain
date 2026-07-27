@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 
 from centurion_cli.provider_control import (
@@ -36,6 +38,8 @@ from centurion_cli.provider_control import (
     validate_switch,
 )
 from centurion_cli import support_control
+
+logger = logging.getLogger(__name__)
 
 
 def handle_request(
@@ -139,6 +143,8 @@ def handle_request(
         return _handle_session_list(request, request_id)
     if action == "session_new":
         return _handle_session_new(request, request_id)
+    if action == "session_end_continuity":
+        return _handle_session_end_continuity(request, request_id)
     if action == "session_resume":
         return _handle_session_resume(request, request_id)
     if action == "session_history":
@@ -157,6 +163,14 @@ def handle_request(
         return _handle_license_redeem(request, request_id)
     if action == "license_fingerprint":
         return _handle_license_fingerprint(request_id)
+    if action == "fleet_status":
+        return _handle_fleet_status(request_id)
+    if action == "fleet_ping":
+        return _handle_fleet_ping(request, request_id)
+    if action == "fleet_peer_put":
+        return _handle_fleet_peer_put(request, request_id)
+    if action == "plugin_list":
+        return _handle_plugin_list(request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -1411,8 +1425,69 @@ def _handle_session_list(request: dict[str, Any], request_id: str) -> dict[str, 
         return _error_response(request_id, action="session_list", exc=exc)
 
 
+def _commit_remote_session_continuity(session_id: str | None) -> dict[str, Any]:
+    """Fire Memory Horizon session-end digest for a Brain/remote chat session.
+
+    Safe to call from session_new / soul_put / explicit session_end_continuity.
+    Never raises.
+    """
+    result: dict[str, Any] = {"committed": False, "session_id": session_id}
+    sid = str(session_id or "").strip()
+    if not sid:
+        return result
+    try:
+        from agent.memory_continuity import run_session_end_digest
+        from centurion_state import SessionDB
+
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(sid)
+            messages = db.get_messages_as_conversation(tip, include_ancestors=True)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+        agent = SimpleNamespace(
+            _skip_memory=False,
+            _continuity_digest_done=False,
+            agent_context="primary",
+            session_id=tip,
+            _horizon_continuity_cfg=None,
+        )
+        run_session_end_digest(agent, messages or [])
+        result["committed"] = bool(getattr(agent, "_continuity_digest_done", False))
+        result["session_id"] = tip
+    except Exception:
+        logger.debug(
+            "remote_bridge: session continuity commit failed for %s",
+            sid,
+            exc_info=True,
+        )
+    return result
+
+
+def _handle_session_end_continuity(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        session_id = str(request.get("session_id") or "").strip()
+        info = _commit_remote_session_continuity(session_id or None)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_end_continuity",
+            **info,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_end_continuity", exc=exc)
+
+
 def _handle_session_new(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     try:
+        previous = str(request.get("previous_session_id") or "").strip()
+        continuity = _commit_remote_session_continuity(previous or None)
         title = str(request.get("title") or "").strip() or None
         session_id = _ensure_remote_session(title=title)
         return {
@@ -1420,6 +1495,7 @@ def _handle_session_new(request: dict[str, Any], request_id: str) -> dict[str, A
             "ok": True,
             "action": "session_new",
             "session_id": session_id,
+            "continuity": continuity,
         }
     except Exception as exc:
         return _error_response(request_id, action="session_new", exc=exc)
@@ -1954,11 +2030,26 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
         resolved = resolve_centurion_display_name(str(soul.get("markdown") or ""))
         soul["resolvedName"] = resolved
         soul["displayName"] = str(soul.get("name") or "").strip() or resolved
+        # Soul change rebuilds identity on next turn — commit continuity for the
+        # chat session the Brain is about to abandon (previous_session_id or
+        # desktop_chat_session file).
+        previous = str(request.get("previous_session_id") or "").strip()
+        if not previous:
+            try:
+                from centurion_constants import get_centurion_home
+
+                marker = get_centurion_home() / "desktop_chat_session"
+                if marker.is_file():
+                    previous = marker.read_text(encoding="utf-8").strip()
+            except Exception:
+                previous = ""
+        continuity = _commit_remote_session_continuity(previous or None)
         return {
             "id": request_id,
             "ok": True,
             "action": "soul_put",
             "soul": soul,
+            "continuity": continuity,
             "message": (
                 f"Saved. Next Chat reply should use the name {resolved}."
                 if _is_usable_personal_name(resolved)
@@ -2365,6 +2456,152 @@ def _handle_plan_save_template(request: dict[str, Any], request_id: str) -> dict
         }
     except Exception as exc:
         return _error_response(request_id, action="plan_save_template", exc=exc)
+
+
+def _ensure_fleet_toolset_enabled() -> None:
+    """Enable the fleet toolset when at least one peer has an address."""
+    try:
+        from centurion_cli.config import load_config, save_config
+
+        cfg = load_config()
+        changed = False
+        tools = cfg.setdefault("tools", {})
+        for platform in ("remote", "cli", "telegram"):
+            plat = tools.setdefault(platform, {})
+            disabled = plat.get("disabled")
+            if isinstance(disabled, list) and "fleet" in disabled:
+                plat["disabled"] = [x for x in disabled if x != "fleet"]
+                changed = True
+            enabled = plat.get("enabled")
+            if isinstance(enabled, list) and "fleet" not in enabled:
+                plat["enabled"] = list(enabled) + ["fleet"]
+                changed = True
+        platform_toolsets = cfg.setdefault("platform_toolsets", {})
+        for platform in ("remote", "cli", "telegram"):
+            current = platform_toolsets.get(platform)
+            if isinstance(current, list) and "fleet" not in current:
+                platform_toolsets[platform] = list(current) + ["fleet"]
+                changed = True
+        if changed:
+            save_config(cfg)
+    except Exception:
+        logger.debug("remote_bridge: could not enable fleet toolset", exc_info=True)
+
+
+def _handle_fleet_status(request_id: str) -> dict[str, Any]:
+    try:
+        from tools.fleet_tools import fleet_status_tool
+
+        raw = fleet_status_tool({})
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(payload, dict):
+            raise ValueError("Unexpected fleet status payload")
+        ok = bool(payload.get("success", True)) and not payload.get("error")
+        return {
+            "id": request_id,
+            "ok": ok,
+            "action": "fleet_status",
+            "self_id": payload.get("self_id"),
+            "health": payload.get("health"),
+            "peers": payload.get("peers") or [],
+            "peer_count": payload.get("peer_count") or 0,
+            "message": payload.get("error") or payload.get("message"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_status", exc=exc)
+
+
+def _handle_fleet_ping(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from tools.fleet_tools import fleet_ping_tool
+
+        peer_id = str(request.get("peer_id") or request.get("name") or "").strip()
+        raw = fleet_ping_tool({"peer_id": peer_id})
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(payload, dict):
+            raise ValueError("Unexpected fleet ping payload")
+        ok = bool(payload.get("success", False))
+        return {
+            "id": request_id,
+            "ok": ok,
+            "action": "fleet_ping",
+            "peer": payload,
+            "message": payload.get("error") or payload.get("note") or payload.get("status"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_ping", exc=exc)
+
+
+def _handle_fleet_peer_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion.fleet.peers import FleetPeer, FleetPeers
+
+        peer_id = str(request.get("peer_id") or request.get("id") or "").strip()
+        name = str(request.get("name") or peer_id).strip()
+        address = str(request.get("address") or "").strip()
+        auth_token = str(request.get("auth_token") or request.get("token") or "").strip()
+        if not peer_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_put",
+                "code": "INVALID_REQUEST",
+                "error": "peer_id is required",
+                "message": "peer_id is required",
+            }
+        peers = FleetPeers()
+        existing = peers.get(peer_id)
+        peer = FleetPeer(
+            centurion_id=peer_id,
+            name=name or (existing.name if existing else peer_id),
+            address=address if address else (existing.address if existing else ""),
+            auth_token=auth_token
+            if auth_token
+            else (existing.auth_token if existing else ""),
+            telegram_handle=existing.telegram_handle if existing else "",
+            status=existing.status if existing else "unknown",
+            last_seen=existing.last_seen if existing else 0.0,
+        )
+        peers.register(peer)
+        if peer.address:
+            _ensure_fleet_toolset_enabled()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_peer_put",
+            "peer": {
+                "id": peer.centurion_id,
+                "name": peer.name,
+                "address": peer.address,
+                "status": peer.status,
+                "has_token": bool(peer.auth_token),
+            },
+            "message": f"Saved peer {peer.name}.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_peer_put", exc=exc)
+
+
+def _handle_plugin_list(request_id: str) -> dict[str, Any]:
+    """Client plugin seam v0 — list discovered agent plugins for Brain Settings."""
+    try:
+        from centurion_cli.plugins import discover_plugins, get_plugin_manager
+
+        discover_plugins()
+        plugins = get_plugin_manager().list_plugins()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "plugin_list",
+            "plugins": plugins,
+            "count": len(plugins),
+            "message": (
+                "Agent plugins extend tools and hooks. They do not automatically "
+                "add Brain UI — see developer-guide/client-plugins.md."
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="plugin_list", exc=exc)
 
 
 def _read_request() -> dict[str, Any]:

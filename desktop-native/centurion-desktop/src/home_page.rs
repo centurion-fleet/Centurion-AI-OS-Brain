@@ -5,6 +5,7 @@
 
 use adw::prelude::*;
 use gtk4 as gtk;
+use gtk4::glib;
 use libadwaita as adw;
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
@@ -129,6 +130,15 @@ struct SwarmOrb {
 }
 
 #[derive(Clone, Debug, Default)]
+struct FleetPeerItem {
+    id: String,
+    name: String,
+    status: String,
+    address: String,
+    last_seen: f64,
+}
+
+#[derive(Clone, Debug, Default)]
 struct HomeFeed {
     live: Option<LiveActivity>,
     wins: Vec<FinishedItem>,
@@ -138,6 +148,7 @@ struct HomeFeed {
     plans: Vec<PlanItem>,
     mission: MissionInfo,
     swarms: Vec<SwarmOrb>,
+    fleet_peers: Vec<FleetPeerItem>,
     error: Option<String>,
 }
 
@@ -508,6 +519,7 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
             targets,
         },
         swarms: orb_swarms,
+        fleet_peers: Vec::new(),
         error: None,
     }
 }
@@ -543,7 +555,26 @@ fn load_home_feed() -> HomeFeed {
         })
         .unwrap_or_else(|| serde_json::json!({}));
 
-    map_feed(&snapshot, &plans, &mission)
+    let mut feed = map_feed(&snapshot, &plans, &mission);
+    if let Some(resp) = run_bridge_action("fleet_status", serde_json::json!({})) {
+        if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            feed.fleet_peers = resp
+                .get("peers")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .map(|p| FleetPeerItem {
+                    id: json_str(p.get("id")),
+                    name: json_str(p.get("name")),
+                    status: json_str(p.get("status")),
+                    address: json_str(p.get("address")),
+                    last_seen: json_f64(p.get("last_seen")),
+                })
+                .filter(|p| !p.id.is_empty() || !p.name.is_empty())
+                .collect();
+        }
+    }
+    feed
 }
 
 fn decide_plan(plan_id: &str, choice: &str) -> Result<(), String> {
@@ -578,6 +609,123 @@ fn resolve_signal(signal_id: &str, note: &str) -> Result<(), String> {
             .unwrap_or("Could not record that choice.")
             .to_owned())
     }
+}
+
+fn save_mission_statement(statement: &str) -> Result<(), String> {
+    let response = run_bridge_action(
+        "mission_put",
+        serde_json::json!({ "mission": { "statement": statement } }),
+    )
+    .ok_or_else(|| "Could not reach the mission service.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not save Life Mission.")
+            .to_owned())
+    }
+}
+
+fn show_home_error(parent: &impl IsA<gtk::Widget>, message: &str) {
+    let dialog = adw::AlertDialog::builder()
+        .heading("Could not record that")
+        .body(message)
+        .close_response("ok")
+        .build();
+    dialog.add_response("ok", "OK");
+    dialog.present(Some(parent));
+}
+
+fn run_async_result<F>(
+    parent: gtk::Widget,
+    refresh: Rc<dyn Fn()>,
+    work: F,
+) where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel::<Result<(), String>>();
+    thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+        Ok(Ok(())) => {
+            refresh();
+            glib::ControlFlow::Break
+        }
+        Ok(Err(msg)) => {
+            show_home_error(&parent, &msg);
+            refresh();
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+    });
+}
+
+fn empty_cta_box(
+    message: &str,
+    primary_label: &str,
+    on_primary: impl Fn() + 'static,
+    secondary_label: Option<&str>,
+    on_secondary: Option<Rc<dyn Fn()>>,
+) -> gtk::Box {
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    box_.append(&empty_label(message));
+    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let primary = gtk::Button::with_label(primary_label);
+    primary.add_css_class("suggested-action");
+    primary.connect_clicked(move |_| on_primary());
+    actions.append(&primary);
+    if let (Some(label), Some(cb)) = (secondary_label, on_secondary) {
+        let secondary = gtk::Button::with_label(label);
+        secondary.add_css_class("flat");
+        secondary.connect_clicked(move |_| cb());
+        actions.append(&secondary);
+    }
+    box_.append(&actions);
+    box_
+}
+
+fn show_mission_edit_dialog(
+    parent: &impl IsA<gtk::Widget>,
+    current: &str,
+    refresh: Rc<dyn Fn()>,
+) {
+    let entry = gtk::TextView::builder()
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+    entry.buffer().set_text(current);
+    let scrolled = gtk::ScrolledWindow::builder()
+        .child(&entry)
+        .min_content_height(120)
+        .hexpand(true)
+        .build();
+    let dialog = adw::AlertDialog::builder()
+        .heading("Life Mission")
+        .body("What are you building toward? Your Sovereign uses this to stay aligned.")
+        .extra_child(&scrolled)
+        .close_response("cancel")
+        .default_response("save")
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("save", "Save");
+    dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    dialog.connect_response(None, move |_d, response| {
+        if response != "save" {
+            return;
+        }
+        let (start, end) = entry.buffer().bounds();
+        let text = entry.buffer().text(&start, &end, false).trim().to_owned();
+        let refresh = refresh.clone();
+        let parent_w = parent_w.clone();
+        run_async_result(parent_w, refresh, move || save_mission_statement(&text));
+    });
+    dialog.present(Some(parent));
 }
 
 fn clear_box(container: &gtk::Box) {
@@ -749,27 +897,25 @@ fn show_plan_dialog(
         dialog.add_response("approve", "Proceed");
         dialog.add_response("hold", "Hold");
         dialog.add_response("adjust", "Adjust");
+        dialog.add_response("reject", "Reject");
         dialog.set_response_appearance("approve", adw::ResponseAppearance::Suggested);
+        dialog.set_response_appearance("reject", adw::ResponseAppearance::Destructive);
     }
     let plan_id = plan.id.clone();
     let title = plan.title.clone();
     let summary = plan.summary.clone();
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
     dialog.connect_response(None, move |_d, response| match response {
-        "approve" => {
+        "approve" | "hold" | "reject" => {
+            let choice = match response {
+                "approve" => "approve",
+                "hold" => "hold",
+                _ => "reject",
+            };
             let refresh = refresh.clone();
             let plan_id = plan_id.clone();
-            thread::spawn(move || {
-                let _ = decide_plan(&plan_id, "approve");
-            });
-            glib::timeout_add_local_once(Duration::from_millis(400), move || refresh());
-        }
-        "hold" => {
-            let refresh = refresh.clone();
-            let plan_id = plan_id.clone();
-            thread::spawn(move || {
-                let _ = decide_plan(&plan_id, "hold");
-            });
-            glib::timeout_add_local_once(Duration::from_millis(400), move || refresh());
+            let parent_w = parent_w.clone();
+            run_async_result(parent_w, refresh, move || decide_plan(&plan_id, choice));
         }
         "adjust" => {
             on_ask(
@@ -847,15 +993,34 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
     );
     chrome.append(&constellation);
 
+    let fleet_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    fleet_section.append(
+        &gtk::Label::builder()
+            .label("Fleet Presence")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build(),
+    );
+    let fleet_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    fleet_body.add_css_class("centurion-home-fleet");
+    fleet_section.append(&fleet_body);
+    chrome.append(&fleet_section);
+
     let mission_banner = gtk::Box::new(gtk::Orientation::Vertical, 6);
     mission_banner.add_css_class("centurion-home-mission");
-    mission_banner.append(
+    let mission_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    mission_header.append(
         &gtk::Label::builder()
             .label("WHAT YOU'RE BUILDING TOWARD")
             .css_classes(["caption-heading"])
             .xalign(0.0)
+            .hexpand(true)
             .build(),
     );
+    let mission_edit = gtk::Button::with_label("Edit");
+    mission_edit.add_css_class("flat");
+    mission_header.append(&mission_edit);
+    mission_banner.append(&mission_header);
     let mission_statement = gtk::Label::builder()
         .label("Set a Life Mission to guide your Sovereign.")
         .wrap(true)
@@ -904,6 +1069,7 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
         let feed = feed.clone();
         let selected = selected.clone();
         let constellation = constellation.clone();
+        let fleet_body = fleet_body.clone();
         let mission_statement = mission_statement.clone();
         let commitments = commitments.clone();
         let error_label = error_label.clone();
@@ -925,6 +1091,96 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                         .css_classes(["centurion-home-orb"])
                         .build();
                     constellation.append(&chip);
+                }
+            }
+
+            clear_box(&fleet_body);
+            if data.fleet_peers.is_empty() {
+                fleet_body.append(&empty_label(
+                    "No fleet peers yet. Add an address under Settings → Fleet peer to talk across machines.",
+                ));
+            } else {
+                for peer in &data.fleet_peers {
+                    let card = card_box();
+                    let status = if peer.status.is_empty() {
+                        "unknown"
+                    } else {
+                        peer.status.as_str()
+                    };
+                    let addr = if peer.address.is_empty() {
+                        "no address".to_owned()
+                    } else {
+                        peer.address.clone()
+                    };
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&format!("{} · {status}", peer.name))
+                            .xalign(0.0)
+                            .build(),
+                    );
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&addr)
+                            .xalign(0.0)
+                            .css_classes(["dim-label", "caption"])
+                            .build(),
+                    );
+                    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                    let ping = gtk::Button::with_label("Ping");
+                    ping.add_css_class("flat");
+                    let peer_id = if peer.id.is_empty() {
+                        peer.name.clone()
+                    } else {
+                        peer.id.clone()
+                    };
+                    let refresh_all = {
+                        let render_slot = render_slot.clone();
+                        Rc::new(move || {
+                            if let Some(f) = render_slot.borrow().as_ref() {
+                                f();
+                            }
+                        }) as Rc<dyn Fn()>
+                    };
+                    let parent_w = container.clone().upcast::<gtk::Widget>();
+                    ping.connect_clicked(move |_| {
+                        let peer_id = peer_id.clone();
+                        let refresh_all = refresh_all.clone();
+                        let parent_w = parent_w.clone();
+                        run_async_result(parent_w, refresh_all, move || {
+                            let response = run_bridge_action(
+                                "fleet_ping",
+                                serde_json::json!({ "peer_id": peer_id }),
+                            )
+                            .ok_or_else(|| "Could not reach fleet service.".to_owned())?;
+                            if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                                Ok(())
+                            } else {
+                                Err(response
+                                    .get("message")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Ping failed.")
+                                    .to_owned())
+                            }
+                        });
+                    });
+                    let ask = gtk::Button::with_label("Ask about this");
+                    ask.add_css_class("suggested-action");
+                    let on_ask = hooks.on_ask_about.clone();
+                    let pname = peer.name.clone();
+                    let pstatus = status.to_owned();
+                    ask.connect_clicked(move |_| {
+                        on_ask(
+                            pname.clone(),
+                            format!(
+                                "Fleet peer {pname} is currently {pstatus}. \
+What should we do with them, or what messages are waiting?"
+                            ),
+                        );
+                    });
+                    actions.append(&ping);
+                    actions.append(&ask);
+                    card.append(&actions);
+                    fleet_body.append(&card);
                 }
             }
 
@@ -1037,8 +1293,33 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                         card.append(&actions);
                         category_body.append(&card);
                     } else {
-                        category_body.append(&empty_label(
-                            "Nothing in motion right now. When your Sovereign starts a loop, it shows up here.",
+                        let on_ask = hooks.on_ask_about.clone();
+                        let on_ask2 = hooks.on_ask_about.clone();
+                        let mission_text = data.mission.statement.clone();
+                        category_body.append(&empty_cta_box(
+                            "Nothing in motion right now. Start with a plan or talk through your mission.",
+                            "Propose a plan",
+                            move || {
+                                on_ask(
+                                    "Propose a plan".to_owned(),
+                                    "Propose a plan for what we should work on next. \
+Outline the goal, steps, and what you need from me before acting."
+                                        .to_owned(),
+                                );
+                            },
+                            Some("Discuss mission"),
+                            Some(Rc::new(move || {
+                                let prompt = if mission_text.is_empty() {
+                                    "Help me set a Life Mission — what I'm building toward — \
+so you can partner with me on it.".to_owned()
+                                } else {
+                                    format!(
+                                        "Let's discuss my Life Mission:\n\n{mission_text}\n\n\
+What should we focus on next?"
+                                    )
+                                };
+                                on_ask2("Life Mission".to_owned(), prompt);
+                            }) as Rc<dyn Fn()>),
                         ));
                     }
                 }
@@ -1067,8 +1348,20 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                         .cloned()
                         .collect();
                     if pending.is_empty() && active.is_empty() && done.is_empty() {
-                        category_body.append(&empty_label(
-                            "No plans yet. Use Propose first in Chat to draft one.",
+                        let on_ask = hooks.on_ask_about.clone();
+                        category_body.append(&empty_cta_box(
+                            "No plans yet. Ask your Sovereign to propose one, or discuss the mission first.",
+                            "Propose a plan",
+                            move || {
+                                on_ask(
+                                    "Propose a plan".to_owned(),
+                                    "Propose a plan for what we should work on next. \
+Outline the goal, steps, and what you need from me before acting."
+                                        .to_owned(),
+                                );
+                            },
+                            None,
+                            None,
                         ));
                     } else {
                         for (label, items) in [
@@ -1222,24 +1515,26 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                             adjust.add_css_class("flat");
                             let hold = gtk::Button::with_label("Hold");
                             hold.add_css_class("flat");
+                            let reject = gtk::Button::with_label("Reject");
+                            reject.add_css_class("flat");
 
                             let plan_id = decision.plan_id.clone();
                             let signal_id = decision.signal_id.clone();
                             let refresh_p = refresh_all.clone();
+                            let parent_w = container.clone().upcast::<gtk::Widget>();
                             proceed.connect_clicked(move |_| {
                                 let plan_id = plan_id.clone();
                                 let signal_id = signal_id.clone();
                                 let refresh_p = refresh_p.clone();
-                                thread::spawn(move || {
+                                let parent_w = parent_w.clone();
+                                run_async_result(parent_w, refresh_p, move || {
                                     if let Some(pid) = plan_id.as_ref() {
-                                        let _ = decide_plan(pid, "approve");
+                                        decide_plan(pid, "approve")?;
                                     }
                                     if let Some(sid) = signal_id.as_ref() {
-                                        let _ = resolve_signal(sid, "Proceed");
+                                        resolve_signal(sid, "Proceed")?;
                                     }
-                                });
-                                glib::timeout_add_local_once(Duration::from_millis(450), move || {
-                                    refresh_p();
+                                    Ok(())
                                 });
                             });
 
@@ -1257,22 +1552,41 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
 
                             let plan_id = decision.plan_id.clone();
                             let refresh_h = refresh_all.clone();
+                            let parent_h = container.clone().upcast::<gtk::Widget>();
                             hold.connect_clicked(move |_| {
                                 if let Some(pid) = plan_id.clone() {
                                     let refresh_h = refresh_h.clone();
-                                    thread::spawn(move || {
-                                        let _ = decide_plan(&pid, "hold");
+                                    let parent_h = parent_h.clone();
+                                    run_async_result(parent_h, refresh_h, move || {
+                                        decide_plan(&pid, "hold")
                                     });
-                                    glib::timeout_add_local_once(
-                                        Duration::from_millis(450),
-                                        move || refresh_h(),
-                                    );
                                 }
+                            });
+
+                            let plan_id = decision.plan_id.clone();
+                            let signal_id = decision.signal_id.clone();
+                            let refresh_r = refresh_all.clone();
+                            let parent_r = container.clone().upcast::<gtk::Widget>();
+                            reject.connect_clicked(move |_| {
+                                let plan_id = plan_id.clone();
+                                let signal_id = signal_id.clone();
+                                let refresh_r = refresh_r.clone();
+                                let parent_r = parent_r.clone();
+                                run_async_result(parent_r, refresh_r, move || {
+                                    if let Some(pid) = plan_id.as_ref() {
+                                        decide_plan(pid, "reject")?;
+                                    }
+                                    if let Some(sid) = signal_id.as_ref() {
+                                        resolve_signal(sid, "Reject")?;
+                                    }
+                                    Ok(())
+                                });
                             });
 
                             actions.append(&proceed);
                             actions.append(&adjust);
                             actions.append(&hold);
+                            actions.append(&reject);
                             card.append(&actions);
                             category_body.append(&card);
                         }
@@ -1383,6 +1697,24 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
             glib::ControlFlow::Continue
         }
     });
+
+    {
+        let container = container.clone();
+        let feed = feed.clone();
+        let render_slot = render_slot.clone();
+        mission_edit.connect_clicked(move |_| {
+            let current = feed.borrow().mission.statement.clone();
+            let refresh = {
+                let render_slot = render_slot.clone();
+                Rc::new(move || {
+                    if let Some(f) = render_slot.borrow().as_ref() {
+                        f();
+                    }
+                }) as Rc<dyn Fn()>
+            };
+            show_mission_edit_dialog(&container, &current, refresh);
+        });
+    }
 
     container
 }

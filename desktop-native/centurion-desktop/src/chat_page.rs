@@ -509,7 +509,14 @@ fn session_store_path() -> PathBuf {
 
 /// Drop the Brain Chat session pointer so the next message starts clean
 /// (needed after Soul/name changes — prior Hermes replies stick otherwise).
+/// Commits Memory Horizon continuity for the abandoned session first.
 pub fn clear_desktop_chat_session() {
+    if let Some(sid) = load_session_id() {
+        let _ = run_bridge_json(
+            "session_end_continuity",
+            serde_json::json!({ "session_id": sid }),
+        );
+    }
     let path = session_store_path();
     let _ = std::fs::remove_file(path);
 }
@@ -1806,9 +1813,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             set_error(None);
             *assistant_name.borrow_mut() = load_assistant_display_name();
             messages.borrow_mut().clear();
-            // Lazy session: clear local state only. A real DB session is created
-            // on the first send via ensure_session_id(), so we don't leave an
-            // empty "Untitled chat · Just now" row in Conversations.
+            // Commit continuity for the active chat, then lazy-clear so the next
+            // send creates a fresh session without an empty Conversations ghost.
+            if let Some(sid) = session_id.borrow().clone() {
+                let _ = run_bridge_json(
+                    "session_end_continuity",
+                    serde_json::json!({ "session_id": sid }),
+                );
+            }
             *session_id.borrow_mut() = None;
             let path = session_store_path();
             let _ = std::fs::remove_file(&path);

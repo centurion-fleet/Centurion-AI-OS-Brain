@@ -949,6 +949,13 @@ automatically scope to the active profile.
 
 ## Known Pitfalls
 
+### Brain product focus — freeze iPhone plumbing expansions
+Sovereign AI Brain (`desktop-native/`) is the primary client surface. Do **not**
+expand pairing, away-from-home relay, phone stream, or Unbox-as-product work
+unless fixing a security or build blocker. Prefer Soul continuity, Home Pulse,
+fleet presence, narrative onboarding, and client plugin seams. See
+`desktop-native/README.md` and `website/docs/developer-guide/client-plugins.md`.
+
 ### DO NOT hardcode `~/.centurion` paths
 Use `get_centurion_home()` from `centurion_constants` for code paths. Use `display_centurion_home()`
 for user-facing print/log messages. Hardcoding `~/.centurion` breaks profiles — each profile

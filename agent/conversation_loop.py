@@ -705,6 +705,21 @@ def run_conversation(
         except Exception:
             pass
 
+    # Memory Horizon continuity: first-turn Session Recall digest (ephemeral).
+    _continuity_prefetch_cache = ""
+    if not getattr(agent, "_skip_memory", False):
+        try:
+            from agent.memory_continuity import prefetch_continuity_for_session
+
+            _continuity_prefetch_cache = prefetch_continuity_for_session(
+                agent,
+                user_message=(
+                    original_user_message if isinstance(original_user_message, str) else ""
+                ),
+            ) or ""
+        except Exception:
+            pass
+
     # Optional opt-in runtime: if api_mode == codex_app_server, hand the
     # turn to the codex app-server subprocess (terminal/file ops/patching
     # all run inside Codex). Default Centurion path is bypassed entirely.
@@ -887,6 +902,8 @@ def run_conversation(
                             _injections.append(_vf)
                     except Exception:
                         pass
+                if _continuity_prefetch_cache:
+                    _injections.append(_continuity_prefetch_cache)
                 if _plugin_user_context:
                     _injections.append(_plugin_user_context)
                 if _injections:

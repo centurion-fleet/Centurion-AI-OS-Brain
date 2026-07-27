@@ -188,4 +188,25 @@ def build_memory_horizon_snapshot() -> dict[str, Any]:
         "hot_cache": hot_cache,
         "session_recall": session_recall,
         "vault": vault,
+        "continuity": _continuity_fields(),
     }
+
+
+def _continuity_fields() -> dict[str, Any]:
+    """Memory Horizon continuity status for Settings gauges."""
+    try:
+        from agent.memory_continuity import continuity_status
+
+        return continuity_status()
+    except Exception:
+        logger.debug("memory_horizon: continuity status unavailable", exc_info=True)
+        return {
+            "continuity_prefetch": True,
+            "session_end_digest": True,
+            "last_digest_at": None,
+            "last_digest_target": None,
+            "last_digest_skip_reason": None,
+            "last_digest_preview": None,
+            "last_session_at": None,
+            "sessions_last_24h": 0,
+        }

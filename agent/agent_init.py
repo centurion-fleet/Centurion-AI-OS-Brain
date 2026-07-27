@@ -1063,6 +1063,14 @@ def init_agent(
     agent._iters_since_skill = 0
     agent._skip_memory = bool(skip_memory)
     agent._vault_prefetch_on_turn = False
+    agent._horizon_continuity_cfg = {
+        "continuity_prefetch": False,
+        "session_end_digest": False,
+        "digest_max_chars": 1200,
+        "lookback_hours": 36,
+    }
+    agent._continuity_prefetch_done = True
+    agent._continuity_digest_done = True
     mem_config = {}
     if not skip_memory:
         try:
@@ -1087,6 +1095,23 @@ def init_agent(
             )
         except Exception:
             agent._vault_prefetch_on_turn = False
+
+        # Memory Horizon continuity settings (first-turn prefetch + session-end digest)
+        try:
+            from agent.memory_continuity import load_horizon_continuity_config
+
+            agent._horizon_continuity_cfg = load_horizon_continuity_config(
+                {"memory": mem_config} if mem_config else None
+            )
+        except Exception:
+            agent._horizon_continuity_cfg = {
+                "continuity_prefetch": True,
+                "session_end_digest": True,
+                "digest_max_chars": 1200,
+                "lookback_hours": 36,
+            }
+        agent._continuity_prefetch_done = False
+        agent._continuity_digest_done = False
 
 
     # Memory provider plugin (external — one at a time, alongside built-in)

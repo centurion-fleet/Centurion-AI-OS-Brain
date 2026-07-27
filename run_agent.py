@@ -2057,6 +2057,14 @@ class AIAgent:
         NOT called per-turn — only at CLI exit, /reset, gateway
         session expiry, etc.
         """
+        # Memory Horizon continuity: session-end Vault experiential digest
+        # (before providers tear down so vault/config remain available).
+        try:
+            from agent.memory_continuity import run_session_end_digest
+
+            run_session_end_digest(self, messages)
+        except Exception:
+            pass
         if self._memory_manager:
             try:
                 self._memory_manager.on_session_end(messages or [])
@@ -2081,6 +2089,12 @@ class AIAgent:
         Called when session_id rotates (e.g. /new, context compression);
         providers keep their state and continue running under the old
         session_id — they just flush pending extraction now."""
+        try:
+            from agent.memory_continuity import run_session_end_digest
+
+            run_session_end_digest(self, messages)
+        except Exception:
+            pass
         if self._memory_manager:
             try:
                 self._memory_manager.on_session_end(messages or [])

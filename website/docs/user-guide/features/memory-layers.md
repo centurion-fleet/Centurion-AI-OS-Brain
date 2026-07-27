@@ -147,10 +147,12 @@ vault:
 |--------------|-----|
 | Remember a preference or project fact for every chat | **Hot Cache** — `memory` / `user` |
 | Find what you said in a conversation two weeks ago | **Session Recall** — `session_search` |
+| Remember yesterday / unfinished threads automatically | **Session Recall continuity** — first-turn digest fence (`memory.horizon.continuity_prefetch`) |
 | Archive a durable decision, workflow, or life context for years | **Vault** — `core` / `experiential` / `pattern` |
+| Persist being/relationship notes at session end | **Vault experiential** — session-end digest (`memory.horizon.session_end_digest`) when Vault is enabled+unlocked |
 | Store an API key or credential | **None** — use secrets / env; Memory Horizon layers block credential patterns |
 
-**Division of labor:** Keep Hot Cache **small and essential**. Use Session Recall for **historical chat lookup**. Use Vault for **long-horizon archives**.
+**Division of labor:** Keep Hot Cache **small and essential**. Use Session Recall for **historical chat lookup** (including automatic recent-session continuity). Use Vault for **long-horizon archives** and experiential being notes.
 
 ---
 

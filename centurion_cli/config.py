@@ -1044,6 +1044,15 @@ DEFAULT_CONFIG = {
             "timeout": 30,
             "extra_body": {},
         },
+        # Memory Horizon session-end continuity digest → Vault experiential.
+        "memory_continuity": {
+            "provider": "auto",
+            "model": "",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 45,
+            "extra_body": {},
+        },
         # Triage specifier — flesh out a rough one-liner in the Kanban
         # Triage column into a concrete spec, then promote it to ``todo``.
         # Invoked by ``centurion kanban specify`` (single id or --all). Set a
@@ -1310,6 +1319,15 @@ DEFAULT_CONFIG = {
         # "hindsight", "holographic", "retaindb", "byterover".
         # Only ONE external provider is allowed at a time.
         "provider": "",
+        # Memory Horizon continuity — being persistence across sessions.
+        # Uses Session Recall (first-turn digest fence) + Vault experiential
+        # (session-end propose). Does NOT add a fourth Horizon layer.
+        "horizon": {
+            "continuity_prefetch": True,   # first-turn Session Recall digest
+            "session_end_digest": True,    # propose Vault experiential on session end
+            "digest_max_chars": 1200,
+            "lookback_hours": 36,
+        },
     },
 
     # Vault — offline sealed long-term memory (AES-GCM at rest, local embeddings).

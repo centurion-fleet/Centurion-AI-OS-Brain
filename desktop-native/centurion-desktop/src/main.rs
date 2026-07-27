@@ -495,6 +495,50 @@ mod linux {
 
     /// Full-screen QR pairing page: scan-first UX with auto-rotated tokens.
     /// Minting stays on the GTK main thread (no idle_add / Send wrappers).
+    fn brain_welcome_marker_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("brain_welcome_seen")
+    }
+
+    fn brain_welcome_seen() -> bool {
+        brain_welcome_marker_path().is_file()
+    }
+
+    fn mark_brain_welcome_seen() {
+        let path = brain_welcome_marker_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, b"1\n");
+    }
+
+    /// First-run narrative: what a Centurion *is* (partner), not pairing theatre.
+    fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
+        let body = "This computer is your Sovereign — a private partner that thinks with you, \
+keeps your data here, and stays on your mission.\n\n\
+Chat is the conversation. Home is the command center: mission, plans, and decisions. \
+Settings is how you shape Soul, memory, and thinking.\n\n\
+An iPhone remote is optional later — only when you want the Brain in your pocket. \
+For now, sit here and meet your Centurion.";
+        let dialog = adw::AlertDialog::builder()
+            .heading("Welcome to your Centurion")
+            .body(body)
+            .close_response("begin")
+            .default_response("begin")
+            .build();
+        dialog.add_response("begin", "Begin");
+        dialog.add_response("pair", "Pair iPhone later");
+        dialog.set_response_appearance("begin", adw::ResponseAppearance::Suggested);
+        let parent_for_pair = parent.clone();
+        dialog.connect_response(None, move |_d, response| {
+            mark_brain_welcome_seen();
+            if response == "pair" {
+                show_pairing_qr_window(&parent_for_pair);
+            }
+        });
+        dialog.present(Some(parent));
+    }
+
     fn show_pairing_qr_window(parent: &adw::ApplicationWindow) {
         let window = adw::Window::builder()
             .title("Link iPhone")
@@ -685,7 +729,7 @@ mod linux {
 
         container.append(
             &gtk::Label::builder()
-                .label("Unbox pairing")
+                .label("Optional iPhone remote")
                 .css_classes(["title-4"])
                 .xalign(0.0)
                 .build(),
@@ -694,7 +738,8 @@ mod linux {
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Your Centurion shows a QR on first boot. On the same Wi‑Fi, open Sovereign AI Remote and scan it.",
+                    "The Brain on this desk is the product. Pairing an iPhone is optional convenience \
+on the same Wi‑Fi — scan only when you want a thin remote.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -702,7 +747,7 @@ mod linux {
                 .build(),
         );
 
-        let link = gtk::Button::with_label("Show pairing QR again");
+        let link = gtk::Button::with_label("Show pairing QR");
         link.add_css_class("suggested-action");
         link.set_margin_top(4);
         if let Some(parent) = parent {
@@ -925,6 +970,24 @@ mod linux {
             .icon_name("view-list-symbolic")
             .build();
         brain_group.add(&backup_thinking_row);
+        let fleet_peer_row = adw::ActionRow::builder()
+            .title("Fleet peer")
+            .subtitle("Set another Centurion’s address and shared token for cross-machine talk.")
+            .icon_name("network-server-symbolic")
+            .build();
+        let fleet_peer_button = gtk::Button::with_label("Configure");
+        fleet_peer_button.set_valign(gtk::Align::Center);
+        fleet_peer_row.add_suffix(&fleet_peer_button);
+        brain_group.add(&fleet_peer_row);
+        let plugins_row = adw::ActionRow::builder()
+            .title("Installed plugins")
+            .subtitle("Agent plugins on this Brain (tools/hooks — not automatic Brain UI).")
+            .icon_name("application-x-addon-symbolic")
+            .build();
+        let plugins_button = gtk::Button::with_label("View");
+        plugins_button.set_valign(gtk::Align::Center);
+        plugins_row.add_suffix(&plugins_button);
+        brain_group.add(&plugins_row);
         settings.append(&brain_group);
 
         let you_group = adw::PreferencesGroup::builder()
@@ -1137,25 +1200,11 @@ mod linux {
         };
 
         update_status();
-        // Unbox & Go: virgin Brain auto-opens full-screen LAN QR once remote is up.
-        // Serve may need a moment after spawn — retry briefly.
-        {
+        // First-run: teach what a Centurion is. Pairing QR is opt-in, not the product story.
+        if !brain_welcome_seen() && !any_iphones_linked() {
             let window = window.clone();
-            let attempts = Rc::new(RefCell::new(0_u32));
-            glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-                let mut n = attempts.borrow_mut();
-                *n += 1;
-                if any_iphones_linked() {
-                    return glib::ControlFlow::Break;
-                }
-                if remote_listener_active() {
-                    show_pairing_qr_window(&window);
-                    return glib::ControlFlow::Break;
-                }
-                if *n >= 10 {
-                    return glib::ControlFlow::Break;
-                }
-                glib::ControlFlow::Continue
+            glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+                show_brain_welcome_dialog(&window);
             });
         }
         refresh_thinking_status(&thinking_detail, &thinking_settings_row);
@@ -1219,6 +1268,14 @@ mod linux {
             let window = window.clone();
             let backup_thinking_row = backup_thinking_row.clone();
             move |_| show_backup_thinking_dialog(&window, &backup_thinking_row)
+        });
+        fleet_peer_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_fleet_peer_dialog(&window)
+        });
+        plugins_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_plugins_list_dialog(&window)
         });
         pairing_settings_row.connect_activated({
             let window = window.clone();
@@ -2326,6 +2383,23 @@ mod linux {
             "Hot Cache {:.0}% · {sessions} conversations · {vault_label}",
             hot * 100.0
         ));
+        if let Some(cont) = payload.get("snapshot").and_then(|s| s.get("continuity")) {
+            let target = cont
+                .get("last_digest_target")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let skip = cont
+                .get("last_digest_skip_reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if !target.is_empty() {
+                let base = row.subtitle().map(|s| s.to_string()).unwrap_or_default();
+                row.set_subtitle(&format!("{base} · Continuity → {target}"));
+            } else if !skip.is_empty() {
+                let base = row.subtitle().map(|s| s.to_string()).unwrap_or_default();
+                row.set_subtitle(&format!("{base} · {skip}"));
+            }
+        }
     }
 
     fn show_memory_horizon_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
@@ -2394,6 +2468,52 @@ mod linux {
             )
         };
 
+        let continuity = snapshot
+            .get("continuity")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+        let cont_prefetch = continuity
+            .get("continuity_prefetch")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let cont_digest = continuity
+            .get("session_end_digest")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let last_digest_at = continuity
+            .get("last_digest_at")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let last_digest_target = continuity
+            .get("last_digest_target")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let last_digest_skip = continuity
+            .get("last_digest_skip_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let continuity_status = {
+            let mut lines = vec![format!(
+                "Prefetch on first turn: {} · Session-end digest: {}",
+                if cont_prefetch { "on" } else { "off" },
+                if cont_digest { "on" } else { "off" },
+            )];
+            if !last_digest_at.is_empty() {
+                let target = if last_digest_target.is_empty() {
+                    "unknown"
+                } else {
+                    last_digest_target
+                };
+                lines.push(format!("Last digest: {last_digest_at} → {target}"));
+            } else {
+                lines.push("Last digest: none yet".to_owned());
+            }
+            if !last_digest_skip.is_empty() {
+                lines.push(last_digest_skip.to_owned());
+            }
+            lines.join("\n")
+        };
+
         let body = format!(
             "Three layers on this Sovereign. Hot Cache is a software budget (not hardware RAM). \
 Session Recall and Vault grow with use and share disk space here.\n\n\
@@ -2407,7 +2527,9 @@ Mid · Session Recall\n\
 Grows as you chat. If disk is high, ask about pruning older sessions.\n\n\
 Far · Vault\n\
 {vault_status}\n\
-Grow with durable notes (propose → commit). Passphrase stays on this computer.",
+Grow with durable notes (propose → commit). Passphrase stays on this computer.\n\n\
+Being · Continuity\n\
+{continuity_status}",
             hot_fill * 100.0,
             format_bytes_short(recall_db),
             format_bytes_short(recall_free),
@@ -3088,6 +3210,136 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
             let subtitle = labels.join(" · ");
             row.set_subtitle(&subtitle);
         }
+    }
+
+    fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {
+        let id_entry = gtk::Entry::builder()
+            .placeholder_text("Peer id (e.g. cent-002)")
+            .hexpand(true)
+            .build();
+        let name_entry = gtk::Entry::builder()
+            .placeholder_text("Display name (e.g. Eve)")
+            .hexpand(true)
+            .build();
+        let address_entry = gtk::Entry::builder()
+            .placeholder_text("Address (http://host:8642)")
+            .hexpand(true)
+            .build();
+        let token_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("Shared FLEET_AUTH_TOKEN")
+            .show_peek_icon(true)
+            .hexpand(true)
+            .build();
+        let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        form.append(&id_entry);
+        form.append(&name_entry);
+        form.append(&address_entry);
+        form.append(&token_entry);
+        let dialog = adw::AlertDialog::builder()
+            .heading("Fleet peer")
+            .body(
+                "Add another Centurion’s LAN or public address and the shared fleet token. \
+Home → Fleet Presence can then ping them.",
+            )
+            .extra_child(&form)
+            .close_response("cancel")
+            .default_response("save")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("save", "Save");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        let parent_for_result = parent.clone();
+        dialog.connect_response(None, move |_d, response| {
+            if response != "save" {
+                return;
+            }
+            let peer_id = id_entry.text().trim().to_string();
+            let name = name_entry.text().trim().to_string();
+            let address = address_entry.text().trim().to_string();
+            let token = token_entry.text().trim().to_string();
+            let payload = run_bridge_action(
+                "fleet_peer_put",
+                serde_json::json!({
+                    "peer_id": peer_id,
+                    "name": name,
+                    "address": address,
+                    "auth_token": token,
+                }),
+            );
+            let message = payload
+                .as_ref()
+                .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                .unwrap_or("Could not save fleet peer.")
+                .to_owned();
+            let ok = payload
+                .as_ref()
+                .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+                .unwrap_or(false);
+            let result = adw::AlertDialog::builder()
+                .heading(if ok { "Peer saved" } else { "Could not save peer" })
+                .body(&message)
+                .close_response("ok")
+                .build();
+            result.add_response("ok", "OK");
+            result.present(Some(&parent_for_result));
+        });
+        dialog.present(Some(parent));
+    }
+
+    fn show_plugins_list_dialog(parent: &adw::ApplicationWindow) {
+        let payload = run_bridge_action("plugin_list", serde_json::json!({}));
+        let body = match payload {
+            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                let plugins = p
+                    .get("plugins")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if plugins.is_empty() {
+                    "No plugins discovered yet.\n\n\
+Agent plugins live under ~/.centurion/plugins and extend tools/hooks — \
+they do not automatically add Brain UI. See developer-guide/client-plugins.md."
+                        .to_owned()
+                } else {
+                    let mut lines = vec![
+                        "Agent plugins on this Brain (v0 list only):".to_owned(),
+                        String::new(),
+                    ];
+                    for plug in plugins.iter().take(40) {
+                        let name = plug
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("(unnamed)");
+                        let kind = plug.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+                        let enabled = plug
+                            .get("enabled")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let state = if enabled { "on" } else { "off" };
+                        lines.push(format!("• {name} [{kind}] — {state}"));
+                    }
+                    lines.push(String::new());
+                    lines.push(
+                        "Enabling a plugin for the agent does not add GTK panels yet."
+                            .to_owned(),
+                    );
+                    lines.join("\n")
+                }
+            }
+            Some(p) => p
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not list plugins.")
+                .to_owned(),
+            None => "Could not reach the plugin bridge.".to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Installed plugins")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.present(Some(parent));
     }
 
     fn show_backup_thinking_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {

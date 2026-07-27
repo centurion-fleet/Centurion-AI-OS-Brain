@@ -3,10 +3,20 @@
 Native GTK4/libadwaita desktop application and encrypted iPhone service for
 Fedora-based Personal Centurion hardware.
 
-**Away-from-home is the assumed path.** Pair with a public or tunnel hostname
-(`centurion remote pair --host your.tunnel.example`) and expose TCP **9119**.
-Same-LAN Bonjour is optional convenience only — do not require it for shipping
-or App Review.
+## Product focus (Brain first)
+
+The **desktop Brain is the product**: Chat, Home (mission/plans), Settings
+(Soul, memory, thinking, fleet). Treat the iPhone remote as an optional thin
+client — do **not** expand pairing, relay, stream, or Unbox-as-product work
+unless fixing a security or build blocker. Revisit ambient phone when the Brain
+experience is solid and the connection layer is invisible.
+
+See also: [Client plugins](../website/docs/developer-guide/client-plugins.md)
+(agent vs dashboard vs Brain plugin surfaces).
+
+**Away-from-home pairing** remains available for existing remotes but is not the
+primary first-run story. First launch teaches what a Centurion *is*; pairing QR
+is opt-in from Settings → Status.
 
 ## Components
 
