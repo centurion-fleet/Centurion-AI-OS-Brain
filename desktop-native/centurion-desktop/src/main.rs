@@ -902,14 +902,18 @@ mod linux {
         brain_group.add(&update_row);
 
         let thinking_settings_row = adw::ActionRow::builder()
-            .title("Thinking Service")
+            .title("How your Centurion thinks")
             .subtitle("Checking thinking service…")
             .icon_name("preferences-system-symbolic")
             .build();
-        let restore_thinking_button = gtk::Button::with_label("Restore last working setup");
-        restore_thinking_button.add_css_class("suggested-action");
+        let restore_thinking_button = gtk::Button::with_label("Restore");
+        restore_thinking_button.set_tooltip_text(Some("Restore last working thinking setup"));
         restore_thinking_button.set_valign(gtk::Align::Center);
-        let change_thinking_button = gtk::Button::with_label("Change Thinking Service");
+        let change_thinking_button = gtk::Button::with_label("Change");
+        change_thinking_button.set_tooltip_text(Some(
+            "Choose your thinking service and access code for this brain.",
+        ));
+        change_thinking_button.add_css_class("suggested-action");
         change_thinking_button.set_valign(gtk::Align::Center);
         thinking_settings_row.add_suffix(&restore_thinking_button);
         thinking_settings_row.add_suffix(&change_thinking_button);
@@ -921,13 +925,6 @@ mod linux {
             .icon_name("view-list-symbolic")
             .build();
         brain_group.add(&backup_thinking_row);
-
-        let setup_thinking_row = adw::ActionRow::builder()
-            .title("Set up how your Centurion thinks")
-            .subtitle("Run centurion setup on this computer for first-time configuration.")
-            .icon_name("system-run-symbolic")
-            .build();
-        brain_group.add(&setup_thinking_row);
         settings.append(&brain_group);
 
         let you_group = adw::PreferencesGroup::builder()
@@ -1210,19 +1207,6 @@ mod linux {
             }
         });
         change_thinking_button.connect_clicked({
-            let thinking_settings_row = thinking_settings_row.clone();
-            let thinking_detail = thinking_detail.clone();
-            let window = window.clone();
-            move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
-        });
-        let setup_thinking_button = gtk::Button::with_label("Set up");
-        setup_thinking_button.add_css_class("suggested-action");
-        setup_thinking_button.set_valign(gtk::Align::Center);
-        setup_thinking_row.add_suffix(&setup_thinking_button);
-        setup_thinking_row.set_subtitle(
-            "Choose your thinking service and access code for this brain.",
-        );
-        setup_thinking_button.connect_clicked({
             let thinking_settings_row = thinking_settings_row.clone();
             let thinking_detail = thinking_detail.clone();
             let window = window.clone();
@@ -3119,7 +3103,7 @@ Grow with durable notes (propose → commit). Passphrase stays on this computer.
                 if backups.is_empty() {
                     "No backup thinking services are configured yet.\n\n\
                      Backups come from your fallback thinking chain in Centurion config. \
-                     Set a primary service under Thinking Service — Change, then ask your \
+                     Set a primary service under How your Centurion thinks → Change, then ask your \
                      advisor to add fallbacks if you want automatic failover."
                         .to_owned()
                 } else {
