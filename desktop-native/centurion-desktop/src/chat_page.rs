@@ -490,6 +490,15 @@ fn list_sessions() -> Vec<SessionSummary> {
             if id.is_empty() {
                 return None;
             }
+            // Hide brand-new empty sessions (e.g. after delete used to spawn a
+            // replacement). They reappear once the first message is sent.
+            let message_count = row
+                .get("message_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if message_count == 0 {
+                return None;
+            }
             let title = row
                 .get("title")
                 .and_then(|v| v.as_str())
@@ -1410,35 +1419,15 @@ pub fn build() -> gtk::Box {
             set_error(None);
             *assistant_name.borrow_mut() = load_assistant_display_name();
             messages.borrow_mut().clear();
+            // Lazy session: clear local state only. A real DB session is created
+            // on the first send via ensure_session_id(), so we don't leave an
+            // empty "Untitled chat · Just now" row in Conversations.
             *session_id.borrow_mut() = None;
             let path = session_store_path();
             let _ = std::fs::remove_file(&path);
             follow_bottom.set(true);
             refresh_messages();
-            let messages = messages.clone();
-            let session_id = session_id.clone();
-            let refresh_messages = refresh_messages.clone();
-            let refresh_sessions = refresh_sessions.clone();
-            let set_error = set_error.clone();
-            let (tx, rx) = mpsc::channel::<Result<String, String>>();
-            thread::spawn(move || {
-                let _ = tx.send(ensure_session_id());
-            });
-            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(Ok(sid)) => {
-                    *session_id.borrow_mut() = Some(sid);
-                    messages.borrow_mut().clear();
-                    refresh_messages();
-                    refresh_sessions();
-                    glib::ControlFlow::Break
-                }
-                Ok(Err(error)) => {
-                    set_error(Some(error));
-                    glib::ControlFlow::Break
-                }
-                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-            });
+            refresh_sessions();
         }
     });
 
@@ -1505,10 +1494,14 @@ pub fn build() -> gtk::Box {
     let prompt_delete_session: Rc<dyn Fn(SessionSummary)> = Rc::new({
         let container = container.clone();
         let refresh_sessions = refresh_sessions.clone();
+        let refresh_messages = refresh_messages.clone();
         let set_error = set_error.clone();
         let is_sending = is_sending.clone();
         let session_id = session_id.clone();
-        let start_new_chat = start_new_chat.clone();
+        let messages = messages.clone();
+        let clear_approval = clear_approval.clone();
+        let follow_bottom = follow_bottom.clone();
+        let assistant_name = assistant_name.clone();
         move |summary: SessionSummary| {
             if *is_sending.borrow() {
                 return;
@@ -1526,9 +1519,13 @@ pub fn build() -> gtk::Box {
             dialog.add_response("delete", "Delete");
             dialog.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             let refresh_sessions = refresh_sessions.clone();
+            let refresh_messages = refresh_messages.clone();
             let set_error = set_error.clone();
             let session_id = session_id.clone();
-            let start_new_chat = start_new_chat.clone();
+            let messages = messages.clone();
+            let clear_approval = clear_approval.clone();
+            let follow_bottom = follow_bottom.clone();
+            let assistant_name = assistant_name.clone();
             let target_id = summary.id.clone();
             dialog.connect_response(None, move |_dialog, response| {
                 if response != "delete" {
@@ -1537,8 +1534,13 @@ pub fn build() -> gtk::Box {
                 set_error(None);
                 let was_active = session_id.borrow().as_deref() == Some(target_id.as_str());
                 let refresh_sessions = refresh_sessions.clone();
+                let refresh_messages = refresh_messages.clone();
                 let set_error = set_error.clone();
-                let start_new_chat = start_new_chat.clone();
+                let session_id = session_id.clone();
+                let messages = messages.clone();
+                let clear_approval = clear_approval.clone();
+                let follow_bottom = follow_bottom.clone();
+                let assistant_name = assistant_name.clone();
                 let target_id = target_id.clone();
                 let (tx, rx) = mpsc::channel::<Result<(), String>>();
                 thread::spawn(move || {
@@ -1547,10 +1549,91 @@ pub fn build() -> gtk::Box {
                 glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
                     Ok(Ok(())) => {
                         if was_active {
-                            start_new_chat();
-                        } else {
-                            refresh_sessions();
+                            // Remove from stream only — do not spawn a replacement
+                            // session (that showed up as "Untitled chat · Just now").
+                            clear_approval();
+                            messages.borrow_mut().clear();
+                            *session_id.borrow_mut() = None;
+                            let path = session_store_path();
+                            let _ = std::fs::remove_file(&path);
+                            follow_bottom.set(true);
+                            *assistant_name.borrow_mut() = load_assistant_display_name();
+                            refresh_messages();
                         }
+                        // After the list refreshes, open the newest remaining chat
+                        // if the deleted one was active.
+                        let session_id = session_id.clone();
+                        let messages = messages.clone();
+                        let refresh_messages = refresh_messages.clone();
+                        let refresh_sessions = refresh_sessions.clone();
+                        let set_error = set_error.clone();
+                        let follow_bottom = follow_bottom.clone();
+                        let assistant_name = assistant_name.clone();
+                        let (list_tx, list_rx) = mpsc::channel::<Vec<SessionSummary>>();
+                        thread::spawn(move || {
+                            let _ = list_tx.send(list_sessions());
+                        });
+                        glib::timeout_add_local(Duration::from_millis(50), move || {
+                            match list_rx.try_recv() {
+                                Ok(remaining) => {
+                                    if was_active {
+                                        if let Some(next) = remaining.first().cloned() {
+                                            let session_id = session_id.clone();
+                                            let messages = messages.clone();
+                                            let refresh_messages = refresh_messages.clone();
+                                            let refresh_sessions = refresh_sessions.clone();
+                                            let set_error = set_error.clone();
+                                            let follow_bottom = follow_bottom.clone();
+                                            let assistant_name = assistant_name.clone();
+                                            let (tx, rx) = mpsc::channel::<
+                                                Result<(String, Vec<ChatMessage>), String>,
+                                            >();
+                                            thread::spawn(move || {
+                                                let _ = tx.send(resume_session(&next.id));
+                                            });
+                                            glib::timeout_add_local(
+                                                Duration::from_millis(50),
+                                                move || match rx.try_recv() {
+                                                    Ok(Ok((sid, history))) => {
+                                                        save_session_id(&sid);
+                                                        *session_id.borrow_mut() = Some(sid);
+                                                        *messages.borrow_mut() = history;
+                                                        *assistant_name.borrow_mut() =
+                                                            load_assistant_display_name();
+                                                        follow_bottom.set(true);
+                                                        refresh_messages();
+                                                        refresh_sessions();
+                                                        glib::ControlFlow::Break
+                                                    }
+                                                    Ok(Err(error)) => {
+                                                        set_error(Some(error));
+                                                        refresh_sessions();
+                                                        glib::ControlFlow::Break
+                                                    }
+                                                    Err(mpsc::TryRecvError::Empty) => {
+                                                        glib::ControlFlow::Continue
+                                                    }
+                                                    Err(mpsc::TryRecvError::Disconnected) => {
+                                                        refresh_sessions();
+                                                        glib::ControlFlow::Break
+                                                    }
+                                                },
+                                            );
+                                        } else {
+                                            refresh_sessions();
+                                        }
+                                    } else {
+                                        refresh_sessions();
+                                    }
+                                    glib::ControlFlow::Break
+                                }
+                                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                Err(mpsc::TryRecvError::Disconnected) => {
+                                    refresh_sessions();
+                                    glib::ControlFlow::Break
+                                }
+                            }
+                        });
                         glib::ControlFlow::Break
                     }
                     Ok(Err(error)) => {
@@ -1621,6 +1704,8 @@ pub fn build() -> gtk::Box {
     }));
 
     // Initial session + history + sidebar load (bridge stays off the UI thread).
+    // Prefer an existing non-empty conversation; do not create a blank DB row
+    // just to open Chat (that used to show up as "Untitled chat · Just now").
     {
         let messages = messages.clone();
         let session_id = session_id.clone();
@@ -1628,24 +1713,44 @@ pub fn build() -> gtk::Box {
         let refresh_sessions = refresh_sessions.clone();
         let set_error = set_error.clone();
         let (tx, rx) =
-            mpsc::channel::<Result<(String, Vec<ChatMessage>), String>>();
+            mpsc::channel::<Result<Option<(String, Vec<ChatMessage>)>, String>>();
         thread::spawn(move || {
-            match ensure_session_id() {
-                Ok(sid) => {
-                    let history = load_history(&sid);
-                    let _ = tx.send(Ok((sid, history)));
+            if let Some(sid) = load_session_id() {
+                let history = load_history(&sid);
+                let listed = list_sessions();
+                if listed.iter().any(|s| s.id == sid) || !history.is_empty() {
+                    let _ = tx.send(Ok(Some((sid, history))));
+                    return;
                 }
-                Err(err) => {
-                    let _ = tx.send(Err(err));
-                }
+                // Stale pointer (deleted / empty-only) — drop it.
+                let path = session_store_path();
+                let _ = std::fs::remove_file(&path);
             }
+            if let Some(next) = list_sessions().into_iter().next() {
+                match resume_session(&next.id) {
+                    Ok(pair) => {
+                        let _ = tx.send(Ok(Some(pair)));
+                    }
+                    Err(err) => {
+                        let _ = tx.send(Err(err));
+                    }
+                }
+                return;
+            }
+            let _ = tx.send(Ok(None));
         });
         glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-            Ok(Ok((sid, history))) => {
+            Ok(Ok(Some((sid, history)))) => {
+                save_session_id(&sid);
                 *session_id.borrow_mut() = Some(sid);
-                if !history.is_empty() {
-                    *messages.borrow_mut() = history;
-                }
+                *messages.borrow_mut() = history;
+                refresh_messages();
+                refresh_sessions();
+                glib::ControlFlow::Break
+            }
+            Ok(Ok(None)) => {
+                *session_id.borrow_mut() = None;
+                messages.borrow_mut().clear();
                 refresh_messages();
                 refresh_sessions();
                 glib::ControlFlow::Break
