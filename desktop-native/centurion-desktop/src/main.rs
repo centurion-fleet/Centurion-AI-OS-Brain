@@ -35,6 +35,16 @@ mod chat_page;
     clippy::too_many_lines
 )]
 mod home_page;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
+mod interviews;
 
 #[cfg(target_os = "linux")]
 #[allow(
@@ -990,6 +1000,33 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&plugins_row);
         settings.append(&brain_group);
 
+        let gateway_group = adw::PreferencesGroup::builder()
+            .title("Messaging Gateway")
+            .description("Telegram and other platforms for this Brain")
+            .build();
+        let gateway_row = adw::ActionRow::builder()
+            .title("Gateway")
+            .subtitle("Checking…")
+            .icon_name("network-workgroup-symbolic")
+            .build();
+        let gateway_start_btn = gtk::Button::with_label("Start");
+        gateway_start_btn.set_valign(gtk::Align::Center);
+        let gateway_stop_btn = gtk::Button::with_label("Stop");
+        gateway_stop_btn.set_valign(gtk::Align::Center);
+        let gateway_restart_btn = gtk::Button::with_label("Restart");
+        gateway_restart_btn.set_valign(gtk::Align::Center);
+        gateway_row.add_suffix(&gateway_start_btn);
+        gateway_row.add_suffix(&gateway_stop_btn);
+        gateway_row.add_suffix(&gateway_restart_btn);
+        gateway_group.add(&gateway_row);
+        settings.append(&gateway_group);
+        let gateway_platform_list = gtk::ListBox::new();
+        gateway_platform_list.add_css_class("boxed-list");
+        gateway_platform_list.set_margin_start(32);
+        gateway_platform_list.set_margin_end(32);
+        gateway_platform_list.set_margin_bottom(8);
+        settings.append(&gateway_platform_list);
+
         let you_group = adw::PreferencesGroup::builder()
             .title("You & Oversight")
             .description("Autonomy, personality, memory, and reporting")
@@ -1004,13 +1041,38 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         autonomy_row.add_suffix(&autonomy_button);
         you_group.add(&autonomy_row);
 
+        let mission_discover_row = adw::ActionRow::builder()
+            .title("Mission Discovery")
+            .subtitle("Ceremonial interview to set your Life Mission")
+            .icon_name("compass-symbolic")
+            .build();
+        let mission_discover_button = gtk::Button::with_label("Begin");
+        mission_discover_button.add_css_class("suggested-action");
+        mission_discover_button.set_valign(gtk::Align::Center);
+        mission_discover_row.add_suffix(&mission_discover_button);
+        you_group.add(&mission_discover_row);
+
+        let about_you_row = adw::ActionRow::builder()
+            .title("About You")
+            .subtitle("Story, values, and challenges for your Sovereign")
+            .icon_name("user-info-symbolic")
+            .build();
+        let about_you_button = gtk::Button::with_label("Interview");
+        about_you_button.set_valign(gtk::Align::Center);
+        about_you_row.add_suffix(&about_you_button);
+        you_group.add(&about_you_row);
+
         let soul_row = adw::ActionRow::builder()
             .title("Your Sovereign's Soul")
             .subtitle("Personality and rules for your Centurion")
             .icon_name("emoji-people-symbolic")
             .build();
+        let soul_shape_button = gtk::Button::with_label("Shape");
+        soul_shape_button.add_css_class("suggested-action");
+        soul_shape_button.set_valign(gtk::Align::Center);
         let soul_button = gtk::Button::with_label("View / Edit");
         soul_button.set_valign(gtk::Align::Center);
+        soul_row.add_suffix(&soul_shape_button);
         soul_row.add_suffix(&soul_button);
         you_group.add(&soul_row);
 
@@ -1033,6 +1095,55 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         oversight_button.set_valign(gtk::Align::Center);
         oversight_row.add_suffix(&oversight_button);
         you_group.add(&oversight_row);
+
+        let privacy_row = adw::ActionRow::builder()
+            .title("Privacy & Trust")
+            .subtitle("What stays on this computer, and how partnership works")
+            .icon_name("security-high-symbolic")
+            .activatable(true)
+            .build();
+        you_group.add(&privacy_row);
+
+        let pulse_pref_row = adw::ActionRow::builder()
+            .title("Home attention")
+            .subtitle("Prefer opening Home on decisions when something needs you")
+            .icon_name("emblem-important-symbolic")
+            .build();
+        let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
+        pulse_pref_switch.set_active(load_decision_first_pref());
+        pulse_pref_row.add_suffix(&pulse_pref_switch);
+        you_group.add(&pulse_pref_row);
+
+        let skills_row = adw::ActionRow::builder()
+            .title("Skills & tools")
+            .subtitle("What this Brain can use (read-only)")
+            .icon_name("applications-engineering-symbolic")
+            .build();
+        let skills_button = gtk::Button::with_label("View");
+        skills_button.set_valign(gtk::Align::Center);
+        skills_row.add_suffix(&skills_button);
+        you_group.add(&skills_row);
+
+        let license_row = adw::ActionRow::builder()
+            .title("License")
+            .subtitle("Product entitlement for this Brain")
+            .icon_name("dialog-password-symbolic")
+            .build();
+        let license_button = gtk::Button::with_label("Status");
+        license_button.set_valign(gtk::Align::Center);
+        license_row.add_suffix(&license_button);
+        you_group.add(&license_row);
+
+        let beneficiary_row = adw::ActionRow::builder()
+            .title("Family Beneficiary")
+            .subtitle("Nominate family and track colleague referrals")
+            .icon_name("avatar-default-symbolic")
+            .build();
+        let beneficiary_button = gtk::Button::with_label("Open");
+        beneficiary_button.set_valign(gtk::Align::Center);
+        beneficiary_row.add_suffix(&beneficiary_button);
+        you_group.add(&beneficiary_row);
+
         settings.append(&you_group);
 
         let transition_group = adw::PreferencesGroup::builder()
@@ -1071,16 +1182,35 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .subtitle("Open a saved support bundle by code")
             .icon_name("system-search-symbolic")
             .build();
+        let fix_thinking_row = adw::ActionRow::builder()
+            .title("Fix Thinking Service")
+            .subtitle("Catalog → access code → apply → probe")
+            .icon_name("emblem-ok-symbolic")
+            .build();
+        let auto_fix_row = adw::ActionRow::builder()
+            .title("Try auto-fix")
+            .subtitle("Safe recovery for common thinking/config issues")
+            .icon_name("tools-check-symbolic")
+            .build();
         let health_check_button = gtk::Button::with_label("Run");
         health_check_button.set_valign(gtk::Align::Center);
         let bundle_button = gtk::Button::with_label("Generate");
         bundle_button.set_valign(gtk::Align::Center);
         let lookup_button = gtk::Button::with_label("Look Up");
         lookup_button.set_valign(gtk::Align::Center);
+        let fix_thinking_button = gtk::Button::with_label("Fix");
+        fix_thinking_button.add_css_class("suggested-action");
+        fix_thinking_button.set_valign(gtk::Align::Center);
+        let auto_fix_button = gtk::Button::with_label("Run");
+        auto_fix_button.set_valign(gtk::Align::Center);
         support_health_row.add_suffix(&health_check_button);
         support_bundle_row.add_suffix(&bundle_button);
         support_lookup_row.add_suffix(&lookup_button);
+        fix_thinking_row.add_suffix(&fix_thinking_button);
+        auto_fix_row.add_suffix(&auto_fix_button);
         support_group.add(&support_health_row);
+        support_group.add(&fix_thinking_row);
+        support_group.add(&auto_fix_row);
         support_group.add(&support_bundle_row);
         support_group.add(&support_lookup_row);
 
@@ -1294,10 +1424,104 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let soul_row = soul_row.clone();
             move |_| show_soul_dialog(&window, &soul_row)
         });
+        soul_shape_button.connect_clicked({
+            let window = window.clone();
+            let soul_row = soul_row.clone();
+            move |_| {
+                crate::interviews::show_soul_interview(
+                    &window,
+                    Rc::new({
+                        let soul_row = soul_row.clone();
+                        move || refresh_soul_row(&soul_row)
+                    }),
+                );
+            }
+        });
+        mission_discover_button.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                crate::interviews::show_mission_discovery(&window, Rc::new(|| {}));
+            }
+        });
+        about_you_button.connect_clicked({
+            let window = window.clone();
+            move |_| {
+                crate::interviews::show_about_you_interview(&window, Rc::new(|| {}));
+            }
+        });
+        privacy_row.connect_activated({
+            let window = window.clone();
+            move |_| crate::interviews::show_privacy_trust_dialog(&window)
+        });
+        pulse_pref_switch.connect_active_notify(|sw| {
+            save_decision_first_pref(sw.is_active());
+        });
+        skills_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_skills_tools_dialog(&window)
+        });
+        license_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_license_dialog(&window)
+        });
+        beneficiary_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_beneficiary_dialog(&window)
+        });
+        gateway_start_btn.connect_clicked({
+            let gateway_row = gateway_row.clone();
+            let gateway_platform_list = gateway_platform_list.clone();
+            move |_| {
+                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
+                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+            }
+        });
+        gateway_stop_btn.connect_clicked({
+            let gateway_row = gateway_row.clone();
+            let gateway_platform_list = gateway_platform_list.clone();
+            move |_| {
+                let _ = run_bridge_action("gateway_stop", serde_json::json!({}));
+                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+            }
+        });
+        gateway_restart_btn.connect_clicked({
+            let gateway_row = gateway_row.clone();
+            let gateway_platform_list = gateway_platform_list.clone();
+            move |_| {
+                let _ = run_bridge_action("gateway_restart", serde_json::json!({}));
+                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+            }
+        });
+        refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+        fix_thinking_button.connect_clicked({
+            let window = window.clone();
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
+            move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        auto_fix_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_support_auto_fix_dialog(&window)
+        });
         memory_horizon_button.connect_clicked({
             let window = window.clone();
             let memory_horizon_row = memory_horizon_row.clone();
-            move |_| show_memory_horizon_dialog(&window, &memory_horizon_row)
+            let stack = stack.clone();
+            let chat_handle = chat_handle.clone();
+            move |_| {
+                show_memory_horizon_dialog(
+                    &window,
+                    &memory_horizon_row,
+                    Rc::new({
+                        let stack = stack.clone();
+                        let chat_handle = chat_handle.clone();
+                        move |title: String, detail: String| {
+                            chat_handle.seed_discuss(&title, &detail);
+                            stack.set_visible_child_name("chat");
+                        }
+                    }),
+                )
+            }
         });
         oversight_button.connect_clicked({
             let window = window.clone();
@@ -2402,7 +2626,11 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
     }
 
-    fn show_memory_horizon_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
+    fn show_memory_horizon_dialog(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        on_ask: Rc<dyn Fn(String, String)>,
+    ) {
         let snapshot = run_bridge_action("memory_horizon_snapshot", serde_json::json!({}))
             .and_then(|p| p.get("snapshot").cloned())
             .unwrap_or_else(|| serde_json::json!({}));
@@ -2536,16 +2764,56 @@ Being · Continuity\n\
             recall_fill * 100.0,
         );
 
+        let digest_note = if last_digest_target.eq_ignore_ascii_case("vault") {
+            "Recent continuity digests landed in Vault."
+        } else if last_digest_target.eq_ignore_ascii_case("hot_cache")
+            || last_digest_target.eq_ignore_ascii_case("hot-cache")
+            || last_digest_target.eq_ignore_ascii_case("hot")
+        {
+            "Recent continuity digests landed in Hot Cache (Vault was unavailable)."
+        } else if !last_digest_target.is_empty() {
+            "See Continuity above for where the last digest was stored."
+        } else {
+            "No continuity digest yet — digests appear after a session ends."
+        };
+        let body = format!("{body}\n\n{digest_note}");
+
         let dialog = adw::AlertDialog::builder()
             .heading("Memory Horizon")
             .body(&body)
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
+        dialog.add_response("hot", "Discuss Hot Cache");
+        dialog.add_response("vault", "Discuss Vault");
+        if vault_enabled && !vault_init {
+            dialog.add_response("vault_setup", "Set up Vault");
+        } else if vault_enabled && vault_init && !vault_unlocked {
+            dialog.add_response("vault_unlock", "How to unlock Vault");
+        }
         dialog.set_default_response(Some("close"));
         let row = row.clone();
-        dialog.connect_response(None, move |_dialog, _| {
+        dialog.connect_response(None, move |_dialog, response| {
             refresh_memory_horizon_row(&row);
+            match response {
+                "hot" => on_ask(
+                    "Hot Cache".to_owned(),
+                    "Let's discuss my Hot Cache — what's filling it, what to curate, and whether continuity digests should stay there or move to Vault.".to_owned(),
+                ),
+                "vault" => on_ask(
+                    "Vault".to_owned(),
+                    "Let's discuss my Vault — setup, unlock, and what durable notes belong there vs Hot Cache.".to_owned(),
+                ),
+                "vault_setup" => on_ask(
+                    "Set up Vault".to_owned(),
+                    "Help me set up and initialize Vault on this computer for durable memory.".to_owned(),
+                ),
+                "vault_unlock" => on_ask(
+                    "Unlock Vault".to_owned(),
+                    "Vault is locked on this computer. Walk me through unlocking it safely with my passphrase.".to_owned(),
+                ),
+                _ => {}
+            }
         });
         dialog.present(Some(parent));
     }
@@ -3210,6 +3478,390 @@ Being · Continuity\n\
             let subtitle = labels.join(" · ");
             row.set_subtitle(&subtitle);
         }
+    }
+
+    fn decision_first_pref_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("brain_decision_first")
+    }
+
+    fn load_decision_first_pref() -> bool {
+        decision_first_pref_path()
+            .read_to_string()
+            .map(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true"))
+            .unwrap_or(true)
+    }
+
+    fn save_decision_first_pref(enabled: bool) {
+        let path = decision_first_pref_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, if enabled { b"1\n" as &[u8] } else { b"0\n" });
+    }
+
+    fn refresh_gateway_ui(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
+        while let Some(child) = platform_list.first_child() {
+            platform_list.remove(&child);
+        }
+        let Some(payload) = run_bridge_action("gateway_status", serde_json::json!({})) else {
+            row.set_subtitle("Could not read gateway status.");
+            return;
+        };
+        if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            row.set_subtitle(
+                payload
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Gateway status unavailable."),
+            );
+            return;
+        }
+        let running = payload
+            .pointer("/status/running")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let state = payload
+            .pointer("/status/gateway_state")
+            .and_then(|v| v.as_str())
+            .unwrap_or(if running { "running" } else { "stopped" });
+        row.set_subtitle(&format!(
+            "{} — {}",
+            if running { "Running" } else { "Stopped" },
+            state
+        ));
+        let platforms = payload
+            .pointer("/status/platforms")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if platforms.is_empty() {
+            platform_list.append(
+                &adw::ActionRow::builder()
+                    .title("No messaging platforms configured")
+                    .subtitle("Use centurion setup or config.yaml to add Telegram/Discord/etc.")
+                    .build(),
+            );
+            return;
+        }
+        for plat in platforms {
+            let name = plat
+                .get("name")
+                .or_else(|| plat.get("label"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("platform")
+                .to_owned();
+            let enabled = plat
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let connected = plat
+                .get("connected")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let status = plat
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            let row = adw::ActionRow::builder()
+                .title(&name)
+                .subtitle(&format!(
+                    "{}{}",
+                    if connected { "Connected" } else { "Not connected" },
+                    if status.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" · {status}")
+                    }
+                ))
+                .build();
+            let toggle = gtk::Switch::builder()
+                .active(enabled)
+                .valign(gtk::Align::Center)
+                .build();
+            let platform_name = name.clone();
+            let platform_list = platform_list.clone();
+            let gateway_row = row.clone();
+            toggle.connect_active_notify(move |sw| {
+                let _ = run_bridge_action(
+                    "gateway_platform_set",
+                    serde_json::json!({
+                        "platform": platform_name,
+                        "enabled": sw.is_active(),
+                        "restart": true,
+                    }),
+                );
+                // Refresh whole list asynchronously-ish after toggle.
+                let list = platform_list.clone();
+                let grow = gateway_row.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+                    // gateway_row here is the platform ActionRow — we need the parent gateway status row.
+                    // Re-query status into list only.
+                    while let Some(child) = list.first_child() {
+                        list.remove(&child);
+                    }
+                    let _ = grow;
+                    if let Some(payload) =
+                        run_bridge_action("gateway_status", serde_json::json!({}))
+                    {
+                        if let Some(platforms) = payload
+                            .pointer("/status/platforms")
+                            .and_then(|v| v.as_array())
+                        {
+                            for plat in platforms {
+                                let name = plat
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("platform");
+                                let enabled = plat
+                                    .get("enabled")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                list.append(
+                                    &adw::ActionRow::builder()
+                                        .title(name)
+                                        .subtitle(if enabled { "Enabled" } else { "Disabled" })
+                                        .build(),
+                                );
+                            }
+                        }
+                    }
+                });
+            });
+            row.add_suffix(&toggle);
+            platform_list.append(&row);
+        }
+    }
+
+    fn show_support_auto_fix_dialog(parent: &adw::ApplicationWindow) {
+        let payload = run_bridge_action("support_auto_fix", serde_json::json!({}));
+        let (heading, body) = match payload {
+            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => (
+                "Auto-fix finished",
+                p.get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Recovery steps completed.")
+                    .to_owned(),
+            ),
+            Some(p) => (
+                "Auto-fix could not finish",
+                p.get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("See health check for details.")
+                    .to_owned(),
+            ),
+            None => (
+                "Auto-fix unavailable",
+                "Could not reach the support bridge.".to_owned(),
+            ),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading(heading)
+            .body(&body)
+            .close_response("ok")
+            .build();
+        dialog.add_response("ok", "OK");
+        dialog.present(Some(parent));
+    }
+
+    fn show_skills_tools_dialog(parent: &adw::ApplicationWindow) {
+        let payload = run_bridge_action("tools_skills_snapshot", serde_json::json!({}));
+        let body = match payload {
+            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                let tools = p
+                    .get("toolsets")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let skills = p
+                    .get("skills")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let mut lines = vec![
+                    "Enabled for this Brain (read-only). Changes take effect next session unless you use CLI --now.".to_owned(),
+                    String::new(),
+                    "Toolsets:".to_owned(),
+                ];
+                if tools.is_empty() {
+                    lines.push("• (none listed)".to_owned());
+                } else {
+                    for t in tools.iter().take(40) {
+                        let name = t.as_str().unwrap_or("?");
+                        lines.push(format!("• {name}"));
+                    }
+                }
+                lines.push(String::new());
+                lines.push("Skills:".to_owned());
+                if skills.is_empty() {
+                    lines.push("• (none listed — bundled skills load as needed)".to_owned());
+                } else {
+                    for s in skills.iter().take(40) {
+                        let name = s
+                            .as_str()
+                            .or_else(|| s.get("name").and_then(|v| v.as_str()))
+                            .unwrap_or("?");
+                        lines.push(format!("• {name}"));
+                    }
+                }
+                lines.join("\n")
+            }
+            Some(p) => p
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not list skills/tools.")
+                .to_owned(),
+            None => "Could not reach the bridge.".to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Skills & tools")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.present(Some(parent));
+    }
+
+    fn show_license_dialog(parent: &adw::ApplicationWindow) {
+        let payload = run_bridge_action("license_status", serde_json::json!({}));
+        let body = match payload {
+            Some(p) => {
+                let enabled = p
+                    .pointer("/status/enabled")
+                    .or_else(|| p.get("enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if !enabled
+                    && p.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                    && p.get("status").is_none()
+                {
+                    "License enforcement is off on this Brain (BYOK / contributor mode).".to_owned()
+                } else {
+                    serde_json::to_string_pretty(&p).unwrap_or_else(|_| {
+                        p.get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("See license status in CLI.")
+                            .to_owned()
+                    })
+                }
+            }
+            None => "Could not read license status.".to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("License")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        if payload
+            .as_ref()
+            .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+            == Some(true)
+        {
+            dialog.add_response("redeem", "Redeem code");
+        }
+        let parent = parent.clone();
+        dialog.connect_response(None, move |_d, response| {
+            if response != "redeem" {
+                return;
+            }
+            let entry = gtk::Entry::builder()
+                .placeholder_text("License or redeem code")
+                .hexpand(true)
+                .build();
+            let redeem = adw::AlertDialog::builder()
+                .heading("Redeem license")
+                .extra_child(&entry)
+                .close_response("cancel")
+                .default_response("ok")
+                .build();
+            redeem.add_response("cancel", "Cancel");
+            redeem.add_response("ok", "Redeem");
+            redeem.set_response_appearance("ok", adw::ResponseAppearance::Suggested);
+            let parent = parent.clone();
+            redeem.connect_response(None, move |_d, resp| {
+                if resp != "ok" {
+                    return;
+                }
+                let code = entry.text().trim().to_string();
+                let result = run_bridge_action(
+                    "license_redeem",
+                    serde_json::json!({ "code": code }),
+                );
+                let msg = result
+                    .as_ref()
+                    .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                    .unwrap_or("Redeem finished.")
+                    .to_owned();
+                let done = adw::AlertDialog::builder()
+                    .heading("Redeem")
+                    .body(&msg)
+                    .close_response("ok")
+                    .build();
+                done.add_response("ok", "OK");
+                done.present(Some(&parent));
+            });
+            redeem.present(Some(&parent));
+        });
+        dialog.present(Some(&parent));
+    }
+
+    fn show_beneficiary_dialog(parent: &adw::ApplicationWindow) {
+        let snapshot = run_bridge_action("beneficiary_snapshot", serde_json::json!({}));
+        let summary = snapshot
+            .as_ref()
+            .and_then(|p| serde_json::to_string_pretty(p).ok())
+            .unwrap_or_else(|| "Could not load Family Beneficiary state.".to_owned());
+        let first = gtk::Entry::builder()
+            .placeholder_text("Family beneficiary first name")
+            .hexpand(true)
+            .build();
+        let colleague = gtk::Entry::builder()
+            .placeholder_text("Colleague referral note / email")
+            .hexpand(true)
+            .build();
+        let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        form.append(
+            &gtk::Label::builder()
+                .label(&summary)
+                .wrap(true)
+                .xalign(0.0)
+                .selectable(true)
+                .build(),
+        );
+        form.append(&first);
+        form.append(&colleague);
+        let dialog = adw::AlertDialog::builder()
+            .heading("Family Beneficiary")
+            .body("Nominate a family member or record a colleague referral.")
+            .extra_child(&form)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.add_response("family", "Save family");
+        dialog.add_response("colleague", "Submit colleague");
+        let parent = parent.clone();
+        dialog.connect_response(None, move |_d, response| {
+            match response {
+                "family" => {
+                    let name = first.text().trim().to_string();
+                    let _ = run_bridge_action(
+                        "beneficiary_set_family_member",
+                        serde_json::json!({ "first_name": name }),
+                    );
+                }
+                "colleague" => {
+                    let note = colleague.text().trim().to_string();
+                    let _ = run_bridge_action(
+                        "beneficiary_submit_colleague",
+                        serde_json::json!({ "note": note, "email": note }),
+                    );
+                }
+                _ => {}
+            }
+        });
+        dialog.present(Some(&parent));
     }
 
     fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {

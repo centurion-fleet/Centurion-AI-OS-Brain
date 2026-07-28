@@ -171,6 +171,12 @@ def handle_request(
         return _handle_fleet_peer_put(request, request_id)
     if action == "plugin_list":
         return _handle_plugin_list(request_id)
+    if action == "tools_skills_snapshot":
+        return _handle_tools_skills_snapshot(request_id)
+    if action == "ops_glance":
+        return _handle_ops_glance(request_id)
+    if action == "client_plugin_cards":
+        return _handle_client_plugin_cards(request_id)
 
     code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
     return {
@@ -2602,6 +2608,151 @@ def _handle_plugin_list(request_id: str) -> dict[str, Any]:
         }
     except Exception as exc:
         return _error_response(request_id, action="plugin_list", exc=exc)
+
+
+def _handle_tools_skills_snapshot(request_id: str) -> dict[str, Any]:
+    """Read-only toolsets + skill names for Brain Settings."""
+    try:
+        from centurion_cli.config import load_config
+        from centurion_cli.tools_config import _get_platform_tools
+
+        cfg = load_config()
+        toolsets = sorted(_get_platform_tools(cfg, "remote") or _get_platform_tools(cfg, "cli") or [])
+        skills: list[str] = []
+        try:
+            from pathlib import Path
+
+            from centurion_constants import get_centurion_home
+
+            skills_root = get_centurion_home() / "skills"
+            if skills_root.is_dir():
+                for path in sorted(skills_root.rglob("SKILL.md")):
+                    name = path.parent.name
+                    if name and name not in skills:
+                        skills.append(name)
+        except Exception:
+            logger.debug("tools_skills_snapshot: skill scan failed", exc_info=True)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "tools_skills_snapshot",
+            "toolsets": toolsets,
+            "skills": skills,
+            "message": "Manage via centurion tools / skills (next session unless --now).",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="tools_skills_snapshot", exc=exc)
+
+
+def _handle_ops_glance(request_id: str) -> dict[str, Any]:
+    """Home pulse glance: next cron jobs + blocked/ready kanban tasks."""
+    cron_jobs: list[dict[str, Any]] = []
+    kanban_tasks: list[dict[str, Any]] = []
+    try:
+        from cron.jobs import list_jobs
+
+        for job in list_jobs()[:8]:
+            if not isinstance(job, dict):
+                continue
+            if job.get("paused") or job.get("enabled") is False:
+                continue
+            cron_jobs.append(
+                {
+                    "id": job.get("id") or job.get("job_id") or "",
+                    "name": job.get("name") or job.get("title") or job.get("id") or "job",
+                    "schedule": job.get("schedule") or job.get("next_run") or "",
+                    "next_run": job.get("next_run") or job.get("next_run_at") or "",
+                }
+            )
+    except Exception:
+        logger.debug("ops_glance: cron unavailable", exc_info=True)
+    try:
+        import centurion_cli.kanban_db as kb
+
+        with kb.connect() as conn:
+            rows = kb.list_tasks(conn, limit=24)
+            for row in rows or []:
+                status = str(getattr(row, "status", "") or "").lower()
+                if status not in {"blocked", "ready", "in_progress", "todo", "open"}:
+                    continue
+                kanban_tasks.append(
+                    {
+                        "id": str(getattr(row, "id", "") or ""),
+                        "title": str(getattr(row, "title", "") or getattr(row, "name", "") or "task"),
+                        "status": status,
+                    }
+                )
+                if len(kanban_tasks) >= 8:
+                    break
+    except Exception:
+        logger.debug("ops_glance: kanban unavailable", exc_info=True)
+    return {
+        "id": request_id,
+        "ok": True,
+        "action": "ops_glance",
+        "cron": cron_jobs,
+        "kanban": kanban_tasks,
+    }
+
+
+def _handle_client_plugin_cards(request_id: str) -> dict[str, Any]:
+    """Client plugin seam v1 — declarative Home/Settings cards from manifests."""
+    cards: list[dict[str, Any]] = []
+    try:
+        from pathlib import Path
+
+        from centurion_constants import get_centurion_home
+
+        roots = [
+            get_centurion_home() / "plugins",
+            Path(__file__).resolve().parents[1] / "plugins",
+        ]
+        seen: set[str] = set()
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for manifest in root.rglob("manifest.json"):
+                # Prefer dashboard/ or client/ brain manifests
+                parent_name = manifest.parent.name.lower()
+                if parent_name not in {"dashboard", "client", "brain"}:
+                    # Also accept plugin.yaml sibling with client section via JSON only here
+                    if "dashboard" not in str(manifest) and "client" not in str(manifest):
+                        continue
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                client = data.get("client") or data.get("brain") or data
+                if not isinstance(client, dict):
+                    continue
+                title = str(client.get("title") or data.get("name") or manifest.parent.parent.name).strip()
+                if not title or title in seen:
+                    continue
+                seen.add(title)
+                cards.append(
+                    {
+                        "id": str(client.get("id") or title).strip(),
+                        "title": title,
+                        "subtitle": str(client.get("subtitle") or client.get("description") or "").strip(),
+                        "surface": str(client.get("surface") or "home").strip().lower(),
+                        "ask_prompt": str(client.get("ask_prompt") or f"Tell me about {title}.").strip(),
+                    }
+                )
+                if len(cards) >= 12:
+                    break
+            if len(cards) >= 12:
+                break
+    except Exception:
+        logger.debug("client_plugin_cards failed", exc_info=True)
+    return {
+        "id": request_id,
+        "ok": True,
+        "action": "client_plugin_cards",
+        "cards": cards,
+        "count": len(cards),
+    }
 
 
 def _read_request() -> dict[str, Any]:

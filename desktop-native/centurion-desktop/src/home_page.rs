@@ -114,6 +114,7 @@ struct PlanItem {
     status: String,
     goal: String,
     steps: Vec<String>,
+    risks: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -127,6 +128,8 @@ struct SwarmOrb {
     id: String,
     name: String,
     pulse: String,
+    objective: String,
+    detail: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -136,6 +139,22 @@ struct FleetPeerItem {
     status: String,
     address: String,
     last_seen: f64,
+}
+
+#[derive(Clone, Debug, Default)]
+struct OpsItem {
+    id: String,
+    title: String,
+    detail: String,
+    kind: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PluginCard {
+    id: String,
+    title: String,
+    subtitle: String,
+    ask_prompt: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -149,6 +168,8 @@ struct HomeFeed {
     mission: MissionInfo,
     swarms: Vec<SwarmOrb>,
     fleet_peers: Vec<FleetPeerItem>,
+    ops: Vec<OpsItem>,
+    plugins: Vec<PluginCard>,
     error: Option<String>,
 }
 
@@ -476,6 +497,14 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                 .iter()
                 .filter_map(|s| s.as_str().map(str::to_owned))
                 .collect(),
+            risks: p
+                .get("risks")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|s| s.as_str().map(str::to_owned))
+                .collect(),
         })
         .collect();
 
@@ -499,10 +528,35 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
     let orb_swarms: Vec<SwarmOrb> = swarms
         .iter()
         .take(6)
-        .map(|s| SwarmOrb {
-            id: json_str(s.get("id")),
-            name: json_str(s.get("display_name")),
-            pulse: json_str(s.get("pulse")),
+        .map(|s| {
+            let id = json_str(s.get("id"));
+            let objective = json_str(s.get("objective"));
+            let open_signals = signals
+                .iter()
+                .filter(|sig| json_str(sig.get("swarm_id")) == id)
+                .filter(|sig| {
+                    let st = json_str(sig.get("status")).to_lowercase();
+                    st.is_empty() || st == "open" || st == "pending"
+                })
+                .count();
+            let outcome_n = outcomes
+                .iter()
+                .filter(|o| json_str(o.get("swarm_id")) == id)
+                .count();
+            let detail = format!(
+                "{} open decision{} · {} outcome{}",
+                open_signals,
+                if open_signals == 1 { "" } else { "s" },
+                outcome_n,
+                if outcome_n == 1 { "" } else { "s" },
+            );
+            SwarmOrb {
+                id,
+                name: json_str(s.get("display_name")),
+                pulse: json_str(s.get("pulse")),
+                objective,
+                detail,
+            }
         })
         .filter(|s| !s.name.is_empty())
         .collect();
@@ -520,6 +574,8 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
         },
         swarms: orb_swarms,
         fleet_peers: Vec::new(),
+        ops: Vec::new(),
+        plugins: Vec::new(),
         error: None,
     }
 }
@@ -571,6 +627,157 @@ fn load_home_feed() -> HomeFeed {
                     last_seen: json_f64(p.get("last_seen")),
                 })
                 .filter(|p| !p.id.is_empty() || !p.name.is_empty())
+                .collect();
+        }
+    }
+
+    // Enrich plan bodies via plan_get when list payloads are stubby.
+    for plan in feed.plans.iter_mut().take(8) {
+        let Some(resp) = run_bridge_action(
+            "plan_get",
+            serde_json::json!({ "plan_id": plan.id }),
+        ) else {
+            continue;
+        };
+        if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        let Some(full) = resp.get("plan") else { continue };
+        let goal = json_str(full.get("goal"));
+        let summary = json_str(full.get("summary"));
+        if !goal.is_empty() {
+            plan.goal = goal;
+        }
+        if !summary.is_empty() {
+            plan.summary = summary;
+        }
+        let steps = full
+            .get("steps")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        if !steps.is_empty() {
+            plan.steps = steps;
+        }
+        let risks = full
+            .get("risks")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        if !risks.is_empty() {
+            plan.risks = risks;
+        }
+    }
+    for doc in feed.outputs.iter_mut() {
+        let Some(plan_id) = doc.plan_id.clone() else { continue };
+        if let Some(plan) = feed.plans.iter().find(|p| p.id == plan_id) {
+            let mut body = format!("# {}
+
+{}
+", plan.title, plan.summary);
+            if !plan.goal.is_empty() {
+                body.push_str(&format!("
+Goal: {}
+", plan.goal));
+            }
+            if !plan.steps.is_empty() {
+                body.push_str("
+Steps:
+");
+                for step in &plan.steps {
+                    body.push_str(&format!("- {step}
+"));
+                }
+            }
+            if !plan.risks.is_empty() {
+                body.push_str("
+Risks:
+");
+                for risk in &plan.risks {
+                    body.push_str(&format!("- {risk}
+"));
+                }
+            }
+            doc.body = body;
+            if doc.summary.is_empty() {
+                doc.summary = plan.summary.clone();
+            }
+        }
+    }
+
+    if let Some(resp) = run_bridge_action("ops_glance", serde_json::json!({})) {
+        if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            let mut ops = Vec::new();
+            for job in resp
+                .get("cron")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+            {
+                let name = json_str(job.get("name"));
+                if name.is_empty() {
+                    continue;
+                }
+                let schedule = json_str(job.get("schedule"));
+                let next = json_str(job.get("next_run"));
+                ops.push(OpsItem {
+                    id: json_str(job.get("id")),
+                    title: name,
+                    detail: if !next.is_empty() {
+                        format!("Next: {next}")
+                    } else if !schedule.is_empty() {
+                        schedule
+                    } else {
+                        "Scheduled job".to_owned()
+                    },
+                    kind: "cron".to_owned(),
+                });
+            }
+            for task in resp
+                .get("kanban")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+            {
+                let title = json_str(task.get("title"));
+                if title.is_empty() {
+                    continue;
+                }
+                ops.push(OpsItem {
+                    id: json_str(task.get("id")),
+                    title,
+                    detail: format!("Board · {}", json_str(task.get("status"))),
+                    kind: "kanban".to_owned(),
+                });
+            }
+            feed.ops = ops;
+        }
+    }
+
+    if let Some(resp) = run_bridge_action("client_plugin_cards", serde_json::json!({})) {
+        if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            feed.plugins = resp
+                .get("cards")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .filter(|c| {
+                    let surface = json_str(c.get("surface")).to_lowercase();
+                    surface.is_empty() || surface == "home" || surface == "both"
+                })
+                .map(|c| PluginCard {
+                    id: json_str(c.get("id")),
+                    title: json_str(c.get("title")),
+                    subtitle: json_str(c.get("subtitle")),
+                    ask_prompt: json_str(c.get("ask_prompt")),
+                })
+                .filter(|c| !c.title.is_empty())
                 .collect();
         }
     }
@@ -728,6 +935,188 @@ fn show_mission_edit_dialog(
     dialog.present(Some(parent));
 }
 
+fn find_app_window(widget: &impl IsA<gtk::Widget>) -> Option<adw::ApplicationWindow> {
+    widget
+        .root()
+        .and_then(|r| r.downcast::<adw::ApplicationWindow>().ok())
+}
+
+fn load_decision_first_pref() -> bool {
+    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        .join("brain_decision_first")
+        .read_to_string()
+        .map(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(true)
+}
+
+fn show_collab_detail_dialog(
+    parent: &impl IsA<gtk::Widget>,
+    orb: &SwarmOrb,
+    on_ask: Rc<dyn Fn(String, String)>,
+) {
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    if !orb.objective.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label(&format!("Objective: {}", orb.objective))
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+    }
+    body.append(
+        &gtk::Label::builder()
+            .label(&format!("Pulse: {}", orb.pulse))
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build(),
+    );
+    if !orb.detail.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label(&orb.detail)
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+    }
+    let dialog = adw::AlertDialog::builder()
+        .heading(&orb.name)
+        .body("Collaboration detail")
+        .extra_child(&body)
+        .close_response("close")
+        .default_response("discuss")
+        .build();
+    dialog.add_response("close", "Close");
+    dialog.add_response("discuss", "Discuss");
+    dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
+    let name = orb.name.clone();
+    let objective = orb.objective.clone();
+    let pulse = orb.pulse.clone();
+    dialog.connect_response(None, move |_d, response| {
+        if response == "discuss" {
+            on_ask(
+                name.clone(),
+                format!(
+                    "Let's discuss collaboration “{name}” (pulse: {pulse}).\n\nObjective: {objective}\n\nWhat should we do next?"
+                ),
+            );
+        }
+    });
+    dialog.present(Some(parent));
+}
+
+fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    let token = gtk::Entry::builder()
+        .placeholder_text("Mission Control token (ctk_proj_…)")
+        .hexpand(true)
+        .build();
+    let project_id = gtk::Entry::builder()
+        .placeholder_text("Project id")
+        .hexpand(true)
+        .build();
+    let install_id = gtk::Entry::builder()
+        .placeholder_text("Install id")
+        .hexpand(true)
+        .build();
+    let friend_id = gtk::Entry::builder()
+        .placeholder_text("Friend customer id (for Invite)")
+        .hexpand(true)
+        .build();
+    let board_title = gtk::Entry::builder()
+        .placeholder_text("Board title (for Create board)")
+        .hexpand(true)
+        .build();
+    box_.append(&token);
+    box_.append(&project_id);
+    box_.append(&install_id);
+    box_.append(&friend_id);
+    box_.append(&board_title);
+    let dialog = adw::AlertDialog::builder()
+        .heading("Connect another Sovereign")
+        .body(
+            "Connect with a Mission Control project token, invite a friend by customer id, or create a local collaboration board.",
+        )
+        .extra_child(&box_)
+        .close_response("cancel")
+        .default_response("connect")
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("connect", "Connect");
+    dialog.add_response("invite", "Invite");
+    dialog.add_response("board", "Create board");
+    dialog.set_response_appearance("connect", adw::ResponseAppearance::Suggested);
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    dialog.connect_response(None, move |_d, response| {
+        if response == "cancel" {
+            return;
+        }
+        let token_v = token.text().trim().to_owned();
+        let project_v = project_id.text().trim().to_owned();
+        let install_v = install_id.text().trim().to_owned();
+        let friend_v = friend_id.text().trim().to_owned();
+        let board_v = board_title.text().trim().to_owned();
+        let refresh = refresh.clone();
+        let parent_w = parent_w.clone();
+        let action = response.to_owned();
+        run_async_result(parent_w, refresh, move || {
+            let payload = match action.as_str() {
+                "connect" => {
+                    if token_v.is_empty() || project_v.is_empty() || install_v.is_empty() {
+                        return Err(
+                            "Connect needs token, project id, and install id.".to_owned(),
+                        );
+                    }
+                    run_bridge_action(
+                        "swarm_connect",
+                        serde_json::json!({
+                            "token": token_v,
+                            "project_id": project_v,
+                            "install_id": install_v,
+                        }),
+                    )
+                }
+                "invite" => {
+                    if friend_v.is_empty() {
+                        return Err("Enter a friend customer id to invite.".to_owned());
+                    }
+                    let mut body = serde_json::json!({ "invited_customer_id": friend_v });
+                    if !project_v.is_empty() {
+                        body["project_id"] = serde_json::Value::String(project_v);
+                    }
+                    run_bridge_action("swarm_invite", body)
+                }
+                "board" => run_bridge_action(
+                    "swarm_create_board",
+                    serde_json::json!({
+                        "name": if board_v.is_empty() {
+                            "Desk collaboration".to_owned()
+                        } else {
+                            board_v
+                        },
+                        "objective": "Desk collaboration board",
+                    }),
+                ),
+                _ => return Ok(()),
+            }
+            .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
+            if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                Ok(())
+            } else {
+                Err(payload
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Collaboration action failed.")
+                    .to_owned())
+            }
+        });
+    });
+    dialog.present(Some(parent));
+}
+
 fn clear_box(container: &gtk::Box) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
@@ -881,6 +1270,16 @@ fn show_plan_dialog(
                 .build(),
         );
     }
+    for risk in &plan.risks {
+        body.append(
+            &gtk::Label::builder()
+                .label(&format!("Risk: {risk}"))
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+    }
     let dialog = adw::AlertDialog::builder()
         .heading(&plan.title)
         .body(&format!("Status: {}", plan.status))
@@ -889,6 +1288,7 @@ fn show_plan_dialog(
         .default_response("close")
         .build();
     dialog.add_response("close", "Close");
+    dialog.add_response("share", "Share");
     let pending = matches!(
         plan.status.to_lowercase().as_str(),
         "pending_review" | "held" | "adjusted" | "proposed"
@@ -905,6 +1305,7 @@ fn show_plan_dialog(
     let title = plan.title.clone();
     let summary = plan.summary.clone();
     let parent_w = parent.clone().upcast::<gtk::Widget>();
+    let parent_share = parent.clone().upcast::<gtk::Widget>();
     dialog.connect_response(None, move |_d, response| match response {
         "approve" | "hold" | "reject" => {
             let choice = match response {
@@ -925,6 +1326,58 @@ fn show_plan_dialog(
                     summary
                 ),
             );
+        }
+        "share" => {
+            let plan_id = plan_id.clone();
+            let parent_share = parent_share.clone();
+            let refresh = refresh.clone();
+            let entry = gtk::Entry::builder()
+                .placeholder_text("Reviewer customer id")
+                .hexpand(true)
+                .build();
+            let ask = adw::AlertDialog::builder()
+                .heading("Share plan")
+                .body("Enter the reviewer customer id for co-review.")
+                .extra_child(&entry)
+                .close_response("cancel")
+                .default_response("send")
+                .build();
+            ask.add_response("cancel", "Cancel");
+            ask.add_response("send", "Share");
+            ask.set_response_appearance("send", adw::ResponseAppearance::Suggested);
+            ask.connect_response(None, move |_d, response| {
+                if response != "send" {
+                    return;
+                }
+                let reviewer = entry.text().trim().to_owned();
+                if reviewer.is_empty() {
+                    show_home_error(&parent_share, "Reviewer customer id is required.");
+                    return;
+                }
+                let plan_id = plan_id.clone();
+                let parent_share = parent_share.clone();
+                let refresh = refresh.clone();
+                run_async_result(parent_share, refresh, move || {
+                    let response = run_bridge_action(
+                        "plan_share",
+                        serde_json::json!({
+                            "plan_id": plan_id,
+                            "reviewer_customer_id": reviewer,
+                        }),
+                    )
+                    .ok_or_else(|| "Could not share plan.".to_owned())?;
+                    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                        Ok(())
+                    } else {
+                        Err(response
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Share failed.")
+                            .to_owned())
+                    }
+                });
+            });
+            ask.present(Some(&parent_share));
         }
         _ => {}
     });
@@ -984,14 +1437,45 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
 
     let constellation = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     constellation.add_css_class("centurion-home-constellation");
-    chrome.append(
+    let collab_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    collab_header.append(
         &gtk::Label::builder()
             .label("Your collaborations")
             .css_classes(["title-4"])
             .xalign(0.0)
+            .hexpand(true)
             .build(),
     );
+    let connect_collab = gtk::Button::with_label("Connect");
+    connect_collab.add_css_class("flat");
+    connect_collab.set_tooltip_text(Some("Connect or invite another Sovereign"));
+    collab_header.append(&connect_collab);
+    chrome.append(&collab_header);
     chrome.append(&constellation);
+
+    let ops_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    ops_section.append(
+        &gtk::Label::builder()
+            .label("Scheduled & board")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build(),
+    );
+    let ops_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    ops_section.append(&ops_body);
+    chrome.append(&ops_section);
+
+    let plugin_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    plugin_section.append(
+        &gtk::Label::builder()
+            .label("Extensions")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build(),
+    );
+    let plugin_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    plugin_section.append(&plugin_body);
+    chrome.append(&plugin_section);
 
     let fleet_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
     fleet_section.append(
@@ -1020,6 +1504,9 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
     let mission_edit = gtk::Button::with_label("Edit");
     mission_edit.add_css_class("flat");
     mission_header.append(&mission_edit);
+    let mission_discover = gtk::Button::with_label("Discover");
+    mission_discover.add_css_class("suggested-action");
+    mission_header.append(&mission_discover);
     mission_banner.append(&mission_header);
     let mission_statement = gtk::Label::builder()
         .label("Set a Life Mission to guide your Sovereign.")
@@ -1061,6 +1548,7 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
 
     let feed: Rc<RefCell<HomeFeed>> = Rc::new(RefCell::new(HomeFeed::default()));
     let selected = Rc::new(Cell::new(PulseCategory::Live));
+    let applied_decision_first = Rc::new(Cell::new(false));
     let pill_buttons: Rc<RefCell<Vec<(PulseCategory, gtk::ToggleButton)>>> =
         Rc::new(RefCell::new(Vec::new()));
     let render_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
@@ -1070,6 +1558,8 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
         let selected = selected.clone();
         let constellation = constellation.clone();
         let fleet_body = fleet_body.clone();
+        let ops_body = ops_body.clone();
+        let plugin_body = plugin_body.clone();
         let mission_statement = mission_statement.clone();
         let commitments = commitments.clone();
         let error_label = error_label.clone();
@@ -1077,6 +1567,7 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
         let hooks = hooks.clone();
         let container = container.clone();
         let render_slot = render_slot.clone();
+        let pill_buttons = pill_buttons.clone();
         move || {
             let data = feed.borrow().clone();
             clear_box(&constellation);
@@ -1086,12 +1577,133 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                 ));
             } else {
                 for orb in &data.swarms {
-                    let chip = gtk::Label::builder()
-                        .label(&format!("{} · {}", orb.name, orb.pulse))
-                        .css_classes(["centurion-home-orb"])
-                        .build();
+                    let chip = gtk::Button::with_label(&format!("{} · {}", orb.name, orb.pulse));
+                    chip.add_css_class("flat");
+                    chip.add_css_class("centurion-home-orb");
+                    let parent = container.clone();
+                    let on_ask = hooks.on_ask_about.clone();
+                    let orb_clone = orb.clone();
+                    chip.connect_clicked(move |_| {
+                        show_collab_detail_dialog(&parent, &orb_clone, on_ask.clone());
+                    });
                     constellation.append(&chip);
                 }
+            }
+
+            clear_box(&ops_body);
+            if data.ops.is_empty() {
+                ops_body.append(&empty_label(
+                    "No upcoming jobs or board tasks right now.",
+                ));
+            } else {
+                for item in &data.ops {
+                    let card = card_box();
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&item.title)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["heading"])
+                            .build(),
+                    );
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&item.detail)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["dim-label"])
+                            .build(),
+                    );
+                    let ask = gtk::Button::with_label("Ask about this");
+                    ask.add_css_class("flat");
+                    let on_ask = hooks.on_ask_about.clone();
+                    let title = item.title.clone();
+                    let detail = item.detail.clone();
+                    let kind = item.kind.clone();
+                    ask.connect_clicked(move |_| {
+                        on_ask(
+                            title.clone(),
+                            format!(
+                                "About this {kind} item:
+
+{title}
+{detail}
+
+What should we do?"
+                            ),
+                        );
+                    });
+                    card.append(&ask);
+                    ops_body.append(&card);
+                }
+            }
+
+            clear_box(&plugin_body);
+            if data.plugins.is_empty() {
+                plugin_body.append(&empty_label(
+                    "No client extensions yet. Plugins can publish a thin Brain card via manifest.",
+                ));
+            } else {
+                for plugin in &data.plugins {
+                    let card = card_box();
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&plugin.title)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["heading"])
+                            .build(),
+                    );
+                    if !plugin.subtitle.is_empty() {
+                        card.append(
+                            &gtk::Label::builder()
+                                .label(&plugin.subtitle)
+                                .wrap(true)
+                                .xalign(0.0)
+                                .css_classes(["dim-label"])
+                                .build(),
+                        );
+                    }
+                    let ask = gtk::Button::with_label("Open in Chat");
+                    ask.add_css_class("suggested-action");
+                    let on_ask = hooks.on_ask_about.clone();
+                    let title = plugin.title.clone();
+                    let prompt = if plugin.ask_prompt.is_empty() {
+                        format!("Tell me about {title}.")
+                    } else {
+                        plugin.ask_prompt.clone()
+                    };
+                    ask.connect_clicked(move |_| {
+                        on_ask(title.clone(), prompt.clone());
+                    });
+                    card.append(&ask);
+                    plugin_body.append(&card);
+                }
+            }
+
+            // Badge pill labels for attention counts.
+            let decision_n = data.decisions.len();
+            let pending_plan_n = data
+                .plans
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.status.to_lowercase().as_str(),
+                        "pending_review" | "held" | "adjusted" | "proposed"
+                    )
+                })
+                .count();
+            for (cat, btn) in pill_buttons.borrow().iter() {
+                let label = match cat {
+                    PulseCategory::Decisions if decision_n > 0 => {
+                        format!("{} ({decision_n})", cat.title())
+                    }
+                    PulseCategory::Plans if pending_plan_n > 0 => {
+                        format!("{} ({pending_plan_n})", cat.title())
+                    }
+                    _ => cat.title().to_owned(),
+                };
+                btn.set_label(&label);
             }
 
             clear_box(&fleet_body);
@@ -1638,6 +2250,9 @@ Outline the goal, steps, and what you need from me before acting."
     let refresh_feed: Rc<dyn Fn()> = Rc::new({
         let feed = feed.clone();
         let paint = paint.clone();
+        let selected = selected.clone();
+        let applied_decision_first = applied_decision_first.clone();
+        let pill_buttons = pill_buttons.clone();
         move || {
             let (tx, rx) = mpsc::channel::<HomeFeed>();
             thread::spawn(move || {
@@ -1645,9 +2260,35 @@ Outline the goal, steps, and what you need from me before acting."
             });
             let feed = feed.clone();
             let paint = paint.clone();
+            let selected = selected.clone();
+            let applied_decision_first = applied_decision_first.clone();
+            let pill_buttons = pill_buttons.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
                 Ok(next) => {
                     *feed.borrow_mut() = next;
+                    if !applied_decision_first.get() && load_decision_first_pref() {
+                        applied_decision_first.set(true);
+                        let data = feed.borrow();
+                        let initial = if !data.decisions.is_empty() {
+                            PulseCategory::Decisions
+                        } else if data.plans.iter().any(|p| {
+                            matches!(
+                                p.status.to_lowercase().as_str(),
+                                "pending_review" | "held" | "adjusted" | "proposed"
+                            )
+                        }) {
+                            PulseCategory::Plans
+                        } else {
+                            PulseCategory::Live
+                        };
+                        drop(data);
+                        selected.set(initial);
+                        for (cat, btn) in pill_buttons.borrow().iter() {
+                            btn.set_active(*cat == initial);
+                        }
+                    } else if !applied_decision_first.get() {
+                        applied_decision_first.set(true);
+                    }
                     paint();
                     glib::ControlFlow::Break
                 }
@@ -1713,6 +2354,41 @@ Outline the goal, steps, and what you need from me before acting."
                 }) as Rc<dyn Fn()>
             };
             show_mission_edit_dialog(&container, &current, refresh);
+        });
+    }
+
+    {
+        let container = container.clone();
+        let render_slot = render_slot.clone();
+        mission_discover.connect_clicked(move |_| {
+            let Some(window) = find_app_window(&container) else {
+                return;
+            };
+            let refresh = {
+                let render_slot = render_slot.clone();
+                Rc::new(move || {
+                    if let Some(f) = render_slot.borrow().as_ref() {
+                        f();
+                    }
+                }) as Rc<dyn Fn()>
+            };
+            crate::interviews::show_mission_discovery(&window, refresh);
+        });
+    }
+
+    {
+        let container = container.clone();
+        let render_slot = render_slot.clone();
+        connect_collab.connect_clicked(move |_| {
+            let refresh = {
+                let render_slot = render_slot.clone();
+                Rc::new(move || {
+                    if let Some(f) = render_slot.borrow().as_ref() {
+                        f();
+                    }
+                }) as Rc<dyn Fn()>
+            };
+            show_connect_collab_dialog(&container, refresh);
         });
     }
 
