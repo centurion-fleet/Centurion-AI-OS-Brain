@@ -826,6 +826,172 @@ def _attempt_lkg_retry(
         return None
 
 
+def _remote_events_enabled() -> bool:
+    import os
+
+    return os.environ.get("CENTURION_REMOTE_EVENTS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _emit_remote_event(event: dict[str, Any]) -> None:
+    """Write one NDJSON event to the real stdout FD (survives redirect_stdout)."""
+    import os
+
+    os.write(1, (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+
+
+def _resolve_remote_tool_progress_mode(cfg: dict[str, Any] | None = None) -> str:
+    """Resolve display.tool_progress for Brain/remote (default all)."""
+    try:
+        if cfg is None:
+            from centurion_cli.config import load_config
+
+            cfg = load_config()
+        from gateway.display_config import resolve_display_setting
+
+        mode = resolve_display_setting(cfg or {}, "remote", "tool_progress", "all")
+    except Exception:
+        mode = "all"
+    if mode is False or mode is None:
+        return "off"
+    text = str(mode).strip().lower()
+    if text in {"off", "new", "all", "verbose"}:
+        return text
+    return "all"
+
+
+def _format_remote_tool_activity_line(
+    tool_name: str,
+    preview: str | None = None,
+    args: dict | None = None,
+    *,
+    mode: str = "all",
+) -> str:
+    """Telegram-style tool progress line for Brain Chat activity feed."""
+    try:
+        from agent.display import get_tool_emoji, get_tool_preview_max_len
+
+        emoji = get_tool_emoji(tool_name, default="⚙️")
+        preview_len = get_tool_preview_max_len()
+    except Exception:
+        emoji = "⚙️"
+        preview_len = 0
+
+    name = (tool_name or "tool").strip() or "tool"
+    if mode == "verbose" and args:
+        try:
+            args_str = json.dumps(args, ensure_ascii=False, default=str)
+        except Exception:
+            args_str = str(args)
+        cap = preview_len if preview_len > 0 else 0
+        if cap > 0 and len(args_str) > cap:
+            args_str = args_str[: cap - 3] + "..."
+        keys = list(args.keys()) if isinstance(args, dict) else []
+        return f"{emoji} {name}({keys})\n{args_str}"
+
+    text = (preview or "").strip()
+    if text:
+        cap = preview_len if preview_len > 0 else 40
+        if len(text) > cap:
+            text = text[: cap - 3] + "..."
+        return f'{emoji} {name}: "{text}"'
+    return f"{emoji} {name}..."
+
+
+def _make_remote_activity_callbacks(
+    *,
+    mode: str,
+) -> tuple[Any, Any]:
+    """Build tool_progress_callback + status_callback that emit NDJSON activity.
+
+    Returns ``(tool_progress_callback, status_callback)``. When *mode* is
+    ``off``, both callables are no-ops (still safe to attach).
+    """
+    last_tool: list[str | None] = [None]
+
+    def tool_progress_callback(
+        event_type: str,
+        tool_name: str | None = None,
+        preview: str | None = None,
+        args: dict | None = None,
+        **_kwargs: Any,
+    ) -> None:
+        if mode == "off" or not _remote_events_enabled():
+            return
+        et = (event_type or "").strip()
+        if et in {"reasoning.available", "_thinking"}:
+            text = (preview or tool_name or "").strip()
+            if not text:
+                return
+            _emit_remote_event(
+                {
+                    "centurion_event": "activity",
+                    "kind": "thinking",
+                    "text": text[:800],
+                }
+            )
+            return
+        if et == "tool.completed":
+            if mode != "verbose":
+                return
+            # Verbose completion: short done line only.
+            name = (tool_name or "").strip()
+            if not name:
+                return
+            line = _format_remote_tool_activity_line(name, preview, args, mode="all")
+            _emit_remote_event(
+                {
+                    "centurion_event": "activity",
+                    "kind": "tool",
+                    "event": et,
+                    "tool": name,
+                    "preview": (preview or "")[:200],
+                    "line": f"✓ {line}",
+                }
+            )
+            return
+        if et != "tool.started":
+            return
+        name = (tool_name or "").strip()
+        if not name:
+            return
+        if mode == "new" and name == last_tool[0]:
+            return
+        last_tool[0] = name
+        line = _format_remote_tool_activity_line(name, preview, args, mode=mode)
+        _emit_remote_event(
+            {
+                "centurion_event": "activity",
+                "kind": "tool",
+                "event": et,
+                "tool": name,
+                "preview": (preview or "")[:200],
+                "line": line,
+            }
+        )
+
+    def status_callback(event_type: str, message: str) -> None:
+        if mode == "off" or not _remote_events_enabled():
+            return
+        text = (message or "").strip()
+        if not text:
+            return
+        _emit_remote_event(
+            {
+                "centurion_event": "activity",
+                "kind": "status",
+                "event": (event_type or "lifecycle").strip() or "lifecycle",
+                "message": text[:400],
+                "line": text[:400],
+            }
+        )
+
+    return tool_progress_callback, status_callback
+
+
 def _run_agent_quiet(
     text: str,
     *,
@@ -834,9 +1000,10 @@ def _run_agent_quiet(
 ) -> str:
     """Run one agent turn without polluting stdout (bridge response must be pure JSON).
 
-    When remote events are enabled (NDJSON on stdout), approval prompts are
-    emitted as ``{"centurion_event":"approval_request",...}`` lines and the
-    final response is still a single JSON object on stdout. Stderr stays quiet.
+    When remote events are enabled (NDJSON on stdout), approval prompts and
+    mid-turn activity (tools / thinking / status) are emitted as
+    ``{"centurion_event":...}`` lines and the final response is still a single
+    JSON object on stdout. Stderr stays quiet.
     """
     import logging
     import os
@@ -1238,6 +1405,12 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
     agent.suppress_status_output = True
     agent.stream_delta_callback = None
     agent.tool_gen_callback = None
+
+    progress_mode = _resolve_remote_tool_progress_mode(cfg)
+    if _remote_events_enabled() and progress_mode != "off":
+        tool_cb, status_cb = _make_remote_activity_callbacks(mode=progress_mode)
+        agent.tool_progress_callback = tool_cb
+        agent.status_callback = status_cb
 
     result = agent.run_conversation(
         user_message=api_user_message,
@@ -1870,7 +2043,7 @@ def _handle_license_redeem(request: dict[str, Any], request_id: str) -> dict[str
     try:
         from centurion.license.activate import redeem_outright_token
 
-        token = str(request.get("token") or "").strip()
+        token = str(request.get("token") or request.get("code") or "").strip()
         if not token:
             return {
                 "id": request_id,

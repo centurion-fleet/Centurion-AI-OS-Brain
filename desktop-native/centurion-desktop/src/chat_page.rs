@@ -39,8 +39,17 @@ struct ApprovalRequest {
     choices: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+struct ActivityEvent {
+    kind: String,
+    line: String,
+    text: String,
+    tool: String,
+}
+
 enum WorkerEvent {
     Approval(ApprovalRequest),
+    Activity(ActivityEvent),
     Done(Result<ChatTurnResult, String>),
 }
 
@@ -1590,7 +1599,48 @@ fn run_chat_turn(
         let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
             continue;
         };
-        if value.get("centurion_event").and_then(|v| v.as_str()) == Some("approval_request") {
+        let event_name = value
+            .get("centurion_event")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if event_name == "activity" {
+            let kind = value
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("status")
+                .to_owned();
+            let line = value
+                .get("line")
+                .and_then(|v| v.as_str())
+                .or_else(|| value.get("message").and_then(|v| v.as_str()))
+                .or_else(|| value.get("text").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_owned();
+            let text = value
+                .get("text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            let tool = value
+                .get("tool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            if !line.is_empty() || !text.is_empty() {
+                let _ = event_tx.send(WorkerEvent::Activity(ActivityEvent {
+                    kind,
+                    line: if line.is_empty() {
+                        text.clone()
+                    } else {
+                        line
+                    },
+                    text,
+                    tool,
+                }));
+            }
+            continue;
+        }
+        if event_name == "approval_request" {
             let request = ApprovalRequest {
                 approval_id: value
                     .get("approval_id")
@@ -1661,8 +1711,20 @@ fn run_chat_turn(
             }
             continue;
         }
-        final_response = Some(value);
-        break;
+        // Ignore unknown event types; keep reading until the final chat reply.
+        if !event_name.is_empty() {
+            continue;
+        }
+        // Final reply: prefer payloads that look like a chat result.
+        let looks_final = value.get("ok").is_some()
+            || value.get("text").is_some()
+            || value.get("reply").is_some()
+            || value.get("response").is_some()
+            || value.get("message").is_some();
+        if looks_final {
+            final_response = Some(value);
+            break;
+        }
     }
 
     let _ = child.wait();
@@ -1719,9 +1781,16 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
                 .build(),
         );
     } else if message.role == ChatRole::System {
+        let caption = if message.content.starts_with("Worked with")
+            || message.content.starts_with("Thinking")
+        {
+            "Activity"
+        } else {
+            "Status"
+        };
         bubble.append(
             &gtk::Label::builder()
-                .label("Status")
+                .label(caption)
                 .xalign(0.0)
                 .css_classes(["caption", "dim-label"])
                 .build(),
@@ -2018,6 +2087,177 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         programmatic_scroll.clone(),
     );
     chat_column.append(&message_scroll);
+
+    let activity_card = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    activity_card.add_css_class("centurion-chat-activity");
+    activity_card.set_margin_top(0);
+    activity_card.set_hexpand(true);
+    activity_card.set_visible(false);
+    let activity_title = gtk::Label::builder()
+        .label("Working…")
+        .xalign(0.0)
+        .css_classes(["caption-heading"])
+        .build();
+    activity_card.append(&activity_title);
+    let thinking_label = gtk::Label::builder()
+        .label("")
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .selectable(true)
+        .build();
+    let thinking_expander = gtk::Expander::builder()
+        .label("Thinking")
+        .expanded(true)
+        .build();
+    thinking_expander.set_child(Some(&thinking_label));
+    thinking_expander.set_visible(false);
+    activity_card.append(&thinking_expander);
+    let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    activity_card.append(&activity_tools);
+    chat_column.append(&activity_card);
+
+    let activity_tool_count = Rc::new(Cell::new(0usize));
+    let activity_has_thinking = Rc::new(Cell::new(false));
+
+    let clear_activity_box = {
+        let activity_tools = activity_tools.clone();
+        Rc::new(move || {
+            while let Some(child) = activity_tools.first_child() {
+                activity_tools.remove(&child);
+            }
+        })
+    };
+
+    let reset_activity: Rc<dyn Fn()> = Rc::new({
+        let activity_card = activity_card.clone();
+        let activity_title = activity_title.clone();
+        let thinking_expander = thinking_expander.clone();
+        let thinking_label = thinking_label.clone();
+        let clear_activity_box = clear_activity_box.clone();
+        let activity_tool_count = activity_tool_count.clone();
+        let activity_has_thinking = activity_has_thinking.clone();
+        move || {
+            clear_activity_box();
+            thinking_label.set_label("");
+            thinking_expander.set_visible(false);
+            thinking_expander.set_expanded(true);
+            activity_title.set_label("Working…");
+            activity_tool_count.set(0);
+            activity_has_thinking.set(false);
+            activity_card.set_visible(false);
+        }
+    });
+
+    let show_activity_working: Rc<dyn Fn()> = Rc::new({
+        let reset_activity = reset_activity.clone();
+        let activity_card = activity_card.clone();
+        let activity_title = activity_title.clone();
+        move || {
+            reset_activity();
+            activity_title.set_label("Working…");
+            activity_card.set_visible(true);
+        }
+    });
+
+    let apply_activity: Rc<dyn Fn(ActivityEvent)> = Rc::new({
+        let activity_card = activity_card.clone();
+        let activity_title = activity_title.clone();
+        let thinking_expander = thinking_expander.clone();
+        let thinking_label = thinking_label.clone();
+        let activity_tools = activity_tools.clone();
+        let activity_tool_count = activity_tool_count.clone();
+        let activity_has_thinking = activity_has_thinking.clone();
+        let follow_bottom = follow_bottom.clone();
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        move |event: ActivityEvent| {
+            activity_card.set_visible(true);
+            match event.kind.as_str() {
+                "thinking" => {
+                    let text = if event.text.is_empty() {
+                        event.line.clone()
+                    } else {
+                        event.text.clone()
+                    };
+                    if text.trim().is_empty() {
+                        return;
+                    }
+                    thinking_label.set_label(&text);
+                    thinking_expander.set_visible(true);
+                    activity_has_thinking.set(true);
+                    activity_title.set_label("Thinking…");
+                }
+                "tool" => {
+                    let line = if event.line.is_empty() {
+                        format!("⚙️ {}", event.tool)
+                    } else {
+                        event.line.clone()
+                    };
+                    activity_tools.append(
+                        &gtk::Label::builder()
+                            .label(&line)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["dim-label", "centurion-chat-activity-line"])
+                            .build(),
+                    );
+                    activity_tool_count.set(activity_tool_count.get().saturating_add(1));
+                    activity_title.set_label("Working…");
+                }
+                _ => {
+                    let line = if event.line.is_empty() {
+                        event.text.clone()
+                    } else {
+                        event.line.clone()
+                    };
+                    if line.trim().is_empty() {
+                        return;
+                    }
+                    activity_tools.append(
+                        &gtk::Label::builder()
+                            .label(&line)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["dim-label", "centurion-chat-activity-line"])
+                            .build(),
+                    );
+                }
+            }
+            follow_bottom.set(true);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &message_list,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
+        }
+    });
+
+    let finish_activity_summary: Rc<dyn Fn() -> Option<String>> = Rc::new({
+        let reset_activity = reset_activity.clone();
+        let activity_tool_count = activity_tool_count.clone();
+        let activity_has_thinking = activity_has_thinking.clone();
+        move || {
+            let tools = activity_tool_count.get();
+            let thinking = activity_has_thinking.get();
+            reset_activity();
+            if tools == 0 && !thinking {
+                return None;
+            }
+            let mut parts = Vec::new();
+            if thinking {
+                parts.push("thinking".to_owned());
+            }
+            if tools == 1 {
+                parts.push("1 tool".to_owned());
+            } else if tools > 1 {
+                parts.push(format!("{tools} tools"));
+            }
+            Some(format!("Worked with {}.", parts.join(" · ")))
+        }
+    });
 
     let bottom = gtk::Box::new(gtk::Orientation::Vertical, 0);
     bottom.add_css_class("centurion-chat-composer");
@@ -2898,6 +3138,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let attachments = attachments.clone();
         let refresh_attachments = refresh_attachments.clone();
         let active_discuss = active_discuss.clone();
+        let show_activity_working = show_activity_working.clone();
+        let apply_activity = apply_activity.clone();
+        let finish_activity_summary = finish_activity_summary.clone();
         move || {
             if *is_sending.borrow() {
                 return;
@@ -2925,6 +3168,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             refresh_messages();
             set_error(None);
             clear_approval();
+            show_activity_working();
             set_sending(true);
 
             let discuss_topic = active_discuss.borrow().clone();
@@ -2984,16 +3228,23 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let clear_approval = clear_approval.clone();
             let pending_approval_tx = pending_approval_tx.clone();
             let follow_bottom = follow_bottom.clone();
+            let apply_activity = apply_activity.clone();
+            let finish_activity_summary = finish_activity_summary.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
                 match event_rx.try_recv() {
                     Ok(WorkerEvent::Approval(request)) => {
                         show_approval(request);
                         glib::ControlFlow::Continue
                     }
+                    Ok(WorkerEvent::Activity(event)) => {
+                        apply_activity(event);
+                        glib::ControlFlow::Continue
+                    }
                     Ok(WorkerEvent::Done(result)) => {
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
+                        let summary = finish_activity_summary();
                         match result {
                             Ok(turn) => {
                                 save_session_id(&turn.session_id);
@@ -3035,6 +3286,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                         let _ = apply_commitment_update_from_response(&raw, &cid);
                                     });
                                 }
+                                if let Some(summary) = summary {
+                                    messages.borrow_mut().push(ChatMessage {
+                                        role: ChatRole::System,
+                                        content: summary,
+                                    });
+                                }
                                 messages.borrow_mut().push(ChatMessage {
                                     role: ChatRole::Assistant,
                                     content: display,
@@ -3052,6 +3309,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
+                        let _ = finish_activity_summary();
                         set_error(Some(
                             "Centurion connection dropped before a reply arrived.".to_owned(),
                         ));

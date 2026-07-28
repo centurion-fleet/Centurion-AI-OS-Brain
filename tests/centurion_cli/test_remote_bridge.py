@@ -198,3 +198,81 @@ def test_remote_bridge_approval_respond_action(monkeypatch):
     assert result["ok"] is True
     assert result["resolved"] == 1
     assert calls == [("remote:req", "once", False)]
+
+
+def test_format_remote_tool_activity_line_basic(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setattr(
+        "agent.display.get_tool_emoji",
+        lambda name, default="⚡": "🔍" if name == "web_search" else default,
+    )
+    monkeypatch.setattr("agent.display.get_tool_preview_max_len", lambda: 40)
+    line = rb._format_remote_tool_activity_line(
+        "web_search", preview="sovereign ai brain", mode="all"
+    )
+    assert line.startswith("🔍 web_search:")
+    assert "sovereign ai brain" in line
+
+
+def test_make_remote_activity_callbacks_emit_tool_and_thinking(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    emitted = []
+
+    monkeypatch.setenv("CENTURION_REMOTE_EVENTS", "1")
+    monkeypatch.setattr(rb, "_emit_remote_event", lambda event: emitted.append(event))
+    monkeypatch.setattr(
+        "agent.display.get_tool_emoji",
+        lambda name, default="⚡": "📖",
+    )
+    monkeypatch.setattr("agent.display.get_tool_preview_max_len", lambda: 40)
+
+    tool_cb, status_cb = rb._make_remote_activity_callbacks(mode="all")
+    tool_cb("tool.started", "read_file", "AGENTS.md", {"path": "AGENTS.md"})
+    tool_cb("reasoning.available", "_thinking", "Considering the next step", None)
+    status_cb("lifecycle", "Compressing context")
+    tool_cb("tool.completed", "read_file", "done", None)  # ignored in all mode
+
+    kinds = [e.get("kind") for e in emitted]
+    assert kinds == ["tool", "thinking", "status"]
+    assert emitted[0]["centurion_event"] == "activity"
+    assert emitted[0]["tool"] == "read_file"
+    assert "AGENTS.md" in emitted[0]["line"]
+    assert emitted[1]["text"].startswith("Considering")
+    assert emitted[2]["message"] == "Compressing context"
+
+
+def test_make_remote_activity_callbacks_off_is_silent(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    emitted = []
+    monkeypatch.setenv("CENTURION_REMOTE_EVENTS", "1")
+    monkeypatch.setattr(rb, "_emit_remote_event", lambda event: emitted.append(event))
+    tool_cb, status_cb = rb._make_remote_activity_callbacks(mode="off")
+    tool_cb("tool.started", "web_search", "q", {})
+    status_cb("warn", "something")
+    assert emitted == []
+
+
+def test_resolve_remote_tool_progress_mode_defaults_all():
+    from centurion_cli import remote_bridge as rb
+
+    assert rb._resolve_remote_tool_progress_mode({}) == "all"
+    assert (
+        rb._resolve_remote_tool_progress_mode(
+            {"display": {"tool_progress": "new"}}
+        )
+        == "new"
+    )
+    assert (
+        rb._resolve_remote_tool_progress_mode(
+            {
+                "display": {
+                    "tool_progress": "all",
+                    "platforms": {"remote": {"tool_progress": "off"}},
+                }
+            }
+        )
+        == "off"
+    )
