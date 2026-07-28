@@ -1872,7 +1872,11 @@ fn scroll_chat_to_latest(
     let adj = message_scroll.vadjustment();
     let target = (adj.upper() - adj.page_size()).max(adj.lower());
     adj.set_value(target);
-    programmatic.set(false);
+    // Clear on next idle so a late value_changed does not disarm follow_bottom.
+    let programmatic = programmatic.clone();
+    glib::idle_add_local_once(move || {
+        programmatic.set(false);
+    });
 }
 
 fn schedule_scroll_to_latest(
@@ -1890,7 +1894,9 @@ fn schedule_scroll_to_latest(
         let follow_bottom = follow_bottom.clone();
         let programmatic = programmatic.clone();
         glib::timeout_add_local_once(Duration::from_millis(delay_ms), move || {
-            follow_bottom.set(true);
+            if !follow_bottom.get() {
+                return;
+            }
             scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
         });
     }
@@ -1902,6 +1908,7 @@ fn wire_follow_bottom_scroll(
     programmatic: Rc<Cell<bool>>,
 ) {
     let adj = message_scroll.vadjustment();
+    const NEAR_BOTTOM_PX: f64 = 80.0;
 
     adj.connect_changed({
         let follow_bottom = follow_bottom.clone();
@@ -1911,10 +1918,13 @@ fn wire_follow_bottom_scroll(
                 return;
             }
             let target = (adj.upper() - adj.page_size()).max(adj.lower());
-            if (adj.value() - target).abs() > 1.0 {
+            if (adj.value() - target).abs() > 0.5 {
                 programmatic.set(true);
                 adj.set_value(target);
-                programmatic.set(false);
+                let programmatic = programmatic.clone();
+                glib::idle_add_local_once(move || {
+                    programmatic.set(false);
+                });
             }
         }
     });
@@ -1928,8 +1938,43 @@ fn wire_follow_bottom_scroll(
             }
             let target = (adj.upper() - adj.page_size()).max(adj.lower());
             // If the user scrolls away from the bottom, stop chasing until
-            // the next send/reply arms follow again.
-            follow_bottom.set(adj.value() >= target - 48.0);
+            // they return near the bottom or the next send arms follow again.
+            follow_bottom.set(adj.value() >= target - NEAR_BOTTOM_PX);
+        }
+    });
+}
+
+/// Re-pin to bottom whenever transcript layout grows (Cursor-style chase).
+fn wire_transcript_size_follow(
+    transcript: &impl IsA<gtk::Widget>,
+    message_scroll: &gtk::ScrolledWindow,
+    message_list: &gtk::ListBox,
+    follow_bottom: Rc<Cell<bool>>,
+    programmatic: Rc<Cell<bool>>,
+) {
+    let pending = Rc::new(Cell::new(false));
+    transcript.connect_size_allocate({
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let follow_bottom = follow_bottom.clone();
+        let programmatic = programmatic.clone();
+        let pending = pending.clone();
+        move |_, _| {
+            if !follow_bottom.get() || pending.get() {
+                return;
+            }
+            pending.set(true);
+            let message_scroll = message_scroll.clone();
+            let message_list = message_list.clone();
+            let follow_bottom = follow_bottom.clone();
+            let programmatic = programmatic.clone();
+            let pending = pending.clone();
+            glib::idle_add_local_once(move || {
+                pending.set(false);
+                if follow_bottom.get() {
+                    scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
+                }
+            });
         }
     });
 }
@@ -2069,24 +2114,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     message_list.set_margin_start(12);
     message_list.set_margin_end(12);
     message_list.set_margin_top(4);
-    message_list.set_margin_bottom(12);
-
-    let message_scroll = gtk::ScrolledWindow::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vscrollbar_policy(gtk::PolicyType::Automatic)
-        .propagate_natural_height(false)
-        .build();
-    message_scroll.set_child(Some(&message_list));
-    let follow_bottom = Rc::new(Cell::new(true));
-    let programmatic_scroll = Rc::new(Cell::new(false));
-    wire_follow_bottom_scroll(
-        &message_scroll,
-        follow_bottom.clone(),
-        programmatic_scroll.clone(),
-    );
-    chat_column.append(&message_scroll);
+    message_list.set_margin_bottom(8);
 
     let activity_card = gtk::Box::new(gtk::Orientation::Vertical, 6);
     activity_card.add_css_class("centurion-chat-activity");
@@ -2115,7 +2143,49 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     activity_card.append(&thinking_expander);
     let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
     activity_card.append(&activity_tools);
-    chat_column.append(&activity_card);
+
+    let transcript_spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    transcript_spacer.add_css_class("centurion-chat-transcript-spacer");
+    transcript_spacer.set_size_request(-1, 40);
+    transcript_spacer.set_hexpand(true);
+
+    // Cursor-style: bubbles + live Activity share one scroll surface; composer stays fixed below.
+    let transcript_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    transcript_box.set_hexpand(true);
+    transcript_box.append(&message_list);
+    transcript_box.append(&activity_card);
+    transcript_box.append(&transcript_spacer);
+
+    let message_scroll = gtk::ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .propagate_natural_height(false)
+        .build();
+    message_scroll.set_child(Some(&transcript_box));
+    let follow_bottom = Rc::new(Cell::new(true));
+    let programmatic_scroll = Rc::new(Cell::new(false));
+    wire_follow_bottom_scroll(
+        &message_scroll,
+        follow_bottom.clone(),
+        programmatic_scroll.clone(),
+    );
+    wire_transcript_size_follow(
+        &transcript_box,
+        &message_scroll,
+        &message_list,
+        follow_bottom.clone(),
+        programmatic_scroll.clone(),
+    );
+    wire_transcript_size_follow(
+        &activity_card,
+        &message_scroll,
+        &message_list,
+        follow_bottom.clone(),
+        programmatic_scroll.clone(),
+    );
+    chat_column.append(&message_scroll);
 
     let activity_tool_count = Rc::new(Cell::new(0usize));
     let activity_has_thinking = Rc::new(Cell::new(false));
@@ -2153,10 +2223,21 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let reset_activity = reset_activity.clone();
         let activity_card = activity_card.clone();
         let activity_title = activity_title.clone();
+        let follow_bottom = follow_bottom.clone();
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
         move || {
             reset_activity();
             activity_title.set_label("Working…");
             activity_card.set_visible(true);
+            follow_bottom.set(true);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &message_list,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
         }
     });
 
