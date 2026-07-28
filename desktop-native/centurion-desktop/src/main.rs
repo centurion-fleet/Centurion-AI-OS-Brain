@@ -3486,8 +3486,7 @@ Being · Continuity\n\
     }
 
     fn load_decision_first_pref() -> bool {
-        decision_first_pref_path()
-            .read_to_string()
+        std::fs::read_to_string(decision_first_pref_path())
             .map(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true"))
             .unwrap_or(true)
     }
