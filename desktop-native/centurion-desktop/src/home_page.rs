@@ -1329,7 +1329,8 @@ fn show_plan_dialog(
         }
         "share" => {
             let plan_id = plan_id.clone();
-            let parent_share = parent_share.clone();
+            let parent_for_cb = parent_share.clone();
+            let parent_for_present = parent_share.clone();
             let refresh = refresh.clone();
             let entry = gtk::Entry::builder()
                 .placeholder_text("Reviewer customer id")
@@ -1351,13 +1352,13 @@ fn show_plan_dialog(
                 }
                 let reviewer = entry.text().trim().to_owned();
                 if reviewer.is_empty() {
-                    show_home_error(&parent_share, "Reviewer customer id is required.");
+                    show_home_error(&parent_for_cb, "Reviewer customer id is required.");
                     return;
                 }
                 let plan_id = plan_id.clone();
-                let parent_share = parent_share.clone();
+                let parent_for_async = parent_for_cb.clone();
                 let refresh = refresh.clone();
-                run_async_result(parent_share, refresh, move || {
+                run_async_result(parent_for_async, refresh, move || {
                     let response = run_bridge_action(
                         "plan_share",
                         serde_json::json!({
@@ -1377,7 +1378,7 @@ fn show_plan_dialog(
                     }
                 });
             });
-            ask.present(Some(&parent_share));
+            ask.present(Some(&parent_for_present));
         }
         _ => {}
     });

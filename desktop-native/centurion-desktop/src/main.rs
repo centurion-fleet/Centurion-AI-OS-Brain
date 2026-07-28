@@ -3564,7 +3564,7 @@ Being · Continuity\n\
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_owned();
-            let row = adw::ActionRow::builder()
+            let plat_row = adw::ActionRow::builder()
                 .title(&name)
                 .subtitle(&format!(
                     "{}{}",
@@ -3581,8 +3581,8 @@ Being · Continuity\n\
                 .valign(gtk::Align::Center)
                 .build();
             let platform_name = name.clone();
-            let platform_list = platform_list.clone();
-            let gateway_row = row.clone();
+            let list_for_cb = platform_list.clone();
+            let status_row = row.clone();
             toggle.connect_active_notify(move |sw| {
                 let _ = run_bridge_action(
                     "gateway_platform_set",
@@ -3592,45 +3592,14 @@ Being · Continuity\n\
                         "restart": true,
                     }),
                 );
-                // Refresh whole list asynchronously-ish after toggle.
-                let list = platform_list.clone();
-                let grow = gateway_row.clone();
+                let list_for_cb = list_for_cb.clone();
+                let status_row = status_row.clone();
                 glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
-                    // gateway_row here is the platform ActionRow — we need the parent gateway status row.
-                    // Re-query status into list only.
-                    while let Some(child) = list.first_child() {
-                        list.remove(&child);
-                    }
-                    let _ = grow;
-                    if let Some(payload) =
-                        run_bridge_action("gateway_status", serde_json::json!({}))
-                    {
-                        if let Some(platforms) = payload
-                            .pointer("/status/platforms")
-                            .and_then(|v| v.as_array())
-                        {
-                            for plat in platforms {
-                                let name = plat
-                                    .get("name")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("platform");
-                                let enabled = plat
-                                    .get("enabled")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false);
-                                list.append(
-                                    &adw::ActionRow::builder()
-                                        .title(name)
-                                        .subtitle(if enabled { "Enabled" } else { "Disabled" })
-                                        .build(),
-                                );
-                            }
-                        }
-                    }
+                    refresh_gateway_ui(&status_row, &list_for_cb);
                 });
             });
-            row.add_suffix(&toggle);
-            platform_list.append(&row);
+            plat_row.add_suffix(&toggle);
+            platform_list.append(&plat_row);
         }
     }
 
@@ -3725,7 +3694,11 @@ Being · Continuity\n\
 
     fn show_license_dialog(parent: &adw::ApplicationWindow) {
         let payload = run_bridge_action("license_status", serde_json::json!({}));
-        let body = match payload {
+        let can_redeem = payload
+            .as_ref()
+            .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+            == Some(true);
+        let body = match &payload {
             Some(p) => {
                 let enabled = p
                     .pointer("/status/enabled")
@@ -3738,7 +3711,7 @@ Being · Continuity\n\
                 {
                     "License enforcement is off on this Brain (BYOK / contributor mode).".to_owned()
                 } else {
-                    serde_json::to_string_pretty(&p).unwrap_or_else(|_| {
+                    serde_json::to_string_pretty(p).unwrap_or_else(|_| {
                         p.get("message")
                             .and_then(|v| v.as_str())
                             .unwrap_or("See license status in CLI.")
@@ -3754,14 +3727,10 @@ Being · Continuity\n\
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
-        if payload
-            .as_ref()
-            .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
-            == Some(true)
-        {
+        if can_redeem {
             dialog.add_response("redeem", "Redeem code");
         }
-        let parent = parent.clone();
+        let parent_for_cb = parent.clone();
         dialog.connect_response(None, move |_d, response| {
             if response != "redeem" {
                 return;
@@ -3779,7 +3748,8 @@ Being · Continuity\n\
             redeem.add_response("cancel", "Cancel");
             redeem.add_response("ok", "Redeem");
             redeem.set_response_appearance("ok", adw::ResponseAppearance::Suggested);
-            let parent = parent.clone();
+            let parent_for_redeem = parent_for_cb.clone();
+            let parent_for_present = parent_for_cb.clone();
             redeem.connect_response(None, move |_d, resp| {
                 if resp != "ok" {
                     return;
@@ -3800,11 +3770,11 @@ Being · Continuity\n\
                     .close_response("ok")
                     .build();
                 done.add_response("ok", "OK");
-                done.present(Some(&parent));
+                done.present(Some(&parent_for_redeem));
             });
-            redeem.present(Some(&parent));
+            redeem.present(Some(&parent_for_present));
         });
-        dialog.present(Some(&parent));
+        dialog.present(Some(parent));
     }
 
     fn show_beneficiary_dialog(parent: &adw::ApplicationWindow) {
@@ -3841,7 +3811,6 @@ Being · Continuity\n\
         dialog.add_response("close", "Close");
         dialog.add_response("family", "Save family");
         dialog.add_response("colleague", "Submit colleague");
-        let parent = parent.clone();
         dialog.connect_response(None, move |_d, response| {
             match response {
                 "family" => {
@@ -3861,7 +3830,7 @@ Being · Continuity\n\
                 _ => {}
             }
         });
-        dialog.present(Some(&parent));
+        dialog.present(Some(parent));
     }
 
     fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {

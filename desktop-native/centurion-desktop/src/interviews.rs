@@ -332,9 +332,9 @@ fn show_guided_interview(
 
 /// Mission Discovery → synthesizes statement and saves via mission_put.
 pub fn show_mission_discovery(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn()>) {
-    let parent = parent.clone();
+    let parent_for_cb = parent.clone();
     show_guided_interview(
-        &parent,
+        parent,
         "Mission Discovery",
         "A short ceremony to name what you are building toward. Your Sovereign will keep this as your Life Mission.",
         MISSION_QUESTIONS,
@@ -403,16 +403,16 @@ pub fn show_mission_discovery(parent: &adw::ApplicationWindow, on_saved: Rc<dyn 
                     on_saved();
                 }
             });
-            dialog.present(Some(&parent));
+            dialog.present(Some(&parent_for_cb));
         }),
     );
 }
 
 /// Shape Your Sovereign → soul_put structured fields; clears desktop chat session.
 pub fn show_soul_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn()>) {
-    let parent = parent.clone();
+    let parent_for_cb = parent.clone();
     show_guided_interview(
-        &parent,
+        parent,
         "Shape Your Sovereign",
         "Answer a few questions. We will write your Sovereign’s Soul — the personality and rules that stay on this computer.",
         SOUL_QUESTIONS,
@@ -425,7 +425,7 @@ pub fn show_soul_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn(
                     .close_response("ok")
                     .build();
                 fail.add_response("ok", "OK");
-                fail.present(Some(&parent));
+                fail.present(Some(&parent_for_cb));
                 return;
             }
             let response = run_bridge_action(
@@ -472,16 +472,16 @@ pub fn show_soul_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn(
                     on_saved();
                 }
             });
-            dialog.present(Some(&parent));
+            dialog.present(Some(&parent_for_cb));
         }),
     );
 }
 
 /// Light About You interview → mission profile fields.
 pub fn show_about_you_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn()>) {
-    let parent = parent.clone();
+    let parent_for_cb = parent.clone();
     show_guided_interview(
-        &parent,
+        parent,
         "About You",
         "Help your Sovereign know the human it partners with. This stays on this computer in your mission profile.",
         ABOUT_YOU_QUESTIONS,
@@ -524,7 +524,7 @@ pub fn show_about_you_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dy
                     on_saved();
                 }
             });
-            dialog.present(Some(&parent));
+            dialog.present(Some(&parent_for_cb));
         }),
     );
 }
