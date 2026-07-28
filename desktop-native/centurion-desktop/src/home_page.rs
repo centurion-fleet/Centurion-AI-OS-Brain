@@ -22,6 +22,17 @@ pub struct HomeHooks {
     pub on_ask_about: Rc<dyn Fn(String, String)>,
 }
 
+#[derive(Clone)]
+pub struct HomeHandle {
+    refresh: Rc<dyn Fn()>,
+}
+
+impl HomeHandle {
+    pub fn refresh(&self) {
+        (self.refresh)();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PulseCategory {
     Live,
@@ -115,6 +126,7 @@ struct PlanItem {
     goal: String,
     steps: Vec<String>,
     risks: Vec<String>,
+    comments: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -130,6 +142,8 @@ struct SwarmOrb {
     pulse: String,
     objective: String,
     detail: String,
+    signals: Vec<(String, String)>, // id, message
+    outcomes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -505,6 +519,7 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                 .iter()
                 .filter_map(|s| s.as_str().map(str::to_owned))
                 .collect(),
+            comments: Vec::new(),
         })
         .collect();
 
@@ -550,12 +565,37 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                 outcome_n,
                 if outcome_n == 1 { "" } else { "s" },
             );
+            let signal_items: Vec<(String, String)> = signals
+                .iter()
+                .filter(|sig| json_str(sig.get("swarm_id")) == id)
+                .filter(|sig| {
+                    let st = json_str(sig.get("status")).to_lowercase();
+                    st.is_empty() || st == "open" || st == "pending"
+                })
+                .take(6)
+                .map(|sig| {
+                    (
+                        json_str(sig.get("id")),
+                        json_str(sig.get("message")),
+                    )
+                })
+                .filter(|(_, msg)| !msg.is_empty())
+                .collect();
+            let outcome_items: Vec<String> = outcomes
+                .iter()
+                .filter(|o| json_str(o.get("swarm_id")) == id)
+                .take(6)
+                .map(|o| json_str(o.get("description")))
+                .filter(|d| !d.is_empty())
+                .collect();
             SwarmOrb {
                 id,
                 name: json_str(s.get("display_name")),
                 pulse: json_str(s.get("pulse")),
                 objective,
                 detail,
+                signals: signal_items,
+                outcomes: outcome_items,
             }
         })
         .filter(|s| !s.name.is_empty())
@@ -672,6 +712,31 @@ fn load_home_feed() -> HomeFeed {
             .collect::<Vec<_>>();
         if !risks.is_empty() {
             plan.risks = risks;
+        }
+        let mut comment_lines = Vec::new();
+        if let Some(arr) = full
+            .pointer("/share/comments")
+            .or_else(|| full.get("comments"))
+            .and_then(|v| v.as_array())
+        {
+            for c in arr.iter().take(12) {
+                let mut body = json_str(c.get("body"));
+                if body.is_empty() {
+                    body = json_str(c.get("text"));
+                }
+                if body.is_empty() {
+                    continue;
+                }
+                let author = json_str(c.get("author"));
+                comment_lines.push(if author.is_empty() {
+                    body
+                } else {
+                    format!("{author}: {body}")
+                });
+            }
+        }
+        if !comment_lines.is_empty() {
+            plan.comments = comment_lines;
         }
     }
     for doc in feed.outputs.iter_mut() {
@@ -953,6 +1018,7 @@ fn show_collab_detail_dialog(
     parent: &impl IsA<gtk::Widget>,
     orb: &SwarmOrb,
     on_ask: Rc<dyn Fn(String, String)>,
+    refresh: Rc<dyn Fn()>,
 ) {
     let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
     if !orb.objective.is_empty() {
@@ -981,6 +1047,63 @@ fn show_collab_detail_dialog(
                 .css_classes(["dim-label"])
                 .build(),
         );
+    }
+    if !orb.signals.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label("Open decisions")
+                .xalign(0.0)
+                .css_classes(["heading"])
+                .margin_top(6)
+                .build(),
+        );
+        for (signal_id, message) in &orb.signals {
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            row.append(
+                &gtk::Label::builder()
+                    .label(message)
+                    .wrap(true)
+                    .xalign(0.0)
+                    .hexpand(true)
+                    .build(),
+            );
+            if !signal_id.is_empty() {
+                let resolve = gtk::Button::with_label("Resolve");
+                resolve.add_css_class("flat");
+                let parent_w = parent.clone().upcast::<gtk::Widget>();
+                let refresh = refresh.clone();
+                let signal_id = signal_id.clone();
+                let message = message.clone();
+                resolve.connect_clicked(move |_| {
+                    let parent_w = parent_w.clone();
+                    let refresh = refresh.clone();
+                    let signal_id = signal_id.clone();
+                    let note = format!("Resolved from Home: {message}");
+                    run_async_result(parent_w, refresh, move || resolve_signal(&signal_id, &note));
+                });
+                row.append(&resolve);
+            }
+            body.append(&row);
+        }
+    }
+    if !orb.outcomes.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label("Outcomes")
+                .xalign(0.0)
+                .css_classes(["heading"])
+                .margin_top(6)
+                .build(),
+        );
+        for outcome in &orb.outcomes {
+            body.append(
+                &gtk::Label::builder()
+                    .label(&format!("• {outcome}"))
+                    .wrap(true)
+                    .xalign(0.0)
+                    .build(),
+            );
+        }
     }
     let dialog = adw::AlertDialog::builder()
         .heading(&orb.name)
@@ -1280,6 +1403,26 @@ fn show_plan_dialog(
                 .build(),
         );
     }
+    if !plan.comments.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label("Comments")
+                .xalign(0.0)
+                .css_classes(["heading"])
+                .margin_top(6)
+                .build(),
+        );
+        for comment in &plan.comments {
+            body.append(
+                &gtk::Label::builder()
+                    .label(comment)
+                    .wrap(true)
+                    .xalign(0.0)
+                    .css_classes(["dim-label"])
+                    .build(),
+            );
+        }
+    }
     let dialog = adw::AlertDialog::builder()
         .heading(&plan.title)
         .body(&format!("Status: {}", plan.status))
@@ -1289,6 +1432,7 @@ fn show_plan_dialog(
         .build();
     dialog.add_response("close", "Close");
     dialog.add_response("share", "Share");
+    dialog.add_response("comment", "Comment");
     let pending = matches!(
         plan.status.to_lowercase().as_str(),
         "pending_review" | "held" | "adjusted" | "proposed"
@@ -1327,6 +1471,60 @@ fn show_plan_dialog(
                 ),
             );
         }
+                "comment" => {
+            let plan_id = plan_id.clone();
+            let parent_for_cb = parent_share.clone();
+            let parent_for_present = parent_share.clone();
+            let refresh = refresh.clone();
+            let entry = gtk::Entry::builder()
+                .placeholder_text("Add a review comment")
+                .hexpand(true)
+                .build();
+            let ask = adw::AlertDialog::builder()
+                .heading("Comment on plan")
+                .extra_child(&entry)
+                .close_response("cancel")
+                .default_response("send")
+                .build();
+            ask.add_response("cancel", "Cancel");
+            ask.add_response("send", "Add comment");
+            ask.set_response_appearance("send", adw::ResponseAppearance::Suggested);
+            ask.connect_response(None, move |_d, response| {
+                if response != "send" {
+                    return;
+                }
+                let body_text = entry.text().trim().to_owned();
+                if body_text.is_empty() {
+                    show_home_error(&parent_for_cb, "Enter a comment first.");
+                    return;
+                }
+                let plan_id = plan_id.clone();
+                let parent_for_async = parent_for_cb.clone();
+                let refresh = refresh.clone();
+                run_async_result(parent_for_async, refresh, move || {
+                    let response = run_bridge_action(
+                        "plan_comment",
+                        serde_json::json!({
+                            "plan_id": plan_id,
+                            "body": body_text,
+                            "author": "desk",
+                        }),
+                    )
+                    .ok_or_else(|| "Could not add comment.".to_owned())?;
+                    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                        Ok(())
+                    } else {
+                        Err(response
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Comment failed.")
+                            .to_owned())
+                    }
+                });
+            });
+            ask.present(Some(&parent_for_present));
+        }
+
         "share" => {
             let plan_id = plan_id.clone();
             let parent_for_cb = parent_share.clone();
@@ -1386,7 +1584,7 @@ fn show_plan_dialog(
 }
 
 /// Build the Home (Pulse) tab.
-pub fn build(hooks: HomeHooks) -> gtk::Box {
+pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     container.set_vexpand(true);
     container.set_hexpand(true);
@@ -1585,7 +1783,15 @@ pub fn build(hooks: HomeHooks) -> gtk::Box {
                     let on_ask = hooks.on_ask_about.clone();
                     let orb_clone = orb.clone();
                     chip.connect_clicked(move |_| {
-                        show_collab_detail_dialog(&parent, &orb_clone, on_ask.clone());
+                        let refresh = {
+                            let render_slot = render_slot.clone();
+                            Rc::new(move || {
+                                if let Some(f) = render_slot.borrow().as_ref() {
+                                    f();
+                                }
+                            }) as Rc<dyn Fn()>
+                        };
+                        show_collab_detail_dialog(&parent, &orb_clone, on_ask.clone(), refresh);
                     });
                     constellation.append(&chip);
                 }
@@ -2393,5 +2599,8 @@ Outline the goal, steps, and what you need from me before acting."
         });
     }
 
-    container
+    let handle = HomeHandle {
+        refresh: refresh_feed.clone(),
+    };
+    (container, handle)
 }

@@ -66,6 +66,7 @@ struct SessionSummary {
 #[derive(Clone)]
 pub struct ChatHandle {
     input: gtk::Entry,
+    on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
 }
 
 impl ChatHandle {
@@ -81,6 +82,31 @@ impl ChatHandle {
         let len = body.chars().count() as i32;
         self.input.set_position(len);
     }
+
+    /// Wire Settings Fix Thinking wizard (set after the main window exists).
+    pub fn set_on_fix_thinking(&self, handler: Rc<dyn Fn()>) {
+        *self.on_fix_thinking.borrow_mut() = Some(handler);
+    }
+}
+
+fn looks_like_thinking_error(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("thinking")
+        || lower.contains("provider")
+        || lower.contains("api key")
+        || lower.contains("access code")
+        || lower.contains("auth")
+        || lower.contains("unauthorized")
+        || lower.contains("401")
+        || lower.contains("403")
+        || lower.contains("model")
+        || lower.contains("rate limit")
+        || lower.contains("quota")
+        || lower.contains("connection dropped")
+        || lower.contains("could not reach")
+        || lower.contains("openai")
+        || lower.contains("anthropic")
+        || lower.contains("openrouter")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1536,16 +1562,36 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     approval_box.append(&approval_buttons);
     bottom.append(&approval_box);
 
+    let error_row = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    error_row.set_margin_start(16);
+    error_row.set_margin_end(16);
+    error_row.set_margin_bottom(4);
+    error_row.set_visible(false);
     let error_label = gtk::Label::builder()
         .wrap(true)
         .xalign(0.0)
-        .margin_start(16)
-        .margin_end(16)
-        .margin_bottom(4)
         .css_classes(["error"])
         .build();
-    error_label.set_visible(false);
-    bottom.append(&error_label);
+    let fix_thinking_button = gtk::Button::with_label("Fix Thinking Service");
+    fix_thinking_button.add_css_class("suggested-action");
+    fix_thinking_button.set_halign(gtk::Align::Start);
+    fix_thinking_button.set_visible(false);
+    fix_thinking_button.set_tooltip_text(Some(
+        "Open the same Fix Thinking wizard as Settings — catalog, access code, apply, probe.",
+    ));
+    error_row.append(&error_label);
+    error_row.append(&fix_thinking_button);
+    bottom.append(&error_row);
+
+    let on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    {
+        let on_fix_thinking = on_fix_thinking.clone();
+        fix_thinking_button.connect_clicked(move |_| {
+            if let Some(handler) = on_fix_thinking.borrow().clone() {
+                handler();
+            }
+        });
+    }
 
     // Intent chips: Talk (default) | Propose first
     let intent = Rc::new(Cell::new(ChatIntent::Talk));
@@ -1750,13 +1796,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     });
 
     let set_error: Rc<dyn Fn(Option<String>)> = Rc::new({
+        let error_row = error_row.clone();
         let error_label = error_label.clone();
+        let fix_thinking_button = fix_thinking_button.clone();
         move |text: Option<String>| {
             if let Some(message) = text {
                 error_label.set_label(&message);
-                error_label.set_visible(true);
+                error_row.set_visible(true);
+                fix_thinking_button.set_visible(looks_like_thinking_error(&message));
             } else {
-                error_label.set_visible(false);
+                error_label.set_label("");
+                error_row.set_visible(false);
+                fix_thinking_button.set_visible(false);
             }
         }
     });
@@ -2470,6 +2521,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     let handle = ChatHandle {
         input: input.clone(),
+        on_fix_thinking,
     };
     (container, handle)
 }

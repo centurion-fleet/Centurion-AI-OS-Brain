@@ -991,7 +991,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain (tools/hooks — not automatic Brain UI).")
+            .subtitle("Agent plugins on this Brain. Home may show client cards from thin manifests.")
             .icon_name("application-x-addon-symbolic")
             .build();
         let plugins_button = gtk::Button::with_label("View");
@@ -1132,6 +1132,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let license_button = gtk::Button::with_label("Status");
         license_button.set_valign(gtk::Align::Center);
         license_row.add_suffix(&license_button);
+        let license_enabled = run_bridge_action("license_status", serde_json::json!({}))
+            .and_then(|p| {
+                p.pointer("/status/enabled")
+                    .or_else(|| p.get("enabled"))
+                    .and_then(|v| v.as_bool())
+            })
+            .unwrap_or(false);
+        license_row.set_visible(license_enabled);
         you_group.add(&license_row);
 
         let beneficiary_row = adw::ActionRow::builder()
@@ -1142,6 +1150,24 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let beneficiary_button = gtk::Button::with_label("Open");
         beneficiary_button.set_valign(gtk::Align::Center);
         beneficiary_row.add_suffix(&beneficiary_button);
+        let beneficiary_active = run_bridge_action("beneficiary_snapshot", serde_json::json!({}))
+            .map(|p| {
+                let s = p.get("snapshot").unwrap_or(&p);
+                let enabled = s
+                    .get("enabled")
+                    .or_else(|| s.get("program_active"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let has_family = s
+                    .get("family_beneficiary_first_name")
+                    .or_else(|| s.pointer("/family/first_name"))
+                    .and_then(|v| v.as_str())
+                    .map(|v| !v.trim().is_empty())
+                    .unwrap_or(false);
+                enabled || has_family
+            })
+            .unwrap_or(false);
+        beneficiary_row.set_visible(beneficiary_active);
         you_group.add(&beneficiary_row);
 
         settings.append(&you_group);
@@ -1252,7 +1278,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .hexpand(true)
             .build();
 
-        let home = {
+        let (home, home_handle) = {
             let stack = stack.clone();
             let chat_handle = chat_handle.clone();
             crate::home_page::build(crate::home_page::HomeHooks {
@@ -1439,14 +1465,28 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         });
         mission_discover_button.connect_clicked({
             let window = window.clone();
+            let home_handle = home_handle.clone();
             move |_| {
-                crate::interviews::show_mission_discovery(&window, Rc::new(|| {}));
+                crate::interviews::show_mission_discovery(
+                    &window,
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
+                    }),
+                );
             }
         });
         about_you_button.connect_clicked({
             let window = window.clone();
+            let home_handle = home_handle.clone();
             move |_| {
-                crate::interviews::show_about_you_interview(&window, Rc::new(|| {}));
+                crate::interviews::show_about_you_interview(
+                    &window,
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
+                    }),
+                );
             }
         });
         privacy_row.connect_activated({
@@ -1560,7 +1600,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let window = window.clone();
             let stack = stack.clone();
             let thinking_settings_row = thinking_settings_row.clone();
-            move || open_adrian_dialog(&window, &stack, &thinking_settings_row)
+            let thinking_detail = thinking_detail.clone();
+            move || {
+                open_adrian_dialog(&window, &stack, &thinking_settings_row, &thinking_detail)
+            }
         };
         adrian_button.connect_clicked({
             let open_adrian = open_adrian.clone();
@@ -1572,7 +1615,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         });
         get_help_link.connect_clicked({
             let window = window.clone();
-            move |_| show_support_health_dialog(&window)
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
+            move |_| show_get_help_dialog(&window, &thinking_settings_row, &thinking_detail)
         });
         restart.connect_clicked({
             let link_addresses = link_addresses.clone();
@@ -1583,7 +1628,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     Ok(()) => {
                         status_title.set_label("Your Centurion is ready");
                         status_detail.set_label(
-                            "The private iPhone connection has restarted. Tap Link iPhone to show a fresh QR code.",
+                            "The private desk connection has restarted. Use Link iPhone under Settings if you need a fresh pairing QR.",
                         );
                         refresh_link_addresses(&link_addresses, Some(&window));
                     }
@@ -1595,6 +1640,15 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 }
             }
         });
+
+        chat_handle.set_on_fix_thinking(Rc::new({
+            let window = window.clone();
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_detail = thinking_detail.clone();
+            move || {
+                show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail);
+            }
+        }));
 
         window.present();
     }
@@ -3704,18 +3758,39 @@ Being · Continuity\n\
                     .or_else(|| p.get("enabled"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                if !enabled
-                    && p.get("ok").and_then(|v| v.as_bool()) == Some(true)
-                    && p.get("status").is_none()
-                {
-                    "License enforcement is off on this Brain (BYOK / contributor mode).".to_owned()
+                if !enabled {
+                    "License enforcement is off on this Brain (BYOK / contributor mode). No key required.".to_owned()
                 } else {
-                    serde_json::to_string_pretty(p).unwrap_or_else(|_| {
-                        p.get("message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("See license status in CLI.")
-                            .to_owned()
-                    })
+                    let state = p
+                        .pointer("/status/state")
+                        .or_else(|| p.get("state"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    let plan = p
+                        .pointer("/status/plan")
+                        .or_else(|| p.get("plan"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let expires = p
+                        .pointer("/status/expires_at")
+                        .or_else(|| p.get("expires_at"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let message = p
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let mut lines = vec![format!("Status: {state}")];
+                    if !plan.is_empty() {
+                        lines.push(format!("Plan: {plan}"));
+                    }
+                    if !expires.is_empty() {
+                        lines.push(format!("Expires: {expires}"));
+                    }
+                    if !message.is_empty() {
+                        lines.push(message.to_owned());
+                    }
+                    lines.join("\n")
                 }
             }
             None => "Could not read license status.".to_owned(),
@@ -3726,7 +3801,16 @@ Being · Continuity\n\
             .close_response("close")
             .build();
         dialog.add_response("close", "Close");
-        if can_redeem {
+        if can_redeem
+            && payload
+                .as_ref()
+                .and_then(|p| {
+                    p.pointer("/status/enabled")
+                        .or_else(|| p.get("enabled"))
+                        .and_then(|v| v.as_bool())
+                })
+                .unwrap_or(false)
+        {
             dialog.add_response("redeem", "Redeem code");
         }
         let parent_for_cb = parent.clone();
@@ -3778,10 +3862,32 @@ Being · Continuity\n\
 
     fn show_beneficiary_dialog(parent: &adw::ApplicationWindow) {
         let snapshot = run_bridge_action("beneficiary_snapshot", serde_json::json!({}));
-        let summary = snapshot
-            .as_ref()
-            .and_then(|p| serde_json::to_string_pretty(p).ok())
-            .unwrap_or_else(|| "Could not load Family Beneficiary state.".to_owned());
+        let summary = match snapshot.as_ref().and_then(|p| p.get("snapshot")).or(snapshot.as_ref())
+        {
+            Some(s) => {
+                let family = s
+                    .get("family_beneficiary_first_name")
+                    .or_else(|| s.pointer("/family/first_name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let colleague = s
+                    .get("colleague_note")
+                    .or_else(|| s.get("colleague_email"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let mut lines = Vec::new();
+                if family.is_empty() {
+                    lines.push("No family beneficiary nominated yet.".to_owned());
+                } else {
+                    lines.push(format!("Family beneficiary: {family}"));
+                }
+                if !colleague.is_empty() {
+                    lines.push(format!("Colleague referral: {colleague}"));
+                }
+                lines.join("\n")
+            }
+            None => "Could not load Family Beneficiary state.".to_owned(),
+        };
         let first = gtk::Entry::builder()
             .placeholder_text("Family beneficiary first name")
             .hexpand(true)
@@ -3922,7 +4028,7 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
                         .to_owned()
                 } else {
                     let mut lines = vec![
-                        "Agent plugins on this Brain (v0 list only):".to_owned(),
+                        "Agent plugins on this Brain:".to_owned(),
                         String::new(),
                     ];
                     for plug in plugins.iter().take(40) {
@@ -4282,6 +4388,52 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         });
     }
 
+    fn show_get_help_dialog(
+        parent: &adw::ApplicationWindow,
+        thinking_settings_row: &adw::ActionRow,
+        thinking_detail: &gtk::Label,
+    ) {
+        let health_body = if let Some(response) = run_support_command(&["health"]) {
+            let ok = response.ok;
+            response
+                .message
+                .or(response.summary)
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| {
+                    if ok {
+                        "Health check completed.".to_owned()
+                    } else {
+                        "Health check could not complete.".to_owned()
+                    }
+                })
+        } else {
+            "Could not run health check. Is Centurion AI OS installed?".to_owned()
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Get Help")
+            .body(&format!(
+                "{health_body}\n\nNext step: try auto-fix for common thinking/config issues, or open Fix Thinking Service to choose a provider and access code."
+            ))
+            .close_response("close")
+            .default_response("autofix")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.add_response("autofix", "Try auto-fix");
+        dialog.add_response("fix", "Fix Thinking");
+        dialog.set_response_appearance("autofix", adw::ResponseAppearance::Suggested);
+        let parent_for_cb = parent.clone();
+        let thinking_settings_row = thinking_settings_row.clone();
+        let thinking_detail = thinking_detail.clone();
+        dialog.connect_response(None, move |_d, response| match response {
+            "autofix" => show_support_auto_fix_dialog(&parent_for_cb),
+            "fix" => {
+                show_change_thinking_dialog(&parent_for_cb, &thinking_settings_row, &thinking_detail)
+            }
+            _ => {}
+        });
+        dialog.present(Some(parent));
+    }
+
     fn show_support_health_dialog(parent: &adw::ApplicationWindow) {
         let body = if let Some(response) = run_support_command(&["health"]) {
             let ok = response.ok;
@@ -4438,32 +4590,21 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         window: &adw::ApplicationWindow,
         stack: &gtk::Stack,
         thinking_settings_row: &adw::ActionRow,
+        thinking_detail: &gtk::Label,
     ) {
         let stack = stack.clone();
         let window = window.clone();
         let dialog_window = window.clone();
         let thinking_settings_row = thinking_settings_row.clone();
+        let thinking_detail = thinking_detail.clone();
         let hooks = AdrianDialogHooks {
             build_context: Rc::new(build_adrian_context),
             on_action: Rc::new(move |action_id: &str| match action_id {
                 "open_connect" => stack.set_visible_child_name("settings"),
-                "open_get_help" => show_support_health_dialog(&window),
-                "try_auto_fix" => {
-                    if let Some(response) = run_provider_command(&["restore", "--json"]) {
-                        let message = response
-                            .message
-                            .or_else(|| {
-                                response.result.and_then(|value| {
-                                    value
-                                        .get("message")
-                                        .and_then(|m| m.as_str())
-                                        .map(str::to_owned)
-                                })
-                            })
-                            .unwrap_or_else(|| "Restore finished.".to_owned());
-                        thinking_settings_row.set_subtitle(&message);
-                    }
+                "open_get_help" => {
+                    show_get_help_dialog(&window, &thinking_settings_row, &thinking_detail)
                 }
+                "try_auto_fix" => show_support_auto_fix_dialog(&window),
                 "open_mission" => stack.set_visible_child_name("chat"),
                 _ => {}
             }),
