@@ -3050,25 +3050,31 @@ What should we focus on next?"
                                     let on_ask = on_ask.clone();
                                     let title = title.clone();
                                     let context = context.clone();
-                                    let on_ok = Rc::new(move || {
-                                        let topic = if let Some(ref plan) = plan_from_feed {
-                                            plan_topic_from_item(plan)
-                                        } else if let Some(plan) = fetch_plan_item(&pid) {
-                                            plan_topic_from_item(&plan)
-                                        } else {
-                                            DiscussTopic::Plan {
-                                                id: pid.clone(),
-                                                title: title.clone(),
-                                                status: "adjusted".to_owned(),
-                                                goal: String::new(),
-                                                summary: context.clone(),
-                                                steps: Vec::new(),
-                                                risks: Vec::new(),
-                                            }
-                                        };
-                                        on_ask(topic, kickoff.clone());
-                                    }) as Rc<dyn Fn()>;
+                                    let kickoff_ok = kickoff.clone();
+                                    // Clone before on_ok move — Fedora rustc E0382 if pid is
+                                    // captured by the Fn and then cloned for decide_plan.
                                     let pid_work = pid.clone();
+                                    let on_ok = Rc::new({
+                                        let pid = pid.clone();
+                                        move || {
+                                            let topic = if let Some(ref plan) = plan_from_feed {
+                                                plan_topic_from_item(plan)
+                                            } else if let Some(plan) = fetch_plan_item(&pid) {
+                                                plan_topic_from_item(&plan)
+                                            } else {
+                                                DiscussTopic::Plan {
+                                                    id: pid.clone(),
+                                                    title: title.clone(),
+                                                    status: "adjusted".to_owned(),
+                                                    goal: String::new(),
+                                                    summary: context.clone(),
+                                                    steps: Vec::new(),
+                                                    risks: Vec::new(),
+                                                }
+                                            };
+                                            on_ask(topic, kickoff_ok.clone());
+                                        }
+                                    }) as Rc<dyn Fn()>;
                                     run_async_then(
                                         parent_adj,
                                         refresh_adj,

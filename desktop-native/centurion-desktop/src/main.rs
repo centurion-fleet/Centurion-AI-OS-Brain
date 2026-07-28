@@ -2863,19 +2863,22 @@ Being · Continuity\n\
                 "vault" => on_ask(
                     "Vault".to_owned(),
                     format!(
-                        "Snapshot: {vault_status}\n\nLet's discuss my Vault — setup, unlock, and what durable notes belong there vs Hot Cache."
+                        "Snapshot: {}\n\nLet's discuss my Vault — setup, unlock, and what durable notes belong there vs Hot Cache.",
+                        vault_status.as_str()
                     ),
                 ),
                 "vault_setup" => on_ask(
                     "Set up Vault".to_owned(),
                     format!(
-                        "Snapshot: {vault_status}\n\nHelp me set up and initialize Vault on this computer for durable memory."
+                        "Snapshot: {}\n\nHelp me set up and initialize Vault on this computer for durable memory.",
+                        vault_status.as_str()
                     ),
                 ),
                 "vault_unlock" => on_ask(
                     "Unlock Vault".to_owned(),
                     format!(
-                        "Snapshot: {vault_status}\n\nVault is locked on this computer. Walk me through unlocking it safely with my passphrase."
+                        "Snapshot: {}\n\nVault is locked on this computer. Walk me through unlocking it safely with my passphrase.",
+                        vault_status.as_str()
                     ),
                 ),
                 _ => {}
