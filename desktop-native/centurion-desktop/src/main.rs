@@ -1282,8 +1282,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let stack = stack.clone();
             let chat_handle = chat_handle.clone();
             crate::home_page::build(crate::home_page::HomeHooks {
-                on_ask_about: Rc::new(move |title: String, detail: String| {
-                    chat_handle.seed_discuss(&title, &detail);
+                on_ask_about: Rc::new(move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
+                    chat_handle.seed_discuss_topic(topic, &kickoff);
                     stack.set_visible_child_name("chat");
                 }),
             })
@@ -1556,7 +1556,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                         let stack = stack.clone();
                         let chat_handle = chat_handle.clone();
                         move |title: String, detail: String| {
-                            chat_handle.seed_discuss(&title, &detail);
+                            chat_handle.seed_discuss_topic(
+                                crate::chat_page::DiscussTopic::horizon(&title, &detail),
+                                &detail,
+                            );
                             stack.set_visible_child_name("chat");
                         }
                     }),
@@ -2852,19 +2855,28 @@ Being · Continuity\n\
             match response {
                 "hot" => on_ask(
                     "Hot Cache".to_owned(),
-                    "Let's discuss my Hot Cache — what's filling it, what to curate, and whether continuity digests should stay there or move to Vault.".to_owned(),
+                    format!(
+                        "Snapshot: {hot_used}/{hot_limit} chars ({:.0}% full); MEMORY {mem_chars}/{mem_limit}; YOU {user_chars}/{user_limit}.\n\nLet's discuss my Hot Cache — what's filling it, what to curate, and whether continuity digests should stay there or move to Vault.",
+                        hot_fill * 100.0
+                    ),
                 ),
                 "vault" => on_ask(
                     "Vault".to_owned(),
-                    "Let's discuss my Vault — setup, unlock, and what durable notes belong there vs Hot Cache.".to_owned(),
+                    format!(
+                        "Snapshot: {vault_status}\n\nLet's discuss my Vault — setup, unlock, and what durable notes belong there vs Hot Cache."
+                    ),
                 ),
                 "vault_setup" => on_ask(
                     "Set up Vault".to_owned(),
-                    "Help me set up and initialize Vault on this computer for durable memory.".to_owned(),
+                    format!(
+                        "Snapshot: {vault_status}\n\nHelp me set up and initialize Vault on this computer for durable memory."
+                    ),
                 ),
                 "vault_unlock" => on_ask(
                     "Unlock Vault".to_owned(),
-                    "Vault is locked on this computer. Walk me through unlocking it safely with my passphrase.".to_owned(),
+                    format!(
+                        "Snapshot: {vault_status}\n\nVault is locked on this computer. Walk me through unlocking it safely with my passphrase."
+                    ),
                 ),
                 _ => {}
             }
@@ -3811,51 +3823,117 @@ Being · Continuity\n\
                 })
                 .unwrap_or(false)
         {
+            dialog.add_response("trial", "Start trial");
+            dialog.add_response("activate", "Activate");
             dialog.add_response("redeem", "Redeem code");
         }
+        dialog.add_response("fingerprint", "Machine id");
         let parent_for_cb = parent.clone();
-        dialog.connect_response(None, move |_d, response| {
-            if response != "redeem" {
-                return;
-            }
-            let entry = gtk::Entry::builder()
-                .placeholder_text("License or redeem code")
-                .hexpand(true)
-                .build();
-            let redeem = adw::AlertDialog::builder()
-                .heading("Redeem license")
-                .extra_child(&entry)
-                .close_response("cancel")
-                .default_response("ok")
-                .build();
-            redeem.add_response("cancel", "Cancel");
-            redeem.add_response("ok", "Redeem");
-            redeem.set_response_appearance("ok", adw::ResponseAppearance::Suggested);
-            let parent_for_redeem = parent_for_cb.clone();
-            let parent_for_present = parent_for_cb.clone();
-            redeem.connect_response(None, move |_d, resp| {
-                if resp != "ok" {
-                    return;
+        dialog.connect_response(None, move |_d, response| match response {
+            "fingerprint" => {
+                let result = run_bridge_action("license_fingerprint", serde_json::json!({}));
+                let fp = result
+                    .as_ref()
+                    .and_then(|p| p.get("fingerprint").and_then(|v| v.as_str()))
+                    .unwrap_or("(unavailable)")
+                    .to_owned();
+                let msg = format!(
+                    "Share this machine id with support if they ask for it:\n\n{fp}"
+                );
+                if result
+                    .as_ref()
+                    .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+                    == Some(true)
+                {
+                    copy_text_to_clipboard(&fp);
                 }
-                let code = entry.text().trim().to_string();
+                let done = adw::AlertDialog::builder()
+                    .heading("Machine id")
+                    .body(&format!("{msg}\n\nCopied to clipboard when available."))
+                    .close_response("ok")
+                    .build();
+                done.add_response("ok", "OK");
+                done.present(Some(&parent_for_cb));
+            }
+            "trial" => {
                 let result = run_bridge_action(
-                    "license_redeem",
-                    serde_json::json!({ "code": code }),
+                    "license_activate",
+                    serde_json::json!({ "tier": "trial", "days": 14 }),
                 );
                 let msg = result
                     .as_ref()
                     .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                    .unwrap_or("Redeem finished.")
+                    .unwrap_or("Trial activation finished.")
                     .to_owned();
                 let done = adw::AlertDialog::builder()
-                    .heading("Redeem")
+                    .heading("Trial")
                     .body(&msg)
                     .close_response("ok")
                     .build();
                 done.add_response("ok", "OK");
-                done.present(Some(&parent_for_redeem));
-            });
-            redeem.present(Some(&parent_for_present));
+                done.present(Some(&parent_for_cb));
+            }
+            "activate" | "redeem" => {
+                let is_activate = response == "activate";
+                let entry = gtk::Entry::builder()
+                    .placeholder_text(if is_activate {
+                        "Activation code"
+                    } else {
+                        "License or redeem code"
+                    })
+                    .hexpand(true)
+                    .build();
+                let redeem = adw::AlertDialog::builder()
+                    .heading(if is_activate {
+                        "Activate license"
+                    } else {
+                        "Redeem license"
+                    })
+                    .extra_child(&entry)
+                    .close_response("cancel")
+                    .default_response("ok")
+                    .build();
+                redeem.add_response("cancel", "Cancel");
+                redeem.add_response("ok", if is_activate { "Activate" } else { "Redeem" });
+                redeem.set_response_appearance("ok", adw::ResponseAppearance::Suggested);
+                let parent_for_redeem = parent_for_cb.clone();
+                let parent_for_present = parent_for_cb.clone();
+                redeem.connect_response(None, move |_d, resp| {
+                    if resp != "ok" {
+                        return;
+                    }
+                    let code = entry.text().trim().to_string();
+                    let result = if is_activate {
+                        run_bridge_action(
+                            "license_activate",
+                            serde_json::json!({ "tier": "paid", "code": code }),
+                        )
+                    } else {
+                        run_bridge_action(
+                            "license_redeem",
+                            serde_json::json!({ "token": code }),
+                        )
+                    };
+                    let msg = result
+                        .as_ref()
+                        .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                        .unwrap_or(if is_activate {
+                            "Activation finished."
+                        } else {
+                            "Redeem finished."
+                        })
+                        .to_owned();
+                    let done = adw::AlertDialog::builder()
+                        .heading(if is_activate { "Activate" } else { "Redeem" })
+                        .body(&msg)
+                        .close_response("ok")
+                        .build();
+                    done.add_response("ok", "OK");
+                    done.present(Some(&parent_for_redeem));
+                });
+                redeem.present(Some(&parent_for_present));
+            }
+            _ => {}
         });
         dialog.present(Some(parent));
     }

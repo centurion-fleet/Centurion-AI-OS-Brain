@@ -14,12 +14,12 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use crate::chat_page::run_bridge_action;
+use crate::chat_page::{run_bridge_action, DiscussTopic};
 
 #[derive(Clone)]
 pub struct HomeHooks {
-    /// Jump to Chat with a seeded composer prompt about this item.
-    pub on_ask_about: Rc<dyn Fn(String, String)>,
+    /// Jump to Chat with a structured topic so outbound turns are framed.
+    pub on_ask_about: Rc<dyn Fn(DiscussTopic, String)>,
 }
 
 #[derive(Clone)]
@@ -129,10 +129,24 @@ struct PlanItem {
     comments: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+struct PlanTemplateItem {
+    id: String,
+    title: String,
+    summary: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct CommitmentItem {
+    id: String,
+    title: String,
+    description: String,
+}
+
 #[derive(Clone, Debug, Default)]
 struct MissionInfo {
     statement: String,
-    targets: Vec<String>,
+    targets: Vec<CommitmentItem>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -179,6 +193,7 @@ struct HomeFeed {
     decisions: Vec<DecisionItem>,
     thoughts: Vec<ThoughtItem>,
     plans: Vec<PlanItem>,
+    templates: Vec<PlanTemplateItem>,
     mission: MissionInfo,
     swarms: Vec<SwarmOrb>,
     fleet_peers: Vec<FleetPeerItem>,
@@ -341,13 +356,37 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
             let is_plan = looks_like_plan(&title);
             let owner = json_str(o.get("owner_name"));
             let status = json_str(o.get("status"));
-            let body = if is_plan {
-                format!(
-                    "# {title}\n\nYour Sovereign proposes this plan.\n\nOwner: {owner}\nStatus: {status}\n"
-                )
-            } else {
-                format!("# {title}\n\nOwner: {owner}\nStatus: {status}\n")
-            };
+            let mut detail = json_str(o.get("detail"));
+            if detail.is_empty() {
+                detail = json_str(o.get("summary"));
+            }
+            let notes = json_str(o.get("notes"));
+            let mut result = json_str(o.get("result"));
+            if result.is_empty() {
+                result = json_str(o.get("outcome"));
+            }
+            let mut sections = vec![format!("# {title}"), String::new()];
+            if is_plan {
+                sections.push("Your Sovereign proposes this plan.".to_owned());
+                sections.push(String::new());
+            }
+            sections.push(format!("Owner: {owner}"));
+            sections.push(format!("Status: {status}"));
+            if !detail.is_empty() {
+                sections.push(String::new());
+                sections.push(detail);
+            }
+            if !result.is_empty() {
+                sections.push(String::new());
+                sections.push("## Result".to_owned());
+                sections.push(result);
+            }
+            if !notes.is_empty() {
+                sections.push(String::new());
+                sections.push("## Notes".to_owned());
+                sections.push(notes);
+            }
+            let body = sections.join("\n");
             DocumentItem {
                 id: json_str(o.get("id")),
                 title: title.chars().take(80).collect(),
@@ -528,13 +567,26 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
         for item in arr {
             if let Some(obj) = item.as_object() {
                 let title = json_str(obj.get("title"));
-                if !title.is_empty() {
-                    targets.push(title);
+                if title.is_empty() {
+                    continue;
                 }
+                let mut id = json_str(obj.get("id"));
+                if id.is_empty() {
+                    id = title.clone();
+                }
+                targets.push(CommitmentItem {
+                    id,
+                    title,
+                    description: json_str(obj.get("description")),
+                });
             } else {
                 let text = json_str(Some(item));
                 if !text.is_empty() {
-                    targets.push(text);
+                    targets.push(CommitmentItem {
+                        id: text.clone(),
+                        title: text,
+                        description: String::new(),
+                    });
                 }
             }
         }
@@ -608,6 +660,7 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
         decisions,
         thoughts,
         plans: plan_items,
+        templates: Vec::new(),
         mission: MissionInfo {
             statement: json_str(mission.get("statement")),
             targets,
@@ -652,6 +705,28 @@ fn load_home_feed() -> HomeFeed {
         .unwrap_or_else(|| serde_json::json!({}));
 
     let mut feed = map_feed(&snapshot, &plans, &mission);
+    if let Some(resp) = run_bridge_action("plan_templates_list", serde_json::json!({})) {
+        if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            feed.templates = resp
+                .get("templates")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .map(|t| PlanTemplateItem {
+                    id: json_str(t.get("id")),
+                    title: json_str(t.get("title")),
+                    summary: {
+                        let mut s = json_str(t.get("summary"));
+                        if s.is_empty() {
+                            s = json_str(t.get("goal"));
+                        }
+                        s
+                    },
+                })
+                .filter(|t| !t.id.is_empty() && !t.title.is_empty())
+                .collect();
+        }
+    }
     if let Some(resp) = run_bridge_action("fleet_status", serde_json::json!({})) {
         if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             feed.fleet_peers = resp
@@ -742,31 +817,20 @@ fn load_home_feed() -> HomeFeed {
     for doc in feed.outputs.iter_mut() {
         let Some(plan_id) = doc.plan_id.clone() else { continue };
         if let Some(plan) = feed.plans.iter().find(|p| p.id == plan_id) {
-            let mut body = format!("# {}
-
-{}
-", plan.title, plan.summary);
+            let mut body = format!("# {}\n\n{}\n", plan.title, plan.summary);
             if !plan.goal.is_empty() {
-                body.push_str(&format!("
-Goal: {}
-", plan.goal));
+                body.push_str(&format!("\nGoal: {}\n", plan.goal));
             }
             if !plan.steps.is_empty() {
-                body.push_str("
-Steps:
-");
+                body.push_str("\nSteps:\n");
                 for step in &plan.steps {
-                    body.push_str(&format!("- {step}
-"));
+                    body.push_str(&format!("- {step}\n"));
                 }
             }
             if !plan.risks.is_empty() {
-                body.push_str("
-Risks:
-");
+                body.push_str("\nRisks:\n");
                 for risk in &plan.risks {
-                    body.push_str(&format!("- {risk}
-"));
+                    body.push_str(&format!("- {risk}\n"));
                 }
             }
             doc.body = body;
@@ -866,6 +930,69 @@ fn decide_plan(plan_id: &str, choice: &str) -> Result<(), String> {
     }
 }
 
+fn fetch_plan_item(plan_id: &str) -> Option<PlanItem> {
+    let resp = run_bridge_action("plan_get", serde_json::json!({ "plan_id": plan_id }))?;
+    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let full = resp.get("plan")?;
+    let mut comment_lines = Vec::new();
+    if let Some(arr) = full
+        .pointer("/share/comments")
+        .or_else(|| full.get("comments"))
+        .and_then(|v| v.as_array())
+    {
+        for c in arr {
+            let author = json_str(c.get("author"));
+            let body = json_str(c.get("body"));
+            if body.is_empty() {
+                continue;
+            }
+            comment_lines.push(if author.is_empty() {
+                body
+            } else {
+                format!("{author}: {body}")
+            });
+        }
+    }
+    Some(PlanItem {
+        id: json_str(full.get("id")),
+        title: json_str(full.get("title")),
+        summary: json_str(full.get("summary")),
+        status: json_str(full.get("status")),
+        goal: json_str(full.get("goal")),
+        steps: full
+            .get("steps")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect(),
+        risks: full
+            .get("risks")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect(),
+        comments: comment_lines,
+    })
+}
+
+fn plan_topic_from_item(plan: &PlanItem) -> DiscussTopic {
+    DiscussTopic::Plan {
+        id: plan.id.clone(),
+        title: plan.title.clone(),
+        status: plan.status.clone(),
+        goal: plan.goal.clone(),
+        summary: plan.summary.clone(),
+        steps: plan.steps.clone(),
+        risks: plan.risks.clone(),
+    }
+}
+
 fn resolve_signal(signal_id: &str, note: &str) -> Result<(), String> {
     let response = run_bridge_action(
         "swarm_resolve_signal",
@@ -934,6 +1061,131 @@ fn run_async_result<F>(
         Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
         Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
     });
+}
+
+/// Like `run_async_result`, but runs `on_ok` on the UI thread after success (before refresh).
+fn run_async_then<F>(
+    parent: gtk::Widget,
+    refresh: Rc<dyn Fn()>,
+    work: F,
+    on_ok: Rc<dyn Fn()>,
+) where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel::<Result<(), String>>();
+    thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+        Ok(Ok(())) => {
+            on_ok();
+            refresh();
+            glib::ControlFlow::Break
+        }
+        Ok(Err(msg)) => {
+            show_home_error(&parent, &msg);
+            refresh();
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+    });
+}
+
+fn pulse_seen_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home()).join("brain_pulse_seen.json")
+}
+
+fn load_pulse_seen() -> Value {
+    let path = pulse_seen_path();
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({ "seen": {}, "visited_at": {} }))
+}
+
+fn save_pulse_seen(value: &Value) {
+    let path = pulse_seen_path();
+    if let Ok(bytes) = serde_json::to_vec_pretty(value) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
+fn pulse_key(cat: PulseCategory) -> &'static str {
+    match cat {
+        PulseCategory::Live => "live",
+        PulseCategory::Plans => "plans",
+        PulseCategory::Wins => "wins",
+        PulseCategory::Outputs => "outputs",
+        PulseCategory::Decisions => "decisions",
+        PulseCategory::Pulse => "pulse",
+    }
+}
+
+fn feed_ids_for_category(data: &HomeFeed, cat: PulseCategory) -> Vec<String> {
+    match cat {
+        PulseCategory::Live => data
+            .live
+            .as_ref()
+            .map(|l| vec![l.id.clone()])
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect(),
+        PulseCategory::Plans => data.plans.iter().map(|p| p.id.clone()).collect(),
+        PulseCategory::Wins => data.wins.iter().map(|w| w.id.clone()).collect(),
+        PulseCategory::Outputs => data.outputs.iter().map(|d| d.id.clone()).collect(),
+        PulseCategory::Decisions => data.decisions.iter().map(|d| d.id.clone()).collect(),
+        PulseCategory::Pulse => data.thoughts.iter().map(|t| t.id.clone()).collect(),
+    }
+}
+
+fn new_count_for_category(data: &HomeFeed, cat: PulseCategory, seen: &Value) -> usize {
+    let ids = feed_ids_for_category(data, cat);
+    if ids.is_empty() {
+        return 0;
+    }
+    let key = pulse_key(cat);
+    // Never visited this pill: don't alarm until the user opens it once.
+    if seen.pointer(&format!("/visited_at/{key}")).is_none() {
+        return 0;
+    }
+    let seen_ids: std::collections::HashSet<String> = seen
+        .pointer(&format!("/seen/{key}"))
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    ids.into_iter().filter(|id| !seen_ids.contains(id)).count()
+}
+
+fn mark_category_seen(data: &HomeFeed, cat: PulseCategory) {
+    let mut store = load_pulse_seen();
+    let key = pulse_key(cat);
+    let ids = feed_ids_for_category(data, cat);
+    let seen = store
+        .as_object_mut()
+        .map(|o| o.entry("seen".to_owned()).or_insert_with(|| serde_json::json!({})));
+    if let Some(Value::Object(map)) = seen {
+        map.insert(
+            key.to_owned(),
+            Value::Array(ids.into_iter().map(Value::String).collect()),
+        );
+    }
+    if let Some(obj) = store.as_object_mut() {
+        let visited = obj
+            .entry("visited_at".to_owned())
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(vmap) = visited.as_object_mut() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            vmap.insert(key.to_owned(), Value::from(now));
+        }
+    }
+    save_pulse_seen(&store);
 }
 
 fn empty_cta_box(
@@ -1017,7 +1269,7 @@ fn load_decision_first_pref() -> bool {
 fn show_collab_detail_dialog(
     parent: &impl IsA<gtk::Widget>,
     orb: &SwarmOrb,
-    on_ask: Rc<dyn Fn(String, String)>,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
     refresh: Rc<dyn Fn()>,
 ) {
     let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
@@ -1070,18 +1322,47 @@ fn show_collab_detail_dialog(
             if !signal_id.is_empty() {
                 let resolve = gtk::Button::with_label("Resolve");
                 resolve.add_css_class("flat");
+                let note_btn = gtk::Button::with_label("Note");
+                note_btn.add_css_class("flat");
+                let hold_btn = gtk::Button::with_label("Hold");
+                hold_btn.add_css_class("flat");
                 let parent_w = parent.clone().upcast::<gtk::Widget>();
                 let refresh = refresh.clone();
-                let signal_id = signal_id.clone();
+                let signal_id_r = signal_id.clone();
                 let message = message.clone();
                 resolve.connect_clicked(move |_| {
                     let parent_w = parent_w.clone();
                     let refresh = refresh.clone();
-                    let signal_id = signal_id.clone();
+                    let signal_id = signal_id_r.clone();
                     let note = format!("Resolved from Home: {message}");
                     run_async_result(parent_w, refresh, move || resolve_signal(&signal_id, &note));
                 });
+                let parent_n = parent.clone().upcast::<gtk::Widget>();
+                let refresh_n = refresh.clone();
+                let signal_id_n = signal_id.clone();
+                note_btn.connect_clicked(move |_| {
+                    prompt_signal_note(
+                        &parent_n,
+                        signal_id_n.clone(),
+                        "Add note",
+                        "Note for this collaboration decision",
+                        refresh_n.clone(),
+                    );
+                });
+                let parent_h = parent.clone().upcast::<gtk::Widget>();
+                let refresh_h = refresh.clone();
+                let signal_id_h = signal_id.clone();
+                hold_btn.connect_clicked(move |_| {
+                    let parent_h = parent_h.clone();
+                    let refresh_h = refresh_h.clone();
+                    let signal_id = signal_id_h.clone();
+                    run_async_result(parent_h, refresh_h, move || {
+                        resolve_signal(&signal_id, "Hold")
+                    });
+                });
                 row.append(&resolve);
+                row.append(&note_btn);
+                row.append(&hold_btn);
             }
             body.append(&row);
         }
@@ -1113,20 +1394,58 @@ fn show_collab_detail_dialog(
         .default_response("discuss")
         .build();
     dialog.add_response("close", "Close");
+    dialog.add_response("note", "Add note");
     dialog.add_response("discuss", "Discuss");
     dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
+    let orb_id = orb.id.clone();
     let name = orb.name.clone();
     let objective = orb.objective.clone();
     let pulse = orb.pulse.clone();
-    dialog.connect_response(None, move |_d, response| {
-        if response == "discuss" {
+    let first_signal = orb
+        .signals
+        .iter()
+        .find(|(id, _)| !id.is_empty())
+        .map(|(id, _)| id.clone());
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    let refresh_n = refresh.clone();
+    dialog.connect_response(None, move |_d, response| match response {
+        "discuss" => {
             on_ask(
-                name.clone(),
+                DiscussTopic::Collab {
+                    id: orb_id.clone(),
+                    name: name.clone(),
+                    pulse: pulse.clone(),
+                    objective: objective.clone(),
+                },
                 format!(
                     "Let's discuss collaboration “{name}” (pulse: {pulse}).\n\nObjective: {objective}\n\nWhat should we do next?"
                 ),
             );
         }
+        "note" => {
+            if let Some(sid) = first_signal.clone() {
+                prompt_signal_note(
+                    &parent_w,
+                    sid,
+                    "Add collaboration note",
+                    "Note attached to the open decision",
+                    refresh_n.clone(),
+                );
+            } else {
+                on_ask(
+                    DiscussTopic::Collab {
+                        id: orb_id.clone(),
+                        name: name.clone(),
+                        pulse: pulse.clone(),
+                        objective: objective.clone(),
+                    },
+                    format!(
+                        "Note on collaboration “{name}” (pulse: {pulse}).\n\nObjective: {objective}\n\n"
+                    ),
+                );
+            }
+        }
+        _ => {}
     });
     dialog.present(Some(parent));
 }
@@ -1335,7 +1654,190 @@ fn show_how_dialog(parent: &impl IsA<gtk::Widget>, live: &LiveActivity) {
     dialog.present(Some(parent));
 }
 
-fn show_document_dialog(parent: &impl IsA<gtk::Widget>, doc: &DocumentItem) {
+fn copy_text_to_clipboard(text: &str) {
+    if let Some(display) = gtk::gdk::Display::default() {
+        display.clipboard().set_text(text);
+    }
+}
+
+fn comment_on_plan(plan_id: &str, body: &str) -> Result<(), String> {
+    let response = run_bridge_action(
+        "plan_comment",
+        serde_json::json!({
+            "plan_id": plan_id,
+            "body": body,
+            "author": "desk",
+        }),
+    )
+    .ok_or_else(|| "Could not add comment.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Comment failed.")
+            .to_owned())
+    }
+}
+
+fn save_plan_template(plan_id: &str) -> Result<(), String> {
+    let response = run_bridge_action(
+        "plan_save_template",
+        serde_json::json!({ "plan_id": plan_id }),
+    )
+    .ok_or_else(|| "Could not save template.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not save as template.")
+            .to_owned())
+    }
+}
+
+fn instantiate_plan_template(template_id: &str) -> Result<(), String> {
+    let response = run_bridge_action(
+        "plan_template_instantiate",
+        serde_json::json!({ "template_id": template_id }),
+    )
+    .ok_or_else(|| "Could not create plan from template.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Template instantiate failed.")
+            .to_owned())
+    }
+}
+
+fn prompt_plan_comment(
+    parent: &impl IsA<gtk::Widget>,
+    plan_id: String,
+    refresh: Rc<dyn Fn()>,
+) {
+    let entry = gtk::Entry::builder()
+        .placeholder_text("Add a review comment")
+        .hexpand(true)
+        .build();
+    let ask = adw::AlertDialog::builder()
+        .heading("Comment on plan")
+        .extra_child(&entry)
+        .close_response("cancel")
+        .default_response("send")
+        .build();
+    ask.add_response("cancel", "Cancel");
+    ask.add_response("send", "Add comment");
+    ask.set_response_appearance("send", adw::ResponseAppearance::Suggested);
+    let parent_for_cb = parent.clone().upcast::<gtk::Widget>();
+    let parent_for_present = parent.clone().upcast::<gtk::Widget>();
+    ask.connect_response(None, move |_d, response| {
+        if response != "send" {
+            return;
+        }
+        let body_text = entry.text().trim().to_owned();
+        if body_text.is_empty() {
+            show_home_error(&parent_for_cb, "Enter a comment first.");
+            return;
+        }
+        let plan_id = plan_id.clone();
+        let parent_for_async = parent_for_cb.clone();
+        let refresh = refresh.clone();
+        run_async_result(parent_for_async, refresh, move || {
+            comment_on_plan(&plan_id, &body_text)
+        });
+    });
+    ask.present(Some(&parent_for_present));
+}
+
+fn prompt_signal_note(
+    parent: &impl IsA<gtk::Widget>,
+    signal_id: String,
+    heading: &str,
+    placeholder: &str,
+    refresh: Rc<dyn Fn()>,
+) {
+    let entry = gtk::Entry::builder()
+        .placeholder_text(placeholder)
+        .hexpand(true)
+        .build();
+    let ask = adw::AlertDialog::builder()
+        .heading(heading)
+        .extra_child(&entry)
+        .close_response("cancel")
+        .default_response("send")
+        .build();
+    ask.add_response("cancel", "Cancel");
+    ask.add_response("send", "Save note");
+    ask.set_response_appearance("send", adw::ResponseAppearance::Suggested);
+    let parent_for_cb = parent.clone().upcast::<gtk::Widget>();
+    let parent_for_present = parent.clone().upcast::<gtk::Widget>();
+    ask.connect_response(None, move |_d, response| {
+        if response != "send" {
+            return;
+        }
+        let note = entry.text().trim().to_owned();
+        if note.is_empty() {
+            show_home_error(&parent_for_cb, "Enter a note first.");
+            return;
+        }
+        let signal_id = signal_id.clone();
+        let parent_for_async = parent_for_cb.clone();
+        let refresh = refresh.clone();
+        run_async_result(parent_for_async, refresh, move || {
+            resolve_signal(&signal_id, &note)
+        });
+    });
+    ask.present(Some(&parent_for_present));
+}
+
+fn show_document_dialog(
+    parent: &impl IsA<gtk::Widget>,
+    doc: &DocumentItem,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
+    refresh: Rc<dyn Fn()>,
+    plans: &[PlanItem],
+) {
+    // Plan-linked documents open the full plan review surface.
+    if let Some(pid) = doc.plan_id.as_ref() {
+        if let Some(plan) = plans.iter().find(|p| &p.id == pid) {
+            show_plan_dialog(parent, plan, refresh, on_ask);
+            return;
+        }
+        if let Some(plan) = fetch_plan_item(pid) {
+            show_plan_dialog(parent, &plan, refresh, on_ask);
+            return;
+        }
+    }
+    // Outcome docs: title / id heuristic → known plan, then plan_get.
+    let title_l = doc.title.to_lowercase();
+    if let Some(plan) = plans.iter().find(|p| {
+        (!p.id.is_empty() && title_l.contains(&p.id.to_lowercase()))
+            || (!p.title.is_empty()
+                && (title_l == p.title.to_lowercase()
+                    || title_l.contains(&p.title.to_lowercase())
+                    || p.title.to_lowercase().contains(&title_l)))
+    }) {
+        show_plan_dialog(parent, plan, refresh, on_ask);
+        return;
+    }
+    // If the doc id looks like plan:<id>, try plan_get.
+    if let Some(pid) = doc
+        .id
+        .strip_prefix("plan:")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if let Some(plan) = fetch_plan_item(pid) {
+            show_plan_dialog(parent, &plan, refresh, on_ask);
+            return;
+        }
+    }
+
     let view = gtk::TextView::builder()
         .editable(false)
         .wrap_mode(gtk::WrapMode::WordChar)
@@ -1352,9 +1854,57 @@ fn show_document_dialog(parent: &impl IsA<gtk::Widget>, doc: &DocumentItem) {
         .heading(&doc.title)
         .extra_child(&scroll)
         .close_response("close")
-        .default_response("close")
+        .default_response("discuss")
         .build();
     dialog.add_response("close", "Close");
+    dialog.add_response("copy", "Copy");
+    dialog.add_response("share", "Share");
+    dialog.add_response("discuss", "Discuss");
+    if doc.plan_id.is_some() {
+        dialog.add_response("comment", "Comment");
+    }
+    dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
+    let title = doc.title.clone();
+    let body = doc.body.clone();
+    let summary = doc.summary.clone();
+    let plan_id = doc.plan_id.clone();
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    let refresh = refresh.clone();
+    dialog.connect_response(None, move |_d, response| match response {
+        "copy" | "share" => {
+            copy_text_to_clipboard(&body);
+            let done = adw::AlertDialog::builder()
+                .heading(if response == "share" {
+                    "Ready to share"
+                } else {
+                    "Copied"
+                })
+                .body("Document text is on the clipboard — paste into email, chat, or notes.")
+                .close_response("ok")
+                .build();
+            done.add_response("ok", "OK");
+            done.present(Some(&parent_w));
+        }
+                "discuss" => {
+            on_ask(
+                DiscussTopic::Document {
+                    title: title.clone(),
+                    summary: summary.clone(),
+                    plan_id: plan_id.clone(),
+                    body_excerpt: body.clone(),
+                },
+                format!(
+                    "Let's discuss this document.\n\n{title}\n\n{summary}\n\nWhat should we do with it?"
+                ),
+            );
+        }
+        "comment" => {
+            if let Some(pid) = plan_id.clone() {
+                prompt_plan_comment(&parent_w, pid, refresh.clone());
+            }
+        }
+        _ => {}
+    });
     dialog.present(Some(parent));
 }
 
@@ -1362,7 +1912,7 @@ fn show_plan_dialog(
     parent: &impl IsA<gtk::Widget>,
     plan: &PlanItem,
     refresh: Rc<dyn Fn()>,
-    on_ask: Rc<dyn Fn(String, String)>,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
 ) {
     let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
     if !plan.summary.is_empty() {
@@ -1428,11 +1978,14 @@ fn show_plan_dialog(
         .body(&format!("Status: {}", plan.status))
         .extra_child(&body)
         .close_response("close")
-        .default_response("close")
+        .default_response("discuss")
         .build();
     dialog.add_response("close", "Close");
+    dialog.add_response("discuss", "Discuss");
     dialog.add_response("share", "Share");
     dialog.add_response("comment", "Comment");
+    dialog.add_response("template", "Save template");
+    dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
     let pending = matches!(
         plan.status.to_lowercase().as_str(),
         "pending_review" | "held" | "adjusted" | "proposed"
@@ -1448,6 +2001,10 @@ fn show_plan_dialog(
     let plan_id = plan.id.clone();
     let title = plan.title.clone();
     let summary = plan.summary.clone();
+    let goal = plan.goal.clone();
+    let status = plan.status.clone();
+    let steps = plan.steps.clone();
+    let risks = plan.risks.clone();
     let parent_w = parent.clone().upcast::<gtk::Widget>();
     let parent_share = parent.clone().upcast::<gtk::Widget>();
     dialog.connect_response(None, move |_d, response| match response {
@@ -1462,69 +2019,80 @@ fn show_plan_dialog(
             let parent_w = parent_w.clone();
             run_async_result(parent_w, refresh, move || decide_plan(&plan_id, choice));
         }
-        "adjust" => {
+                "discuss" => {
+            let summary_text = if summary.is_empty() {
+                "(no summary yet)".to_owned()
+            } else {
+                summary.clone()
+            };
             on_ask(
-                title.clone(),
+                DiscussTopic::Plan {
+                    id: plan_id.clone(),
+                    title: title.clone(),
+                    status: status.clone(),
+                    goal: goal.clone(),
+                    summary: summary.clone(),
+                    steps: steps.clone(),
+                    risks: risks.clone(),
+                },
                 format!(
-                    "I'd like to adjust this plan.\n\n{}\n\nWhat should change?",
-                    summary
+                    "Let's discuss this plan.\n\nTitle: {title}\n\n{summary_text}\n\nGoal: {goal}\n\nWhat should change or stay?"
                 ),
             );
         }
-                "comment" => {
+        "adjust" => {
             let plan_id = plan_id.clone();
-            let parent_for_cb = parent_share.clone();
-            let parent_for_present = parent_share.clone();
             let refresh = refresh.clone();
-            let entry = gtk::Entry::builder()
-                .placeholder_text("Add a review comment")
-                .hexpand(true)
-                .build();
-            let ask = adw::AlertDialog::builder()
-                .heading("Comment on plan")
-                .extra_child(&entry)
-                .close_response("cancel")
-                .default_response("send")
-                .build();
-            ask.add_response("cancel", "Cancel");
-            ask.add_response("send", "Add comment");
-            ask.set_response_appearance("send", adw::ResponseAppearance::Suggested);
-            ask.connect_response(None, move |_d, response| {
-                if response != "send" {
-                    return;
-                }
-                let body_text = entry.text().trim().to_owned();
-                if body_text.is_empty() {
-                    show_home_error(&parent_for_cb, "Enter a comment first.");
-                    return;
-                }
+            let parent_w = parent_w.clone();
+            let on_ask = on_ask.clone();
+            let title = title.clone();
+            let summary = summary.clone();
+            let status = status.clone();
+            let goal = goal.clone();
+            let steps = steps.clone();
+            let risks = risks.clone();
+            // Await request_changes, then open discuss with full plan identity.
+            let on_ok = Rc::new({
                 let plan_id = plan_id.clone();
-                let parent_for_async = parent_for_cb.clone();
-                let refresh = refresh.clone();
-                run_async_result(parent_for_async, refresh, move || {
-                    let response = run_bridge_action(
-                        "plan_comment",
-                        serde_json::json!({
-                            "plan_id": plan_id,
-                            "body": body_text,
-                            "author": "desk",
-                        }),
-                    )
-                    .ok_or_else(|| "Could not add comment.".to_owned())?;
-                    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                        Ok(())
-                    } else {
-                        Err(response
-                            .get("message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("Comment failed.")
-                            .to_owned())
-                    }
-                });
-            });
-            ask.present(Some(&parent_for_present));
+                let title = title.clone();
+                let summary = summary.clone();
+                let status = status.clone();
+                let goal = goal.clone();
+                let steps = steps.clone();
+                let risks = risks.clone();
+                let on_ask = on_ask.clone();
+                move || {
+                    on_ask(
+                        DiscussTopic::Plan {
+                            id: plan_id.clone(),
+                            title: title.clone(),
+                            status: status.clone(),
+                            goal: goal.clone(),
+                            summary: summary.clone(),
+                            steps: steps.clone(),
+                            risks: risks.clone(),
+                        },
+                        format!(
+                            "I'd like to adjust this plan.\n\n{}\n\nWhat should change?",
+                            summary
+                        ),
+                    );
+                }
+            }) as Rc<dyn Fn()>;
+            let plan_id_work = plan_id.clone();
+            run_async_then(parent_w, refresh, move || {
+                decide_plan(&plan_id_work, "request_changes")
+            }, on_ok);
         }
-
+        "comment" => {
+            prompt_plan_comment(&parent_share, plan_id.clone(), refresh.clone());
+        }
+        "template" => {
+            let plan_id = plan_id.clone();
+            let refresh = refresh.clone();
+            let parent_w = parent_w.clone();
+            run_async_result(parent_w, refresh, move || save_plan_template(&plan_id));
+        }
         "share" => {
             let plan_id = plan_id.clone();
             let parent_for_cb = parent_share.clone();
@@ -1782,16 +2350,22 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                     let parent = container.clone();
                     let on_ask = hooks.on_ask_about.clone();
                     let orb_clone = orb.clone();
+                    // Clone before the click Fn so the paint Fn can bind many chips.
+                    let refresh = {
+                        let render_slot = render_slot.clone();
+                        Rc::new(move || {
+                            if let Some(f) = render_slot.borrow().as_ref() {
+                                f();
+                            }
+                        }) as Rc<dyn Fn()>
+                    };
                     chip.connect_clicked(move |_| {
-                        let refresh = {
-                            let render_slot = render_slot.clone();
-                            Rc::new(move || {
-                                if let Some(f) = render_slot.borrow().as_ref() {
-                                    f();
-                                }
-                            }) as Rc<dyn Fn()>
-                        };
-                        show_collab_detail_dialog(&parent, &orb_clone, on_ask.clone(), refresh);
+                        show_collab_detail_dialog(
+                            &parent,
+                            &orb_clone,
+                            on_ask.clone(),
+                            refresh.clone(),
+                        );
                     });
                     constellation.append(&chip);
                 }
@@ -1829,14 +2403,13 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                     let kind = item.kind.clone();
                     ask.connect_clicked(move |_| {
                         on_ask(
-                            title.clone(),
+                            DiscussTopic::Generic {
+                                title: title.clone(),
+                                kind: kind.clone(),
+                                detail: String::new(),
+                            },
                             format!(
-                                "About this {kind} item:
-
-{title}
-{detail}
-
-What should we do?"
+                                "About this {kind} item:\n\n{title}\n{detail}\n\nWhat should we do?"
                             ),
                         );
                     });
@@ -1881,37 +2454,38 @@ What should we do?"
                         plugin.ask_prompt.clone()
                     };
                     ask.connect_clicked(move |_| {
-                        on_ask(title.clone(), prompt.clone());
+                        on_ask(
+                            DiscussTopic::Generic {
+                                title: title.clone(),
+                                kind: "extension".to_owned(),
+                                detail: String::new(),
+                            },
+                            prompt.clone(),
+                        );
                     });
                     card.append(&ask);
                     plugin_body.append(&card);
                 }
             }
 
-            // Badge pill labels for attention counts.
-            let decision_n = data.decisions.len();
-            let pending_plan_n = data
-                .plans
-                .iter()
-                .filter(|p| {
-                    matches!(
-                        p.status.to_lowercase().as_str(),
-                        "pending_review" | "held" | "adjusted" | "proposed"
-                    )
-                })
-                .count();
+            // Last-seen "new" badges (iPhone pulse_note_* parity).
+            let seen = load_pulse_seen();
+            let selected_cat = selected.get();
             for (cat, btn) in pill_buttons.borrow().iter() {
-                let label = match cat {
-                    PulseCategory::Decisions if decision_n > 0 => {
-                        format!("{} ({decision_n})", cat.title())
-                    }
-                    PulseCategory::Plans if pending_plan_n > 0 => {
-                        format!("{} ({pending_plan_n})", cat.title())
-                    }
-                    _ => cat.title().to_owned(),
+                let n = if *cat == selected_cat {
+                    0
+                } else {
+                    new_count_for_category(&data, *cat, &seen)
+                };
+                let label = if n > 0 {
+                    format!("{} · {n} new", cat.title())
+                } else {
+                    cat.title().to_owned()
                 };
                 btn.set_label(&label);
             }
+            // Visiting a pill clears its "new" set (also covers feed refresh while viewing).
+            mark_category_seen(&data, selected_cat);
 
             clear_box(&fleet_body);
             if data.fleet_peers.is_empty() {
@@ -1989,10 +2563,13 @@ What should we do?"
                     let pstatus = status.to_owned();
                     ask.connect_clicked(move |_| {
                         on_ask(
-                            pname.clone(),
+                            DiscussTopic::Generic {
+                                title: pname.clone(),
+                                kind: "fleet peer".to_owned(),
+                                detail: String::new(),
+                            },
                             format!(
-                                "Fleet peer {pname} is currently {pstatus}. \
-What should we do with them, or what messages are waiting?"
+                                "Fleet peer {pname} is currently {pstatus}. What should we do with them, or what messages are waiting?"
                             ),
                         );
                     });
@@ -2009,16 +2586,29 @@ What should we do with them, or what messages are waiting?"
                 mission_statement.set_label(&data.mission.statement);
             }
             clear_box(&commitments);
+            let mission_statement_for_chips = data.mission.statement.clone();
             for target in &data.mission.targets {
-                let chip = gtk::Button::with_label(target);
+                let chip = gtk::Button::with_label(&target.title);
                 chip.add_css_class("flat");
                 chip.add_css_class("centurion-home-commitment");
-                let title = target.clone();
                 let on_ask = hooks.on_ask_about.clone();
+                let commitment = target.clone();
+                let mission_statement = mission_statement_for_chips.clone();
                 chip.connect_clicked(move |_| {
                     on_ask(
-                        title.clone(),
-                        format!("Let's talk about my commitment: {title}"),
+                        DiscussTopic::Commitment {
+                            id: commitment.id.clone(),
+                            title: commitment.title.clone(),
+                            description: commitment.description.clone(),
+                            active: true,
+                            mission_statement: mission_statement.clone(),
+                        },
+                        format!(
+                            "Let's talk about my commitment: {}
+
+{}",
+                            commitment.title, commitment.description
+                        ),
                     );
                 });
                 commitments.append(&chip);
@@ -2097,11 +2687,17 @@ What should we do with them, or what messages are waiting?"
                         let ask = gtk::Button::with_label("Ask about this");
                         ask.add_css_class("suggested-action");
                         let on_ask = hooks.on_ask_about.clone();
+                        let live_id = live.id.clone();
                         let summary = live.summary.clone();
                         let detail = live.detail.clone();
                         ask.connect_clicked(move |_| {
                             on_ask(
-                                summary.clone(),
+                                DiscussTopic::Collab {
+                                    id: live_id.clone(),
+                                    name: summary.clone(),
+                                    pulse: "active".to_owned(),
+                                    objective: detail.clone(),
+                                },
                                 format!(
                                     "You're working on: {summary}\n\nRecent: {detail}\n\nWhat's the status and what do you need from me?"
                                 ),
@@ -2120,9 +2716,12 @@ What should we do with them, or what messages are waiting?"
                             "Propose a plan",
                             move || {
                                 on_ask(
-                                    "Propose a plan".to_owned(),
-                                    "Propose a plan for what we should work on next. \
-Outline the goal, steps, and what you need from me before acting."
+                                    DiscussTopic::Generic {
+                                        title: "Propose a plan".to_owned(),
+                                        kind: "plan".to_owned(),
+                                        detail: String::new(),
+                                    },
+                                    "Propose a plan for what we should work on next. Outline the goal, steps, and what you need from me before acting."
                                         .to_owned(),
                                 );
                             },
@@ -2137,7 +2736,12 @@ so you can partner with me on it.".to_owned()
 What should we focus on next?"
                                     )
                                 };
-                                on_ask2("Life Mission".to_owned(), prompt);
+                                on_ask2(
+                                    DiscussTopic::Mission {
+                                        statement: mission_text.clone(),
+                                    },
+                                    prompt,
+                                );
                             }) as Rc<dyn Fn()>),
                         ));
                     }
@@ -2173,9 +2777,12 @@ What should we focus on next?"
                             "Propose a plan",
                             move || {
                                 on_ask(
-                                    "Propose a plan".to_owned(),
-                                    "Propose a plan for what we should work on next. \
-Outline the goal, steps, and what you need from me before acting."
+                                    DiscussTopic::Generic {
+                                        title: "Propose a plan".to_owned(),
+                                        kind: "plan".to_owned(),
+                                        detail: String::new(),
+                                    },
+                                    "Propose a plan for what we should work on next. Outline the goal, steps, and what you need from me before acting."
                                         .to_owned(),
                                 );
                             },
@@ -2231,6 +2838,45 @@ Outline the goal, steps, and what you need from me before acting."
                             }
                         }
                     }
+                    if !data.templates.is_empty() {
+                        category_body.append(&section_heading("Templates"));
+                        for tmpl in &data.templates {
+                            let card = card_box();
+                            card.append(
+                                &gtk::Label::builder()
+                                    .label(&tmpl.title)
+                                    .wrap(true)
+                                    .xalign(0.0)
+                                    .css_classes(["heading"])
+                                    .build(),
+                            );
+                            if !tmpl.summary.is_empty() {
+                                card.append(
+                                    &gtk::Label::builder()
+                                        .label(&tmpl.summary)
+                                        .wrap(true)
+                                        .xalign(0.0)
+                                        .css_classes(["dim-label"])
+                                        .build(),
+                                );
+                            }
+                            let use_btn = gtk::Button::with_label("Use template");
+                            use_btn.add_css_class("flat");
+                            let parent = container.clone().upcast::<gtk::Widget>();
+                            let refresh = refresh_all.clone();
+                            let template_id = tmpl.id.clone();
+                            use_btn.connect_clicked(move |_| {
+                                let parent = parent.clone();
+                                let refresh = refresh.clone();
+                                let template_id = template_id.clone();
+                                run_async_result(parent, refresh, move || {
+                                    instantiate_plan_template(&template_id)
+                                });
+                            });
+                            card.append(&use_btn);
+                            category_body.append(&card);
+                        }
+                    }
                 }
                 PulseCategory::Wins => {
                     if data.wins.is_empty() {
@@ -2257,10 +2903,17 @@ Outline the goal, steps, and what you need from me before acting."
                             ask.add_css_class("flat");
                             let on_ask = hooks.on_ask_about.clone();
                             let summary = win.summary.clone();
+                            let detail = win.detail.clone();
                             ask.connect_clicked(move |_| {
                                 on_ask(
-                                    summary.clone(),
-                                    format!("Tell me more about this finished work:\n\n{summary}"),
+                                    DiscussTopic::Generic {
+                                        title: summary.clone(),
+                                        kind: "finished work".to_owned(),
+                                        detail: detail.clone(),
+                                    },
+                                    format!(
+                                        "Tell me more about this finished work:\n\n{summary}\n\n{detail}"
+                                    ),
                                 );
                             });
                             card.append(&ask);
@@ -2298,7 +2951,18 @@ Outline the goal, steps, and what you need from me before acting."
                             open.add_css_class("flat");
                             let parent = container.clone();
                             let doc_c = doc.clone();
-                            open.connect_clicked(move |_| show_document_dialog(&parent, &doc_c));
+                            let on_ask = hooks.on_ask_about.clone();
+                            let refresh = refresh_all.clone();
+                            let plans_snapshot = data.plans.clone();
+                            open.connect_clicked(move |_| {
+                                show_document_dialog(
+                                    &parent,
+                                    &doc_c,
+                                    on_ask.clone(),
+                                    refresh.clone(),
+                                    &plans_snapshot,
+                                );
+                            });
                             card.append(&open);
                             category_body.append(&card);
                         }
@@ -2336,6 +3000,14 @@ Outline the goal, steps, and what you need from me before acting."
                             hold.add_css_class("flat");
                             let reject = gtk::Button::with_label("Reject");
                             reject.add_css_class("flat");
+                            let comment = gtk::Button::with_label(
+                                if decision.plan_id.is_some() {
+                                    "Comment"
+                                } else {
+                                    "Note"
+                                },
+                            );
+                            comment.add_css_class("flat");
 
                             let plan_id = decision.plan_id.clone();
                             let signal_id = decision.signal_id.clone();
@@ -2360,26 +3032,79 @@ Outline the goal, steps, and what you need from me before acting."
                             let on_ask = hooks.on_ask_about.clone();
                             let title = decision.title.clone();
                             let context = decision.context.clone();
+                            let plan_id_adj = decision.plan_id.clone();
+                            let refresh_adj = refresh_all.clone();
+                            let parent_adj = container.clone().upcast::<gtk::Widget>();
+                            let plans_for_adj = data.plans.clone();
                             adjust.connect_clicked(move |_| {
-                                on_ask(
-                                    title.clone(),
-                                    format!(
-                                        "I'd like to adjust this decision.\n\n{title}\n\n{context}\n\nWhat should change?"
-                                    ),
+                                let kickoff = format!(
+                                    "I'd like to adjust this decision.\n\n{title}\n\n{context}\n\nWhat should change?"
                                 );
+                                if let Some(pid) = plan_id_adj.clone() {
+                                    let plan_from_feed = plans_for_adj
+                                        .iter()
+                                        .find(|p| p.id == pid)
+                                        .cloned();
+                                    let refresh_adj = refresh_adj.clone();
+                                    let parent_adj = parent_adj.clone();
+                                    let on_ask = on_ask.clone();
+                                    let title = title.clone();
+                                    let context = context.clone();
+                                    let on_ok = Rc::new(move || {
+                                        let topic = if let Some(ref plan) = plan_from_feed {
+                                            plan_topic_from_item(plan)
+                                        } else if let Some(plan) = fetch_plan_item(&pid) {
+                                            plan_topic_from_item(&plan)
+                                        } else {
+                                            DiscussTopic::Plan {
+                                                id: pid.clone(),
+                                                title: title.clone(),
+                                                status: "adjusted".to_owned(),
+                                                goal: String::new(),
+                                                summary: context.clone(),
+                                                steps: Vec::new(),
+                                                risks: Vec::new(),
+                                            }
+                                        };
+                                        on_ask(topic, kickoff.clone());
+                                    }) as Rc<dyn Fn()>;
+                                    let pid_work = pid.clone();
+                                    run_async_then(
+                                        parent_adj,
+                                        refresh_adj,
+                                        move || decide_plan(&pid_work, "request_changes"),
+                                        on_ok,
+                                    );
+                                } else {
+                                    on_ask(
+                                        DiscussTopic::Generic {
+                                            title: title.clone(),
+                                            kind: "decision".to_owned(),
+                                            detail: context.clone(),
+                                        },
+                                        kickoff,
+                                    );
+                                }
                             });
 
                             let plan_id = decision.plan_id.clone();
+                            let signal_id = decision.signal_id.clone();
                             let refresh_h = refresh_all.clone();
                             let parent_h = container.clone().upcast::<gtk::Widget>();
                             hold.connect_clicked(move |_| {
-                                if let Some(pid) = plan_id.clone() {
-                                    let refresh_h = refresh_h.clone();
-                                    let parent_h = parent_h.clone();
-                                    run_async_result(parent_h, refresh_h, move || {
-                                        decide_plan(&pid, "hold")
-                                    });
-                                }
+                                let plan_id = plan_id.clone();
+                                let signal_id = signal_id.clone();
+                                let refresh_h = refresh_h.clone();
+                                let parent_h = parent_h.clone();
+                                run_async_result(parent_h, refresh_h, move || {
+                                    if let Some(pid) = plan_id.as_ref() {
+                                        decide_plan(pid, "hold")?;
+                                    }
+                                    if let Some(sid) = signal_id.as_ref() {
+                                        resolve_signal(sid, "Hold")?;
+                                    }
+                                    Ok(())
+                                });
                             });
 
                             let plan_id = decision.plan_id.clone();
@@ -2406,6 +3131,27 @@ Outline the goal, steps, and what you need from me before acting."
                             actions.append(&adjust);
                             actions.append(&hold);
                             actions.append(&reject);
+                            if let Some(pid) = decision.plan_id.clone() {
+                                let parent_c = container.clone();
+                                let refresh_c = refresh_all.clone();
+                                comment.connect_clicked(move |_| {
+                                    prompt_plan_comment(&parent_c, pid.clone(), refresh_c.clone());
+                                });
+                                actions.append(&comment);
+                            } else if let Some(sid) = decision.signal_id.clone() {
+                                let parent_c = container.clone();
+                                let refresh_c = refresh_all.clone();
+                                comment.connect_clicked(move |_| {
+                                    prompt_signal_note(
+                                        &parent_c,
+                                        sid.clone(),
+                                        "Add note",
+                                        "Note for this decision",
+                                        refresh_c.clone(),
+                                    );
+                                });
+                                actions.append(&comment);
+                            }
                             card.append(&actions);
                             category_body.append(&card);
                         }
@@ -2442,8 +3188,16 @@ Outline the goal, steps, and what you need from me before acting."
                             ask.add_css_class("flat");
                             let on_ask = hooks.on_ask_about.clone();
                             let text = thought.text.clone();
+                            let meta = meta.clone();
                             ask.connect_clicked(move |_| {
-                                on_ask(text.clone(), format!("About this update:\n\n{text}"));
+                                on_ask(
+                                    DiscussTopic::Generic {
+                                        title: text.clone(),
+                                        kind: "update".to_owned(),
+                                        detail: meta.clone(),
+                                    },
+                                    format!("About this update ({meta}):\n\n{text}"),
+                                );
                             });
                             card.append(&ask);
                             category_body.append(&card);
@@ -2521,11 +3275,13 @@ Outline the goal, steps, and what you need from me before acting."
         let selected = selected.clone();
         let pill_buttons_for_toggle = pill_buttons.clone();
         let paint = paint.clone();
+        let feed_for_seen = feed.clone();
         btn.connect_toggled(move |b| {
             if !b.is_active() {
                 return;
             }
             selected.set(cat);
+            mark_category_seen(&feed_for_seen.borrow(), cat);
             for (other_cat, other) in pill_buttons_for_toggle.borrow().iter() {
                 if *other_cat != cat {
                     other.set_active(false);

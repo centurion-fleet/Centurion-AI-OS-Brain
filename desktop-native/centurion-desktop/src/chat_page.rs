@@ -62,25 +62,141 @@ struct SessionSummary {
     last_active_label: String,
 }
 
-/// Handle for other tabs (Home) to seed the Chat composer.
+/// Structured topic for Home → Chat discuss so Centurion knows *what* is in play.
+#[derive(Clone, Debug)]
+pub enum DiscussTopic {
+    Plan {
+        id: String,
+        title: String,
+        status: String,
+        goal: String,
+        summary: String,
+        steps: Vec<String>,
+        risks: Vec<String>,
+    },
+    Collab {
+        id: String,
+        name: String,
+        pulse: String,
+        objective: String,
+    },
+    Document {
+        title: String,
+        summary: String,
+        plan_id: Option<String>,
+        body_excerpt: String,
+    },
+    Mission {
+        statement: String,
+    },
+    Commitment {
+        id: String,
+        title: String,
+        description: String,
+        active: bool,
+        mission_statement: String,
+    },
+    Horizon {
+        layer: String,
+        detail: String,
+    },
+    Generic {
+        title: String,
+        kind: String,
+        detail: String,
+    },
+}
+
+impl DiscussTopic {
+    pub fn banner_label(&self) -> String {
+        match self {
+            Self::Plan { title, .. } => format!("Discussing plan · {title}"),
+            Self::Collab { name, .. } => format!("Discussing collaboration · {name}"),
+            Self::Document { title, .. } => format!("Discussing document · {title}"),
+            Self::Mission { .. } => "Discussing Life Mission".to_owned(),
+            Self::Commitment { title, .. } => format!("Discussing commitment · {title}"),
+            Self::Horizon { layer, .. } => format!("Discussing Memory Horizon · {layer}"),
+            Self::Generic { title, kind, .. } => {
+                if kind.is_empty() {
+                    format!("Discussing · {title}")
+                } else {
+                    format!("Discussing {kind} · {title}")
+                }
+            }
+        }
+    }
+
+    pub fn from_title_detail(title: &str, detail: &str) -> Self {
+        Self::Generic {
+            title: title.to_owned(),
+            kind: "topic".to_owned(),
+            detail: detail.to_owned(),
+        }
+    }
+
+    pub fn horizon(layer: &str, detail: &str) -> Self {
+        Self::Horizon {
+            layer: layer.to_owned(),
+            detail: detail.to_owned(),
+        }
+    }
+}
+
+/// Handle for other tabs (Home) to seed the Chat composer with topic context.
 #[derive(Clone)]
 pub struct ChatHandle {
     input: gtk::Entry,
+    active_discuss: Rc<RefCell<Option<DiscussTopic>>>,
+    context_banner: gtk::Label,
+    context_bar: gtk::Box,
     on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
 }
 
 impl ChatHandle {
-    /// Prefill the composer with a discuss prompt and focus it.
-    pub fn seed_discuss(&self, title: &str, detail: &str) {
-        let body = if detail.trim().is_empty() {
-            format!("About “{title}”:\n\n")
+    fn refresh_banner(&self) {
+        match self.active_discuss.borrow().as_ref() {
+            Some(topic) => {
+                self.context_banner.set_label(&topic.banner_label());
+                self.context_bar.set_visible(true);
+            }
+            None => {
+                self.context_banner.set_label("");
+                self.context_bar.set_visible(false);
+            }
+        }
+    }
+
+    /// Prefill composer and remember structured topic for outbound framing.
+    pub fn seed_discuss_topic(&self, topic: DiscussTopic, kickoff: &str) {
+        *self.active_discuss.borrow_mut() = Some(topic);
+        self.refresh_banner();
+        let body = if kickoff.trim().is_empty() {
+            String::new()
+        } else if kickoff.ends_with('\n') {
+            kickoff.to_owned()
         } else {
-            format!("{detail}\n\n")
+            format!("{kickoff}\n\n")
         };
         self.input.set_text(&body);
         self.input.grab_focus();
         let len = body.chars().count() as i32;
         self.input.set_position(len);
+    }
+
+    /// Back-compat: title + detail prose only (Horizon and similar).
+    pub fn seed_discuss(&self, title: &str, detail: &str) {
+        let topic = DiscussTopic::from_title_detail(title, detail);
+        let kickoff = if detail.trim().is_empty() {
+            format!("About “{title}”:\n\n")
+        } else {
+            detail.to_owned()
+        };
+        self.seed_discuss_topic(topic, &kickoff);
+    }
+
+    pub fn clear_discuss(&self) {
+        *self.active_discuss.borrow_mut() = None;
+        self.refresh_banner();
     }
 
     /// Wire Settings Fix Thinking wizard (set after the main window exists).
@@ -162,7 +278,7 @@ const PLAN_ARTIFACT_FENCE: &str = "plan-artifact";
 
 fn frame_propose_first(user_text: &str) -> String {
     format!(
-        "[Sovereign AI Remote — Propose first]\n\
+        "[Sovereign AI Brain — Propose first]\n\
          The user wants a plan before any consequential action.\n\n\
          For this turn only:\n\
          - Draft a concrete plan. Do not implement, send, edit project files, run mutating commands, or take external actions.\n\
@@ -175,6 +291,375 @@ fn frame_propose_first(user_text: &str) -> String {
          User message:\n\
          {user_text}"
     )
+}
+
+const PLAN_UPDATE_FENCE: &str = "plan-update";
+
+fn frame_plan_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Plan {
+        id,
+        title,
+        status,
+        goal,
+        summary,
+        steps,
+        risks,
+    } = topic
+    else {
+        return user_text.to_owned();
+    };
+    let steps_block = if steps.is_empty() {
+        "(none yet)".to_owned()
+    } else {
+        steps
+            .iter()
+            .enumerate()
+            .map(|(i, s)| format!("{}. {s}", i + 1))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let risks_block = if risks.is_empty() {
+        "(none listed)".to_owned()
+    } else {
+        risks
+            .iter()
+            .map(|r| format!("- {r}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let goal = if goal.is_empty() { "(not set)" } else { goal.as_str() };
+    let summary = if summary.is_empty() { "(none)" } else { summary.as_str() };
+    let status = if status.is_empty() { "pending_review" } else { status.as_str() };
+    format!(
+        "[Sovereign AI Brain — Plan discuss]\n\
+The user is continuing Chat about this reviewable Plan (not their life Mission).\n\n\
+Plan ID: {id}\n\
+Title: {title}\n\
+Status: {status}\n\
+Goal: {goal}\n\
+Steps:\n\
+{steps_block}\n\
+Risks:\n\
+{risks_block}\n\
+Summary: {summary}\n\n\
+Help them refine, proceed guidance, or revise the plan. Do not take irreversible \
+external actions unless they clearly ask you to execute after Proceed.\n\n\
+If you and the user agree on plan edits, end your reply with a fenced JSON block \
+exactly like this (omit fields you are not changing):\n\n\
+```{PLAN_UPDATE_FENCE}\n\
+{{\"plan_id\":\"{id}\",\"title\":\"Updated title\",\"goal\":\"Updated goal\",\"steps\":[\"Step 1\"],\"risks\":[],\"open_questions\":[],\"summary\":\"Short summary\",\"status\":\"pending_review\"}}\n\
+```\n\n\
+Allowed status values: pending_review, proceeded, held, adjusted, completed, rejected.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn frame_collab_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Collab {
+        id,
+        name,
+        pulse,
+        objective,
+    } = topic
+    else {
+        return user_text.to_owned();
+    };
+    let id_line = if id.is_empty() {
+        String::new()
+    } else {
+        format!("Collaboration ID: {id}\n")
+    };
+    format!(
+        "[Sovereign AI Brain — Collaboration discuss]\n\
+The user is talking about an active collaboration / swarm on this Brain.\n\n\
+{id_line}Name: {name}\n\
+Pulse: {pulse}\n\
+Objective: {objective}\n\n\
+Stay grounded in this collaboration. Ask before irreversible external actions.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn frame_document_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Document {
+        title,
+        summary,
+        plan_id,
+        body_excerpt,
+    } = topic
+    else {
+        return user_text.to_owned();
+    };
+    let plan_line = plan_id
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .map(|p| format!("Linked plan ID: {p}\n"))
+        .unwrap_or_default();
+    let excerpt = if body_excerpt.trim().is_empty() {
+        summary.clone()
+    } else {
+        body_excerpt.chars().take(1200).collect()
+    };
+    format!(
+        "[Sovereign AI Brain — Document discuss]\n\
+The user is discussing a document / outcome on Home.\n\n\
+Title: {title}\n\
+{plan_line}Summary: {summary}\n\n\
+Excerpt:\n\
+{excerpt}\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Mission { statement } = topic else {
+        return user_text.to_owned();
+    };
+    let statement = if statement.trim().is_empty() {
+        "(not set yet — help them shape one)"
+    } else {
+        statement.as_str()
+    };
+    format!(
+        "[Sovereign AI Brain — Life Mission discuss]\n\
+The user is discussing their Life Mission (direction), not a single reviewable Plan.\n\n\
+Current Mission:\n\
+{statement}\n\n\
+Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn frame_generic_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Generic { title, kind, detail } = topic else {
+        return user_text.to_owned();
+    };
+    let detail_block = if detail.trim().is_empty() {
+        String::new()
+    } else {
+        format!("Context:\n{detail}\n\n")
+    };
+    format!(
+        "[Sovereign AI Brain — {kind} discuss]\n\
+Topic: {title}\n\n\
+{detail_block}Keep this topic in context for the reply.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn frame_horizon_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Horizon { layer, detail } = topic else {
+        return user_text.to_owned();
+    };
+    format!(
+        "[Sovereign AI Brain — Memory Horizon discuss]\n\
+Layer: {layer}\n\n\
+{detail}\n\n\
+Help the user understand and manage this memory layer. Do not invent storage they do not have.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+const COMMITMENT_UPDATE_FENCE: &str = "mission-update";
+
+fn frame_commitment_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Commitment {
+        id,
+        title,
+        description,
+        active,
+        mission_statement,
+    } = topic
+    else {
+        return user_text.to_owned();
+    };
+    let mission_line = if mission_statement.trim().is_empty() {
+        "(not set yet)"
+    } else {
+        mission_statement.as_str()
+    };
+    let desc = if description.trim().is_empty() {
+        "(none)"
+    } else {
+        description.as_str()
+    };
+    format!(
+        "[Sovereign AI Brain — Living Commitment chat]\n\
+Life mission: {mission_line}\n\
+Commitment: {title}\n\
+Description: {desc}\n\
+Commitment ID: {id}\n\
+Active on Home: {active}\n\n\
+The user is discussing or revising this living commitment. You may suggest renames, \
+clearer descriptions, or deactivating it. If you apply a change the user agrees to, \
+end your reply with a fenced block exactly like this (omit fields you are not changing):\n\n\
+```{COMMITMENT_UPDATE_FENCE}\n\
+{{\"commitment_id\":\"{id}\",\"title\":\"New title\",\"description\":\"New description\",\"active\":true}}\n\
+```\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+fn extract_commitment_update_block(response: &str) -> Option<String> {
+    let open = format!("```{COMMITMENT_UPDATE_FENCE}");
+    let start = response.find(&open)?;
+    let after = &response[start + open.len()..];
+    let close = after.find("```")?;
+    Some(after[..close].trim().to_owned())
+}
+
+fn strip_commitment_update(response: &str) -> String {
+    let open = format!("```{COMMITMENT_UPDATE_FENCE}");
+    let Some(start) = response.find(&open) else {
+        return response.trim().to_owned();
+    };
+    let mut result = response[..start].to_owned();
+    let after_open = &response[start + open.len()..];
+    if let Some(close) = after_open.find("```") {
+        result.push_str(&after_open[close + 3..]);
+    }
+    result.trim().to_owned()
+}
+
+fn apply_commitment_update_from_response(response: &str, fallback_id: &str) -> Option<()> {
+    let block = extract_commitment_update_block(response)?;
+    let value: Value = serde_json::from_str(&block).ok()?;
+    let obj = value.as_object()?;
+    let mut cid = obj
+        .get("commitment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    if cid.is_empty() {
+        cid = fallback_id.to_owned();
+    }
+    if cid.is_empty() {
+        return None;
+    }
+    let mission_resp = run_bridge_action("mission_get", serde_json::json!({}))?;
+    if mission_resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let mut mission = mission_resp.get("mission")?.clone();
+    let targets = mission
+        .get_mut("targets")
+        .and_then(|v| v.as_array_mut())?;
+    let mut found = false;
+    let mut remove_idx = None;
+    for (i, target) in targets.iter_mut().enumerate() {
+        let tid = target
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let title = target
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        if tid != cid && title != cid {
+            continue;
+        }
+        found = true;
+        if let Some(t) = obj.get("title").and_then(|v| v.as_str()) {
+            if !t.trim().is_empty() {
+                target
+                    .as_object_mut()?
+                    .insert("title".to_owned(), Value::String(t.trim().to_owned()));
+            }
+        }
+        if let Some(d) = obj.get("description").and_then(|v| v.as_str()) {
+            target
+                .as_object_mut()?
+                .insert("description".to_owned(), Value::String(d.trim().to_owned()));
+        }
+        if obj.get("active").and_then(|v| v.as_bool()) == Some(false) {
+            remove_idx = Some(i);
+        }
+        break;
+    }
+    if !found {
+        return None;
+    }
+    if let Some(i) = remove_idx {
+        targets.remove(i);
+    }
+    let put = run_bridge_action(
+        "mission_put",
+        serde_json::json!({ "mission": mission }),
+    )?;
+    if put.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Some(())
+    } else {
+        None
+    }
+}
+
+fn frame_discuss_outbound(user_text: &str, topic: &DiscussTopic) -> String {
+    match topic {
+        DiscussTopic::Plan { .. } => frame_plan_discuss(user_text, topic),
+        DiscussTopic::Collab { .. } => frame_collab_discuss(user_text, topic),
+        DiscussTopic::Document { .. } => frame_document_discuss(user_text, topic),
+        DiscussTopic::Mission { .. } => frame_mission_discuss(user_text, topic),
+        DiscussTopic::Commitment { .. } => frame_commitment_discuss(user_text, topic),
+        DiscussTopic::Horizon { .. } => frame_horizon_discuss(user_text, topic),
+        DiscussTopic::Generic { .. } => frame_generic_discuss(user_text, topic),
+    }
+}
+
+fn extract_plan_update_block(response: &str) -> Option<String> {
+    let open = format!("```{PLAN_UPDATE_FENCE}");
+    let start = response.find(&open)?;
+    let after = &response[start + open.len()..];
+    let close = after.find("```")?;
+    Some(after[..close].trim().to_owned())
+}
+
+fn strip_plan_update(response: &str) -> String {
+    let open = format!("```{PLAN_UPDATE_FENCE}");
+    let Some(start) = response.find(&open) else {
+        return response.trim().to_owned();
+    };
+    let mut result = response[..start].to_owned();
+    let after_open = &response[start + open.len()..];
+    if let Some(close) = after_open.find("```") {
+        result.push_str(&after_open[close + 3..]);
+    }
+    result.trim().to_owned()
+}
+
+fn apply_plan_update_from_response(response: &str, fallback_plan_id: &str) -> Option<()> {
+    let block = extract_plan_update_block(response)?;
+    let mut value: Value = serde_json::from_str(&block).ok()?;
+    let obj = value.as_object_mut()?;
+    if obj
+        .get("plan_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+        && !fallback_plan_id.is_empty()
+    {
+        obj.insert("plan_id".to_owned(), Value::String(fallback_plan_id.to_owned()));
+    }
+    // Host put_plan keys on `id`.
+    if let Some(pid) = obj
+        .get("plan_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+    {
+        obj.insert("id".to_owned(), Value::String(pid));
+    }
+    let _ = put_plan_artifact(value);
+    Some(())
 }
 
 fn extract_plan_artifact_block(response: &str) -> Option<String> {
@@ -1023,7 +1508,7 @@ fn run_chat_turn(
         "text": text,
         "session_id": session_id,
     });
-    let mut line = match serde_json::to_vec(&payload) {
+    let line = match serde_json::to_vec(&payload) {
         Ok(mut bytes) => {
             bytes.push(b'\n');
             bytes
@@ -1583,6 +2068,39 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     error_row.append(&fix_thinking_button);
     bottom.append(&error_row);
 
+    let active_discuss: Rc<RefCell<Option<DiscussTopic>>> = Rc::new(RefCell::new(None));
+    let context_bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    context_bar.set_margin_start(16);
+    context_bar.set_margin_end(16);
+    context_bar.set_margin_bottom(4);
+    context_bar.set_visible(false);
+    context_bar.add_css_class("centurion-chat-context");
+    let context_banner = gtk::Label::builder()
+        .label("")
+        .wrap(true)
+        .xalign(0.0)
+        .hexpand(true)
+        .css_classes(["dim-label", "caption"])
+        .build();
+    let clear_context = gtk::Button::with_label("Clear topic");
+    clear_context.add_css_class("flat");
+    clear_context.set_tooltip_text(Some(
+        "Stop framing replies around this Home topic",
+    ));
+    {
+        let active_discuss = active_discuss.clone();
+        let context_banner = context_banner.clone();
+        let context_bar = context_bar.clone();
+        clear_context.connect_clicked(move |_| {
+            *active_discuss.borrow_mut() = None;
+            context_banner.set_label("");
+            context_bar.set_visible(false);
+        });
+    }
+    context_bar.append(&context_banner);
+    context_bar.append(&clear_context);
+    bottom.append(&context_bar);
+
     let on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     {
         let on_fix_thinking = on_fix_thinking.clone();
@@ -1858,12 +2376,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let set_sending = set_sending.clone();
         let assistant_name = assistant_name.clone();
         let follow_bottom = follow_bottom.clone();
+        let active_discuss = active_discuss.clone();
+        let context_banner = context_banner.clone();
+        let context_bar = context_bar.clone();
         move || {
             clear_approval();
             set_sending(false);
             set_error(None);
             *assistant_name.borrow_mut() = load_assistant_display_name();
             messages.borrow_mut().clear();
+            *active_discuss.borrow_mut() = None;
+            context_banner.set_label("");
+            context_bar.set_visible(false);
             // Commit continuity for the active chat, then lazy-clear so the next
             // send creates a fresh session without an empty Conversations ghost.
             if let Some(sid) = session_id.borrow().clone() {
@@ -2373,6 +2897,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let intent = intent.clone();
         let attachments = attachments.clone();
         let refresh_attachments = refresh_attachments.clone();
+        let active_discuss = active_discuss.clone();
         move || {
             if *is_sending.borrow() {
                 return;
@@ -2402,11 +2927,29 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             clear_approval();
             set_sending(true);
 
+            let discuss_topic = active_discuss.borrow().clone();
             let mut outbound = format_attachment_outbound(&text, &pending);
             if propose_first {
+                // Propose-first is its own framing; drop topic frame for this turn.
                 outbound = frame_propose_first(&outbound);
+            } else if let Some(ref topic) = discuss_topic {
+                outbound = frame_discuss_outbound(&outbound, topic);
             }
             let user_request = text.clone();
+            let plan_id_for_update = match &discuss_topic {
+                Some(DiscussTopic::Plan { id, .. }) => id.clone(),
+                Some(DiscussTopic::Document {
+                    plan_id: Some(pid), ..
+                }) => pid.clone(),
+                _ => String::new(),
+            };
+            let commitment_id_for_update = match &discuss_topic {
+                Some(DiscussTopic::Commitment { id, .. }) => id.clone(),
+                _ => String::new(),
+            };
+            let applying_plan_update = !propose_first && !plan_id_for_update.is_empty();
+            let applying_commitment_update =
+                !propose_first && !commitment_id_for_update.is_empty();
 
             let (event_tx, event_rx) = mpsc::channel::<WorkerEvent>();
             let (approval_tx, approval_rx) = mpsc::channel::<ApprovalDecision>();
@@ -2457,6 +3000,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                 *session_id.borrow_mut() = Some(turn.session_id);
                                 let mut display = if propose_first {
                                     strip_plan_artifact(&turn.text)
+                                } else if applying_plan_update {
+                                    strip_plan_update(&turn.text)
+                                } else if applying_commitment_update {
+                                    strip_commitment_update(&turn.text)
                                 } else {
                                     turn.text.clone()
                                 };
@@ -2475,6 +3022,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             "\n\nYou can review this plan on Home under Plans, Needs your choice, or Documents.",
                                         );
                                     }
+                                } else if applying_plan_update {
+                                    let raw = turn.text.clone();
+                                    let pid = plan_id_for_update.clone();
+                                    thread::spawn(move || {
+                                        let _ = apply_plan_update_from_response(&raw, &pid);
+                                    });
+                                } else if applying_commitment_update {
+                                    let raw = turn.text.clone();
+                                    let cid = commitment_id_for_update.clone();
+                                    thread::spawn(move || {
+                                        let _ = apply_commitment_update_from_response(&raw, &cid);
+                                    });
                                 }
                                 messages.borrow_mut().push(ChatMessage {
                                     role: ChatRole::Assistant,
@@ -2521,6 +3080,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     let handle = ChatHandle {
         input: input.clone(),
+        active_discuss: active_discuss.clone(),
+        context_banner: context_banner.clone(),
+        context_bar: context_bar.clone(),
         on_fix_thinking,
     };
     (container, handle)
