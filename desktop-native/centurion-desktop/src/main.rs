@@ -1307,13 +1307,21 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .hexpand(true)
             .build();
 
+        let attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
+            Rc::new(RefCell::new(Rc::new(|_: u32| {})));
         let (home, home_handle) = {
             let stack = stack.clone();
             let chat_handle = chat_handle.clone();
+            let attention_sink_for_hooks = attention_sink.clone();
             crate::home_page::build(crate::home_page::HomeHooks {
-                on_ask_about: Rc::new(move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
-                    chat_handle.seed_discuss_topic(topic, &kickoff);
-                    stack.set_visible_child_name("chat");
+                on_ask_about: Rc::new(
+                    move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
+                        chat_handle.seed_discuss_topic(topic, &kickoff);
+                        stack.set_visible_child_name("chat");
+                    },
+                ),
+                on_attention_changed: Rc::new(move |n: u32| {
+                    (attention_sink_for_hooks.borrow())(n);
                 }),
             })
         };
@@ -1327,19 +1335,72 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         settings_scroll.set_vexpand(true);
         settings_scroll.set_hexpand(true);
 
+        let refresh_home_badge = {
+            let stack = stack.clone();
+            let home = home.clone();
+            let home_handle = home_handle.clone();
+            Rc::new(move || {
+                let n = home_handle.attention_count();
+                let home_title = if n > 0 {
+                    format!("Home ({n})")
+                } else {
+                    "Home".to_owned()
+                };
+                stack.page(&home).set_title(Some(&home_title));
+            }) as Rc<dyn Fn()>
+        };
+        let refresh_settings_badge = {
+            let stack = stack.clone();
+            let settings_scroll = settings_scroll.clone();
+            Rc::new(move || {
+                let settings_title = if settings_needs_attention() {
+                    "Settings (!)"
+                } else {
+                    "Settings"
+                };
+                stack
+                    .page(&settings_scroll)
+                    .set_title(Some(settings_title));
+            }) as Rc<dyn Fn()>
+        };
+        let refresh_stack_badges = {
+            let refresh_home_badge = refresh_home_badge.clone();
+            let refresh_settings_badge = refresh_settings_badge.clone();
+            Rc::new(move || {
+                refresh_home_badge();
+                refresh_settings_badge();
+            }) as Rc<dyn Fn()>
+        };
+        *attention_sink.borrow_mut() = {
+            let refresh_home_badge = refresh_home_badge.clone();
+            Rc::new(move |_n: u32| {
+                refresh_home_badge();
+            })
+        };
+        refresh_stack_badges();
+
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
+        let poll_settings_badge = refresh_settings_badge.clone();
         glib::timeout_add_seconds_local(5, move || {
             if poll_stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&poll_list);
             }
+            // Light poll for Settings (!) — thinking/device state.
+            poll_settings_badge();
             glib::ControlFlow::Continue
         });
         let tab_refresh_list = device_list.clone();
+        let tab_badges = refresh_stack_badges.clone();
+        let tab_home_handle = home_handle.clone();
         stack.connect_visible_child_name_notify(move |stack| {
             if stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&tab_refresh_list);
             }
+            if stack.visible_child_name().as_deref() == Some("home") {
+                tab_home_handle.refresh();
+            }
+            tab_badges();
         });
 
         let switcher = gtk::StackSwitcher::builder().stack(&stack).build();
@@ -1785,6 +1846,42 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         header.pack_start(&minimize);
         header.pack_start(&maximize);
         header.pack_start(&fullscreen);
+    }
+
+    fn settings_needs_attention() -> bool {
+        // iPhone You tab "!": thinking unhealthy / unavailable, or remotes
+        // previously linked but now offline — not a pending-device queue count.
+        // Use --skip-probe so the 5s tab-badge poll stays light.
+        let thinking_attention = match run_provider_command(&["status", "--skip-probe"]) {
+            Some(response) => match response.status {
+                Some(status) => status.health != "ok",
+                None => true,
+            },
+            None => true,
+        };
+        if thinking_attention {
+            return true;
+        }
+
+        let centurion_remote = std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{home}/.local/bin/centurion-remote"))
+            .filter(|path| std::path::Path::new(path).is_file())
+            .unwrap_or_else(|| "centurion-remote".to_owned());
+        let listing = Command::new(&centurion_remote)
+            .args(["devices", "--json"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| serde_json::from_slice::<DeviceListing>(&output.stdout).ok());
+        if let Some(listing) = listing {
+            if !listing.approved.is_empty()
+                && listing.approved.iter().all(|device| !device.connected)
+            {
+                return true;
+            }
+        }
+        false
     }
 
     fn refresh_devices(list: &gtk::ListBox) {

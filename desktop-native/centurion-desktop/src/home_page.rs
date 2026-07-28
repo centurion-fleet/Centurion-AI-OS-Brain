@@ -20,17 +20,35 @@ use crate::chat_page::{run_bridge_action, DiscussTopic};
 pub struct HomeHooks {
     /// Jump to Chat with a structured topic so outbound turns are framed.
     pub on_ask_about: Rc<dyn Fn(DiscussTopic, String)>,
+    /// Fires whenever Home recomputes pill “new” totals (for tab badges).
+    pub on_attention_changed: Rc<dyn Fn(u32)>,
 }
 
 #[derive(Clone)]
 pub struct HomeHandle {
     refresh: Rc<dyn Fn()>,
+    attention: Rc<Cell<u32>>,
 }
 
 impl HomeHandle {
     pub fn refresh(&self) {
         (self.refresh)();
     }
+
+    /// Sum of pill new-counts (Live = presence 0/1). Used for the Home tab badge.
+    pub fn attention_count(&self) -> u32 {
+        self.attention.get()
+    }
+}
+
+/// Icon-first discuss affordance (iPhone `bubble.left.and.bubble.right` parity).
+fn discuss_icon_button(tooltip: &str) -> gtk::Button {
+    let btn = gtk::Button::from_icon_name("mail-message-new-symbolic");
+    btn.add_css_class("flat");
+    btn.add_css_class("centurion-home-discuss");
+    btn.set_tooltip_text(Some(tooltip));
+    btn.set_valign(gtk::Align::Center);
+    btn
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1140,16 +1158,32 @@ fn feed_ids_for_category(data: &HomeFeed, cat: PulseCategory) -> Vec<String> {
     }
 }
 
+fn live_presence_badge(data: &HomeFeed) -> usize {
+    // iPhone Live pill: presence 0/1 — visiting does not clear while work is active.
+    if data.live.is_some() {
+        return 1;
+    }
+    if data.swarms.iter().any(|s| {
+        matches!(
+            s.pulse.to_lowercase().as_str(),
+            "active" | "blocked" | "forming" | "attention" | "waiting"
+        )
+    }) {
+        return 1;
+    }
+    0
+}
+
 fn new_count_for_category(data: &HomeFeed, cat: PulseCategory, seen: &Value) -> usize {
+    if cat == PulseCategory::Live {
+        return live_presence_badge(data);
+    }
     let ids = feed_ids_for_category(data, cat);
     if ids.is_empty() {
         return 0;
     }
     let key = pulse_key(cat);
-    // Never visited this pill: don't alarm until the user opens it once.
-    if seen.pointer(&format!("/visited_at/{key}")).is_none() {
-        return 0;
-    }
+    // Empty seen ⇒ all current IDs count as new (iPhone lastSeen ≈ 0).
     let seen_ids: std::collections::HashSet<String> = seen
         .pointer(&format!("/seen/{key}"))
         .and_then(|v| v.as_array())
@@ -1158,6 +1192,13 @@ fn new_count_for_category(data: &HomeFeed, cat: PulseCategory, seen: &Value) -> 
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
     ids.into_iter().filter(|id| !seen_ids.contains(id)).count()
+}
+
+fn total_attention_count(data: &HomeFeed, seen: &Value) -> u32 {
+    PulseCategory::ALL
+        .iter()
+        .map(|cat| new_count_for_category(data, *cat, seen) as u32)
+        .sum()
 }
 
 fn mark_category_seen(data: &HomeFeed, cat: PulseCategory) {
@@ -2273,7 +2314,9 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let feed: Rc<RefCell<HomeFeed>> = Rc::new(RefCell::new(HomeFeed::default()));
     let selected = Rc::new(Cell::new(PulseCategory::Live));
     let applied_decision_first = Rc::new(Cell::new(false));
-    let pill_buttons: Rc<RefCell<Vec<(PulseCategory, gtk::ToggleButton)>>> =
+    let attention = Rc::new(Cell::new(0u32));
+    // Toggle + title label + numeric capsule badge (iPhone CenturionPillNav parity).
+    let pill_buttons: Rc<RefCell<Vec<(PulseCategory, gtk::ToggleButton, gtk::Label, gtk::Label)>>> =
         Rc::new(RefCell::new(Vec::new()));
     let render_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
@@ -2289,6 +2332,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let container = container.clone();
         let render_slot = render_slot.clone();
         let pill_buttons = pill_buttons.clone();
+        let attention = attention.clone();
         move || {
             let data = feed.borrow().clone();
             clear_box(&constellation);
@@ -2298,9 +2342,14 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                 ));
             } else {
                 for orb in &data.swarms {
-                    let chip = gtk::Button::with_label(&format!("{} · {}", orb.name, orb.pulse));
+                    let chip = gtk::Button::new();
                     chip.add_css_class("flat");
                     chip.add_css_class("centurion-home-orb");
+                    let chip_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+                    chip_row.append(&gtk::Image::from_icon_name("mail-message-new-symbolic"));
+                    chip_row.append(&gtk::Label::new(Some(&format!("{} · {}", orb.name, orb.pulse))));
+                    chip.set_child(Some(&chip_row));
+                    chip.set_tooltip_text(Some("Open collaboration"));
                     let parent = container.clone();
                     let on_ask = hooks.on_ask_about.clone();
                     let orb_clone = orb.clone();
@@ -2326,23 +2375,26 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             }
 
             // Last-seen "new" badges (iPhone pulse_note_* parity).
-            let seen = load_pulse_seen();
+            // Mark selected first so Home tab total drops that pill (Live presence stays).
             let selected_cat = selected.get();
-            for (cat, btn) in pill_buttons.borrow().iter() {
+            mark_category_seen(&data, selected_cat);
+            let seen = load_pulse_seen();
+            for (cat, _btn, _title, badge) in pill_buttons.borrow().iter() {
                 let n = if *cat == selected_cat {
                     0
                 } else {
                     new_count_for_category(&data, *cat, &seen)
                 };
-                let label = if n > 0 {
-                    format!("{} · {n} new", cat.title())
+                if n > 0 {
+                    badge.set_label(&n.to_string());
+                    badge.set_visible(true);
                 } else {
-                    cat.title().to_owned()
-                };
-                btn.set_label(&label);
+                    badge.set_visible(false);
+                }
             }
-            // Visiting a pill clears its "new" set (also covers feed refresh while viewing).
-            mark_category_seen(&data, selected_cat);
+            let total = total_attention_count(&data, &seen);
+            attention.set(total);
+            (hooks.on_attention_changed)(total);
 
             if data.mission.statement.is_empty() {
                 mission_statement.set_label("Set a Life Mission to guide your Sovereign.");
@@ -2352,9 +2404,14 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             clear_box(&commitments);
             let mission_statement_for_chips = data.mission.statement.clone();
             for target in &data.mission.targets {
-                let chip = gtk::Button::with_label(&target.title);
+                let chip = gtk::Button::new();
                 chip.add_css_class("flat");
                 chip.add_css_class("centurion-home-commitment");
+                let chip_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+                chip_row.append(&gtk::Image::from_icon_name("mail-message-new-symbolic"));
+                chip_row.append(&gtk::Label::new(Some(&target.title)));
+                chip.set_child(Some(&chip_row));
+                chip.set_tooltip_text(Some("Ask about this commitment"));
                 let on_ask = hooks.on_ask_about.clone();
                 let commitment = target.clone();
                 let mission_statement = mission_statement_for_chips.clone();
@@ -2448,7 +2505,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                         let live_clone = live.clone();
                         let parent = container.clone();
                         how.connect_clicked(move |_| show_how_dialog(&parent, &live_clone));
-                        let ask = gtk::Button::with_label("Ask about this");
+                        let ask = discuss_icon_button("Ask about this");
                         ask.add_css_class("suggested-action");
                         let on_ask = hooks.on_ask_about.clone();
                         let live_id = live.id.clone();
@@ -2583,6 +2640,7 @@ What should we focus on next?"
                                             .build(),
                                     );
                                 }
+                                let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
                                 let open = gtk::Button::with_label("Open");
                                 open.add_css_class("flat");
                                 let parent = container.clone();
@@ -2597,7 +2655,27 @@ What should we focus on next?"
                                         on_ask.clone(),
                                     );
                                 });
-                                card.append(&open);
+                                let discuss = discuss_icon_button("Discuss this plan");
+                                let on_ask_d = hooks.on_ask_about.clone();
+                                let plan_d = plan.clone();
+                                discuss.connect_clicked(move |_| {
+                                    on_ask_d(
+                                        plan_topic_from_item(&plan_d),
+                                        format!(
+                                            "Let's discuss this plan.\n\nTitle: {}\n\n{}\n\nGoal: {}\n\nWhat should change or stay?",
+                                            plan_d.title,
+                                            if plan_d.summary.is_empty() {
+                                                "(no summary yet)"
+                                            } else {
+                                                plan_d.summary.as_str()
+                                            },
+                                            plan_d.goal
+                                        ),
+                                    );
+                                });
+                                actions.append(&open);
+                                actions.append(&discuss);
+                                card.append(&actions);
                                 category_body.append(&card);
                             }
                         }
@@ -2663,8 +2741,8 @@ What should we focus on next?"
                                     .css_classes(["dim-label"])
                                     .build(),
                             );
-                            let ask = gtk::Button::with_label("Ask about this");
-                            ask.add_css_class("flat");
+                            let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                            let ask = discuss_icon_button("Ask about this");
                             let on_ask = hooks.on_ask_about.clone();
                             let summary = win.summary.clone();
                             let detail = win.detail.clone();
@@ -2680,7 +2758,8 @@ What should we focus on next?"
                                     ),
                                 );
                             });
-                            card.append(&ask);
+                            actions.append(&ask);
+                            card.append(&actions);
                             category_body.append(&card);
                         }
                     }
@@ -2711,6 +2790,7 @@ What should we focus on next?"
                                         .build(),
                                 );
                             }
+                            let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
                             let open = gtk::Button::with_label("Open");
                             open.add_css_class("flat");
                             let parent = container.clone();
@@ -2727,7 +2807,28 @@ What should we focus on next?"
                                     &plans_snapshot,
                                 );
                             });
-                            card.append(&open);
+                            let discuss = discuss_icon_button("Discuss this document");
+                            let on_ask_d = hooks.on_ask_about.clone();
+                            let title = doc.title.clone();
+                            let summary = doc.summary.clone();
+                            let body = doc.body.clone();
+                            let plan_id = doc.plan_id.clone();
+                            discuss.connect_clicked(move |_| {
+                                on_ask_d(
+                                    DiscussTopic::Document {
+                                        title: title.clone(),
+                                        summary: summary.clone(),
+                                        plan_id: plan_id.clone(),
+                                        body_excerpt: body.clone(),
+                                    },
+                                    format!(
+                                        "Let's discuss this document.\n\n{title}\n\n{summary}\n\nWhat should we do with it?"
+                                    ),
+                                );
+                            });
+                            actions.append(&open);
+                            actions.append(&discuss);
+                            card.append(&actions);
                             category_body.append(&card);
                         }
                     }
@@ -2901,6 +3002,35 @@ What should we focus on next?"
                             actions.append(&adjust);
                             actions.append(&hold);
                             actions.append(&reject);
+                            let discuss = discuss_icon_button("Discuss this decision");
+                            let on_ask_d = hooks.on_ask_about.clone();
+                            let title_d = decision.title.clone();
+                            let context_d = decision.context.clone();
+                            let plan_for_d = decision.plan_id.clone().and_then(|pid| {
+                                data.plans.iter().find(|p| p.id == pid).cloned()
+                            });
+                            discuss.connect_clicked(move |_| {
+                                if let Some(ref plan) = plan_for_d {
+                                    on_ask_d(
+                                        plan_topic_from_item(plan),
+                                        format!(
+                                            "Let's discuss this decision.\n\n{title_d}\n\n{context_d}\n\nWhat should we do?"
+                                        ),
+                                    );
+                                } else {
+                                    on_ask_d(
+                                        DiscussTopic::Generic {
+                                            title: title_d.clone(),
+                                            kind: "decision".to_owned(),
+                                            detail: context_d.clone(),
+                                        },
+                                        format!(
+                                            "Let's discuss this decision.\n\n{title_d}\n\n{context_d}\n\nWhat should we do?"
+                                        ),
+                                    );
+                                }
+                            });
+                            actions.append(&discuss);
                             if let Some(pid) = decision.plan_id.clone() {
                                 let parent_c = container.clone();
                                 let refresh_c = refresh_all.clone();
@@ -2954,19 +3084,18 @@ What should we focus on next?"
                                     .xalign(0.0)
                                     .build(),
                             );
-                            let ask = gtk::Button::with_label("Discuss");
-                            ask.add_css_class("flat");
+                            let ask = discuss_icon_button("Discuss this update");
                             let on_ask = hooks.on_ask_about.clone();
                             let text = thought.text.clone();
-                            let meta = meta.clone();
+                            let kind = thought.kind.clone();
                             ask.connect_clicked(move |_| {
                                 on_ask(
                                     DiscussTopic::Generic {
-                                        title: text.clone(),
+                                        title: kind.clone(),
                                         kind: "update".to_owned(),
-                                        detail: meta.clone(),
+                                        detail: text.clone(),
                                     },
-                                    format!("About this update ({meta}):\n\n{text}"),
+                                    format!("Let's discuss this update:\n\n{text}"),
                                 );
                             });
                             card.append(&ask);
@@ -3014,7 +3143,7 @@ What should we focus on next?"
                         };
                         drop(data);
                         selected.set(initial);
-                        for (cat, btn) in pill_buttons.borrow().iter() {
+                        for (cat, btn, _title, _badge) in pill_buttons.borrow().iter() {
                             btn.set_active(*cat == initial);
                         }
                     } else if !applied_decision_first.get() {
@@ -3039,9 +3168,22 @@ What should we focus on next?"
     }) as Rc<dyn Fn()>);
 
     for cat in PulseCategory::ALL {
-        let btn = gtk::ToggleButton::with_label(cat.title());
+        let btn = gtk::ToggleButton::new();
         btn.add_css_class("centurion-home-pill");
         btn.set_active(cat == PulseCategory::Live);
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let title = gtk::Label::builder()
+            .label(cat.title())
+            .css_classes(["centurion-home-pill-title"])
+            .build();
+        let badge = gtk::Label::builder()
+            .label("")
+            .css_classes(["centurion-home-pill-badge"])
+            .visible(false)
+            .build();
+        row.append(&title);
+        row.append(&badge);
+        btn.set_child(Some(&row));
         let selected = selected.clone();
         let pill_buttons_for_toggle = pill_buttons.clone();
         let paint = paint.clone();
@@ -3052,7 +3194,7 @@ What should we focus on next?"
             }
             selected.set(cat);
             mark_category_seen(&feed_for_seen.borrow(), cat);
-            for (other_cat, other) in pill_buttons_for_toggle.borrow().iter() {
+            for (other_cat, other, _title, _badge) in pill_buttons_for_toggle.borrow().iter() {
                 if *other_cat != cat {
                     other.set_active(false);
                 }
@@ -3060,7 +3202,9 @@ What should we focus on next?"
             paint();
         });
         pill_bar.append(&btn);
-        pill_buttons.borrow_mut().push((cat, btn));
+        pill_buttons
+            .borrow_mut()
+            .push((cat, btn, title, badge));
     }
 
     refresh_feed();
@@ -3074,6 +3218,7 @@ What should we focus on next?"
 
     let handle = HomeHandle {
         refresh: refresh_feed.clone(),
+        attention: attention.clone(),
     };
     (container, handle)
 }

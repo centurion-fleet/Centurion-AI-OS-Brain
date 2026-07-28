@@ -156,6 +156,27 @@ stackswitcher button {
   color: @centurion_canvas;
 }
 
+.centurion-home-pill-badge {
+  min-width: 1.4em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 700;
+  background: @centurion_interactive;
+  color: @centurion_canvas;
+}
+
+.centurion-home-pill:checked .centurion-home-pill-badge {
+  background: @centurion_canvas;
+  color: @centurion_ink;
+}
+
+.centurion-home-discuss {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px;
+}
+
 .centurion-home-card {
   padding: 14px 16px;
   border-radius: 10px;
