@@ -1327,12 +1327,12 @@ fn show_collab_detail_dialog(
                 let hold_btn = gtk::Button::with_label("Hold");
                 hold_btn.add_css_class("flat");
                 let parent_w = parent.clone().upcast::<gtk::Widget>();
-                let refresh = refresh.clone();
+                let refresh_r = refresh.clone();
                 let signal_id_r = signal_id.clone();
                 let message = message.clone();
                 resolve.connect_clicked(move |_| {
                     let parent_w = parent_w.clone();
-                    let refresh = refresh.clone();
+                    let refresh = refresh_r.clone();
                     let signal_id = signal_id_r.clone();
                     let note = format!("Resolved from Home: {message}");
                     run_async_result(parent_w, refresh, move || resolve_signal(&signal_id, &note));
