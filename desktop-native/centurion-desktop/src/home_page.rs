@@ -942,9 +942,9 @@ fn find_app_window(widget: &impl IsA<gtk::Widget>) -> Option<adw::ApplicationWin
 }
 
 fn load_decision_first_pref() -> bool {
-    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
-        .join("brain_decision_first")
-        .read_to_string()
+    let path = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        .join("brain_decision_first");
+    std::fs::read_to_string(path)
         .map(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true"))
         .unwrap_or(true)
 }
