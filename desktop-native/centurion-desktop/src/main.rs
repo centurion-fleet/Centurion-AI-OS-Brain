@@ -982,7 +982,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&backup_thinking_row);
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
-            .subtitle("Set another Centurion’s address and shared token for cross-machine talk.")
+            .subtitle("Add peers and ping across machines (moved from Home).")
             .icon_name("network-server-symbolic")
             .build();
         let fleet_peer_button = gtk::Button::with_label("Configure");
@@ -991,13 +991,32 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain. Home may show client cards from thin manifests.")
+            .subtitle("Agent plugins on this Brain — manage here, not on Home.")
             .icon_name("application-x-addon-symbolic")
             .build();
         let plugins_button = gtk::Button::with_label("View");
         plugins_button.set_valign(gtk::Align::Center);
         plugins_row.add_suffix(&plugins_button);
         brain_group.add(&plugins_row);
+        let ops_row = adw::ActionRow::builder()
+            .title("Scheduled & board")
+            .subtitle("Cron jobs and kanban glance — desk ops, not Home pulse.")
+            .icon_name("view-list-symbolic")
+            .build();
+        let ops_button = gtk::Button::with_label("View");
+        ops_button.set_valign(gtk::Align::Center);
+        ops_row.add_suffix(&ops_button);
+        brain_group.add(&ops_row);
+        let collab_connect_row = adw::ActionRow::builder()
+            .title("Collaborations")
+            .subtitle("Connect or invite another Sovereign. Live orbs stay on Home.")
+            .icon_name("system-users-symbolic")
+            .build();
+        let collab_connect_button = gtk::Button::with_label("Connect");
+        collab_connect_button.add_css_class("suggested-action");
+        collab_connect_button.set_valign(gtk::Align::Center);
+        collab_connect_row.add_suffix(&collab_connect_button);
+        brain_group.add(&collab_connect_row);
         settings.append(&brain_group);
 
         let gateway_group = adw::PreferencesGroup::builder()
@@ -1040,6 +1059,16 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         autonomy_button.set_valign(gtk::Align::Center);
         autonomy_row.add_suffix(&autonomy_button);
         you_group.add(&autonomy_row);
+
+        let life_mission_row = adw::ActionRow::builder()
+            .title("Life Mission")
+            .subtitle("What you're building toward — shown on Home; edit here.")
+            .icon_name("emblem-favorite-symbolic")
+            .build();
+        let life_mission_edit_button = gtk::Button::with_label("Edit");
+        life_mission_edit_button.set_valign(gtk::Align::Center);
+        life_mission_row.add_suffix(&life_mission_edit_button);
+        you_group.add(&life_mission_row);
 
         let mission_discover_row = adw::ActionRow::builder()
             .title("Mission Discovery")
@@ -1433,6 +1462,23 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let window = window.clone();
             move |_| show_plugins_list_dialog(&window)
         });
+        ops_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_ops_glance_dialog(&window)
+        });
+        collab_connect_button.connect_clicked({
+            let window = window.clone();
+            let home_handle = home_handle.clone();
+            move |_| {
+                crate::home_page::show_connect_collab_dialog(
+                    &window,
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
+                    }),
+                );
+            }
+        });
         pairing_settings_row.connect_activated({
             let window = window.clone();
             move |_| {
@@ -1459,6 +1505,32 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     Rc::new({
                         let soul_row = soul_row.clone();
                         move || refresh_soul_row(&soul_row)
+                    }),
+                );
+            }
+        });
+        life_mission_edit_button.connect_clicked({
+            let window = window.clone();
+            let home_handle = home_handle.clone();
+            move |_| {
+                let current = run_bridge_action("mission_get", serde_json::json!({}))
+                    .and_then(|r| {
+                        if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                            r.get("mission")
+                                .and_then(|m| m.get("statement"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                crate::home_page::show_mission_edit_dialog(
+                    &window,
+                    &current,
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
                     }),
                 );
             }
@@ -4020,6 +4092,100 @@ Being · Continuity\n\
     }
 
     fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {
+        let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let peers_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        if let Some(resp) = run_bridge_action("fleet_status", serde_json::json!({})) {
+            if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                let peers = resp
+                    .get("peers")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if peers.is_empty() {
+                    peers_box.append(
+                        &gtk::Label::builder()
+                            .label("No peers yet — add one below.")
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["dim-label"])
+                            .build(),
+                    );
+                } else {
+                    for peer in peers.iter().take(12) {
+                        let name = peer
+                            .get("name")
+                            .or_else(|| peer.get("id"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("peer");
+                        let status = peer
+                            .get("status")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let address = peer
+                            .get("address")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let peer_id = peer
+                            .get("id")
+                            .or_else(|| peer.get("name"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(name)
+                            .to_owned();
+                        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                        row.append(
+                            &gtk::Label::builder()
+                                .label(&format!("{name} · {status}"))
+                                .xalign(0.0)
+                                .hexpand(true)
+                                .wrap(true)
+                                .build(),
+                        );
+                        if !address.is_empty() {
+                            row.set_tooltip_text(Some(address));
+                        }
+                        let ping = gtk::Button::with_label("Ping");
+                        ping.add_css_class("flat");
+                        let parent_w = parent.clone();
+                        ping.connect_clicked(move |_| {
+                            let payload = run_bridge_action(
+                                "fleet_ping",
+                                serde_json::json!({ "peer_id": peer_id }),
+                            );
+                            let ok = payload
+                                .as_ref()
+                                .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+                                .unwrap_or(false);
+                            let message = payload
+                                .as_ref()
+                                .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                                .unwrap_or(if ok {
+                                    "Ping sent."
+                                } else {
+                                    "Ping failed."
+                                })
+                                .to_owned();
+                            let result = adw::AlertDialog::builder()
+                                .heading(if ok { "Ping" } else { "Ping failed" })
+                                .body(&message)
+                                .close_response("ok")
+                                .build();
+                            result.add_response("ok", "OK");
+                            result.present(Some(&parent_w));
+                        });
+                        row.append(&ping);
+                        peers_box.append(&row);
+                    }
+                }
+            }
+        }
+        form.append(&peers_box);
+        form.append(
+            &gtk::Label::builder()
+                .label("Add a peer")
+                .xalign(0.0)
+                .css_classes(["heading"])
+                .build(),
+        );
         let id_entry = gtk::Entry::builder()
             .placeholder_text("Peer id (e.g. cent-002)")
             .hexpand(true)
@@ -4037,7 +4203,6 @@ Being · Continuity\n\
             .show_peek_icon(true)
             .hexpand(true)
             .build();
-        let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
         form.append(&id_entry);
         form.append(&name_entry);
         form.append(&address_entry);
@@ -4045,8 +4210,8 @@ Being · Continuity\n\
         let dialog = adw::AlertDialog::builder()
             .heading("Fleet peer")
             .body(
-                "Add another Centurion’s LAN or public address and the shared fleet token. \
-Home → Fleet Presence can then ping them.",
+                "Peers and ping live here (moved off Home). Add another Centurion’s \
+LAN or public address and the shared fleet token.",
             )
             .extra_child(&form)
             .close_response("cancel")
@@ -4090,6 +4255,84 @@ Home → Fleet Presence can then ping them.",
             result.add_response("ok", "OK");
             result.present(Some(&parent_for_result));
         });
+        dialog.present(Some(parent));
+    }
+
+    fn show_ops_glance_dialog(parent: &adw::ApplicationWindow) {
+        let body = match run_bridge_action("ops_glance", serde_json::json!({})) {
+            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                let mut lines = Vec::new();
+                let cron = p
+                    .get("cron")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let kanban = p
+                    .get("kanban")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if cron.is_empty() && kanban.is_empty() {
+                    "No upcoming jobs or board tasks right now.\n\n\
+Schedule work with cron or kanban; this glance stays in Settings, not Home."
+                        .to_owned()
+                } else {
+                    if !cron.is_empty() {
+                        lines.push("Scheduled jobs".to_owned());
+                        for job in cron.iter().take(20) {
+                            let name = job
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("(job)");
+                            let next = job
+                                .get("next_run")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let schedule = job
+                                .get("schedule")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            let detail = if !next.is_empty() {
+                                format!("next {next}")
+                            } else if !schedule.is_empty() {
+                                schedule.to_owned()
+                            } else {
+                                "scheduled".to_owned()
+                            };
+                            lines.push(format!("• {name} — {detail}"));
+                        }
+                        lines.push(String::new());
+                    }
+                    if !kanban.is_empty() {
+                        lines.push("Board".to_owned());
+                        for task in kanban.iter().take(20) {
+                            let title = task
+                                .get("title")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("(task)");
+                            let status = task
+                                .get("status")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            lines.push(format!("• {title} — {status}"));
+                        }
+                    }
+                    lines.join("\n")
+                }
+            }
+            Some(p) => p
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not load ops glance.")
+                .to_owned(),
+            None => "Could not reach the ops bridge.".to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Scheduled & board")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
         dialog.present(Some(parent));
     }
 

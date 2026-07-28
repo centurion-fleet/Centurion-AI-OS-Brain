@@ -1212,7 +1212,7 @@ fn empty_cta_box(
     box_
 }
 
-fn show_mission_edit_dialog(
+pub fn show_mission_edit_dialog(
     parent: &impl IsA<gtk::Widget>,
     current: &str,
     refresh: Rc<dyn Fn()>,
@@ -1450,7 +1450,7 @@ fn show_collab_detail_dialog(
     dialog.present(Some(parent));
 }
 
-fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
     let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
     let token = gtk::Entry::builder()
         .placeholder_text("Mission Control token (ctk_proj_…)")
@@ -2180,112 +2180,57 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     );
     container.append(&header);
 
-    let pill_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    pill_bar.add_css_class("centurion-home-pills");
-    pill_bar.set_margin_start(16);
-    pill_bar.set_margin_end(16);
-    pill_bar.set_margin_bottom(8);
-    let pill_scroll = gtk::ScrolledWindow::builder()
-        .child(&pill_bar)
-        .hscrollbar_policy(gtk::PolicyType::Automatic)
-        .vscrollbar_policy(gtk::PolicyType::Never)
-        .hexpand(true)
-        .build();
-    container.append(&pill_scroll);
-
     let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
     body.set_hexpand(true);
 
+    // Match iPhone Home: mission + commitments + live collab orbs, then pills + feed.
+    // Fleet / Extensions / Scheduled & board / Connect live under Settings.
     let chrome = gtk::Box::new(gtk::Orientation::Vertical, 10);
     chrome.set_margin_start(20);
     chrome.set_margin_end(20);
     chrome.set_margin_top(4);
     chrome.set_margin_bottom(8);
 
-    let constellation = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    constellation.add_css_class("centurion-home-constellation");
-    let collab_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    collab_header.append(
-        &gtk::Label::builder()
-            .label("Your collaborations")
-            .css_classes(["title-4"])
-            .xalign(0.0)
-            .hexpand(true)
-            .build(),
-    );
-    let connect_collab = gtk::Button::with_label("Connect");
-    connect_collab.add_css_class("flat");
-    connect_collab.set_tooltip_text(Some("Connect or invite another Sovereign"));
-    collab_header.append(&connect_collab);
-    chrome.append(&collab_header);
-    chrome.append(&constellation);
-
-    let ops_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    ops_section.append(
-        &gtk::Label::builder()
-            .label("Scheduled & board")
-            .css_classes(["title-4"])
-            .xalign(0.0)
-            .build(),
-    );
-    let ops_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    ops_section.append(&ops_body);
-    chrome.append(&ops_section);
-
-    let plugin_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    plugin_section.append(
-        &gtk::Label::builder()
-            .label("Extensions")
-            .css_classes(["title-4"])
-            .xalign(0.0)
-            .build(),
-    );
-    let plugin_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    plugin_section.append(&plugin_body);
-    chrome.append(&plugin_section);
-
-    let fleet_section = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    fleet_section.append(
-        &gtk::Label::builder()
-            .label("Fleet Presence")
-            .css_classes(["title-4"])
-            .xalign(0.0)
-            .build(),
-    );
-    let fleet_body = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    fleet_body.add_css_class("centurion-home-fleet");
-    fleet_section.append(&fleet_body);
-    chrome.append(&fleet_section);
-
+    // Mission statement only — Edit / Discover live under Settings (iPhone You tab).
     let mission_banner = gtk::Box::new(gtk::Orientation::Vertical, 6);
     mission_banner.add_css_class("centurion-home-mission");
-    let mission_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    mission_header.append(
+    mission_banner.append(
         &gtk::Label::builder()
             .label("WHAT YOU'RE BUILDING TOWARD")
             .css_classes(["caption-heading"])
             .xalign(0.0)
-            .hexpand(true)
             .build(),
     );
-    let mission_edit = gtk::Button::with_label("Edit");
-    mission_edit.add_css_class("flat");
-    mission_header.append(&mission_edit);
-    let mission_discover = gtk::Button::with_label("Discover");
-    mission_discover.add_css_class("suggested-action");
-    mission_header.append(&mission_discover);
-    mission_banner.append(&mission_header);
     let mission_statement = gtk::Label::builder()
         .label("Set a Life Mission to guide your Sovereign.")
         .wrap(true)
         .xalign(0.0)
         .build();
     mission_banner.append(&mission_statement);
+    mission_banner.append(
+        &gtk::Label::builder()
+            .label("Edit or discover under Settings.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label", "caption"])
+            .build(),
+    );
     chrome.append(&mission_banner);
 
     let commitments = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     commitments.add_css_class("centurion-home-commitments");
     chrome.append(&commitments);
+
+    let constellation = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    constellation.add_css_class("centurion-home-constellation");
+    chrome.append(
+        &gtk::Label::builder()
+            .label("Your collaborations")
+            .css_classes(["title-4"])
+            .xalign(0.0)
+            .build(),
+    );
+    chrome.append(&constellation);
 
     let error_label = gtk::Label::builder()
         .label("")
@@ -2296,12 +2241,24 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         .build();
     chrome.append(&error_label);
 
+    let pill_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    pill_bar.add_css_class("centurion-home-pills");
+    pill_bar.set_margin_top(4);
+    pill_bar.set_margin_bottom(8);
+    let pill_scroll = gtk::ScrolledWindow::builder()
+        .child(&pill_bar)
+        .hscrollbar_policy(gtk::PolicyType::Automatic)
+        .vscrollbar_policy(gtk::PolicyType::Never)
+        .hexpand(true)
+        .build();
+
     let category_body = gtk::Box::new(gtk::Orientation::Vertical, 8);
     category_body.set_margin_start(20);
     category_body.set_margin_end(20);
     category_body.set_margin_bottom(28);
 
     body.append(&chrome);
+    body.append(&pill_scroll);
     body.append(&category_body);
 
     let scroll = gtk::ScrolledWindow::builder()
@@ -2324,9 +2281,6 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let feed = feed.clone();
         let selected = selected.clone();
         let constellation = constellation.clone();
-        let fleet_body = fleet_body.clone();
-        let ops_body = ops_body.clone();
-        let plugin_body = plugin_body.clone();
         let mission_statement = mission_statement.clone();
         let commitments = commitments.clone();
         let error_label = error_label.clone();
@@ -2371,103 +2325,6 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                 }
             }
 
-            clear_box(&ops_body);
-            if data.ops.is_empty() {
-                ops_body.append(&empty_label(
-                    "No upcoming jobs or board tasks right now.",
-                ));
-            } else {
-                for item in &data.ops {
-                    let card = card_box();
-                    card.append(
-                        &gtk::Label::builder()
-                            .label(&item.title)
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["heading"])
-                            .build(),
-                    );
-                    card.append(
-                        &gtk::Label::builder()
-                            .label(&item.detail)
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["dim-label"])
-                            .build(),
-                    );
-                    let ask = gtk::Button::with_label("Ask about this");
-                    ask.add_css_class("flat");
-                    let on_ask = hooks.on_ask_about.clone();
-                    let title = item.title.clone();
-                    let detail = item.detail.clone();
-                    let kind = item.kind.clone();
-                    ask.connect_clicked(move |_| {
-                        on_ask(
-                            DiscussTopic::Generic {
-                                title: title.clone(),
-                                kind: kind.clone(),
-                                detail: String::new(),
-                            },
-                            format!(
-                                "About this {kind} item:\n\n{title}\n{detail}\n\nWhat should we do?"
-                            ),
-                        );
-                    });
-                    card.append(&ask);
-                    ops_body.append(&card);
-                }
-            }
-
-            clear_box(&plugin_body);
-            if data.plugins.is_empty() {
-                plugin_body.append(&empty_label(
-                    "No client extensions yet. Plugins can publish a thin Brain card via manifest.",
-                ));
-            } else {
-                for plugin in &data.plugins {
-                    let card = card_box();
-                    card.append(
-                        &gtk::Label::builder()
-                            .label(&plugin.title)
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["heading"])
-                            .build(),
-                    );
-                    if !plugin.subtitle.is_empty() {
-                        card.append(
-                            &gtk::Label::builder()
-                                .label(&plugin.subtitle)
-                                .wrap(true)
-                                .xalign(0.0)
-                                .css_classes(["dim-label"])
-                                .build(),
-                        );
-                    }
-                    let ask = gtk::Button::with_label("Open in Chat");
-                    ask.add_css_class("suggested-action");
-                    let on_ask = hooks.on_ask_about.clone();
-                    let title = plugin.title.clone();
-                    let prompt = if plugin.ask_prompt.is_empty() {
-                        format!("Tell me about {title}.")
-                    } else {
-                        plugin.ask_prompt.clone()
-                    };
-                    ask.connect_clicked(move |_| {
-                        on_ask(
-                            DiscussTopic::Generic {
-                                title: title.clone(),
-                                kind: "extension".to_owned(),
-                                detail: String::new(),
-                            },
-                            prompt.clone(),
-                        );
-                    });
-                    card.append(&ask);
-                    plugin_body.append(&card);
-                }
-            }
-
             // Last-seen "new" badges (iPhone pulse_note_* parity).
             let seen = load_pulse_seen();
             let selected_cat = selected.get();
@@ -2486,99 +2343,6 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             }
             // Visiting a pill clears its "new" set (also covers feed refresh while viewing).
             mark_category_seen(&data, selected_cat);
-
-            clear_box(&fleet_body);
-            if data.fleet_peers.is_empty() {
-                fleet_body.append(&empty_label(
-                    "No fleet peers yet. Add an address under Settings → Fleet peer to talk across machines.",
-                ));
-            } else {
-                for peer in &data.fleet_peers {
-                    let card = card_box();
-                    let status = if peer.status.is_empty() {
-                        "unknown"
-                    } else {
-                        peer.status.as_str()
-                    };
-                    let addr = if peer.address.is_empty() {
-                        "no address".to_owned()
-                    } else {
-                        peer.address.clone()
-                    };
-                    card.append(
-                        &gtk::Label::builder()
-                            .label(&format!("{} · {status}", peer.name))
-                            .xalign(0.0)
-                            .build(),
-                    );
-                    card.append(
-                        &gtk::Label::builder()
-                            .label(&addr)
-                            .xalign(0.0)
-                            .css_classes(["dim-label", "caption"])
-                            .build(),
-                    );
-                    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                    let ping = gtk::Button::with_label("Ping");
-                    ping.add_css_class("flat");
-                    let peer_id = if peer.id.is_empty() {
-                        peer.name.clone()
-                    } else {
-                        peer.id.clone()
-                    };
-                    let refresh_all = {
-                        let render_slot = render_slot.clone();
-                        Rc::new(move || {
-                            if let Some(f) = render_slot.borrow().as_ref() {
-                                f();
-                            }
-                        }) as Rc<dyn Fn()>
-                    };
-                    let parent_w = container.clone().upcast::<gtk::Widget>();
-                    ping.connect_clicked(move |_| {
-                        let peer_id = peer_id.clone();
-                        let refresh_all = refresh_all.clone();
-                        let parent_w = parent_w.clone();
-                        run_async_result(parent_w, refresh_all, move || {
-                            let response = run_bridge_action(
-                                "fleet_ping",
-                                serde_json::json!({ "peer_id": peer_id }),
-                            )
-                            .ok_or_else(|| "Could not reach fleet service.".to_owned())?;
-                            if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                                Ok(())
-                            } else {
-                                Err(response
-                                    .get("message")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Ping failed.")
-                                    .to_owned())
-                            }
-                        });
-                    });
-                    let ask = gtk::Button::with_label("Ask about this");
-                    ask.add_css_class("suggested-action");
-                    let on_ask = hooks.on_ask_about.clone();
-                    let pname = peer.name.clone();
-                    let pstatus = status.to_owned();
-                    ask.connect_clicked(move |_| {
-                        on_ask(
-                            DiscussTopic::Generic {
-                                title: pname.clone(),
-                                kind: "fleet peer".to_owned(),
-                                detail: String::new(),
-                            },
-                            format!(
-                                "Fleet peer {pname} is currently {pstatus}. What should we do with them, or what messages are waiting?"
-                            ),
-                        );
-                    });
-                    actions.append(&ping);
-                    actions.append(&ask);
-                    card.append(&actions);
-                    fleet_body.append(&card);
-                }
-            }
 
             if data.mission.statement.is_empty() {
                 mission_statement.set_label("Set a Life Mission to guide your Sovereign.");
@@ -3307,59 +3071,6 @@ What should we focus on next?"
             glib::ControlFlow::Continue
         }
     });
-
-    {
-        let container = container.clone();
-        let feed = feed.clone();
-        let render_slot = render_slot.clone();
-        mission_edit.connect_clicked(move |_| {
-            let current = feed.borrow().mission.statement.clone();
-            let refresh = {
-                let render_slot = render_slot.clone();
-                Rc::new(move || {
-                    if let Some(f) = render_slot.borrow().as_ref() {
-                        f();
-                    }
-                }) as Rc<dyn Fn()>
-            };
-            show_mission_edit_dialog(&container, &current, refresh);
-        });
-    }
-
-    {
-        let container = container.clone();
-        let render_slot = render_slot.clone();
-        mission_discover.connect_clicked(move |_| {
-            let Some(window) = find_app_window(&container) else {
-                return;
-            };
-            let refresh = {
-                let render_slot = render_slot.clone();
-                Rc::new(move || {
-                    if let Some(f) = render_slot.borrow().as_ref() {
-                        f();
-                    }
-                }) as Rc<dyn Fn()>
-            };
-            crate::interviews::show_mission_discovery(&window, refresh);
-        });
-    }
-
-    {
-        let container = container.clone();
-        let render_slot = render_slot.clone();
-        connect_collab.connect_clicked(move |_| {
-            let refresh = {
-                let render_slot = render_slot.clone();
-                Rc::new(move || {
-                    if let Some(f) = render_slot.borrow().as_ref() {
-                        f();
-                    }
-                }) as Rc<dyn Fn()>
-            };
-            show_connect_collab_dialog(&container, refresh);
-        });
-    }
 
     let handle = HomeHandle {
         refresh: refresh_feed.clone(),
