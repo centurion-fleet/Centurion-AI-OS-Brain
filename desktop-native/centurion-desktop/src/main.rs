@@ -1357,7 +1357,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 } else {
                     "Home".to_owned()
                 };
-                stack.page(&home).set_title(Some(&home_title));
+                stack.page(&home).set_title(&home_title);
             }) as Rc<dyn Fn()>
         };
         let refresh_settings_badge = {
@@ -1371,7 +1371,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 };
                 stack
                     .page(&settings_scroll)
-                    .set_title(Some(settings_title));
+                    .set_title(settings_title);
             }) as Rc<dyn Fn()>
         };
         let refresh_stack_badges = {
