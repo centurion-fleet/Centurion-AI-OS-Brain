@@ -44,6 +44,16 @@ mod home_page;
     clippy::needless_pass_by_value,
     clippy::too_many_lines
 )]
+mod mission_deck_page;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
 mod interviews;
 
 #[cfg(target_os = "linux")]
@@ -290,6 +300,9 @@ mod linux {
     }
 
     fn load_brand_css() {
+        // Amber Horizon — force dark so Chat / Settings match Mission Deck.
+        adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+
         let provider = gtk::CssProvider::new();
         provider.load_from_string(include_str!("../../resources/centurion.css"));
         gtk::style_context_add_provider_for_display(
@@ -1412,7 +1425,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let stack = stack.clone();
             let chat_handle = chat_handle.clone();
             let attention_sink_for_hooks = attention_sink.clone();
-            crate::home_page::build(crate::home_page::HomeHooks {
+            // Mission Deck (React / WebKit) replaces the legacy GTK Missions surface.
+            crate::mission_deck_page::build(crate::home_page::HomeHooks {
                 on_ask_about: Rc::new(
                     move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
                         chat_handle.seed_discuss_topic(topic, &kickoff);

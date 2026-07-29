@@ -1,28 +1,43 @@
-/* Centurion v5 desktop chrome — mapped from design-tokens/tokens.json */
-@define-color centurion_canvas #fafaf9;
-@define-color centurion_ink #1a1612;
-@define-color centurion_border #dad7d0;
-@define-color centurion_muted #5e534a;
-@define-color centurion_interactive #2563eb;
-@define-color centurion_interactive_soft #60a5fa;
-@define-color centurion_warm #b87a36;
-@define-color centurion_warm_soft #d7a868;
-/* Tab / pill / banner attention marks — red only for the mark itself */
-@define-color centurion_attention #c62828;
-@define-color centurion_attention_soft #ef9a9a;
+/* Centurion Brain — Amber Horizon
+   Unified dark chrome so Chat, Missions (WebView), and Settings feel like one product.
+   Mission Deck React UI owns the Missions pane; these tokens theme native GTK chrome. */
+
+@define-color centurion_canvas #1a1410;
+@define-color centurion_surface #221c17;
+@define-color centurion_ink #f5efe6;
+@define-color centurion_border rgba(255, 255, 255, 0.10);
+@define-color centurion_muted rgba(245, 239, 230, 0.55);
+@define-color centurion_dim rgba(245, 239, 230, 0.35);
+@define-color centurion_interactive #ff9f1c;
+@define-color centurion_interactive_soft #ffd700;
+@define-color centurion_warm #ff9f1c;
+@define-color centurion_warm_soft #ffb347;
+@define-color centurion_attention #ff6b4a;
+@define-color centurion_attention_soft #ff9a80;
+@define-color centurion_glass rgba(255, 255, 255, 0.03);
 
 window {
-  background: linear-gradient(145deg, alpha(@centurion_ink, 0.03), transparent 42%),
-              @centurion_canvas;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, alpha(@centurion_warm, 0.16), transparent),
+    @centurion_canvas;
+  color: @centurion_ink;
+}
+
+headerbar,
+.top-bar,
+toolbarview > headerbar {
+  background: alpha(@centurion_surface, 0.92);
+  color: @centurion_ink;
+  border-bottom: 1px solid @centurion_border;
 }
 
 .centurion-card {
   min-height: 360px;
   padding: 48px;
-  border-radius: 8px;
-  background: alpha(@window_bg_color, 0.96);
+  border-radius: 16px;
+  background: @centurion_glass;
   border: 1px solid @centurion_border;
-  box-shadow: 0 18px 50px alpha(@centurion_ink, 0.08);
+  box-shadow: 0 18px 50px alpha(#000, 0.35);
 }
 
 .centurion-card image {
@@ -38,39 +53,37 @@ window {
 }
 
 button.suggested-action {
-  background: @centurion_ink;
+  background: linear-gradient(90deg, @centurion_interactive, @centurion_interactive_soft);
   color: @centurion_canvas;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 600;
+  border: none;
+}
+
+button.suggested-action:hover {
+  filter: brightness(1.08);
 }
 
 button.link {
-  color: @centurion_interactive;
+  color: @centurion_warm_soft;
   font-weight: 600;
 }
 
-.centurion-adrian-user {
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: alpha(@centurion_interactive, 0.10);
-}
-
-.centurion-adrian-bot {
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: alpha(@centurion_ink, 0.05);
-}
-
+.centurion-adrian-user,
 .centurion-chat-user {
   padding: 10px 14px;
-  border-radius: 12px;
-  background: alpha(@centurion_interactive, 0.12);
+  border-radius: 14px;
+  background: alpha(@centurion_interactive, 0.18);
+  color: @centurion_ink;
 }
 
+.centurion-adrian-bot,
 .centurion-chat-bot {
   padding: 10px 14px;
-  border-radius: 12px;
-  background: alpha(@centurion_ink, 0.05);
+  border-radius: 14px;
+  background: @centurion_glass;
+  border: 1px solid @centurion_border;
+  color: @centurion_ink;
 }
 
 .centurion-chat-system {
@@ -84,13 +97,14 @@ button.link {
   padding: 10px 14px;
   border-radius: 12px;
   margin: 4px 12px 0 12px;
-  background: alpha(@centurion_ink, 0.06);
+  background: alpha(@centurion_warm, 0.08);
   border: 1px solid @centurion_border;
 }
 
 .centurion-chat-activity-line {
   font-family: monospace;
   font-size: 0.92em;
+  color: @centurion_muted;
 }
 
 .centurion-chat-transcript-spacer {
@@ -99,18 +113,16 @@ button.link {
 
 .centurion-chat-approval {
   padding: 12px;
-  border-radius: 8px;
-  border: 1px solid @centurion_border;
-  background: alpha(@centurion_warm, 0.08);
+  border-radius: 12px;
+  border: 1px solid alpha(@centurion_warm, 0.35);
+  background: alpha(@centurion_warm, 0.12);
 }
-
-
 
 button.pill {
   border-radius: 999px;
   padding: 6px 14px;
-  background: alpha(@centurion_interactive, 0.10);
-  color: @centurion_interactive;
+  background: alpha(@centurion_interactive, 0.14);
+  color: @centurion_warm_soft;
   font-weight: 600;
 }
 
@@ -119,7 +131,6 @@ stackswitcher button {
   min-width: 96px;
 }
 
-/* Global attention tab chrome: title stays ink; (!) / (N) is red */
 .centurion-tab-bar {
   spacing: 4px;
 }
@@ -128,17 +139,23 @@ stackswitcher button {
   min-height: 36px;
   min-width: 96px;
   padding: 4px 14px;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 600;
+  background: transparent;
+  color: @centurion_muted;
+}
+
+.centurion-tab:checked {
+  background: alpha(@centurion_interactive, 0.18);
 }
 
 .centurion-tab-title {
-  color: @centurion_ink;
+  color: @centurion_muted;
   font-weight: 600;
 }
 
 .centurion-tab:checked .centurion-tab-title {
-  color: @centurion_ink;
+  color: @centurion_interactive_soft;
 }
 
 .centurion-tab-badge {
@@ -148,9 +165,9 @@ stackswitcher button {
 
 .centurion-attention-banner {
   padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid @centurion_attention_soft;
-  background: alpha(@centurion_attention, 0.08);
+  border-radius: 12px;
+  border: 1px solid alpha(@centurion_attention, 0.35);
+  background: alpha(@centurion_attention, 0.12);
 }
 
 .centurion-attention-banner-title {
@@ -173,9 +190,9 @@ stackswitcher button {
 }
 
 .centurion-chat-composer {
-  background: @window_bg_color;
-  border-top: 2px solid @centurion_border;
-  box-shadow: 0 -8px 24px alpha(@centurion_ink, 0.08);
+  background: alpha(@centurion_surface, 0.96);
+  border-top: 1px solid @centurion_border;
+  box-shadow: 0 -12px 32px alpha(#000, 0.35);
   min-height: 72px;
 }
 
@@ -183,122 +200,69 @@ stackswitcher button {
   min-height: 44px;
   font-size: 15px;
   padding: 8px 12px;
+  color: @centurion_ink;
+  background: alpha(#fff, 0.04);
+  border-radius: 12px;
 }
 
 .centurion-chat-sidebar {
   border-right: 1px solid @centurion_border;
-  background: alpha(@centurion_ink, 0.02);
+  background: alpha(#000, 0.22);
   min-width: 220px;
 }
 
 .centurion-session-active {
-  background: alpha(@centurion_interactive, 0.10);
+  background: alpha(@centurion_interactive, 0.14);
 }
 
-/* Home (Pulse) — iPhone Mission Portfolio parity */
-.centurion-home-pills {
-  padding: 4px 0 8px 0;
+.centurion-mission-deck-host {
+  background: @centurion_canvas;
 }
 
-.centurion-home-pill {
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-weight: 600;
-  background: alpha(@centurion_ink, 0.05);
-}
-
-.centurion-home-pill:checked {
-  background: @centurion_ink;
-  color: @centurion_canvas;
-}
-
-.centurion-home-pill-badge {
-  min-width: 1.4em;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 0.75em;
-  font-weight: 700;
-  background: transparent;
-  color: @centurion_attention;
-  border: 1px solid @centurion_attention_soft;
-}
-
-.centurion-home-pill:checked .centurion-home-pill-badge {
-  background: alpha(@centurion_attention, 0.15);
-  color: @centurion_attention;
-  border-color: @centurion_attention;
-}
-
-.centurion-home-discuss {
-  min-width: 32px;
-  min-height: 32px;
-  padding: 4px;
-}
-
-.centurion-home-card {
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid @centurion_border;
-  background: alpha(@window_bg_color, 0.96);
-  box-shadow: 0 8px 24px alpha(@centurion_ink, 0.05);
-}
-
-.centurion-home-mission {
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid @centurion_border;
-  background: alpha(@centurion_interactive, 0.06);
-}
-
-.centurion-home-orb {
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: alpha(@centurion_warm, 0.12);
-  color: @centurion_ink;
-  font-weight: 600;
-}
-
-.centurion-home-pulse-dot {
-  color: @centurion_interactive;
+.centurion-mission-deck-status {
+  color: @centurion_muted;
   font-size: 14px;
 }
 
-.centurion-home-agent {
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: alpha(@centurion_ink, 0.04);
+/* Preferences / Settings groups — glass rows on dark */
+.centurion-home-pills,
+list,
+.boxed-list {
+  background: transparent;
 }
 
-.centurion-home-commitment {
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: alpha(@centurion_interactive, 0.10);
+row {
+  color: @centurion_ink;
 }
 
-.centurion-chat-intents {
-  padding-top: 2px;
+row:hover {
+  background: alpha(@centurion_interactive, 0.08);
 }
 
-.centurion-chat-intent {
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-weight: 600;
-  background: alpha(@centurion_ink, 0.05);
+label {
+  color: inherit;
 }
 
-.centurion-chat-intent:checked {
-  background: @centurion_ink;
-  color: @centurion_canvas;
+entry {
+  background: alpha(#fff, 0.04);
+  color: @centurion_ink;
+  border-radius: 10px;
+  border: 1px solid @centurion_border;
 }
 
-.centurion-chat-attach-chip {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: alpha(@centurion_interactive, 0.10);
+/* Legacy home_page widgets (Settings dialogs still use some) */
+.centurion-home-header-title {
+  color: @centurion_ink;
+  font-weight: 650;
 }
 
-.centurion-error-log {
-  font-family: monospace;
-  font-size: 12px;
-  padding: 8px;
+.centurion-mission-card {
+  background: @centurion_glass;
+  border: 1px solid @centurion_border;
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.centurion-home-discuss {
+  color: @centurion_warm_soft;
 }

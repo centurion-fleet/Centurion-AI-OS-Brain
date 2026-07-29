@@ -10,12 +10,15 @@ BuildRequires:  cargo
 BuildRequires:  rust
 BuildRequires:  gtk4-devel
 BuildRequires:  libadwaita-devel
+BuildRequires:  webkitgtk6.0-devel
 BuildRequires:  vte291-gtk4-devel
 BuildRequires:  desktop-file-utils
 BuildRequires:  firewalld-filesystem
 BuildRequires:  systemd-rpm-macros
 Requires:       python3
 Requires:       firewalld
+Requires:       webkitgtk6.0
+Requires:       nodejs
 Requires:       vte291-gtk4
 
 %description

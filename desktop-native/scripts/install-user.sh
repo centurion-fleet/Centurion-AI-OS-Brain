@@ -93,6 +93,38 @@ mkdir -p "${APP_DIR}" "${ICON_DIR}"
 # Remove stale Tauri launcher if present.
 rm -f "${APP_DIR}/centurion-desktop.desktop"
 
+echo "Building Mission Deck (web-dashboard)…"
+MISSION_DECK_SRC="${ROOT}/web-dashboard"
+MISSION_DECK_DST="${HOME}/.local/share/centurion/mission-deck"
+if [[ -f "${MISSION_DECK_SRC}/package.json" ]]; then
+  if command -v npm >/dev/null 2>&1; then
+    (
+      cd "${MISSION_DECK_SRC}"
+      npm install --silent
+      npm run build
+    )
+    mkdir -p "${MISSION_DECK_DST}"
+    # Runtime needs server.js + dist/ (+ node_modules only if server imports none — it is stdlib-only)
+    rsync -a --delete \
+      --exclude node_modules \
+      --exclude src \
+      --exclude .git \
+      "${MISSION_DECK_SRC}/" "${MISSION_DECK_DST}/" 2>/dev/null \
+      || {
+        rm -rf "${MISSION_DECK_DST}"
+        mkdir -p "${MISSION_DECK_DST}"
+        cp -R "${MISSION_DECK_SRC}/dist" "${MISSION_DECK_DST}/"
+        cp "${MISSION_DECK_SRC}/server.js" "${MISSION_DECK_SRC}/package.json" "${MISSION_DECK_DST}/"
+        cp -R "${MISSION_DECK_SRC}/public" "${MISSION_DECK_DST}/" 2>/dev/null || true
+      }
+    echo "Mission Deck installed → ${MISSION_DECK_DST}"
+  else
+    echo "NOTE: npm not found — Mission Deck UI will be unavailable until built."
+  fi
+else
+  echo "NOTE: web-dashboard missing at ${MISSION_DECK_SRC}"
+fi
+
 # Prefer Centurion venv python so the desktop + remote bridges can import centurion_cli.
 PYTHON_BIN="python3"
 for candidate in \
@@ -116,7 +148,7 @@ Type=Application
 Name=Sovereign AI Brain
 GenericName=Personal AI Brain
 Comment=Your private Sovereign AI Brain
-Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} ${BIN_DIR}/centurion-desktop
+Exec=env CENTURION_PYTHON=${PYTHON_BIN} CENTURION_AI_REPO=${ROOT} CENTURION_MISSION_DECK_DIR=${HOME}/.local/share/centurion/mission-deck ${BIN_DIR}/centurion-desktop
 Icon=com.centurion.desktop
 Terminal=false
 Categories=Utility;Network;

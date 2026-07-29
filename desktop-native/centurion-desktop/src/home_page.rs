@@ -31,6 +31,13 @@ pub struct HomeHandle {
 }
 
 impl HomeHandle {
+    pub(crate) fn new(refresh: Rc<dyn Fn()>, attention: Rc<Cell<u32>>) -> Self {
+        Self {
+            refresh,
+            attention,
+        }
+    }
+
     pub fn refresh(&self) {
         (self.refresh)();
     }

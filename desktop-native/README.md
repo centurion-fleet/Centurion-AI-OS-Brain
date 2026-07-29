@@ -5,11 +5,15 @@ Fedora-based Personal Centurion hardware.
 
 ## Product focus (Brain first)
 
-The **desktop Brain is the product**: Chat, Home (mission/plans), Settings
-(Soul, memory, thinking, fleet). Treat the iPhone remote as an optional thin
-client — do **not** expand pairing, relay, stream, or Unbox-as-product work
-unless fixing a security or build blocker. Revisit ambient phone when the Brain
-experience is solid and the connection layer is invisible.
+The **desktop Brain is the product**: Chat, **Missions** (React Mission Deck
+embedded via WebKit — `web-dashboard/`), Settings (Soul, memory, thinking, fleet).
+Treat the iPhone remote as an optional thin client — do **not** expand pairing,
+relay, stream, or Unbox-as-product work unless fixing a security or build blocker.
+Revisit ambient phone when the Brain experience is solid and the connection layer
+is invisible.
+
+Chrome is **Amber Horizon** (warm charcoal + amber) across Chat, Missions, and
+Settings so the whole window feels like one product.
 
 See also: [Client plugins](../website/docs/developer-guide/client-plugins.md)
 (agent vs dashboard vs Brain plugin surfaces).
@@ -53,7 +57,8 @@ installer replace it.
 ```bash
 sudo dnf install \
   cargo rust gcc gcc-c++ pkgconf-pkg-config \
-  gtk4-devel libadwaita-devel vte291-gtk4-devel
+  gtk4-devel libadwaita-devel webkitgtk6.0-devel vte291-gtk4-devel \
+  nodejs npm
 
 cargo build --workspace
 cargo test --workspace
