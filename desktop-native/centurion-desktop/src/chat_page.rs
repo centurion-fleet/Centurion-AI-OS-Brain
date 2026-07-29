@@ -406,6 +406,8 @@ struct QueuedFollowUp {
 
 /// Skills offered to the agent when Research mode is active (loaded if installed).
 const RESEARCH_MODE_SKILLS: &[&str] = &[
+    "osint-investigation",
+    "domain-intel",
     "arxiv",
     "llm-wiki",
     "duckduckgo-search",
