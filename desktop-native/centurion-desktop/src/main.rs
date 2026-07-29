@@ -1551,14 +1551,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         {
             let update_row = update_row.clone();
             let refresh_settings_badge = refresh_settings_badge.clone();
+            let update_row2 = update_row.clone();
+            let refresh_settings_badge2 = refresh_settings_badge.clone();
             glib::timeout_add_seconds_local(12, move || {
                 probe_update_attention_async(update_row.clone(), refresh_settings_badge.clone());
                 glib::ControlFlow::Break
             });
-            let update_row = update_row.clone();
-            let refresh_settings_badge = refresh_settings_badge.clone();
             glib::timeout_add_seconds_local(3600, move || {
-                probe_update_attention_async(update_row.clone(), refresh_settings_badge.clone());
+                probe_update_attention_async(update_row2.clone(), refresh_settings_badge2.clone());
                 glib::ControlFlow::Continue
             });
         }
