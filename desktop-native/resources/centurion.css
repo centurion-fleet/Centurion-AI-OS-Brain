@@ -75,6 +75,7 @@ button.link {
   border-radius: 14px;
   background: alpha(@centurion_interactive, 0.18);
   color: @centurion_ink;
+  max-width: 520px;
 }
 
 .centurion-adrian-bot,
@@ -84,6 +85,38 @@ button.link {
   background: @centurion_glass;
   border: 1px solid @centurion_border;
   color: @centurion_ink;
+  max-width: 560px;
+}
+
+.centurion-chat-bubble {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+
+.centurion-chat-text {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: @centurion_ink;
+}
+
+.centurion-chat-h1,
+.centurion-chat-h2,
+.centurion-chat-h3 {
+  margin-top: 2px;
+}
+
+.centurion-chat-code {
+  font-family: monospace;
+  font-size: 12.5px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: alpha(#000, 0.35);
+  border: 1px solid @centurion_border;
+  color: @centurion_ink;
+}
+
+.centurion-chat-code-lang {
+  margin-bottom: -4px;
 }
 
 .centurion-chat-system {
@@ -91,6 +124,7 @@ button.link {
   border-radius: 12px;
   background: transparent;
   color: @centurion_muted;
+  max-width: 640px;
 }
 
 .centurion-chat-activity {
@@ -193,16 +227,54 @@ stackswitcher button {
   background: alpha(@centurion_surface, 0.96);
   border-top: 1px solid @centurion_border;
   box-shadow: 0 -12px 32px alpha(#000, 0.35);
-  min-height: 72px;
+  min-height: 120px;
+}
+
+.centurion-chat-entry-scroll {
+  border-radius: 12px;
+  border: 1px solid @centurion_border;
+  background: alpha(#fff, 0.04);
 }
 
 .centurion-chat-entry {
-  min-height: 44px;
   font-size: 15px;
-  padding: 8px 12px;
   color: @centurion_ink;
-  background: alpha(#fff, 0.04);
-  border-radius: 12px;
+  background: transparent;
+}
+
+.centurion-chat-entry text {
+  color: @centurion_ink;
+  background: transparent;
+}
+
+.centurion-chat-placeholder {
+  color: @centurion_dim;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.centurion-chat-stop {
+  background: transparent;
+  color: @centurion_warm_soft;
+  border: 1px solid alpha(@centurion_interactive, 0.45);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.centurion-chat-stop:hover {
+  background: alpha(@centurion_interactive, 0.12);
+}
+
+.centurion-chat-attachments {
+  spacing: 6px;
+}
+
+.centurion-chat-attach-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: alpha(@centurion_interactive, 0.12);
+  border: 1px solid alpha(@centurion_interactive, 0.28);
+  color: @centurion_ink;
 }
 
 .centurion-chat-sidebar {

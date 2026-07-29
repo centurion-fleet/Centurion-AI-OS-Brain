@@ -5,6 +5,8 @@
 
 use adw::prelude::*;
 use gtk4 as gtk;
+use gtk4::gdk::{self, Key, ModifierType};
+use gdk::prelude::*;
 use gio;
 use libadwaita as adw;
 use serde_json::Value;
@@ -13,7 +15,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -232,7 +235,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
 /// Handle for other tabs (Home) to seed the Chat composer with topic context.
 #[derive(Clone)]
 pub struct ChatHandle {
-    input: gtk::Entry,
+    input: ComposerInput,
     active_discuss: Rc<RefCell<Option<DiscussTopic>>>,
     context_banner: gtk::Label,
     context_bar: gtk::Box,
@@ -272,7 +275,7 @@ impl ChatHandle {
         self.refresh_banner();
         if resumed {
             // Continuing the topic thread — don't paste kickoff into an old chat.
-            self.input.set_text("");
+            self.input.clear();
             self.input.grab_focus();
             return;
         }
@@ -284,9 +287,8 @@ impl ChatHandle {
             format!("{kickoff}\n\n")
         };
         self.input.set_text(&body);
+        self.input.place_cursor_end();
         self.input.grab_focus();
-        let len = body.chars().count() as i32;
-        self.input.set_position(len);
     }
 
     /// Back-compat: title + detail prose only (Horizon and similar).
@@ -358,6 +360,172 @@ struct PendingAttachment {
     filename: String,
 }
 
+const COMPOSER_MIN_HEIGHT: i32 = 88;
+const COMPOSER_MAX_HEIGHT: i32 = 220;
+const COMPOSER_PLACEHOLDER: &str =
+    "Message your Centurion…  ·  Enter to send  ·  Shift+Enter for new line";
+
+/// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
+#[derive(Clone)]
+struct ComposerInput {
+    view: gtk::TextView,
+    scroll: gtk::ScrolledWindow,
+    overlay: gtk::Overlay,
+    placeholder: gtk::Label,
+}
+
+impl ComposerInput {
+    fn build() -> Self {
+        let view = gtk::TextView::builder()
+            .wrap_mode(gtk::WrapMode::WordChar)
+            .accepts_tab(false)
+            .hexpand(true)
+            .vexpand(true)
+            .left_margin(12)
+            .right_margin(12)
+            .top_margin(10)
+            .bottom_margin(10)
+            .css_classes(["centurion-chat-entry"])
+            .can_focus(true)
+            .build();
+
+        let scroll = gtk::ScrolledWindow::builder()
+            .child(&view)
+            .hexpand(true)
+            .vexpand(false)
+            .min_content_height(COMPOSER_MIN_HEIGHT)
+            .max_content_height(COMPOSER_MAX_HEIGHT)
+            .propagate_natural_height(true)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .css_classes(["centurion-chat-entry-scroll"])
+            .build();
+        scroll.set_size_request(-1, COMPOSER_MIN_HEIGHT);
+
+        let placeholder = gtk::Label::builder()
+            .label(COMPOSER_PLACEHOLDER)
+            .xalign(0.0)
+            .yalign(0.0)
+            .wrap(true)
+            .sensitive(false)
+            .can_target(false)
+            .css_classes(["centurion-chat-placeholder"])
+            .margin_start(14)
+            .margin_top(12)
+            .margin_end(14)
+            .build();
+
+        let overlay = gtk::Overlay::new();
+        overlay.set_child(Some(&scroll));
+        overlay.add_overlay(&placeholder);
+        overlay.set_hexpand(true);
+
+        let composer = Self {
+            view,
+            scroll,
+            overlay,
+            placeholder,
+        };
+        composer.refresh_placeholder();
+        composer
+    }
+
+    fn root(&self) -> &gtk::Overlay {
+        &self.overlay
+    }
+
+    fn view(&self) -> &gtk::TextView {
+        &self.view
+    }
+
+    fn text(&self) -> String {
+        let buffer = self.view.buffer();
+        let start = buffer.start_iter();
+        let end = buffer.end_iter();
+        buffer.text(&start, &end, false).to_string()
+    }
+
+    fn set_text(&self, text: &str) {
+        self.view.buffer().set_text(text);
+        self.refresh_placeholder();
+        self.update_grow();
+    }
+
+    fn clear(&self) {
+        self.set_text("");
+    }
+
+    fn place_cursor_end(&self) {
+        let buffer = self.view.buffer();
+        let end = buffer.end_iter();
+        buffer.place_cursor(&end);
+    }
+
+    fn grab_focus(&self) {
+        self.view.grab_focus();
+    }
+
+    #[allow(dead_code)]
+    fn set_sensitive(&self, sensitive: bool) {
+        self.view.set_sensitive(sensitive);
+    }
+
+    fn refresh_placeholder(&self) {
+        self.placeholder.set_visible(self.text().is_empty());
+    }
+
+    fn update_grow(&self) {
+        let buffer = self.view.buffer();
+        let line_count = buffer.line_count().max(1);
+        // ~22px per line + padding; clamp to min/max.
+        let desired = (28 + line_count * 22).clamp(COMPOSER_MIN_HEIGHT, COMPOSER_MAX_HEIGHT);
+        self.scroll.set_size_request(-1, desired);
+        self.scroll.set_min_content_height(desired.min(COMPOSER_MAX_HEIGHT));
+    }
+}
+
+fn chat_drafts_dir() -> PathBuf {
+    let dir = PathBuf::from(resolve_centurion_home()).join("chat_drafts");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn push_attachment_unique(
+    attachments: &Rc<RefCell<Vec<PendingAttachment>>>,
+    path: PathBuf,
+) -> bool {
+    let filename = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string());
+    let already = attachments.borrow().iter().any(|a| a.path == path);
+    if already {
+        return false;
+    }
+    attachments
+        .borrow_mut()
+        .push(PendingAttachment { path, filename });
+    true
+}
+
+fn save_clipboard_texture_as_attachment(
+    texture: &gdk::Texture,
+    attachments: &Rc<RefCell<Vec<PendingAttachment>>>,
+) -> bool {
+    let bytes = texture.save_to_png_bytes();
+    let name = format!(
+        "paste-{}.png",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
+    let path = chat_drafts_dir().join(&name);
+    if std::fs::write(&path, bytes.as_ref()).is_err() {
+        return false;
+    }
+    push_attachment_unique(attachments, path)
+}
 
 fn rebuild_attachment_chips(
     attachment_row: &gtk::Box,
@@ -1708,6 +1876,7 @@ fn run_chat_turn(
     text: String,
     event_tx: mpsc::Sender<WorkerEvent>,
     approval_rx: mpsc::Receiver<ApprovalDecision>,
+    cancel: Arc<AtomicBool>,
 ) {
     let payload = serde_json::json!({
         "id": "desktop-chat",
@@ -1773,6 +1942,12 @@ fn run_chat_turn(
     let mut final_response: Option<Value> = None;
 
     for raw_line in reader.lines() {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = event_tx.send(WorkerEvent::Done(Err("Stopped.".to_owned())));
+            return;
+        }
         // Drain any approval decisions the UI already queued.
         while let Ok(decision) = approval_rx.try_recv() {
             let payload = serde_json::json!({
@@ -1966,9 +2141,12 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
     let outer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     outer.set_margin_top(4);
     outer.set_margin_bottom(4);
+    outer.set_hexpand(true);
 
-    let bubble = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    bubble.set_hexpand(true);
+    let bubble = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    // Size to content, not the full window — Cursor-like readable column.
+    bubble.set_hexpand(false);
+    bubble.add_css_class("centurion-chat-bubble");
 
     if message.role == ChatRole::Assistant {
         bubble.append(
@@ -1995,28 +2173,28 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
         );
     }
 
-    bubble.append(
-        &gtk::Label::builder()
-            .label(&message.content)
-            .wrap(true)
-            .xalign(0.0)
-            .selectable(true)
-            .build(),
-    );
+    bubble.append(&formatted_message_body(&message.content));
 
     match message.role {
         ChatRole::User => {
             bubble.set_halign(gtk::Align::End);
             bubble.add_css_class("centurion-chat-user");
+            let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+            spacer.set_hexpand(true);
+            outer.append(&spacer);
             outer.append(&bubble);
         }
         ChatRole::Assistant => {
             bubble.set_halign(gtk::Align::Start);
             bubble.add_css_class("centurion-chat-bot");
             outer.append(&bubble);
+            let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+            spacer.set_hexpand(true);
+            outer.append(&spacer);
         }
         ChatRole::System => {
             bubble.set_halign(gtk::Align::Fill);
+            bubble.set_hexpand(true);
             bubble.add_css_class("centurion-chat-system");
             outer.append(&bubble);
         }
@@ -2024,6 +2202,261 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
 
     row.set_child(Some(&outer));
     row
+}
+
+fn pango_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Turn markdown into a human-friendly GTK widget tree (not raw `**` / `##` / fences).
+fn formatted_message_body(markdown: &str) -> gtk::Box {
+    use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    body.set_hexpand(false);
+
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    let parser = Parser::new_ext(markdown, options);
+
+    let mut blocks: Vec<MessageBlock> = Vec::new();
+    let mut inline = String::new();
+    let mut list_depth: usize = 0;
+    let mut list_ordered: Vec<bool> = Vec::new();
+    let mut list_index: Vec<u32> = Vec::new();
+    let mut in_code_block = false;
+    let mut code_lang = String::new();
+    let mut code_buf = String::new();
+    let mut heading_level: Option<u8> = None;
+
+    let flush_inline = |inline: &mut String, blocks: &mut Vec<MessageBlock>, heading: Option<u8>| {
+        let trimmed = inline.trim_end();
+        if trimmed.is_empty() {
+            inline.clear();
+            return;
+        }
+        blocks.push(MessageBlock::Paragraph {
+            markup: trimmed.to_string(),
+            heading,
+        });
+        inline.clear();
+    };
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Paragraph) => {}
+            Event::End(TagEnd::Paragraph) => {
+                flush_inline(&mut inline, &mut blocks, None);
+            }
+            Event::Start(Tag::Heading { level, .. }) => {
+                flush_inline(&mut inline, &mut blocks, None);
+                heading_level = Some(match level {
+                    HeadingLevel::H1 => 1,
+                    HeadingLevel::H2 => 2,
+                    HeadingLevel::H3 => 3,
+                    HeadingLevel::H4 => 4,
+                    HeadingLevel::H5 => 5,
+                    HeadingLevel::H6 => 6,
+                });
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                let level = heading_level.take();
+                flush_inline(&mut inline, &mut blocks, level);
+            }
+            Event::Start(Tag::List(start)) => {
+                flush_inline(&mut inline, &mut blocks, None);
+                list_depth += 1;
+                list_ordered.push(start.is_some());
+                list_index.push(start.unwrap_or(1));
+            }
+            Event::End(TagEnd::List(_)) => {
+                flush_inline(&mut inline, &mut blocks, None);
+                list_depth = list_depth.saturating_sub(1);
+                list_ordered.pop();
+                list_index.pop();
+            }
+            Event::Start(Tag::Item) => {
+                flush_inline(&mut inline, &mut blocks, None);
+                let indent = "  ".repeat(list_depth.saturating_sub(1));
+                let bullet = if list_ordered.last().copied().unwrap_or(false) {
+                    let n = list_index.last().copied().unwrap_or(1);
+                    if let Some(idx) = list_index.last_mut() {
+                        *idx += 1;
+                    }
+                    format!("{n}. ")
+                } else {
+                    "• ".to_owned()
+                };
+                inline.push_str(&indent);
+                inline.push_str(&bullet);
+            }
+            Event::End(TagEnd::Item) => {
+                flush_inline(&mut inline, &mut blocks, None);
+            }
+            Event::Start(Tag::CodeBlock(kind)) => {
+                flush_inline(&mut inline, &mut blocks, None);
+                in_code_block = true;
+                code_buf.clear();
+                code_lang = match kind {
+                    CodeBlockKind::Fenced(lang) => lang.to_string(),
+                    CodeBlockKind::Indented => String::new(),
+                };
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                in_code_block = false;
+                let code = code_buf.trim_end_matches('\n').to_string();
+                blocks.push(MessageBlock::Code {
+                    text: code,
+                    lang: code_lang.clone(),
+                });
+                code_buf.clear();
+                code_lang.clear();
+            }
+            Event::Start(Tag::Emphasis) => inline.push_str("<i>"),
+            Event::End(TagEnd::Emphasis) => inline.push_str("</i>"),
+            Event::Start(Tag::Strong) => inline.push_str("<b>"),
+            Event::End(TagEnd::Strong) => inline.push_str("</b>"),
+            Event::Start(Tag::Strikethrough) => inline.push_str("<s>"),
+            Event::End(TagEnd::Strikethrough) => inline.push_str("</s>"),
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                inline.push_str("<span foreground=\"#ffb347\"><u>");
+                // Keep URL for title attribute via comment in markup — show as text after.
+                let _ = dest_url;
+            }
+            Event::End(TagEnd::Link) => inline.push_str("</u></span>"),
+            Event::Code(code) => {
+                inline.push_str("<tt>");
+                inline.push_str(&pango_escape(&code));
+                inline.push_str("</tt>");
+            }
+            Event::Text(text) => {
+                if in_code_block {
+                    code_buf.push_str(&text);
+                } else {
+                    inline.push_str(&pango_escape(&text));
+                }
+            }
+            Event::SoftBreak => {
+                if in_code_block {
+                    code_buf.push('\n');
+                } else {
+                    inline.push(' ');
+                }
+            }
+            Event::HardBreak => {
+                if in_code_block {
+                    code_buf.push('\n');
+                } else {
+                    inline.push('\n');
+                }
+            }
+            Event::Rule => {
+                flush_inline(&mut inline, &mut blocks, None);
+                blocks.push(MessageBlock::Rule);
+            }
+            Event::TaskListMarker(checked) => {
+                inline.push_str(if checked { "☑ " } else { "☐ " });
+            }
+            _ => {}
+        }
+    }
+    flush_inline(&mut inline, &mut blocks, None);
+
+    if blocks.is_empty() {
+        // Plain fallback (no markdown structure detected).
+        body.append(&chat_text_label(
+            &pango_escape(markdown.trim()),
+            false,
+            None,
+        ));
+        return body;
+    }
+
+    for block in blocks {
+        match block {
+            MessageBlock::Paragraph { markup, heading } => {
+                body.append(&chat_text_label(&markup, false, heading));
+            }
+            MessageBlock::Code { text, lang } => {
+                let header = if lang.is_empty() {
+                    None
+                } else {
+                    Some(lang)
+                };
+                if let Some(lang) = header {
+                    body.append(
+                        &gtk::Label::builder()
+                            .label(&lang)
+                            .xalign(0.0)
+                            .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
+                            .build(),
+                    );
+                }
+                let code_label = gtk::Label::builder()
+                    .label(&text)
+                    .wrap(true)
+                    .wrap_mode(gtk::pango::WrapMode::Char)
+                    .xalign(0.0)
+                    .selectable(true)
+                    .max_width_chars(52)
+                    .css_classes(["centurion-chat-code"])
+                    .build();
+                body.append(&code_label);
+            }
+            MessageBlock::Rule => {
+                body.append(
+                    &gtk::Separator::builder()
+                        .orientation(gtk::Orientation::Horizontal)
+                        .build(),
+                );
+            }
+        }
+    }
+
+    body
+}
+
+enum MessageBlock {
+    Paragraph { markup: String, heading: Option<u8> },
+    Code { text: String, lang: String },
+    Rule,
+}
+
+fn chat_text_label(markup: &str, monospace: bool, heading: Option<u8>) -> gtk::Label {
+    let final_markup = if let Some(level) = heading {
+        let size = match level {
+            1 => "large",
+            2 => "medium",
+            _ => "small",
+        };
+        format!("<span size=\"{size}\" weight=\"bold\">{markup}</span>")
+    } else if monospace {
+        format!("<tt>{markup}</tt>")
+    } else {
+        markup.to_string()
+    };
+
+    let mut classes = vec!["centurion-chat-text".to_owned()];
+    if monospace {
+        classes.push("centurion-chat-code".to_owned());
+    }
+    if let Some(level) = heading {
+        classes.push(format!("centurion-chat-h{level}"));
+    }
+    let class_refs: Vec<&str> = classes.iter().map(String::as_str).collect();
+    gtk::Label::builder()
+        .use_markup(true)
+        .label(&final_markup)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
+        .xalign(0.0)
+        .selectable(true)
+        .max_width_chars(52)
+        .css_classes(&class_refs)
+        .build()
 }
 
 fn load_assistant_display_name() -> String {
@@ -2664,40 +3097,44 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let attach_button = gtk::Button::from_icon_name("mail-attachment-symbolic");
     attach_button.set_tooltip_text(Some("Attach files"));
     attach_button.add_css_class("flat");
-    attach_button.set_valign(gtk::Align::Center);
+    attach_button.set_valign(gtk::Align::End);
     attach_button.set_size_request(44, 44);
 
-    let input = gtk::Entry::builder()
-        .placeholder_text("Type a message to your Centurion…")
-        .hexpand(true)
-        .can_focus(true)
-        .css_classes(["centurion-chat-entry"])
-        .build();
-    input.set_size_request(-1, 44);
+    let input = ComposerInput::build();
 
     let send_button = gtk::Button::with_label("Send");
     send_button.add_css_class("suggested-action");
-    send_button.set_tooltip_text(Some("Send"));
-    send_button.set_valign(gtk::Align::Center);
+    send_button.set_tooltip_text(Some("Send · Enter"));
+    send_button.set_valign(gtk::Align::End);
     send_button.set_size_request(88, 44);
+
+    let stop_button = gtk::Button::with_label("Stop");
+    stop_button.add_css_class("centurion-chat-stop");
+    stop_button.set_tooltip_text(Some("Stop this turn"));
+    stop_button.set_valign(gtk::Align::End);
+    stop_button.set_size_request(88, 44);
+    stop_button.set_visible(false);
 
     let sending_spinner = gtk::Spinner::new();
     sending_spinner.set_visible(false);
-    sending_spinner.set_valign(gtk::Align::Center);
+    sending_spinner.set_valign(gtk::Align::End);
 
     input_row.append(&attach_button);
-    input_row.append(&input);
+    input_row.append(input.root());
     input_row.append(&send_button);
+    input_row.append(&stop_button);
     input_row.append(&sending_spinner);
     bottom.append(&input_row);
     chat_column.append(&bottom);
+
+    let turn_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
 
     {
         let attachments = attachments.clone();
         let refresh_attachments = refresh_attachments.clone();
         let input = input.clone();
         attach_button.connect_clicked(move |_| {
-            let Some(window) = input.root().and_downcast::<gtk::Window>() else {
+            let Some(window) = input.view().root().and_downcast::<gtk::Window>() else {
                 return;
             };
             let dialog = gtk::FileDialog::builder()
@@ -2722,23 +3159,54 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     let Some(path) = file.path() else {
                         continue;
                     };
-                    let filename = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| path.display().to_string());
-                    let already = attachments.borrow().iter().any(|a| a.path == path);
-                    if already {
-                        continue;
+                    if push_attachment_unique(&attachments, path) {
+                        added = true;
                     }
-                    attachments
-                        .borrow_mut()
-                        .push(PendingAttachment { path, filename });
-                    added = true;
                 }
                 if added {
                     refresh_attachments();
                 }
             });
+        });
+    }
+
+    // Drag-and-drop files onto the composer.
+    {
+        let attachments = attachments.clone();
+        let refresh_attachments = refresh_attachments.clone();
+        let drop = gtk::DropTarget::new(glib::Type::INVALID, gdk::DragAction::COPY);
+        drop.set_types(&[gio::File::static_type(), gdk::FileList::static_type()]);
+        drop.connect_drop(move |_, value, _, _| {
+            let mut added = false;
+            if let Ok(list) = value.get::<gdk::FileList>() {
+                for file in list.files() {
+                    if let Some(path) = file.path() {
+                        if push_attachment_unique(&attachments, path) {
+                            added = true;
+                        }
+                    }
+                }
+            } else if let Ok(file) = value.get::<gio::File>() {
+                if let Some(path) = file.path() {
+                    if push_attachment_unique(&attachments, path) {
+                        added = true;
+                    }
+                }
+            }
+            if added {
+                refresh_attachments();
+            }
+            added
+        });
+        input.root().add_controller(drop);
+    }
+
+    // Placeholder + auto-grow on buffer changes.
+    {
+        let input = input.clone();
+        input.view().buffer().connect_changed(move |_| {
+            input.refresh_placeholder();
+            input.update_grow();
         });
     }
 
@@ -2814,23 +3282,35 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     let set_sending: Rc<dyn Fn(bool)> = Rc::new({
         let send_button = send_button.clone();
+        let stop_button = stop_button.clone();
         let sending_spinner = sending_spinner.clone();
-        let input = input.clone();
         let is_sending = is_sending.clone();
         let new_chat_button = new_chat_button.clone();
         let session_list = session_list.clone();
+        let turn_cancel = turn_cancel.clone();
         move |sending: bool| {
             *is_sending.borrow_mut() = sending;
             send_button.set_visible(!sending);
+            stop_button.set_visible(sending);
             sending_spinner.set_visible(sending);
             if sending {
                 sending_spinner.start();
             } else {
                 sending_spinner.stop();
+                *turn_cancel.borrow_mut() = None;
             }
-            input.set_sensitive(!sending);
+            // Keep composer editable while generating (Cursor-like); submit is gated by is_sending.
             new_chat_button.set_sensitive(!sending);
             session_list.set_sensitive(!sending);
+        }
+    });
+
+    stop_button.connect_clicked({
+        let turn_cancel = turn_cancel.clone();
+        move |_| {
+            if let Some(flag) = turn_cancel.borrow().as_ref() {
+                flag.store(true, Ordering::SeqCst);
+            }
         }
     });
 
@@ -3426,11 +3906,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let show_activity_working = show_activity_working.clone();
         let apply_activity = apply_activity.clone();
         let finish_activity_summary = finish_activity_summary.clone();
+        let turn_cancel = turn_cancel.clone();
         move || {
             if *is_sending.borrow() {
                 return;
             }
-            let text = input.text().to_string();
+            let text = input.text();
             let pending = attachments.borrow().clone();
             if text.trim().is_empty() && pending.is_empty() {
                 return;
@@ -3446,7 +3927,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             } else {
                 title.set_label(&format!("Chat with {}", assistant_name.borrow()));
             }
-            input.set_text("");
+            input.clear();
             attachments.borrow_mut().clear();
             refresh_attachments();
             follow_bottom.set(true);
@@ -3458,6 +3939,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             set_error(None);
             clear_approval();
             show_activity_working();
+            let cancel = Arc::new(AtomicBool::new(false));
+            *turn_cancel.borrow_mut() = Some(cancel.clone());
             set_sending(true);
 
             let discuss_topic = active_discuss.borrow().clone();
@@ -3504,7 +3987,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         }
                     },
                 };
-                run_chat_turn(sid, outbound, event_tx, approval_rx);
+                run_chat_turn(sid, outbound, event_tx, approval_rx, cancel);
             });
 
             let messages = messages.clone();
@@ -3589,7 +4072,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                 refresh_messages();
                                 refresh_sessions();
                             }
-                            Err(err) => set_error(Some(err)),
+                            Err(err) => {
+                                if err == "Stopped." {
+                                    messages.borrow_mut().push(ChatMessage {
+                                        role: ChatRole::System,
+                                        content: "Stopped.".to_owned(),
+                                    });
+                                    follow_bottom.set(true);
+                                    refresh_messages();
+                                } else {
+                                    set_error(Some(err));
+                                }
+                            }
                         }
                         glib::ControlFlow::Break
                     }
@@ -3613,10 +4107,53 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let submit = submit.clone();
         move |_| submit()
     });
-    input.connect_activate({
+
+    // Cursor keybindings: Enter / Ctrl+Enter send; Shift+Enter newline.
+    // Ctrl/Cmd+V with an image on the clipboard → attach PNG.
+    {
         let submit = submit.clone();
-        move |_| submit()
-    });
+        let attachments = attachments.clone();
+        let refresh_attachments = refresh_attachments.clone();
+        let key = gtk::EventControllerKey::new();
+        key.set_propagation_phase(gtk::PropagationPhase::Capture);
+        key.connect_key_pressed(move |controller, keyval, _keycode, state| {
+            let shift = state.contains(ModifierType::SHIFT_MASK);
+            let ctrl = state.contains(ModifierType::CONTROL_MASK)
+                || state.contains(ModifierType::META_MASK)
+                || state.contains(ModifierType::SUPER_MASK);
+
+            // Paste image → attachment
+            if ctrl && (keyval == Key::v || keyval == Key::V) {
+                if let Some(widget) = controller.widget() {
+                    let clipboard = widget.clipboard();
+                    let attachments = attachments.clone();
+                    let refresh_attachments = refresh_attachments.clone();
+                    clipboard.read_texture_async(
+                        gio::Cancellable::NONE,
+                        move |result| {
+                            if let Ok(Some(texture)) = result {
+                                if save_clipboard_texture_as_attachment(&texture, &attachments) {
+                                    refresh_attachments();
+                                }
+                            }
+                        },
+                    );
+                    // Let text paste proceed if no image; when image exists we still
+                    // allow text paste in parallel — fine for v1.
+                }
+            }
+
+            if keyval == Key::Return || keyval == Key::KP_Enter {
+                if shift && !ctrl {
+                    return glib::Propagation::Proceed;
+                }
+                submit();
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        input.view().add_controller(key);
+    }
 
     glib::idle_add_local_once({
         let input = input.clone();
