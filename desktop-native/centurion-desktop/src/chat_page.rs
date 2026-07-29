@@ -366,6 +366,8 @@ enum ChatIntent {
     Chat,
     /// Cursor-like Plan mode: structured proposal this turn (mission-proposal or plan-artifact).
     Plan,
+    /// Evidence-backed research this turn — loads research skills into the message.
+    Research,
 }
 
 #[derive(Clone, Debug)]
@@ -399,7 +401,26 @@ struct PendingAttachment {
 struct QueuedFollowUp {
     text: String,
     attachments: Vec<PendingAttachment>,
-    plan_mode: bool,
+    intent: ChatIntent,
+}
+
+/// Skills offered to the agent when Research mode is active (loaded if installed).
+const RESEARCH_MODE_SKILLS: &[&str] = &[
+    "arxiv",
+    "llm-wiki",
+    "duckduckgo-search",
+    "searxng-search",
+    "parallel-cli",
+    "scrapling",
+    "blogwatcher",
+];
+
+fn intent_label(intent: ChatIntent) -> &'static str {
+    match intent {
+        ChatIntent::Chat => "Chat",
+        ChatIntent::Plan => "Plan",
+        ChatIntent::Research => "Research",
+    }
 }
 
 const COMPOSER_MIN_HEIGHT: i32 = 88;
@@ -725,6 +746,26 @@ fn frame_plan_mode(user_text: &str, topic: Option<&DiscussTopic>) -> String {
         }
         None => frame_plan_artifact_mode(user_text),
     }
+}
+
+fn frame_research_mode(user_text: &str, topic: Option<&DiscussTopic>) -> String {
+    let body = match topic {
+        Some(t) => frame_discuss_outbound(user_text, t),
+        None => user_text.to_owned(),
+    };
+    format!(
+        "[Sovereign AI Brain — Research mode]\n\
+         The user wants evidence-backed research this turn — not a casual reply and not a plan-to-act.\n\n\
+         For this turn only:\n\
+         - Use research skills and web tools (`web_search`, `web_extract`, `skill_view`) to gather evidence.\n\
+         - Prefer installed research skills (arxiv, llm-wiki, duckduckgo-search, searxng-search, parallel-cli, scrapling, blogwatcher) when relevant.\n\
+         - Cite sources with URLs, paper IDs, or clear references. Separate facts from speculation.\n\
+         - Summarize findings clearly; call out gaps and what would need deeper digging.\n\
+         - Do not mutate project files, send messages, or take external actions unless the user explicitly asked.\n\
+         - Research skill bodies may be loaded below this framing — follow them when they apply.\n\n\
+         User message:\n\
+         {body}"
+    )
 }
 
 const PLAN_UPDATE_FENCE: &str = "plan-update";
@@ -2379,6 +2420,7 @@ fn run_chat_turn(
     session_id: String,
     text: String,
     life_inject: Option<Value>,
+    skills: Option<Vec<String>>,
     event_tx: mpsc::Sender<WorkerEvent>,
     approval_rx: mpsc::Receiver<ApprovalDecision>,
     cancel: Arc<AtomicBool>,
@@ -2395,6 +2437,16 @@ fn run_chat_turn(
     });
     if let Some(inject) = life_inject {
         payload["life_inject"] = inject;
+    }
+    if let Some(skills) = skills {
+        if !skills.is_empty() {
+            payload["skills"] = Value::Array(
+                skills
+                    .into_iter()
+                    .map(Value::String)
+                    .collect(),
+            );
+        }
     }
     let line = match serde_json::to_vec(&payload) {
         Ok(mut bytes) => {
@@ -3859,7 +3911,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let mode_btn = gtk::MenuButton::builder()
         .label("Chat")
         .css_classes(["centurion-chat-pill"])
-        .tooltip_text("Chat = typed conversation. Plan = ask for a structured proposal this turn. (Not voice.)")
+        .tooltip_text(
+            "Chat = typed conversation. Research = evidence-backed skills. Plan = structured proposal. (Not voice.)",
+        )
         .halign(gtk::Align::Start)
         .build();
     {
@@ -3872,6 +3926,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let chat_item = gtk::Button::with_label("Chat — typed conversation");
         chat_item.add_css_class("flat");
         chat_item.set_halign(gtk::Align::Start);
+        let research_item = gtk::Button::with_label("Research — evidence & research skills");
+        research_item.add_css_class("flat");
+        research_item.set_halign(gtk::Align::Start);
         let plan_item = gtk::Button::with_label("Plan — structured proposal");
         plan_item.add_css_class("flat");
         plan_item.set_halign(gtk::Align::Start);
@@ -3889,6 +3946,16 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let intent = intent.clone();
             let mode_btn = mode_btn.clone();
             let popover = popover.clone();
+            research_item.connect_clicked(move |_| {
+                intent.set(ChatIntent::Research);
+                mode_btn.set_label("Research");
+                popover.popdown();
+            });
+        }
+        {
+            let intent = intent.clone();
+            let mode_btn = mode_btn.clone();
+            let popover = popover.clone();
             plan_item.connect_clicked(move |_| {
                 intent.set(ChatIntent::Plan);
                 mode_btn.set_label("Plan");
@@ -3896,6 +3963,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             });
         }
         list.append(&chat_item);
+        list.append(&research_item);
         list.append(&plan_item);
         popover.set_child(Some(&list));
         mode_btn.set_popover(Some(&popover));
@@ -5242,7 +5310,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 message_queue.borrow_mut().push(QueuedFollowUp {
                     text,
                     attachments: pending,
-                    plan_mode: intent.get() == ChatIntent::Plan,
+                    intent: intent.get(),
                 });
                 input.clear();
                 attachments.borrow_mut().clear();
@@ -5250,7 +5318,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 refresh_queue_strip();
                 return;
             }
-            let plan_mode = intent.get() == ChatIntent::Plan;
+            let turn_intent = intent.get();
+            let plan_mode = turn_intent == ChatIntent::Plan;
+            let research_mode = turn_intent == ChatIntent::Research;
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
             let _ = honor_soul_session_reset(&session_id, &messages);
@@ -5300,12 +5370,24 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             }
             let mut life_inject: Option<Value> = None;
             let mission_discuss = matches!(discuss_topic, Some(DiscussTopic::Mission { .. }));
+            let mut turn_skills: Option<Vec<String>> = None;
             if plan_mode {
                 // Plan mode preserves Mission framing (mission-proposal) instead of dropping it.
                 if let Some(ref topic) = discuss_topic {
                     life_inject = life_inject_for_topic(&text, topic);
                 }
                 outbound = frame_plan_mode(&outbound, discuss_topic.as_ref());
+            } else if research_mode {
+                if let Some(ref topic) = discuss_topic {
+                    life_inject = life_inject_for_topic(&text, topic);
+                }
+                outbound = frame_research_mode(&outbound, discuss_topic.as_ref());
+                turn_skills = Some(
+                    RESEARCH_MODE_SKILLS
+                        .iter()
+                        .map(|s| (*s).to_owned())
+                        .collect(),
+                );
             } else if let Some(ref topic) = discuss_topic {
                 life_inject = life_inject_for_topic(&text, topic);
                 outbound = frame_discuss_outbound(&outbound, topic);
@@ -5322,11 +5404,11 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                 Some(DiscussTopic::Commitment { id, .. }) => id.clone(),
                 _ => String::new(),
             };
-            // Auto plan-update only outside Plan mode (Plan mode may emit a new artifact).
+            // Auto plan-update only in Chat mode (Plan/Research may draft or investigate).
             let applying_plan_update =
-                !plan_mode && !plan_id_for_update.is_empty();
+                !plan_mode && !research_mode && !plan_id_for_update.is_empty();
             let applying_commitment_update =
-                !plan_mode && !commitment_id_for_update.is_empty();
+                !plan_mode && !research_mode && !commitment_id_for_update.is_empty();
             // Non-mission Plan mode still auto-saves plan-artifact to Home.
             let auto_save_plan_artifact = plan_mode && !mission_discuss;
 
@@ -5350,7 +5432,15 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         }
                     },
                 };
-                run_chat_turn(sid, outbound, life_inject, event_tx, approval_rx, cancel);
+                run_chat_turn(
+                    sid,
+                    outbound,
+                    life_inject,
+                    turn_skills,
+                    event_tx,
+                    approval_rx,
+                    cancel,
+                );
             });
 
             let messages = messages.clone();
@@ -5506,12 +5596,8 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         };
                         refresh_queue_strip();
                         if let Some(next) = next {
-                            intent.set(if next.plan_mode {
-                                ChatIntent::Plan
-                            } else {
-                                ChatIntent::Chat
-                            });
-                            mode_btn.set_label(if next.plan_mode { "Plan" } else { "Chat" });
+                            intent.set(next.intent);
+                            mode_btn.set_label(intent_label(next.intent));
                             input.set_text(&next.text);
                             *attachments.borrow_mut() = next.attachments;
                             refresh_attachments();

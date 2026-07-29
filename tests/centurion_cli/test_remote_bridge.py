@@ -385,3 +385,43 @@ def test_handle_chat_life_inject_inserts_context(monkeypatch):
     assert result["ok"] is True
     assert "MISSION_CTX" in seen["text"]
     assert "User message:" in seen["text"]
+
+
+def test_handle_chat_skills_prepends_skill_bodies(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    def fake_build(cmd_key, user_instruction=""):
+        return f"[SKILL {cmd_key}]"
+
+    monkeypatch.setattr(
+        "agent.skill_commands.build_skill_invocation_message",
+        fake_build,
+        raising=False,
+    )
+    import types
+    import sys
+
+    fake_mod = types.ModuleType("agent.skill_commands")
+    fake_mod.build_skill_invocation_message = fake_build
+    monkeypatch.setitem(sys.modules, "agent.skill_commands", fake_mod)
+
+    seen = {}
+
+    def run_agent(text, **kwargs):
+        seen["text"] = text
+        return "ok"
+
+    result = rb.handle_request(
+        {
+            "id": "skills-1",
+            "action": "chat",
+            "text": "What does the arXiv paper say?",
+            "skills": ["arxiv", "missing-skill"],
+        },
+        run_agent=run_agent,
+    )
+    assert result["ok"] is True
+    assert seen["text"].startswith("[SKILL /arxiv]")
+    assert "What does the arXiv paper say?" in seen["text"]
+    # Missing skills that return None are skipped (fake always returns).
+    assert "[SKILL /missing-skill]" in seen["text"]

@@ -321,6 +321,26 @@ def _handle_chat(
         except Exception:
             pass
 
+    # Optional per-turn skill injection (Brain Research mode, etc.).
+    # Loaded into the *user* message so prompt caching stays intact.
+    skills = request.get("skills")
+    if isinstance(skills, list) and skills:
+        try:
+            from agent.skill_commands import build_skill_invocation_message
+
+            blocks: list[str] = []
+            for raw in skills:
+                name = str(raw or "").strip().lstrip("/")
+                if not name:
+                    continue
+                msg = build_skill_invocation_message(f"/{name}", user_instruction="")
+                if msg:
+                    blocks.append(msg)
+            if blocks:
+                chat_text = "\n\n".join(blocks) + "\n\n" + chat_text
+        except Exception:
+            pass
+
     routed_connector_id = None
     routed_display_name = ""
     try:
