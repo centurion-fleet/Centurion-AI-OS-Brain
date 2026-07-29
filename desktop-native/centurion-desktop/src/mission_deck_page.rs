@@ -3,6 +3,7 @@
 //! Replaces the legacy GTK `home_page` stack view as the primary Missions UI.
 //! Settings dialogs may still call into `home_page` for back-office edits.
 
+use libadwaita as adw;
 use adw::prelude::*;
 use gtk4 as gtk;
 use gtk4::glib;
@@ -168,12 +169,12 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     ));
 
     let root_weak = root.downgrade();
-    let status_c = status.clone();
-    let hooks_c = hooks.clone();
     let supervisor_c = supervisor.clone();
-    let attention_c = attention.clone();
+    let hooks_c = hooks.clone();
 
-    std::thread::spawn(move || {
+    // Poll server readiness on the main thread (no std::thread::spawn needed).
+    // Retries up to ~8 seconds before showing the fallback message.
+    glib::timeout_add_seconds_local(0, move || {
         let result: Result<(), String> = match supervisor_c.borrow().as_ref() {
             Some(m) => m
                 .lock()
@@ -186,27 +187,25 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             ),
         };
 
-        glib::MainContext::default().invoke(move || {
-            let Some(root) = root_weak.upgrade() else {
-                return;
-            };
-            match result {
-                Ok(()) => {
-                    status_c.set_visible(false);
-                    if attach_webview(&root, hooks_c.clone()).is_none() {
-                        status_c.set_visible(true);
-                        status_c.set_label(
-                            "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
-                        );
-                    }
-                    let _ = attention_c;
-                }
-                Err(err) => {
-                    status_c.set_visible(true);
-                    status_c.set_label(&err);
+        let Some(root) = root_weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        match result {
+            Ok(()) => {
+                status.set_visible(false);
+                if attach_webview(&root, hooks_c.clone()).is_none() {
+                    status.set_visible(true);
+                    status.set_label(
+                        "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
+                    );
                 }
             }
-        });
+            Err(err) => {
+                status.set_visible(true);
+                status.set_label(&err);
+            }
+        }
+        glib::ControlFlow::Break
     });
 
     let refresh: Rc<dyn Fn()> = {
