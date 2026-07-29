@@ -69,6 +69,7 @@ CONFIGURABLE_TOOLSETS = [
     ("memory",          "💾 Memory",                    "persistent memory across sessions"),
     ("session_search",  "🔎 Session Search",            "search past conversations"),
     ("clarify",         "❓ Clarifying Questions",      "clarify"),
+    ("life",            "🧭 Life Missions",             "missions, targets, dreams, stack"),
     ("delegation",      "👥 Task Delegation",           "delegate_task"),
     ("cronjob",         "⏰ Cron Jobs",                 "create/list/update/pause/resume/run, with optional attached skills"),
     ("messaging",       "📨 Cross-Platform Messaging",  "send_message"),
@@ -475,8 +476,12 @@ TOOL_CATEGORIES = {
 # Simple env-var requirements for toolsets NOT in TOOL_CATEGORIES.
 # Used as a fallback for tools like vision/moa that just need an API key.
 TOOLSET_ENV_REQUIREMENTS = {
-    "vision":     [("OPENROUTER_API_KEY",   "https://openrouter.ai/keys")],
-    "moa":        [("OPENROUTER_API_KEY",   "https://openrouter.ai/keys")],
+    "vision":     [("GOOGLE_API_KEY", "https://aistudio.google.com/app/apikey"),
+                   ("GEMINI_API_KEY", "https://aistudio.google.com/app/apikey"),
+                   ("OPENAI_API_KEY", "https://platform.openai.com/api-keys")],
+    "moa":        [("DEEPSEEK_API_KEY", "https://platform.deepseek.com/api_keys"),
+                   ("ANTHROPIC_API_KEY", "https://console.anthropic.com/"),
+                   ("OPENAI_API_KEY", "https://platform.openai.com/api-keys")],
 }
 
 
@@ -2564,16 +2569,20 @@ def _configure_simple_requirements(ts_key: str):
         print()
         print(color("  Vision / Image Analysis requires a multimodal backend:", Colors.YELLOW))
         choices = [
-            "OpenRouter — uses Gemini",
+            "Google AI Studio (Gemini) — GOOGLE_API_KEY / GEMINI_API_KEY",
             "OpenAI-compatible endpoint — base URL, API key, and vision model",
             "Skip",
         ]
         idx = _prompt_choice("  Configure vision backend", choices, 2)
         if idx == 0:
-            _print_info("  Get key at: https://openrouter.ai/keys")
-            value = _prompt("    OPENROUTER_API_KEY", password=True)
+            _print_info("  Get key at: https://aistudio.google.com/app/apikey")
+            value = _prompt("    GOOGLE_API_KEY (or GEMINI_API_KEY)", password=True)
             if value and value.strip():
-                save_env_value("OPENROUTER_API_KEY", value.strip())
+                save_env_value("GOOGLE_API_KEY", value.strip())
+                _cfg = load_config()
+                _aux = _cfg.setdefault("auxiliary", {}).setdefault("vision", {})
+                _aux["provider"] = "gemini"
+                save_config(_cfg)
                 _print_success("    Saved")
             else:
                 _print_warning("    Skipped")

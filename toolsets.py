@@ -52,6 +52,8 @@ _CENTURION_CORE_TOOLS = [
     "session_search",
     # Clarifying questions
     "clarify",
+    # Life Missions (Brain offline SQLite — Subjects → Missions → Targets)
+    "life_missions", "subject_resolver", "thought_stream",
     # Code execution + delegation
     "execute_code", "delegate_task",
     # Cronjob management
@@ -232,6 +234,16 @@ TOOLSETS = {
         "description": "Ask the user clarifying questions (multiple-choice or open-ended)",
         "tools": [
             "clarify",
+        ],
+        "includes": []
+    },
+
+    "life": {
+        "description": (
+            "Life Missions on this Brain — Subjects, Mission Stack "
+            "(primary + supporting), Targets, Dreams, thoughts, decisions"
+        ),
+        "tools": [
             "life_missions",
             "subject_resolver",
             "thought_stream",

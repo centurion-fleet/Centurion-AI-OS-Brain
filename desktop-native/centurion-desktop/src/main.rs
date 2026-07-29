@@ -24,6 +24,16 @@ mod adrian_dialog;
     clippy::needless_pass_by_value,
     clippy::too_many_lines
 )]
+mod bridge_client;
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    unused_imports,
+    clippy::assigning_clones,
+    clippy::map_unwrap_or,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
 mod chat_page;
 #[cfg(target_os = "linux")]
 #[allow(
@@ -278,6 +288,7 @@ mod linux {
     }
 
     pub fn run() {
+        crate::bridge_client::warm_bridge_daemon_async();
         let application = adw::Application::builder().application_id(APP_ID).build();
         let supervisor = Rc::new(RefCell::new(RemoteSupervisor::default()));
 
@@ -1665,17 +1676,121 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let memory_horizon_poll_row = memory_horizon_row.clone();
         let oversight_poll_row = oversight_row.clone();
         glib::timeout_add_seconds_local(30, move || {
-            // Skip live probe on the poll so Settings refresh does not stall the UI.
-            refresh_thinking_status_inner(
-                &thinking_poll_detail,
-                &thinking_poll_row,
-                true,
-            );
-            refresh_backup_thinking_services(&backup_poll_row);
-            refresh_autonomy_row(&autonomy_poll_row);
-            refresh_soul_row(&soul_poll_row);
-            refresh_memory_horizon_row(&memory_horizon_poll_row);
-            refresh_oversight_row(&oversight_poll_row);
+            let thinking_poll_detail = thinking_poll_detail.clone();
+            let thinking_poll_row = thinking_poll_row.clone();
+            let backup_poll_row = backup_poll_row.clone();
+            let autonomy_poll_row = autonomy_poll_row.clone();
+            let soul_poll_row = soul_poll_row.clone();
+            let memory_horizon_poll_row = memory_horizon_poll_row.clone();
+            let oversight_poll_row = oversight_poll_row.clone();
+            // Run bridge I/O on a worker so the GTK main loop stays responsive.
+            // (Daemon makes each call cheap; we still must not block UI on it.)
+            let (tx, rx) = std::sync::mpsc::channel::<(
+                Option<serde_json::Value>,
+                Option<serde_json::Value>,
+                Option<serde_json::Value>,
+                Option<String>,
+                Option<String>,
+            )>();
+            std::thread::spawn(move || {
+                let soul = run_bridge_action("soul_get", serde_json::json!({}));
+                let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
+                let horizon =
+                    run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
+                let thinking_line = run_provider_command(&["status", "--skip-probe"]).and_then(
+                    |response| {
+                        let status = response.status?;
+                        let plain = match status.health.as_str() {
+                            "ok" => "Working normally".to_owned(),
+                            "degraded" => "May be slow".to_owned(),
+                            _ => "Needs attention".to_owned(),
+                        };
+                        let mut line = format!("{plain} — {}", status.health_message);
+                        if status.last_good_available && status.health != "ok" {
+                            line.push_str(" Last working setup is available.");
+                        }
+                        Some(line)
+                    },
+                );
+                let backup_line = run_support_command(&["backups"]).map(|response| {
+                    let backups = response
+                        .result
+                        .as_ref()
+                        .and_then(|value| value.get("backups"))
+                        .and_then(|value| value.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    if backups.is_empty() {
+                        "No backup thinking services configured.".to_owned()
+                    } else {
+                        let labels: Vec<String> = backups
+                            .iter()
+                            .filter_map(|entry| {
+                                entry
+                                    .get("label")
+                                    .and_then(|label| label.as_str())
+                                    .map(str::to_owned)
+                            })
+                            .collect();
+                        if labels.is_empty() {
+                            format!("{} backup thinking service(s) configured.", backups.len())
+                        } else {
+                            labels.join(" · ")
+                        }
+                    }
+                });
+                let _ = tx.send((soul, oversight, horizon, thinking_line, backup_line));
+            });
+            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                match rx.try_recv() {
+                    Ok((soul, oversight, horizon, thinking_line, backup_line)) => {
+                        if let Some(line) = thinking_line {
+                            thinking_poll_detail.set_label(&line);
+                            thinking_poll_row.set_subtitle(&line);
+                        }
+                        if let Some(line) = backup_line {
+                            backup_poll_row.set_subtitle(&line);
+                        }
+                        if let Some(payload) = oversight.as_ref() {
+                            let level = payload
+                                .pointer("/oversight/autonomy_level")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("balanced");
+                            autonomy_poll_row.set_subtitle(autonomy_label(level));
+                            let cadence = payload
+                                .pointer("/oversight/report_cadence")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("when_needed");
+                            let ask = payload
+                                .pointer("/oversight/ask_before_initiative")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(true);
+                            let cadence_label = match cadence {
+                                "off" => "Off",
+                                "daily" => "Daily",
+                                "after_significant_actions" => "After significant actions",
+                                _ => "When needed",
+                            };
+                            oversight_poll_row.set_subtitle(&format!(
+                                "{cadence_label} · ask before initiative: {}",
+                                if ask { "on" } else { "off" }
+                            ));
+                        }
+                        if let Some(payload) = soul {
+                            apply_soul_row_subtitle(&soul_poll_row, &payload);
+                        }
+                        if let Some(payload) = horizon {
+                            apply_memory_horizon_row_subtitle(
+                                &memory_horizon_poll_row,
+                                &payload,
+                            );
+                        }
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                }
+            });
             glib::ControlFlow::Continue
         });
         restore_thinking_button.connect_clicked({
@@ -3189,6 +3304,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             row.set_subtitle("Could not read your Sovereign's Soul.");
             return;
         };
+        apply_soul_row_subtitle(row, &payload);
+    }
+
+    fn apply_soul_row_subtitle(row: &adw::ActionRow, payload: &serde_json::Value) {
         if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let message = payload
                 .get("message")
@@ -3254,6 +3373,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             row.set_subtitle("Could not read Memory Horizon.");
             return;
         };
+        apply_memory_horizon_row_subtitle(row, &payload);
+    }
+
+    fn apply_memory_horizon_row_subtitle(row: &adw::ActionRow, payload: &serde_json::Value) {
         if payload.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let message = payload
                 .get("message")

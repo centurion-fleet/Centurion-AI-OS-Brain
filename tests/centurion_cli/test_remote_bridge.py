@@ -276,3 +276,112 @@ def test_resolve_remote_tool_progress_mode_defaults_all():
         )
         == "off"
     )
+
+
+def test_bridge_serve_health_check_round_trip(tmp_path, monkeypatch):
+    """Persistent --serve daemon answers health_check over a Unix socket."""
+    import json
+    import socket
+    import subprocess
+    import sys
+    import time
+
+    sock_path = tmp_path / "bridge.sock"
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    monkeypatch.setenv("CENTURION_BRIDGE_SOCKET", str(sock_path))
+
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "centurion_cli.remote_bridge",
+            "--serve",
+            "--socket",
+            str(sock_path),
+            "--workers",
+            "2",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if sock_path.exists():
+                try:
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                        client.settimeout(2.0)
+                        client.connect(str(sock_path))
+                        client.sendall(
+                            b'{"id":"t1","action":"health_check"}\n'
+                        )
+                        data = b""
+                        while b"\n" not in data:
+                            chunk = client.recv(4096)
+                            if not chunk:
+                                break
+                            data += chunk
+                        payload = json.loads(data.decode("utf-8").split("\n", 1)[0])
+                        assert payload.get("id") == "t1"
+                        assert payload.get("ok") is True
+                        assert payload.get("action") == "health_check"
+                        return
+                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                    pass
+            time.sleep(0.05)
+        raise AssertionError("bridge daemon did not become ready")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def test_handle_chat_life_inject_inserts_context(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    def fake_inject(message, current_view=None):
+        return {"formatted_for_ai": "MISSION_CTX"}
+
+    monkeypatch.setattr(
+        "centurion_cli.life_missions.inject_context",
+        fake_inject,
+        raising=False,
+    )
+
+    # Patch import path used inside _handle_chat
+    import types
+    import sys
+
+    fake_mod = types.ModuleType("centurion_cli.life_missions")
+    fake_mod.inject_context = fake_inject
+    monkeypatch.setitem(sys.modules, "centurion_cli.life_missions", fake_mod)
+
+    seen = {}
+
+    def run_agent(text, **kwargs):
+        seen["text"] = text
+        return "ok"
+
+    framed = (
+        "[Sovereign AI Brain — Mission discuss]\n"
+        "Help them.\n\n"
+        "User message:\n"
+        "hello"
+    )
+    result = rb.handle_request(
+        {
+            "id": "inj-1",
+            "action": "chat",
+            "text": framed,
+            "life_inject": {
+                "message": "hello",
+                "current_view": {"mission_id": "m1"},
+            },
+        },
+        run_agent=run_agent,
+    )
+    assert result["ok"] is True
+    assert "MISSION_CTX" in seen["text"]
+    assert "User message:" in seen["text"]

@@ -53,7 +53,7 @@ def life_missions_tool(
             if mission is None:
                 return tool_error("Mission not found")
             return _ok(mission=mission)
-        if action in ("put_mission", "save_mission"):
+        if action in ("put_mission", "save_mission", "create_mission", "create"):
             payload = dict(fields)
             if mission_id:
                 payload.setdefault("id", mission_id)
@@ -63,6 +63,10 @@ def life_missions_tool(
                 payload.setdefault("statement", statement)
             if subject_id:
                 payload.setdefault("subject_id", subject_id)
+            # Default new missions to supporting so Chat can add a second
+            # mission without demoting the primary unless fields_json says so.
+            if "mission_type" not in payload and not mission_id:
+                payload.setdefault("mission_type", "supporting")
             return _ok(mission=life.put_mission(payload))
         if action in ("list_subjects", "subjects"):
             return _ok(subjects=life.list_subjects())
@@ -140,9 +144,9 @@ def life_missions_tool(
         if action in ("snapshot",):
             return _ok(snapshot=life.snapshot_extras())
         return tool_error(
-            "Unknown action. Use stack, missions, get_mission, put_mission, subjects, "
-            "dreams, promote_dream, set_primary, put_target, set_focus, resolve, inject, "
-            "thought, thoughts, decision, decisions, snapshot."
+            "Unknown action. Use stack, missions, get_mission, put_mission|create_mission, "
+            "subjects, dreams, promote_dream, set_primary, put_target, set_focus, resolve, "
+            "inject, thought, thoughts, decision, decisions, snapshot."
         )
     except Exception as exc:
         return tool_error(str(exc))
@@ -150,12 +154,14 @@ def life_missions_tool(
 
 registry.register(
     name="life_missions",
-    toolset="clarify",
+    toolset="life",
     schema={
         "name": "life_missions",
         "description": (
-            "Offline Life Missions on this Brain (Subjects → Missions → Targets, "
-            "Mission Stack, Dreams, focus, thoughts, decisions). Not portal SaaS."
+            "Create/update/list Life Missions on this Brain (offline life.db). "
+            "Use create_mission or put_mission with fields_json for "
+            "mission_type primary|supporting, targets, situation, why. "
+            "Also: stack, dreams, focus, thoughts, decisions. Not portal SaaS."
         ),
         "parameters": {
             "type": "object",
@@ -163,9 +169,10 @@ registry.register(
                 "action": {
                     "type": "string",
                     "description": (
-                        "stack|missions|get_mission|put_mission|subjects|dreams|"
-                        "promote_dream|set_primary|put_target|set_focus|resolve|"
-                        "inject|thought|thoughts|decision|decisions|snapshot"
+                        "stack|missions|get_mission|put_mission|create_mission|"
+                        "subjects|dreams|promote_dream|set_primary|put_target|"
+                        "set_focus|resolve|inject|thought|thoughts|decision|"
+                        "decisions|snapshot"
                     ),
                 },
                 "mission_id": {"type": "string"},
@@ -178,7 +185,11 @@ registry.register(
                 "summary": {"type": "string"},
                 "fields_json": {
                     "type": "string",
-                    "description": "Optional JSON object for put_* payloads.",
+                    "description": (
+                        "JSON for put/create. Example create supporting: "
+                        '{"title":"Cashflow","statement":"...","mission_type":"supporting",'
+                        '"situation":"...","why":"..."}'
+                    ),
                 },
             },
             "required": ["action"],
@@ -201,7 +212,7 @@ registry.register(
 
 registry.register(
     name="subject_resolver",
-    toolset="clarify",
+    toolset="life",
     schema={
         "name": "subject_resolver",
         "description": "Match a query to Subject / Mission / Target on this Brain.",
@@ -222,7 +233,7 @@ registry.register(
 
 registry.register(
     name="thought_stream",
-    toolset="clarify",
+    toolset="life",
     schema={
         "name": "thought_stream",
         "description": "Post or list thought-stream entries for Life Missions.",
