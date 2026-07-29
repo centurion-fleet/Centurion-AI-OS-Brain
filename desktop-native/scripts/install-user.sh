@@ -68,6 +68,13 @@ if ! cargo build --release \
   -p centurion-desktop >"${BUILD_LOG}" 2>&1
 then
   echo "ERROR: cargo build failed. Last lines:" >&2
+  # Prefer real rustc errors over trailing deprecation warnings (icon_name, etc.).
+  if rg -n '^error(\[E[0-9]+\])?:' "${BUILD_LOG}" >/tmp/centurion-desktop-build-errors.txt 2>/dev/null \
+    || grep -nE '^error(\[E[0-9]+\])?:' "${BUILD_LOG}" >/tmp/centurion-desktop-build-errors.txt 2>/dev/null; then
+    tail -n 60 /tmp/centurion-desktop-build-errors.txt >&2 || true
+    echo >&2
+    echo "—— build log tail —— " >&2
+  fi
   tail -n 40 "${BUILD_LOG}" >&2 || true
   echo "Full log: ${BUILD_LOG}" >&2
   exit 1

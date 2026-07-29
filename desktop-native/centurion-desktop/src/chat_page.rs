@@ -8,12 +8,6 @@ use gtk4 as gtk;
 use gio;
 use libadwaita as adw;
 use serde_json::Value;
-
-/// Safe because gtk signal handlers always run on the main thread.
-/// glib-rs 0.22+ requires Send+Sync on closures even for main-thread signals.
-struct GtkSignalCell<T>(pub T);
-unsafe impl<T> Send for GtkSignalCell<T> {}
-unsafe impl<T> Sync for GtkSignalCell<T> {}
 use std::cell::{Cell, RefCell};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -1969,41 +1963,6 @@ fn wire_follow_bottom_scroll(
     });
 }
 
-/// Re-pin to bottom whenever transcript layout grows (Cursor-style chase).
-fn wire_transcript_size_follow(
-    transcript: &impl IsA<gtk::Widget>,
-    message_scroll: &gtk::ScrolledWindow,
-    message_list: &gtk::ListBox,
-    follow_bottom: Rc<Cell<bool>>,
-    programmatic: Rc<Cell<bool>>,
-) {
-    let pending = Rc::new(Cell::new(false));
-    transcript.connect_notify(Some("allocation"), {
-        let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
-        let follow_bottom = GtkSignalCell(follow_bottom.clone());
-        let programmatic = GtkSignalCell(programmatic.clone());
-        let pending = GtkSignalCell(pending.clone());
-        move |_, _| {
-            if !follow_bottom.0.get() || pending.0.get() {
-                return;
-            }
-            pending.0.set(true);
-            let message_scroll = message_scroll.clone();
-            let message_list = message_list.clone();
-            let follow_bottom = follow_bottom.0.clone();
-            let programmatic = programmatic.0.clone();
-            let pending = pending.0.clone();
-            glib::idle_add_local_once(move || {
-                pending.set(false);
-                if follow_bottom.get() {
-                    scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
-                }
-            });
-        }
-    });
-}
-
 /// Settings → Soul save clears ``desktop_chat_session`` on disk. Honor that in
 /// the live Chat tab so the next turn starts a clean session with the new Soul
 /// instead of continuing a stale in-memory session id.
@@ -2196,20 +2155,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         follow_bottom.clone(),
         programmatic_scroll.clone(),
     );
-    wire_transcript_size_follow(
-        &transcript_box,
-        &message_scroll,
-        &message_list,
-        follow_bottom.clone(),
-        programmatic_scroll.clone(),
-    );
-    wire_transcript_size_follow(
-        &activity_card,
-        &message_scroll,
-        &message_list,
-        follow_bottom.clone(),
-        programmatic_scroll.clone(),
-    );
+    // Stick-to-bottom is driven by Adjustment::changed / value_changed above.
+    // Do not use connect_size_allocate (GTK3) or connect_notify("allocation")
+    // + Send wrappers — those break Fedora 44 / glib-rs 0.22 Brain rebuilds.
     chat_column.append(&message_scroll);
 
     let activity_tool_count = Rc::new(Cell::new(0usize));
