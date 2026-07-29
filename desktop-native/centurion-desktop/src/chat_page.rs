@@ -8,6 +8,12 @@ use gtk4 as gtk;
 use gio;
 use libadwaita as adw;
 use serde_json::Value;
+
+/// Safe because gtk signal handlers always run on the main thread.
+/// glib-rs 0.22+ requires Send+Sync on closures even for main-thread signals.
+struct GtkSignalCell<T>(pub T);
+unsafe impl<T> Send for GtkSignalCell<T> {}
+unsafe impl<T> Sync for GtkSignalCell<T> {}
 use std::cell::{Cell, RefCell};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -1972,22 +1978,22 @@ fn wire_transcript_size_follow(
     programmatic: Rc<Cell<bool>>,
 ) {
     let pending = Rc::new(Cell::new(false));
-    transcript.connect_size_allocate({
+    transcript.connect_notify(Some("allocation"), {
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
-        let follow_bottom = follow_bottom.clone();
-        let programmatic = programmatic.clone();
-        let pending = pending.clone();
+        let follow_bottom = GtkSignalCell(follow_bottom.clone());
+        let programmatic = GtkSignalCell(programmatic.clone());
+        let pending = GtkSignalCell(pending.clone());
         move |_, _| {
-            if !follow_bottom.get() || pending.get() {
+            if !follow_bottom.0.get() || pending.0.get() {
                 return;
             }
-            pending.set(true);
+            pending.0.set(true);
             let message_scroll = message_scroll.clone();
             let message_list = message_list.clone();
-            let follow_bottom = follow_bottom.clone();
-            let programmatic = programmatic.clone();
-            let pending = pending.clone();
+            let follow_bottom = follow_bottom.0.clone();
+            let programmatic = programmatic.0.clone();
+            let pending = pending.0.clone();
             glib::idle_add_local_once(move || {
                 pending.set(false);
                 if follow_bottom.get() {
