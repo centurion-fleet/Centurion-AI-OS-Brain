@@ -20,7 +20,11 @@ git -C "${ROOT}" fetch origin
 git -C "${ROOT}" checkout main
 git -C "${ROOT}" reset --hard origin/main
 # Leave nested sibling clones alone; drop other untracked dirt that blocks rebuilds.
-git -C "${ROOT}" clean -fd -e personal-centurion-help-center -e .venv -e venv
+# Keep desktop-native/patches — Fedora 44 glib-rs compat patches live there.
+git -C "${ROOT}" clean -fd \
+  -e personal-centurion-help-center \
+  -e .venv -e venv \
+  -e desktop-native/patches
 
 echo
 echo "Rebuilding Sovereign AI Brain…"

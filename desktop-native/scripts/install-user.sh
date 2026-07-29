@@ -36,6 +36,11 @@ if git -C "${ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   done
 fi
 
+# Apply platform-specific patches (Fedora 44 glib-rs compat, etc.)
+if [[ -f "${HOME}/.centurion/scripts/apply-fedora-patches.sh" ]]; then
+  bash "${HOME}/.centurion/scripts/apply-fedora-patches.sh" "${ROOT}"
+fi
+
 # Prefer profile-aware CENTURION_HOME for build logs + stamp (matches Brain error dialog).
 resolve_centurion_home_dir() {
   local root="${HOME}/.centurion"

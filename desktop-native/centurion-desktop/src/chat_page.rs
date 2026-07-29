@@ -2201,7 +2201,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 flush_inline(&mut inline, &mut blocks, None);
                 list_depth += 1;
                 list_ordered.push(start.is_some());
-                list_index.push(start.unwrap_or(1));
+                list_index.push(start.unwrap_or(1) as u32);
             }
             Event::End(TagEnd::List(_)) => {
                 flush_inline(&mut inline, &mut blocks, None);
@@ -2386,7 +2386,7 @@ fn chat_text_label(markup: &str, monospace: bool, heading: Option<u8>) -> gtk::L
         .xalign(0.0)
         .selectable(true)
         .max_width_chars(52)
-        .css_classes(&class_refs)
+        .css_classes(class_refs.as_slice())
         .build()
 }
 
