@@ -164,6 +164,7 @@ struct PlanItem {
     steps: Vec<String>,
     risks: Vec<String>,
     comments: Vec<String>,
+    related_mission: String,
 }
 
 #[derive(Clone, Debug)]
@@ -596,6 +597,14 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                 .filter_map(|s| s.as_str().map(str::to_owned))
                 .collect(),
             comments: Vec::new(),
+            related_mission: {
+                let a = json_str(p.get("related_mission"));
+                if a.is_empty() {
+                    json_str(p.get("relatedMission"))
+                } else {
+                    a
+                }
+            },
         })
         .collect();
 
@@ -1015,6 +1024,14 @@ fn fetch_plan_item(plan_id: &str) -> Option<PlanItem> {
             .filter_map(|s| s.as_str().map(str::to_owned))
             .collect(),
         comments: comment_lines,
+        related_mission: {
+            let a = json_str(full.get("related_mission"));
+            if a.is_empty() {
+                json_str(full.get("relatedMission"))
+            } else {
+                a
+            }
+        },
     })
 }
 
@@ -1972,6 +1989,16 @@ fn show_plan_dialog(
     on_ask: Rc<dyn Fn(DiscussTopic, String)>,
 ) {
     let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    if !plan.related_mission.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label(&format!("From mission · {}", plan.related_mission))
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+    }
     if !plan.summary.is_empty() {
         body.append(
             &gtk::Label::builder()
@@ -3199,6 +3226,19 @@ What should we focus on next?"
                                         .css_classes(["heading"])
                                         .build(),
                                 );
+                                if !plan.related_mission.is_empty() {
+                                    card.append(
+                                        &gtk::Label::builder()
+                                            .label(&format!(
+                                                "From mission · {}",
+                                                plan.related_mission
+                                            ))
+                                            .wrap(true)
+                                            .xalign(0.0)
+                                            .css_classes(["caption", "dim-label"])
+                                            .build(),
+                                    );
+                                }
                                 if !plan.summary.is_empty() {
                                     card.append(
                                         &gtk::Label::builder()

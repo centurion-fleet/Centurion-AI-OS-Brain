@@ -354,7 +354,29 @@ fn looks_like_thinking_error(message: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChatIntent {
     Talk,
-    ProposeFirst,
+    /// Cursor-like Plan mode: structured proposal this turn (mission-proposal or plan-artifact).
+    Plan,
+}
+
+#[derive(Clone, Debug)]
+struct ProposedTarget {
+    title: String,
+    target_type: String,
+    description: String,
+}
+
+#[derive(Clone, Debug)]
+struct PendingMissionProposal {
+    title: String,
+    goal: String,
+    summary: String,
+    steps: Vec<String>,
+    risks: Vec<String>,
+    open_questions: Vec<String>,
+    related_mission: String,
+    mission_id: String,
+    target_id: String,
+    targets: Vec<ProposedTarget>,
 }
 
 #[derive(Clone, Debug)]
@@ -567,13 +589,15 @@ fn rebuild_attachment_chips(
 }
 
 const PLAN_ARTIFACT_FENCE: &str = "plan-artifact";
+const MISSION_PROPOSAL_FENCE: &str = "mission-proposal";
 
-fn frame_propose_first(user_text: &str) -> String {
+fn frame_plan_artifact_mode(user_text: &str) -> String {
     format!(
-        "[Sovereign AI Brain — Propose first]\n\
-         The user wants a plan before any consequential action.\n\n\
+        "[Sovereign AI Brain — Plan mode]\n\
+         The user wants a reviewable plan before any consequential action.\n\n\
          For this turn only:\n\
          - Draft a concrete plan. Do not implement, send, edit project files, run mutating commands, or take external actions.\n\
+         - Do not call plans put / life_missions put_* to persist this proposal — the Brain UI will save only after the user confirms.\n\
          - You may inspect read-only context if needed.\n\
          - Reply briefly in plain language, then end with a fenced JSON block exactly like this:\n\n\
          ```{PLAN_ARTIFACT_FENCE}\n\
@@ -583,6 +607,106 @@ fn frame_propose_first(user_text: &str) -> String {
          User message:\n\
          {user_text}"
     )
+}
+
+fn frame_mission_plan_mode(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Mission {
+        statement,
+        id,
+        title,
+        target_id,
+        target_title,
+        target_type,
+        target_description,
+        target_status,
+        sequence_number,
+    } = topic
+    else {
+        return frame_plan_artifact_mode(user_text);
+    };
+    let statement = if statement.trim().is_empty() {
+        "(not set yet — help them shape one)"
+    } else {
+        statement.as_str()
+    };
+    let mission_label = title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(statement);
+    let type_label = match target_type.as_deref().map(str::trim).unwrap_or("") {
+        "essential" => "Must Do",
+        "shouldHave" => "Should Do",
+        "niceToHave" => "Nice to Do",
+        other if !other.is_empty() => other,
+        _ => "Target",
+    };
+    let mut target_block = String::new();
+    if let Some(t) = target_title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        target_block.push_str(&format!("Focus target ({type_label}): {t}\n"));
+        if let Some(desc) = target_description
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            target_block.push_str(&format!("Target description: {desc}\n"));
+        }
+        if let Some(st) = target_status
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            target_block.push_str(&format!("Target status: {st}\n"));
+        }
+        if let Some(n) = sequence_number {
+            target_block.push_str(&format!("Sequence #: {n}\n"));
+        }
+        if let Some(tid) = target_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            target_block.push_str(&format!("target_id: {tid}\n"));
+        }
+    }
+    let mission_id_line = id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|mid| format!("mission_id: {mid}\n"))
+        .unwrap_or_default();
+    let related_mission = id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(mission_label);
+    format!(
+        "[Sovereign AI Brain — Mission Plan mode]\n\
+The user wants a structured proposal for this Life Mission before anything is saved.\n\n\
+Mission: {mission_label}\n\
+{mission_id_line}Statement:\n\
+{statement}\n\
+{target_block}\n\
+For this turn only:\n\
+- Draft a concrete proposal (plan + optional Must/Should/Nice targets). Do not implement or take external actions.\n\
+- Do NOT call plans put or life_missions put_* to persist — the Brain shows Save as Plan / Add as targets / Save both / Other / Dismiss chips. Wait for the user.\n\
+- Reply briefly in plain language, then end with a fenced JSON block exactly like this:\n\n\
+```{MISSION_PROPOSAL_FENCE}\n\
+{{\"title\":\"Short proposal title\",\"goal\":\"What success looks like\",\"summary\":\"One or two sentence summary\",\"steps\":[\"Step 1\",\"Step 2\"],\"risks\":[],\"open_questions\":[],\"related_mission\":\"{related_mission}\",\"targets\":[{{\"title\":\"Target title\",\"target_type\":\"essential\",\"description\":\"Optional detail\"}}]}}\n\
+```\n\n\
+target_type must be essential (Must Do), shouldHave (Should Do), or niceToHave (Nice to Do). Omit empty arrays. Keep steps short.\n\n\
+User message:\n\
+{user_text}"
+    )
+}
+
+/// Plan mode framing — preserves Mission discuss context when active.
+fn frame_plan_mode(user_text: &str, topic: Option<&DiscussTopic>) -> String {
+    match topic {
+        Some(t @ DiscussTopic::Mission { .. }) => frame_mission_plan_mode(user_text, t),
+        Some(other) => {
+            // Keep topic grounding, then ask for a Home Plan artifact.
+            let grounded = frame_discuss_outbound(user_text, other);
+            frame_plan_artifact_mode(&grounded)
+        }
+        None => frame_plan_artifact_mode(user_text),
+    }
 }
 
 const PLAN_UPDATE_FENCE: &str = "plan-update";
@@ -780,11 +904,15 @@ Mission: {mission_label}\n\
 {statement}\n\
 {target_block}\n\
 Help them clarify direction and next focus for THIS context. \
-When they want to update the mission or this target, use life_missions \
-(put_mission / put_target / set_focus) — local life.db only. \
+When they want to update the mission or this target *and the user clearly asked to save now*, \
+use life_missions (put_mission / put_target / set_focus) — local life.db only. \
 Never ask for Portal tokens, mc.json, or ctk_proj. \
-When they want a reviewable proposal, use the plans tool (put). \
 Use Must Do / Should Do / Nice to Do vocabulary for targets.\n\n\
+When you propose a bundle of next steps / new targets / a reviewable plan, do NOT silent-persist. \
+End with a ```{MISSION_PROPOSAL_FENCE} JSON fence (title, goal, summary, steps, risks, \
+open_questions, related_mission, targets[]) and wait — the Brain shows choice chips \
+(Save as Plan / Add as targets / Save both / Other / Dismiss). Do not call plans put \
+or put_target for that proposal until the user confirms via those chips.\n\n\
 User message:\n\
 {user_text}"
     )
@@ -1047,7 +1175,19 @@ fn extract_plan_artifact_block(response: &str) -> Option<String> {
 }
 
 fn strip_plan_artifact(response: &str) -> String {
-    let open = format!("```{PLAN_ARTIFACT_FENCE}");
+    strip_fenced_block(response, PLAN_ARTIFACT_FENCE)
+}
+
+fn extract_fenced_block(response: &str, fence: &str) -> Option<String> {
+    let open = format!("```{fence}");
+    let start = response.find(&open)?;
+    let after = &response[start + open.len()..];
+    let close = after.find("```")?;
+    Some(after[..close].trim().to_owned())
+}
+
+fn strip_fenced_block(response: &str, fence: &str) -> String {
+    let open = format!("```{fence}");
     let Some(start) = response.find(&open) else {
         return response.trim().to_owned();
     };
@@ -1057,6 +1197,369 @@ fn strip_plan_artifact(response: &str) -> String {
         result.push_str(&after_open[close + 3..]);
     }
     result.trim().to_owned()
+}
+
+fn strip_mission_proposal(response: &str) -> String {
+    strip_fenced_block(response, MISSION_PROPOSAL_FENCE)
+}
+
+fn strip_proposal_fences(response: &str) -> String {
+    let mut out = strip_mission_proposal(response);
+    out = strip_plan_artifact(&out);
+    out
+}
+
+fn string_list_from_json(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|s| s.as_str().map(|t| t.trim().to_owned()))
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn normalize_target_type(raw: &str) -> String {
+    match raw.trim() {
+        "essential" | "must" | "mustDo" | "Must Do" | "must_do" => "essential".to_owned(),
+        "shouldHave" | "should" | "shouldDo" | "Should Do" | "should_do" => {
+            "shouldHave".to_owned()
+        }
+        "niceToHave" | "nice" | "niceDo" | "Nice to Do" | "nice_to_have" => {
+            "niceToHave".to_owned()
+        }
+        other if !other.is_empty() => other.to_owned(),
+        _ => "shouldHave".to_owned(),
+    }
+}
+
+fn mission_proposal_from_json(
+    value: &Value,
+    topic: Option<&DiscussTopic>,
+) -> Option<PendingMissionProposal> {
+    let obj = value.as_object()?;
+    let title = obj
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let goal = obj
+        .get("goal")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let summary = obj
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let steps = string_list_from_json(obj.get("steps"));
+    let risks = string_list_from_json(obj.get("risks"));
+    let open_questions = string_list_from_json(obj.get("open_questions"));
+    let mut targets: Vec<ProposedTarget> = obj
+        .get("targets")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let t = item.as_object()?;
+            let title = t
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            if title.is_empty() {
+                return None;
+            }
+            Some(ProposedTarget {
+                title,
+                target_type: normalize_target_type(
+                    t.get("target_type")
+                        .or_else(|| t.get("type"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("shouldHave"),
+                ),
+                description: t
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_owned(),
+            })
+        })
+        .collect();
+    if targets.is_empty() && !steps.is_empty() {
+        targets = steps
+            .iter()
+            .take(6)
+            .map(|step| ProposedTarget {
+                title: step.clone(),
+                target_type: "shouldHave".to_owned(),
+                description: String::new(),
+            })
+            .collect();
+    }
+    let (mission_id, mission_title, target_id) = match topic {
+        Some(DiscussTopic::Mission {
+            id,
+            title: mt,
+            statement,
+            target_id,
+            ..
+        }) => (
+            id.clone().unwrap_or_default(),
+            mt.clone()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| statement.clone()),
+            target_id.clone().unwrap_or_default(),
+        ),
+        _ => (String::new(), String::new(), String::new()),
+    };
+    let related = obj
+        .get("related_mission")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let related_mission = if !related.is_empty() {
+        related
+    } else if !mission_title.is_empty() {
+        mission_title
+    } else if !mission_id.is_empty() {
+        mission_id.clone()
+    } else {
+        String::new()
+    };
+    let resolved_title = if !title.is_empty() {
+        title
+    } else if !goal.is_empty() {
+        goal.chars().take(72).collect()
+    } else if !steps.is_empty() {
+        steps[0].chars().take(72).collect()
+    } else {
+        "Mission proposal".to_owned()
+    };
+    if resolved_title.is_empty() && steps.is_empty() && targets.is_empty() {
+        return None;
+    }
+    Some(PendingMissionProposal {
+        title: resolved_title,
+        goal: goal.clone(),
+        summary: if summary.is_empty() {
+            goal
+        } else {
+            summary
+        },
+        steps,
+        risks,
+        open_questions,
+        related_mission,
+        mission_id,
+        target_id,
+        targets,
+    })
+}
+
+fn parse_mission_proposal(
+    response: &str,
+    topic: Option<&DiscussTopic>,
+) -> Option<PendingMissionProposal> {
+    if let Some(block) = extract_fenced_block(response, MISSION_PROPOSAL_FENCE) {
+        if let Ok(value) = serde_json::from_str::<Value>(&block) {
+            if let Some(p) = mission_proposal_from_json(&value, topic) {
+                return Some(p);
+            }
+        }
+    }
+    // Plan-mode fallback: treat plan-artifact as a mission proposal when discussing a mission.
+    if matches!(topic, Some(DiscussTopic::Mission { .. })) {
+        if let Some(block) = extract_plan_artifact_block(response) {
+            if let Ok(value) = serde_json::from_str::<Value>(&block) {
+                return mission_proposal_from_json(&value, topic);
+            }
+        }
+    }
+    None
+}
+
+fn proposal_to_plan_value(proposal: &PendingMissionProposal) -> Value {
+    serde_json::json!({
+        "title": proposal.title,
+        "goal": proposal.goal,
+        "summary": if proposal.summary.is_empty() { &proposal.goal } else { &proposal.summary },
+        "steps": proposal.steps,
+        "risks": proposal.risks,
+        "open_questions": proposal.open_questions,
+        "related_mission": if proposal.related_mission.is_empty() {
+            Value::Null
+        } else {
+            Value::String(proposal.related_mission.clone())
+        },
+        "status": "pending_review",
+    })
+}
+
+fn put_life_target(
+    mission_id: &str,
+    title: &str,
+    description: &str,
+    target_type: &str,
+) -> Result<(), String> {
+    if mission_id.trim().is_empty() {
+        return Err(
+            "This mission has no id yet — open Mission Deck and save the mission first.".to_owned(),
+        );
+    }
+    let response = run_bridge_action(
+        "life_target_put",
+        serde_json::json!({
+            "target": {
+                "mission_id": mission_id,
+                "title": title,
+                "description": description,
+                "target_type": target_type,
+                "status": "not_started",
+            }
+        }),
+    )
+    .ok_or_else(|| "Could not save the target.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not save the target.")
+            .to_owned())
+    }
+}
+
+fn post_mission_thought(mission_id: &str, target_id: &str, summary: &str, detail: &str) {
+    if mission_id.trim().is_empty() || summary.trim().is_empty() {
+        return;
+    }
+    let mut payload = serde_json::json!({
+        "thought": {
+            "mission_id": mission_id,
+            "summary": summary,
+            "detail": detail,
+            "activity_type": "thought",
+        }
+    });
+    if !target_id.trim().is_empty() {
+        payload["thought"]["target_id"] = Value::String(target_id.to_owned());
+    }
+    let _ = run_bridge_action("life_thought_post", payload);
+}
+
+fn persist_proposal_as_plan(proposal: &PendingMissionProposal) -> Result<(), String> {
+    put_plan_artifact(proposal_to_plan_value(proposal)).map(|_| ())
+}
+
+fn persist_proposal_as_targets(proposal: &PendingMissionProposal) -> Result<usize, String> {
+    if proposal.targets.is_empty() {
+        return Err("No targets in this proposal.".to_owned());
+    }
+    let mut saved = 0usize;
+    for t in &proposal.targets {
+        put_life_target(
+            &proposal.mission_id,
+            &t.title,
+            &t.description,
+            &t.target_type,
+        )?;
+        saved += 1;
+    }
+    Ok(saved)
+}
+
+fn run_provider_cli_json(args: &[&str]) -> Option<Value> {
+    let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+    let mut command_args = vec!["provider", "--json"];
+    command_args.extend_from_slice(&rest);
+    let mut command = Command::new(resolve_centurion_cli());
+    configure_bridge_command(&mut command);
+    let output = command.args(command_args).output().ok()?;
+    serde_json::from_slice(&output.stdout).ok()
+}
+
+fn provider_status_label() -> String {
+    let Some(response) = run_provider_cli_json(&["status", "--skip-probe"]) else {
+        return "Model…".to_owned();
+    };
+    let Some(status) = response.get("status") else {
+        return "Model…".to_owned();
+    };
+    let model = status
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    let provider = status
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if !model.is_empty() {
+        let short = model.split('/').next_back().unwrap_or(model);
+        if !provider.is_empty() && provider != short {
+            return format!("{provider} · {short}");
+        }
+        return short.to_owned();
+    }
+    if !provider.is_empty() {
+        return provider.to_owned();
+    }
+    "Model…".to_owned()
+}
+
+fn provider_catalog_connectors() -> Vec<(String, String, bool)> {
+    let Some(response) = run_provider_cli_json(&["catalog"]) else {
+        return Vec::new();
+    };
+    let Some(rows) = response
+        .get("catalog")
+        .and_then(|c| c.get("text_models"))
+        .and_then(|v| v.as_array())
+        .cloned()
+    else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .filter_map(|row| {
+            let id = row.get("id")?.as_str()?.to_owned();
+            let display = row
+                .get("display_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(id.as_str())
+                .to_owned();
+            let needs_key = row
+                .get("needs_key")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            Some((id, display, needs_key))
+        })
+        .collect()
+}
+
+fn apply_provider_connector(connector_id: &str) -> Result<(), String> {
+    let response = run_provider_cli_json(&["apply-connector", connector_id])
+        .ok_or_else(|| "Could not reach the provider CLI.".to_owned())?;
+    if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not switch model.")
+            .to_owned())
+    }
 }
 
 fn plan_payload_from_response(response: &str, user_request: &str) -> Value {
@@ -2877,15 +3380,19 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
+    // Freeze the live activity card on Done so thinking stays readable in the
+    // scroll surface until the next turn replaces it (show_activity_working).
     let finish_activity_summary: Rc<dyn Fn() -> Option<String>> = Rc::new({
-        let reset_activity = reset_activity.clone();
+        let activity_card = activity_card.clone();
+        let activity_title = activity_title.clone();
+        let thinking_expander = thinking_expander.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
         move || {
             let tools = activity_tool_count.get();
             let thinking = activity_has_thinking.get();
-            reset_activity();
             if tools == 0 && !thinking {
+                activity_card.set_visible(false);
                 return None;
             }
             let mut parts = Vec::new();
@@ -2897,7 +3404,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             } else if tools > 1 {
                 parts.push(format!("{tools} tools"));
             }
-            Some(format!("Worked with {}.", parts.join(" · ")))
+            let summary = format!("Worked with {}.", parts.join(" · "));
+            activity_title.set_label(&summary);
+            if thinking {
+                thinking_expander.set_expanded(false);
+                thinking_expander.set_visible(true);
+            }
+            activity_card.set_visible(true);
+            Some(summary)
         }
     });
 
@@ -2937,6 +3451,65 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     approval_box.append(&approval_detail);
     approval_box.append(&approval_buttons);
     bottom.append(&approval_box);
+
+    // Mission proposal choice chips (Save as Plan / targets / Other / Dismiss).
+    let proposal_box = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    proposal_box.set_margin_start(16);
+    proposal_box.set_margin_end(16);
+    proposal_box.set_margin_top(8);
+    proposal_box.set_margin_bottom(4);
+    proposal_box.set_visible(false);
+    proposal_box.add_css_class("centurion-chat-approval");
+    let proposal_title = gtk::Label::builder()
+        .label("Save this proposal?")
+        .css_classes(["title-4"])
+        .xalign(0.0)
+        .wrap(true)
+        .build();
+    let proposal_detail = gtk::Label::builder()
+        .label("")
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .build();
+    let proposal_buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    proposal_buttons.set_homogeneous(false);
+    proposal_box.append(&proposal_title);
+    proposal_box.append(&proposal_detail);
+    proposal_box.append(&proposal_buttons);
+    bottom.append(&proposal_box);
+
+    let pending_proposal: Rc<RefCell<Option<PendingMissionProposal>>> =
+        Rc::new(RefCell::new(None));
+    let keep_proposal_context: Rc<Cell<bool>> = Rc::new(Cell::new(false));
+
+    let clear_proposal_ui: Rc<dyn Fn()> = Rc::new({
+        let proposal_box = proposal_box.clone();
+        let proposal_buttons = proposal_buttons.clone();
+        let proposal_detail = proposal_detail.clone();
+        move || {
+            while let Some(child) = proposal_buttons.first_child() {
+                proposal_buttons.remove(&child);
+            }
+            proposal_detail.set_label("");
+            proposal_box.set_visible(false);
+        }
+    });
+
+    let clear_pending_proposal: Rc<dyn Fn()> = Rc::new({
+        let pending_proposal = pending_proposal.clone();
+        let keep_proposal_context = keep_proposal_context.clone();
+        let clear_proposal_ui = clear_proposal_ui.clone();
+        move || {
+            *pending_proposal.borrow_mut() = None;
+            keep_proposal_context.set(false);
+            clear_proposal_ui();
+        }
+    });
+
+    // Filled after composer + refresh_messages / set_error exist.
+    let show_proposal_choices: Rc<RefCell<Option<Rc<dyn Fn(PendingMissionProposal)>>>> =
+        Rc::new(RefCell::new(None));
 
     let error_row = gtk::Box::new(gtk::Orientation::Vertical, 6);
     error_row.set_margin_start(16);
@@ -3002,7 +3575,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
 
-    // Intent chips: Talk (default) | Propose first
+    // Intent chips: Talk (default) | Plan — plus in-chat model switcher.
     let intent = Rc::new(Cell::new(ChatIntent::Talk));
     let intent_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     intent_row.set_margin_start(16);
@@ -3012,19 +3585,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let talk_btn = gtk::ToggleButton::with_label("Talk");
     talk_btn.add_css_class("centurion-chat-intent");
     talk_btn.set_active(true);
-    let propose_btn = gtk::ToggleButton::with_label("Propose first");
-    propose_btn.add_css_class("centurion-chat-intent");
-    propose_btn.set_tooltip_text(Some(
-        "Ask for a plan only — review it on Home under Plans / Needs your choice.",
+    talk_btn.set_tooltip_text(Some("Normal conversation — discuss without forcing a proposal fence."));
+    let plan_btn = gtk::ToggleButton::with_label("Plan");
+    plan_btn.add_css_class("centurion-chat-intent");
+    plan_btn.set_tooltip_text(Some(
+        "Ask for a structured proposal this turn. In Mission discuss you get Save/targets chips; otherwise a Home Plan.",
     ));
     {
         let intent = intent.clone();
-        let propose_btn = propose_btn.clone();
+        let plan_btn = plan_btn.clone();
         talk_btn.connect_toggled(move |b| {
             if b.is_active() {
                 intent.set(ChatIntent::Talk);
-                propose_btn.set_active(false);
-            } else if !propose_btn.is_active() {
+                plan_btn.set_active(false);
+            } else if !plan_btn.is_active() {
                 b.set_active(true);
             }
         });
@@ -3032,9 +3606,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     {
         let intent = intent.clone();
         let talk_btn = talk_btn.clone();
-        propose_btn.connect_toggled(move |b| {
+        plan_btn.connect_toggled(move |b| {
             if b.is_active() {
-                intent.set(ChatIntent::ProposeFirst);
+                intent.set(ChatIntent::Plan);
                 talk_btn.set_active(false);
             } else if !talk_btn.is_active() {
                 b.set_active(true);
@@ -3042,8 +3616,135 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
     intent_row.append(&talk_btn);
-    intent_row.append(&propose_btn);
+    intent_row.append(&plan_btn);
+
+    let model_btn = gtk::MenuButton::builder()
+        .label("Model…")
+        .css_classes(["flat", "centurion-chat-model"])
+        .tooltip_text("Switch thinking model (same as Settings)")
+        .halign(gtk::Align::End)
+        .hexpand(true)
+        .build();
+    intent_row.append(&model_btn);
     bottom.append(&intent_row);
+
+    let refresh_model_label: Rc<dyn Fn()> = Rc::new({
+        let model_btn = model_btn.clone();
+        move || {
+            let (tx, rx) = mpsc::channel::<String>();
+            thread::spawn(move || {
+                let _ = tx.send(provider_status_label());
+            });
+            let model_btn = model_btn.clone();
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(label) => {
+                    model_btn.set_label(&label);
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        }
+    });
+    refresh_model_label();
+
+    let model_error_slot: Rc<RefCell<Option<Rc<dyn Fn(Option<String>)>>>> =
+        Rc::new(RefCell::new(None));
+    // Populate model popover asynchronously (catalog + apply).
+    {
+        let model_btn = model_btn.clone();
+        let on_fix_thinking = on_fix_thinking.clone();
+        let refresh_model_label = refresh_model_label.clone();
+        let model_error_slot = model_error_slot.clone();
+        let (tx, rx) = mpsc::channel::<Vec<(String, String, bool)>>();
+        thread::spawn(move || {
+            let _ = tx.send(provider_catalog_connectors());
+        });
+        glib::timeout_add_local(Duration::from_millis(80), move || match rx.try_recv() {
+            Ok(connectors) => {
+                let popover = gtk::Popover::new();
+                let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
+                list.set_margin_start(8);
+                list.set_margin_end(8);
+                list.set_margin_top(8);
+                list.set_margin_bottom(8);
+                if connectors.is_empty() {
+                    list.append(
+                        &gtk::Label::builder()
+                            .label("No models in catalog")
+                            .css_classes(["dim-label"])
+                            .build(),
+                    );
+                } else {
+                    for (id, display, needs_key) in connectors {
+                        let row = gtk::Button::with_label(&display);
+                        row.add_css_class("flat");
+                        row.set_halign(gtk::Align::Start);
+                        let on_fix_thinking = on_fix_thinking.clone();
+                        let refresh_model_label = refresh_model_label.clone();
+                        let model_error_slot = model_error_slot.clone();
+                        let popover_c = popover.clone();
+                        let model_btn_c = model_btn.clone();
+                        row.connect_clicked(move |_| {
+                            popover_c.popdown();
+                            if needs_key {
+                                if let Some(handler) = on_fix_thinking.borrow().clone() {
+                                    handler();
+                                }
+                                return;
+                            }
+                            model_btn_c.set_label("Switching…");
+                            let id = id.clone();
+                            let refresh_model_label = refresh_model_label.clone();
+                            let model_error_slot = model_error_slot.clone();
+                            let (tx, rx) = mpsc::channel::<Result<(), String>>();
+                            thread::spawn(move || {
+                                let _ = tx.send(apply_provider_connector(&id));
+                            });
+                            glib::timeout_add_local(Duration::from_millis(50), move || {
+                                match rx.try_recv() {
+                                    Ok(Ok(())) => {
+                                        refresh_model_label();
+                                        glib::ControlFlow::Break
+                                    }
+                                    Ok(Err(err)) => {
+                                        if let Some(set_error) = model_error_slot.borrow().clone()
+                                        {
+                                            set_error(Some(err));
+                                        }
+                                        refresh_model_label();
+                                        glib::ControlFlow::Break
+                                    }
+                                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                    Err(mpsc::TryRecvError::Disconnected) => {
+                                        refresh_model_label();
+                                        glib::ControlFlow::Break
+                                    }
+                                }
+                            });
+                        });
+                        list.append(&row);
+                    }
+                }
+                let open_fix = gtk::Button::with_label("More… (access codes)");
+                open_fix.add_css_class("flat");
+                let on_fix_thinking = on_fix_thinking.clone();
+                let popover_c = popover.clone();
+                open_fix.connect_clicked(move |_| {
+                    popover_c.popdown();
+                    if let Some(handler) = on_fix_thinking.borrow().clone() {
+                        handler();
+                    }
+                });
+                list.append(&open_fix);
+                popover.set_child(Some(&list));
+                model_btn.set_popover(Some(&popover));
+                glib::ControlFlow::Break
+            }
+            Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+        });
+    }
 
     // Attachment chips
     let attachments: Rc<RefCell<Vec<PendingAttachment>>> = Rc::new(RefCell::new(Vec::new()));
@@ -3255,6 +3956,198 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             }
         }
     });
+    *model_error_slot.borrow_mut() = Some(set_error.clone());
+
+    // Mission proposal choice chips — wired now that input / messages / set_error exist.
+    *show_proposal_choices.borrow_mut() = Some(Rc::new({
+        let proposal_box = proposal_box.clone();
+        let proposal_title = proposal_title.clone();
+        let proposal_detail = proposal_detail.clone();
+        let proposal_buttons = proposal_buttons.clone();
+        let pending_proposal = pending_proposal.clone();
+        let keep_proposal_context = keep_proposal_context.clone();
+        let clear_pending_proposal = clear_pending_proposal.clone();
+        let clear_proposal_ui = clear_proposal_ui.clone();
+        let input = input.clone();
+        let messages = messages.clone();
+        let refresh_messages = refresh_messages.clone();
+        let set_error = set_error.clone();
+        let follow_bottom = follow_bottom.clone();
+        move |proposal: PendingMissionProposal| {
+            while let Some(child) = proposal_buttons.first_child() {
+                proposal_buttons.remove(&child);
+            }
+            keep_proposal_context.set(false);
+            *pending_proposal.borrow_mut() = Some(proposal.clone());
+            proposal_title.set_label(&format!("Save “{}”?", proposal.title));
+            let mut detail_parts = Vec::new();
+            if !proposal.summary.is_empty() {
+                detail_parts.push(proposal.summary.clone());
+            } else if !proposal.goal.is_empty() {
+                detail_parts.push(proposal.goal.clone());
+            }
+            if !proposal.targets.is_empty() {
+                detail_parts.push(format!(
+                    "{} target{}",
+                    proposal.targets.len(),
+                    if proposal.targets.len() == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ));
+            } else if !proposal.steps.is_empty() {
+                detail_parts.push(format!(
+                    "{} step{}",
+                    proposal.steps.len(),
+                    if proposal.steps.len() == 1 { "" } else { "s" }
+                ));
+            }
+            proposal_detail.set_label(&detail_parts.join(" · "));
+
+            let choices: &[(&str, &str, bool)] = &[
+                ("save_plan", "Save as Plan", false),
+                ("add_targets", "Add as targets", false),
+                ("save_both", "Save both", false),
+                ("other", "Other", false),
+                ("dismiss", "Dismiss", true),
+            ];
+            for (id, label, destructive) in choices {
+                let button = gtk::Button::with_label(label);
+                if *destructive {
+                    button.add_css_class("destructive-action");
+                } else if *id == "save_both" || *id == "save_plan" {
+                    button.add_css_class("suggested-action");
+                } else {
+                    button.add_css_class("flat");
+                }
+                let choice = (*id).to_owned();
+                let pending_proposal = pending_proposal.clone();
+                let keep_proposal_context = keep_proposal_context.clone();
+                let clear_pending_proposal = clear_pending_proposal.clone();
+                let clear_proposal_ui = clear_proposal_ui.clone();
+                let input = input.clone();
+                let messages = messages.clone();
+                let refresh_messages = refresh_messages.clone();
+                let set_error = set_error.clone();
+                let follow_bottom = follow_bottom.clone();
+                let proposal_box = proposal_box.clone();
+                let proposal_title = proposal_title.clone();
+                let proposal_detail = proposal_detail.clone();
+                let proposal_buttons = proposal_buttons.clone();
+                button.connect_clicked(move |_| {
+                    let Some(proposal) = pending_proposal.borrow().clone() else {
+                        clear_pending_proposal();
+                        return;
+                    };
+                    match choice.as_str() {
+                        "dismiss" => {
+                            clear_pending_proposal();
+                            messages.borrow_mut().push(ChatMessage {
+                                role: ChatRole::System,
+                                content: "Proposal dismissed.".to_owned(),
+                            });
+                            follow_bottom.set(true);
+                            refresh_messages();
+                        }
+                        "other" => {
+                            keep_proposal_context.set(true);
+                            clear_proposal_ui();
+                            proposal_title
+                                .set_label(&format!("Proposal kept · “{}”", proposal.title));
+                            proposal_detail.set_label(
+                                "Type your own direction below. Nothing was saved yet.",
+                            );
+                            while let Some(child) = proposal_buttons.first_child() {
+                                proposal_buttons.remove(&child);
+                            }
+                            let dismiss = gtk::Button::with_label("Dismiss");
+                            dismiss.add_css_class("flat");
+                            let clear_pending_proposal = clear_pending_proposal.clone();
+                            dismiss.connect_clicked(move |_| clear_pending_proposal());
+                            proposal_buttons.append(&dismiss);
+                            proposal_box.set_visible(true);
+                            input.grab_focus();
+                            messages.borrow_mut().push(ChatMessage {
+                                role: ChatRole::System,
+                                content: "Okay — tell me what you'd rather do. Proposal kept in context until you dismiss or save.".to_owned(),
+                            });
+                            follow_bottom.set(true);
+                            refresh_messages();
+                        }
+                        "save_plan" | "add_targets" | "save_both" => {
+                            let choice = choice.clone();
+                            let proposal = proposal.clone();
+                            let clear_pending_proposal = clear_pending_proposal.clone();
+                            let messages = messages.clone();
+                            let refresh_messages = refresh_messages.clone();
+                            let set_error = set_error.clone();
+                            let follow_bottom = follow_bottom.clone();
+                            let (tx, rx) = mpsc::channel::<Result<String, String>>();
+                            thread::spawn(move || {
+                                let result = match choice.as_str() {
+                                    "save_plan" => persist_proposal_as_plan(&proposal).map(|_| {
+                                        "Saved as a Plan on Home (Needs your choice).".to_owned()
+                                    }),
+                                    "add_targets" => {
+                                        persist_proposal_as_targets(&proposal).map(|n| {
+                                            format!(
+                                                "Added {n} target{} to the Target Sequence.",
+                                                if n == 1 { "" } else { "s" }
+                                            )
+                                        })
+                                    }
+                                    "save_both" => {
+                                        persist_proposal_as_plan(&proposal)?;
+                                        let n =
+                                            persist_proposal_as_targets(&proposal).unwrap_or(0);
+                                        post_mission_thought(
+                                            &proposal.mission_id,
+                                            &proposal.target_id,
+                                            &format!("Saved proposal: {}", proposal.title),
+                                            &proposal.summary,
+                                        );
+                                        Ok(format!(
+                                            "Saved Plan on Home and added {n} target{} to the Target Sequence.",
+                                            if n == 1 { "" } else { "s" }
+                                        ))
+                                    }
+                                    _ => Err("Unknown choice.".to_owned()),
+                                };
+                                let _ = tx.send(result);
+                            });
+                            glib::timeout_add_local(Duration::from_millis(50), move || {
+                                match rx.try_recv() {
+                                    Ok(Ok(msg)) => {
+                                        clear_pending_proposal();
+                                        messages.borrow_mut().push(ChatMessage {
+                                            role: ChatRole::System,
+                                            content: msg,
+                                        });
+                                        follow_bottom.set(true);
+                                        refresh_messages();
+                                        glib::ControlFlow::Break
+                                    }
+                                    Ok(Err(err)) => {
+                                        set_error(Some(err));
+                                        glib::ControlFlow::Break
+                                    }
+                                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                    Err(mpsc::TryRecvError::Disconnected) => {
+                                        set_error(Some("Save did not finish.".to_owned()));
+                                        glib::ControlFlow::Break
+                                    }
+                                }
+                            });
+                        }
+                        _ => clear_pending_proposal(),
+                    }
+                });
+                proposal_buttons.append(&button);
+            }
+            proposal_box.set_visible(true);
+        }
+    }));
 
     let set_sending: Rc<dyn Fn(bool)> = Rc::new({
         let send_button = send_button.clone();
@@ -3906,6 +4799,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let apply_activity = apply_activity.clone();
         let finish_activity_summary = finish_activity_summary.clone();
         let turn_cancel = turn_cancel.clone();
+        let show_proposal_choices = show_proposal_choices.clone();
+        let keep_proposal_context = keep_proposal_context.clone();
+        let pending_proposal = pending_proposal.clone();
         move || {
             if *is_sending.borrow() {
                 return;
@@ -3915,7 +4811,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             if text.trim().is_empty() && pending.is_empty() {
                 return;
             }
-            let propose_first = intent.get() == ChatIntent::ProposeFirst;
+            let plan_mode = intent.get() == ChatIntent::Plan;
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
             let _ = honor_soul_session_reset(&session_id, &messages);
@@ -3943,10 +4839,33 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
             let discuss_topic = active_discuss.borrow().clone();
             let mut outbound = format_attachment_outbound(&text, &pending);
+            // If user chose Other on a prior proposal, keep it in context for this turn.
+            if keep_proposal_context.get() {
+                if let Some(p) = pending_proposal.borrow().as_ref() {
+                    outbound = format!(
+                        "[Pending proposal the user chose Other on — do not persist unless they clearly ask]\n\
+Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
+                        p.title,
+                        p.goal,
+                        p.summary,
+                        p.steps.join("; "),
+                        p.targets
+                            .iter()
+                            .map(|t| format!("{} ({})", t.title, t.target_type))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                        outbound
+                    );
+                }
+            }
             let mut life_inject: Option<Value> = None;
-            if propose_first {
-                // Propose-first is its own framing; drop topic frame for this turn.
-                outbound = frame_propose_first(&outbound);
+            let mission_discuss = matches!(discuss_topic, Some(DiscussTopic::Mission { .. }));
+            if plan_mode {
+                // Plan mode preserves Mission framing (mission-proposal) instead of dropping it.
+                if let Some(ref topic) = discuss_topic {
+                    life_inject = life_inject_for_topic(&text, topic);
+                }
+                outbound = frame_plan_mode(&outbound, discuss_topic.as_ref());
             } else if let Some(ref topic) = discuss_topic {
                 life_inject = life_inject_for_topic(&text, topic);
                 outbound = frame_discuss_outbound(&outbound, topic);
@@ -3963,9 +4882,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 Some(DiscussTopic::Commitment { id, .. }) => id.clone(),
                 _ => String::new(),
             };
-            let applying_plan_update = !propose_first && !plan_id_for_update.is_empty();
+            // Auto plan-update only outside Plan mode (Plan mode may emit a new artifact).
+            let applying_plan_update =
+                !plan_mode && !plan_id_for_update.is_empty();
             let applying_commitment_update =
-                !propose_first && !commitment_id_for_update.is_empty();
+                !plan_mode && !commitment_id_for_update.is_empty();
+            // Non-mission Plan mode still auto-saves plan-artifact to Home.
+            let auto_save_plan_artifact = plan_mode && !mission_discuss;
 
             let (event_tx, event_rx) = mpsc::channel::<WorkerEvent>();
             let (approval_tx, approval_rx) = mpsc::channel::<ApprovalDecision>();
@@ -4002,6 +4925,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let follow_bottom = follow_bottom.clone();
             let apply_activity = apply_activity.clone();
             let finish_activity_summary = finish_activity_summary.clone();
+            let show_proposal_choices = show_proposal_choices.clone();
+            let discuss_topic_for_done = discuss_topic.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
                 match event_rx.try_recv() {
                     Ok(WorkerEvent::Approval(request)) => {
@@ -4021,16 +4946,39 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             Ok(turn) => {
                                 save_session_id(&turn.session_id);
                                 *session_id.borrow_mut() = Some(turn.session_id);
-                                let mut display = if propose_first {
+                                let mission_proposal = parse_mission_proposal(
+                                    &turn.text,
+                                    discuss_topic_for_done.as_ref(),
+                                );
+                                let mut display = if mission_proposal.is_some() {
+                                    strip_proposal_fences(&turn.text)
+                                } else if auto_save_plan_artifact {
                                     strip_plan_artifact(&turn.text)
                                 } else if applying_plan_update {
                                     strip_plan_update(&turn.text)
                                 } else if applying_commitment_update {
                                     strip_commitment_update(&turn.text)
                                 } else {
-                                    turn.text.clone()
+                                    // Still strip accidental fences from display.
+                                    strip_proposal_fences(&turn.text)
                                 };
-                                if propose_first {
+                                if let Some(proposal) = mission_proposal {
+                                    if display.trim().is_empty() {
+                                        display = format!(
+                                            "Here's a proposal for “{}”. Choose how to save it below.",
+                                            proposal.title
+                                        );
+                                    } else if !display.to_lowercase().contains("save")
+                                        && !display.to_lowercase().contains("chip")
+                                    {
+                                        display.push_str(
+                                            "\n\nChoose Save as Plan, Add as targets, Save both, Other, or Dismiss below.",
+                                        );
+                                    }
+                                    if let Some(show) = show_proposal_choices.borrow().clone() {
+                                        show(proposal);
+                                    }
+                                } else if auto_save_plan_artifact {
                                     let plan =
                                         plan_payload_from_response(&turn.text, &user_request);
                                     thread::spawn(move || {
@@ -4257,3 +5205,64 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     (container, handle)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_mission_proposal_fence_from_display() {
+        let raw = "Here is a plan.\n\n```mission-proposal\n{\"title\":\"T\",\"goal\":\"G\",\"steps\":[\"a\"],\"targets\":[]}\n```\n";
+        let stripped = strip_mission_proposal(raw);
+        assert!(!stripped.contains("mission-proposal"));
+        assert!(stripped.contains("Here is a plan."));
+    }
+
+    #[test]
+    fn parses_mission_proposal_without_auto_fields() {
+        let raw = r#"Next steps:
+
+```mission-proposal
+{"title":"Ship accept flow","goal":"User can save","summary":"Chips confirm","steps":["Wire fence","Show chips"],"targets":[{"title":"Must ship chips","target_type":"essential","description":""}]}
+```
+"#;
+        let proposal = parse_mission_proposal(raw, None).expect("parse");
+        assert_eq!(proposal.title, "Ship accept flow");
+        assert_eq!(proposal.targets.len(), 1);
+        assert_eq!(proposal.targets[0].target_type, "essential");
+        // Parsing alone must not persist — no bridge calls in this unit test.
+        let plan = proposal_to_plan_value(&proposal);
+        assert_eq!(plan["status"], "pending_review");
+        assert_eq!(plan["title"], "Ship accept flow");
+    }
+
+    #[test]
+    fn plan_artifact_becomes_mission_proposal_when_mission_topic() {
+        let topic = DiscussTopic::Mission {
+            statement: "Build Centurion".to_owned(),
+            id: Some("m1".to_owned()),
+            title: Some("Centurion".to_owned()),
+            target_id: None,
+            target_title: None,
+            target_type: None,
+            target_description: None,
+            target_status: None,
+            sequence_number: None,
+        };
+        let raw = r#"```plan-artifact
+{"title":"Fallback","goal":"G","steps":["one","two"],"summary":"S"}
+```"#;
+        let proposal = parse_mission_proposal(raw, Some(&topic)).expect("fallback");
+        assert_eq!(proposal.mission_id, "m1");
+        assert_eq!(proposal.title, "Fallback");
+        assert_eq!(proposal.targets.len(), 2); // derived from steps
+    }
+
+    #[test]
+    fn normalize_target_types() {
+        assert_eq!(normalize_target_type("Must Do"), "essential");
+        assert_eq!(normalize_target_type("should"), "shouldHave");
+        assert_eq!(normalize_target_type("nice_to_have"), "niceToHave");
+    }
+}
+
