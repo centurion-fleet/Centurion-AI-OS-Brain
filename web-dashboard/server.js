@@ -2,14 +2,16 @@
 /**
  * Centurion Mission Deck server
  * - Serves built SPA from dist/
- * - POST /api/bridge → python -m centurion_cli.remote_bridge (stdio JSON)
+ * - POST /api/bridge → warm remote_bridge Unix socket (stdio spawn fallback)
  * - GET /api/stream → SSE of life_thoughts_list (local poll, no cloud)
  *
  * Port 9120 — Brain LAN only, no auth.
  */
 import http from "node:http";
+import net from "node:net";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -20,6 +22,10 @@ const HOST = process.env.MISSION_DECK_HOST || "0.0.0.0";
 const DEV = process.argv.includes("--dev");
 const DIST = path.join(__dirname, "dist");
 const REPO_ROOT = path.resolve(__dirname, "..");
+const SSE_MS = Math.max(
+  1000,
+  Number(process.env.CENTURION_DECK_SSE_MS || 2000) || 2000,
+);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -51,12 +57,88 @@ function findPython() {
 
 const PYTHON = findPython();
 
+function bridgeSocketPath() {
+  const override = (process.env.CENTURION_BRIDGE_SOCKET || "").trim();
+  if (override) return override;
+  const home = (process.env.CENTURION_HOME || "").trim();
+  if (home) return path.join(home, "run", "bridge.sock");
+  return path.join(os.homedir(), ".centurion", "run", "bridge.sock");
+}
+
 /**
- * Invoke remote_bridge once with a JSON request object.
+ * Prefer the Brain's warm Unix-socket daemon; fall back to one-shot spawn.
  * @param {Record<string, unknown>} request
  * @returns {Promise<Record<string, unknown>>}
  */
 function callBridge(request) {
+  const sock = bridgeSocketPath();
+  if (fs.existsSync(sock)) {
+    return callBridgeSocket(sock, request).catch(() => callBridgeSpawn(request));
+  }
+  return callBridgeSpawn(request);
+}
+
+function callBridgeSocket(sockPath, request) {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection({ path: sockPath });
+    let buf = "";
+    let settled = false;
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      client.destroy();
+      finish(() => reject(new Error("bridge socket timeout")));
+    }, 30_000);
+
+    client.on("connect", () => {
+      client.write(JSON.stringify(request) + "\n");
+    });
+    client.on("data", (chunk) => {
+      buf += chunk.toString();
+      const nl = buf.indexOf("\n");
+      if (nl >= 0) {
+        const line = buf.slice(0, nl).trim();
+        client.end();
+        try {
+          const parsed = JSON.parse(line);
+          finish(() => resolve(parsed));
+        } catch (e) {
+          finish(() =>
+            reject(new Error(`bridge invalid JSON: ${line.slice(0, 200)}`)),
+          );
+        }
+      }
+    });
+    client.on("error", (err) => {
+      finish(() => reject(err));
+    });
+    client.on("end", () => {
+      if (settled) return;
+      const line = buf
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .pop();
+      if (!line) {
+        finish(() => reject(new Error("bridge empty socket response")));
+        return;
+      }
+      try {
+        finish(() => resolve(JSON.parse(line)));
+      } catch (e) {
+        finish(() =>
+          reject(new Error(`bridge invalid JSON: ${line.slice(0, 200)}`)),
+        );
+      }
+    });
+  });
+}
+
+function callBridgeSpawn(request) {
   return new Promise((resolve, reject) => {
     const child = spawn(PYTHON, ["-m", "centurion_cli.remote_bridge"], {
       cwd: REPO_ROOT,
@@ -264,7 +346,7 @@ async function handleStream(req, res) {
       return;
     }
     tick();
-  }, 2000);
+  }, SSE_MS);
 }
 
 const server = http.createServer(async (req, res) => {

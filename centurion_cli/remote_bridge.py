@@ -289,13 +289,45 @@ def _handle_chat(
         except Exception:
             session_id = None
 
+    # Optional life-context inject (Brain Mission Discuss) — one round-trip
+    # with chat instead of a separate bridge spawn before Send.
+    chat_text = text.strip()
+    life_inject = request.get("life_inject")
+    if isinstance(life_inject, dict):
+        try:
+            from centurion_cli.life_missions import inject_context
+
+            message = str(life_inject.get("message") or chat_text)
+            current_view = life_inject.get("current_view")
+            if not isinstance(current_view, dict):
+                current_view = {
+                    "mission_id": life_inject.get("mission_id"),
+                    "target_id": life_inject.get("target_id"),
+                    "subject_id": life_inject.get("subject_id"),
+                }
+            result = inject_context(message, current_view=current_view)
+            block = str(result.get("formatted_for_ai") or "").strip()
+            if block:
+                marker = "Mission context:\n"
+                if marker not in chat_text:
+                    # Prefer inserting before "User message:" when Brain framed the text.
+                    needle = "User message:\n"
+                    if needle in chat_text:
+                        chat_text = chat_text.replace(
+                            needle, f"{marker}{block}\n\n{needle}", 1
+                        )
+                    else:
+                        chat_text = f"{marker}{block}\n\n{chat_text}"
+        except Exception:
+            pass
+
     routed_connector_id = None
     routed_display_name = ""
     try:
         if get_routing_mode() == "phoenix":
             from centurion_cli.phoenix_router import describe_route, resolve as phoenix_resolve
 
-            routed_connector_id = phoenix_resolve(text.strip(), categories={"text"})
+            routed_connector_id = phoenix_resolve(chat_text, categories={"text"})
             if routed_connector_id:
                 switch = apply_remote_switch(routed_connector_id, probe=False)
                 if switch.ok:
@@ -307,12 +339,12 @@ def _handle_chat(
         # Prefer session-aware signature; fall back for test doubles.
         try:
             response = run_agent(
-                text.strip(),
+                chat_text,
                 session_id=session_id,
                 request_id=request_id,
             )
         except TypeError:
-            response = run_agent(text.strip())
+            response = run_agent(chat_text)
         record_successful_turn()
         payload = {
             "id": request_id,
@@ -333,7 +365,7 @@ def _handle_chat(
             exc=exc,
             retryable=True,
             attempt_recovery=True,
-            retry_text=text.strip(),
+            retry_text=chat_text,
             run_agent=run_agent,
         )
 
@@ -938,11 +970,39 @@ def _remote_events_enabled() -> bool:
     }
 
 
+# Thread-local sink for daemon socket mode (overrides FD 1 / stdout).
+_event_sink_tls: Any = None
+
+
+def _event_sink_state():
+    global _event_sink_tls
+    import threading
+
+    if _event_sink_tls is None:
+        _event_sink_tls = threading.local()
+    return _event_sink_tls
+
+
+def _set_event_sink(write_fn: Callable[[bytes], None] | None) -> None:
+    """Route NDJSON events to ``write_fn`` for this thread (Unix-socket serve)."""
+    _event_sink_state().write = write_fn
+
+
 def _emit_remote_event(event: dict[str, Any]) -> None:
-    """Write one NDJSON event to the real stdout FD (survives redirect_stdout)."""
+    """Write one NDJSON event to the active sink or real stdout FD."""
     import os
 
-    os.write(1, (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+    payload = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+    write_fn = getattr(_event_sink_state(), "write", None)
+    if write_fn is not None:
+        write_fn(payload)
+        return
+    os.write(1, payload)
+
+
+def _write_approval_event(event: dict[str, Any]) -> None:
+    """Emit approval_request the same way as activity events (sink or FD 1)."""
+    _emit_remote_event(event)
 
 
 def _resolve_remote_tool_progress_mode(cfg: dict[str, Any] | None = None) -> str:
@@ -1154,9 +1214,8 @@ def _run_agent_quiet(
                 "pattern_key": data.get("pattern_key") or "",
                 "choices": ["once", "session", "always", "deny"],
             }
-            # Write to the real stdout FD so redirect_stdout(devnull) cannot
-            # swallow approval events during the agent turn.
-            os.write(1, (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+            # Sink (socket) or real stdout FD — survives redirect_stdout(devnull).
+            _write_approval_event(event)
 
         register_gateway_notify(approval_key, _emit_approval)
         notify_registered = True
@@ -1180,23 +1239,18 @@ _approval_stdin_started = False
 _approval_stdin_lock = None
 
 
-def _start_approval_stdin_reader(default_session_key: str) -> None:
-    """Read follow-up approval_respond lines from stdin while the agent runs."""
-    global _approval_stdin_started, _approval_stdin_lock
+def _start_approval_line_reader(
+    default_session_key: str,
+    readline_fn: Callable[[], str],
+) -> None:
+    """Read approval_respond JSON lines from ``readline_fn`` while the agent runs."""
     import threading
-
-    if _approval_stdin_lock is None:
-        _approval_stdin_lock = threading.Lock()
-    with _approval_stdin_lock:
-        if _approval_stdin_started:
-            return
-        _approval_stdin_started = True
 
     def _loop() -> None:
         from tools.approval import resolve_gateway_approval
 
         while True:
-            line = sys.stdin.readline()
+            line = readline_fn()
             if not line:
                 return
             line = line.strip()
@@ -1214,7 +1268,30 @@ def _start_approval_stdin_reader(default_session_key: str) -> None:
             if session_key and choice:
                 resolve_gateway_approval(session_key, choice, resolve_all=resolve_all)
 
-    threading.Thread(target=_loop, name="remote-approval-stdin", daemon=True).start()
+    threading.Thread(
+        target=_loop,
+        name="remote-approval-reader",
+        daemon=True,
+    ).start()
+
+
+def _start_approval_stdin_reader(default_session_key: str) -> None:
+    """Read follow-up approval_respond lines from stdin while the agent runs."""
+    global _approval_stdin_started, _approval_stdin_lock
+    import threading
+
+    # Socket serve mode installs its own per-connection reader.
+    if getattr(_event_sink_state(), "write", None) is not None:
+        return
+
+    if _approval_stdin_lock is None:
+        _approval_stdin_lock = threading.Lock()
+    with _approval_stdin_lock:
+        if _approval_stdin_started:
+            return
+        _approval_stdin_started = True
+
+    _start_approval_line_reader(default_session_key, sys.stdin.readline)
 
 
 def _ensure_remote_session(*, title: str | None = None) -> str:
@@ -3548,11 +3625,286 @@ def _read_request() -> dict[str, Any]:
     return value
 
 
+def default_bridge_socket_path() -> str:
+    """Unix socket path for the persistent Brain bridge daemon."""
+    import os
+
+    override = (os.environ.get("CENTURION_BRIDGE_SOCKET") or "").strip()
+    if override:
+        return override
+    try:
+        from centurion_constants import get_centurion_home
+
+        home = get_centurion_home()
+    except Exception:
+        from pathlib import Path
+
+        home = Path(os.environ.get("CENTURION_HOME") or (Path.home() / ".centurion"))
+    return str(home / "run" / "bridge.sock")
+
+
+def _warm_bridge_imports() -> None:
+    """Best-effort eager imports so the first chat is not the coldest path."""
+    try:
+        from centurion_cli.config import load_config
+
+        load_config()
+    except Exception:
+        pass
+    try:
+        import run_agent  # noqa: F401
+    except Exception:
+        pass
+    try:
+        from run_agent import AIAgent  # noqa: F401
+    except Exception:
+        pass
+
+
+_CHAT_SERVE_LOCK: Any = None
+
+
+def _chat_serve_lock():
+    global _CHAT_SERVE_LOCK
+    import threading
+
+    if _CHAT_SERVE_LOCK is None:
+        _CHAT_SERVE_LOCK = threading.Lock()
+    return _CHAT_SERVE_LOCK
+
+
+def _events_requested(request: dict[str, Any]) -> bool:
+    if request.get("events") in (True, 1, "1", "true", "yes"):
+        return True
+    return _remote_events_enabled()
+
+
+def _handle_socket_connection(conn: Any, addr: Any = None) -> None:
+    """Serve one client connection (one request, optional event stream)."""
+    import os
+    import threading
+
+    del addr  # unused; accept() returns it for AF_UNIX compatibility
+    conn.settimeout(None)
+    rfile = conn.makefile("rb")
+    write_lock = threading.Lock()
+
+    def _write_bytes(data: bytes) -> None:
+        with write_lock:
+            try:
+                conn.sendall(data)
+            except OSError:
+                pass
+
+    try:
+        raw = rfile.readline()
+        if not raw:
+            return
+        request = json.loads(raw.decode("utf-8"))
+        if not isinstance(request, dict):
+            raise ValueError("request must be a JSON object")
+    except Exception as exc:
+        code, message = classify_llm_error(exc)
+        _write_bytes(
+            (
+                json.dumps(
+                    {
+                        "id": "",
+                        "ok": False,
+                        "code": code,
+                        "error": message,
+                        "message": message,
+                        "retryable": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+        )
+        try:
+            rfile.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return
+
+    action = str(request.get("action") or "chat").strip().lower()
+    events = action == "chat" and _events_requested(request)
+
+    if events:
+        os.environ["CENTURION_REMOTE_EVENTS"] = "1"
+        _set_event_sink(_write_bytes)
+        approval_key = (
+            f"remote:{request.get('id') or request.get('session_id') or 'turn'}"
+        )
+
+        def _readline() -> str:
+            try:
+                line = rfile.readline()
+            except OSError:
+                return ""
+            if not line:
+                return ""
+            return line.decode("utf-8", errors="replace")
+
+        _start_approval_line_reader(approval_key, _readline)
+        try:
+            with _chat_serve_lock():
+                # Early activity so the Brain UI is never blank during residual warm-up.
+                _emit_remote_event(
+                    {
+                        "centurion_event": "activity",
+                        "kind": "status",
+                        "event": "lifecycle",
+                        "message": "Starting…",
+                        "line": "Starting…",
+                    }
+                )
+                try:
+                    response = handle_request(request)
+                except Exception as exc:
+                    code, message = classify_llm_error(exc)
+                    response = {
+                        "id": str(request.get("id") or ""),
+                        "ok": False,
+                        "code": code,
+                        "error": message,
+                        "message": message,
+                        "retryable": False,
+                    }
+        finally:
+            _set_event_sink(None)
+    else:
+        try:
+            if action == "chat":
+                with _chat_serve_lock():
+                    response = handle_request(request)
+            else:
+                response = handle_request(request)
+        except Exception as exc:
+            code, message = classify_llm_error(exc)
+            response = {
+                "id": str(request.get("id") or ""),
+                "ok": False,
+                "code": code,
+                "error": message,
+                "message": message,
+                "retryable": False,
+            }
+
+    _write_bytes((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+    try:
+        rfile.close()
+    except Exception:
+        pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def serve_bridge(
+    socket_path: str | None = None,
+    *,
+    workers: int = 4,
+) -> int:
+    """Run the persistent Unix-socket bridge daemon (Brain latency path)."""
+    import os
+    import signal
+    import socket
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+
+    try:
+        from centurion_cli.profiles import apply_sticky_profile_home
+
+        apply_sticky_profile_home()
+    except Exception:
+        pass
+
+    path = socket_path or default_bridge_socket_path()
+    sock_file = Path(path)
+    sock_file.parent.mkdir(parents=True, exist_ok=True)
+    if sock_file.exists():
+        try:
+            sock_file.unlink()
+        except OSError:
+            pass
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    server.listen(32)
+    server.settimeout(1.0)
+
+    stop = threading.Event()
+
+    def _shutdown(*_args: Any) -> None:
+        stop.set()
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    _warm_bridge_imports()
+    logger.info("Centurion bridge daemon listening on %s", path)
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        try:
+            while not stop.is_set():
+                try:
+                    conn, addr = server.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if stop.is_set():
+                        break
+                    continue
+                pool.submit(_handle_socket_connection, conn, addr)
+        finally:
+            try:
+                server.close()
+            except OSError:
+                pass
+            try:
+                if sock_file.exists():
+                    sock_file.unlink()
+            except OSError:
+                pass
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Local bridge used by the native Centurion remote service."
     )
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Run as a persistent Unix-socket daemon (Brain).",
+    )
+    parser.add_argument(
+        "--socket",
+        default=None,
+        help="Unix socket path for --serve (default: $CENTURION_HOME/run/bridge.sock).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Thread-pool size for --serve (default: 4).",
+    )
+    args = parser.parse_args(argv)
+
+    if args.serve:
+        return serve_bridge(args.socket, workers=args.workers)
 
     try:
         from centurion_cli.profiles import apply_sticky_profile_home

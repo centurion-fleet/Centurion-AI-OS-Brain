@@ -116,6 +116,15 @@ impl DeckSupervisor {
             .current_dir(&self.dir)
             .env("MISSION_DECK_HOST", DECK_HOST)
             .env("MISSION_DECK_PORT", DECK_PORT.to_string())
+            .env("CENTURION_DECK_SSE_MS", "5000")
+            .env(
+                "CENTURION_HOME",
+                crate::chat_page::resolve_centurion_home(),
+            )
+            .env(
+                "CENTURION_BRIDGE_SOCKET",
+                crate::bridge_client::bridge_socket_path(),
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -238,26 +247,41 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let attention = attention.clone();
         let hooks = hooks.clone();
         glib::timeout_add_seconds_local(12, move || {
-            if let Some(body) = crate::chat_page::run_bridge_action(
-                "life_decisions_list",
-                serde_json::json!({ "limit": 20 }),
-            ) {
-                if let Some(arr) = body.get("decisions").and_then(|v| v.as_array()) {
-                    let n = arr
-                        .iter()
+            let attention = attention.clone();
+            let hooks = hooks.clone();
+            let (tx, rx) = std::sync::mpsc::channel::<u32>();
+            std::thread::spawn(move || {
+                let n = crate::chat_page::run_bridge_action(
+                    "life_decisions_list",
+                    serde_json::json!({ "limit": 20 }),
+                )
+                .as_ref()
+                .and_then(|b| b.get("decisions"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
                         .filter(|d| {
                             d.get("chosen")
                                 .and_then(|c| c.as_str())
                                 .unwrap_or("")
                                 .is_empty()
                         })
-                        .count() as u32;
+                        .count() as u32
+                })
+                .unwrap_or(0);
+                let _ = tx.send(n);
+            });
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(n) => {
                     if attention.get() != n {
                         attention.set(n);
                         (hooks.on_attention_changed)(n);
                     }
+                    glib::ControlFlow::Break
                 }
-            }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
             glib::ControlFlow::Continue
         });
     }

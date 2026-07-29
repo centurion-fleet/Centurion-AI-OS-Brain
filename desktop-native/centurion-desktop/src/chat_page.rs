@@ -11,9 +11,8 @@ use gio;
 use libadwaita as adw;
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
-use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -706,9 +705,9 @@ User message:\n\
 fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     let DiscussTopic::Mission {
         statement,
-        id,
+        id: _,
         title,
-        target_id,
+        target_id: _,
         target_title,
     } = topic
     else {
@@ -730,28 +729,8 @@ fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         .filter(|s| !s.is_empty())
         .map(|t| format!("Focus target: {t}\n"))
         .unwrap_or_default();
-    // New discuss turn only — inject Brain life context into the user message
-    // (never mutate the system prompt / prompt cache).
-    let mut inject = serde_json::json!({ "message": user_text });
-    if id.is_some() || target_id.is_some() {
-        inject["current_view"] = serde_json::json!({
-            "mission_id": id,
-            "target_id": target_id,
-        });
-    }
-    let life_block = run_bridge_action("life_context_inject", inject)
-        .and_then(|r| {
-            if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                r.get("formatted_for_ai")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_owned())
-            } else {
-                None
-            }
-        })
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| format!("Mission context:\n{s}\n\n"))
-        .unwrap_or_default();
+    // Life context is injected inside remote_bridge via `life_inject` on the
+    // chat request (one round-trip) — do not sync-spawn here on the UI thread.
     format!(
         "[Sovereign AI Brain — Mission discuss]\n\
 The user is discussing a Life Mission (direction), not a single reviewable Plan.\n\n\
@@ -759,11 +738,31 @@ Mission: {mission_label}\n\
 Statement:\n\
 {statement}\n\
 {target_line}\n\
-{life_block}Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\
+Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\
 Use Must Do / Should Do / Nice to Do vocabulary for targets.\n\n\
 User message:\n\
 {user_text}"
     )
+}
+
+/// Build optional `life_inject` payload for Mission Discuss (handled in Python).
+fn life_inject_for_topic(user_text: &str, topic: &DiscussTopic) -> Option<Value> {
+    let DiscussTopic::Mission {
+        id,
+        target_id,
+        ..
+    } = topic
+    else {
+        return None;
+    };
+    let mut inject = serde_json::json!({ "message": user_text });
+    if id.is_some() || target_id.is_some() {
+        inject["current_view"] = serde_json::json!({
+            "mission_id": id,
+            "target_id": target_id,
+        });
+    }
+    Some(inject)
 }
 
 fn frame_generic_discuss(user_text: &str, topic: &DiscussTopic) -> String {
@@ -1381,42 +1380,7 @@ fn save_session_id(session_id: &str) {
 }
 
 fn run_bridge_json(action: &str, extra: Value) -> Result<Value, String> {
-    let mut body = serde_json::Map::new();
-    body.insert("id".to_owned(), Value::String("desktop-chat".to_owned()));
-    body.insert("action".to_owned(), Value::String(action.to_owned()));
-    if let Value::Object(map) = extra {
-        for (key, value) in map {
-            body.insert(key, value);
-        }
-    }
-    let payload = Value::Object(body).to_string();
-    let mut child = Command::new(resolve_bridge_python());
-    child
-        .args(["-m", "centurion_cli.remote_bridge"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_bridge_command(&mut child);
-    let mut child = child
-        .spawn()
-        .map_err(|e| format!("Could not start Centurion chat bridge: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(payload.as_bytes())
-            .map_err(|e| format!("Could not talk to Centurion: {e}"))?;
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Centurion chat bridge failed: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_final_json(&stdout).ok_or_else(|| {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.trim().is_empty() {
-            "Centurion did not return a reply.".to_owned()
-        } else {
-            stderr.lines().next().unwrap_or("Centurion chat failed.").to_owned()
-        }
-    })
+    crate::bridge_client::bridge_request_resilient(action, extra)
 }
 
 fn parse_final_json(stdout: &str) -> Option<Value> {
@@ -1440,35 +1404,9 @@ pub fn parse_bridge_stdout(stdout: &[u8]) -> Option<Value> {
 }
 
 /// Run one Settings/bridge action (Soul, Horizon, oversight, …).
+/// Call from a worker thread — never block the GTK main loop.
 pub fn run_bridge_action(action: &str, extra: Value) -> Option<Value> {
-    let mut body = serde_json::Map::new();
-    body.insert("id".to_owned(), Value::String("desktop-settings".to_owned()));
-    body.insert(
-        "action".to_owned(),
-        Value::String(action.to_owned()),
-    );
-    if let Value::Object(map) = extra {
-        for (key, value) in map {
-            body.insert(key, value);
-        }
-    }
-    let payload = Value::Object(body).to_string();
-    let mut child = Command::new(resolve_bridge_python());
-    child
-        .args(["-m", "centurion_cli.remote_bridge"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_bridge_command(&mut child);
-    let mut child = child.spawn().ok()?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(payload.as_bytes()).ok()?;
-    }
-    let output = child.wait_with_output().ok()?;
-    if !output.status.success() && output.stdout.is_empty() {
-        return None;
-    }
-    parse_bridge_stdout(&output.stdout)
+    crate::bridge_client::bridge_request_resilient(action, extra).ok()
 }
 
 fn ensure_session_id() -> Result<String, String> {
@@ -1874,16 +1812,24 @@ fn session_row(
 fn run_chat_turn(
     session_id: String,
     text: String,
+    life_inject: Option<Value>,
     event_tx: mpsc::Sender<WorkerEvent>,
     approval_rx: mpsc::Receiver<ApprovalDecision>,
     cancel: Arc<AtomicBool>,
 ) {
-    let payload = serde_json::json!({
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::Shutdown;
+
+    let mut payload = serde_json::json!({
         "id": "desktop-chat",
         "action": "chat",
         "text": text,
         "session_id": session_id,
+        "events": true,
     });
+    if let Some(inject) = life_inject {
+        payload["life_inject"] = inject;
+    }
     let line = match serde_json::to_vec(&payload) {
         Ok(mut bytes) => {
             bytes.push(b'\n');
@@ -1895,60 +1841,39 @@ fn run_chat_turn(
         }
     };
 
-    let mut child = Command::new(resolve_bridge_python());
-    child
-        .args(["-m", "centurion_cli.remote_bridge"])
-        .env("CENTURION_REMOTE_EVENTS", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_bridge_command(&mut child);
-    let mut child = match child.spawn()
-    {
-        Ok(child) => child,
+    let mut stream = match crate::bridge_client::connect_bridge() {
+        Ok(stream) => stream,
+        Err(e) => {
+            let _ = event_tx.send(WorkerEvent::Done(Err(e)));
+            return;
+        }
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+    if let Err(e) = stream.write_all(&line).and_then(|_| stream.flush()) {
+        let _ = event_tx.send(WorkerEvent::Done(Err(format!("Could not send message: {e}"))));
+        return;
+    }
+
+    let reader_stream = match stream.try_clone() {
+        Ok(s) => s,
         Err(e) => {
             let _ = event_tx.send(WorkerEvent::Done(Err(format!(
-                "Could not start Centurion chat bridge: {e}"
+                "Centurion chat bridge clone failed: {e}"
             ))));
             return;
         }
     };
-
-    let mut stdin = match child.stdin.take() {
-        Some(stdin) => stdin,
-        None => {
-            let _ = event_tx.send(WorkerEvent::Done(Err(
-                "Centurion chat bridge stdin unavailable.".to_owned(),
-            )));
-            return;
-        }
-    };
-    if let Err(e) = stdin.write_all(&line) {
-        let _ = event_tx.send(WorkerEvent::Done(Err(format!("Could not send message: {e}"))));
-        return;
-    }
-    let _ = stdin.flush();
-
-    let stdout = match child.stdout.take() {
-        Some(stdout) => stdout,
-        None => {
-            let _ = event_tx.send(WorkerEvent::Done(Err(
-                "Centurion chat bridge stdout unavailable.".to_owned(),
-            )));
-            return;
-        }
-    };
-    let reader = BufReader::new(stdout);
+    let mut reader = BufReader::new(reader_stream);
     let mut final_response: Option<Value> = None;
+    let mut buf = String::new();
 
-    for raw_line in reader.lines() {
+    loop {
         if cancel.load(Ordering::SeqCst) {
-            let _ = child.kill();
-            let _ = child.wait();
+            let _ = stream.shutdown(Shutdown::Both);
             let _ = event_tx.send(WorkerEvent::Done(Err("Stopped.".to_owned())));
             return;
         }
-        // Drain any approval decisions the UI already queued.
         while let Ok(decision) = approval_rx.try_recv() {
             let payload = serde_json::json!({
                 "action": "approval_respond",
@@ -1957,15 +1882,24 @@ fn run_chat_turn(
             });
             if let Ok(mut bytes) = serde_json::to_vec(&payload) {
                 bytes.push(b'\n');
-                let _ = stdin.write_all(&bytes);
-                let _ = stdin.flush();
+                let _ = stream.write_all(&bytes);
+                let _ = stream.flush();
             }
         }
 
-        let Ok(raw_line) = raw_line else {
-            break;
-        };
-        let trimmed = raw_line.trim();
+        buf.clear();
+        match reader.read_line(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue;
+            }
+            Err(_) => break,
+        }
+        let trimmed = buf.trim();
         if trimmed.is_empty() {
             continue;
         }
@@ -2055,7 +1989,6 @@ fn run_chat_turn(
             };
             let deny_session_key = request.session_key.clone();
             let _ = event_tx.send(WorkerEvent::Approval(request));
-            // Block until the UI answers this approval (or the channel closes).
             match approval_rx.recv_timeout(Duration::from_secs(600)) {
                 Ok(decision) => {
                     let payload = serde_json::json!({
@@ -2065,8 +1998,8 @@ fn run_chat_turn(
                     });
                     if let Ok(mut bytes) = serde_json::to_vec(&payload) {
                         bytes.push(b'\n');
-                        let _ = stdin.write_all(&bytes);
-                        let _ = stdin.flush();
+                        let _ = stream.write_all(&bytes);
+                        let _ = stream.flush();
                     }
                 }
                 Err(_) => {
@@ -2077,18 +2010,16 @@ fn run_chat_turn(
                     });
                     if let Ok(mut bytes) = serde_json::to_vec(&payload) {
                         bytes.push(b'\n');
-                        let _ = stdin.write_all(&bytes);
-                        let _ = stdin.flush();
+                        let _ = stream.write_all(&bytes);
+                        let _ = stream.flush();
                     }
                 }
             }
             continue;
         }
-        // Ignore unknown event types; keep reading until the final chat reply.
         if !event_name.is_empty() {
             continue;
         }
-        // Final reply: prefer payloads that look like a chat result.
         let looks_final = value.get("ok").is_some()
             || value.get("text").is_some()
             || value.get("reply").is_some()
@@ -2100,7 +2031,7 @@ fn run_chat_turn(
         }
     }
 
-    let _ = child.wait();
+    let _ = stream.shutdown(Shutdown::Both);
 
     let result = match final_response {
         Some(value) if value.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
@@ -2519,7 +2450,7 @@ fn schedule_scroll_to_latest(
     follow_bottom.set(true);
     scroll_chat_to_latest(message_scroll, message_list, programmatic);
 
-    for delay_ms in [16u64, 50, 120, 250, 500] {
+    for delay_ms in [16u64, 120] {
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
         let follow_bottom = follow_bottom.clone();
@@ -3361,7 +3292,28 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             clear_approval();
             set_sending(false);
             set_error(None);
-            *assistant_name.borrow_mut() = load_assistant_display_name();
+            // Refresh name off the UI thread so New Chat never stalls on soul_get.
+            {
+                let assistant_name = assistant_name.clone();
+                let title_label = title_label.clone();
+                let active_discuss = active_discuss.clone();
+                let (tx, rx) = mpsc::channel::<String>();
+                thread::spawn(move || {
+                    let _ = tx.send(load_assistant_display_name());
+                });
+                glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                    Ok(name) => {
+                        *assistant_name.borrow_mut() = name;
+                        if active_discuss.borrow().is_none() {
+                            title_label
+                                .set_label(&format!("Chat with {}", assistant_name.borrow()));
+                        }
+                        glib::ControlFlow::Break
+                    }
+                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                });
+            }
             title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
             messages.borrow_mut().clear();
             *active_discuss.borrow_mut() = None;
@@ -3370,10 +3322,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             // Commit continuity for the active chat, then lazy-clear so the next
             // send creates a fresh session without an empty Conversations ghost.
             if let Some(sid) = session_id.borrow().clone() {
-                let _ = run_bridge_json(
-                    "session_end_continuity",
-                    serde_json::json!({ "session_id": sid }),
-                );
+                thread::spawn(move || {
+                    let _ = run_bridge_json(
+                        "session_end_continuity",
+                        serde_json::json!({ "session_id": sid }),
+                    );
+                });
             }
             *session_id.borrow_mut() = None;
             let path = session_store_path();
@@ -3920,8 +3874,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
             let _ = honor_soul_session_reset(&session_id, &messages);
-            // Always refresh the assistant name from disk so Settings → Name shows up.
-            *assistant_name.borrow_mut() = load_assistant_display_name();
+            // Use cached assistant name on Send — never sync-spawn soul_get here.
             if let Some(topic) = active_discuss.borrow().as_ref() {
                 title.set_label(&topic.session_title());
             } else {
@@ -3945,10 +3898,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
             let discuss_topic = active_discuss.borrow().clone();
             let mut outbound = format_attachment_outbound(&text, &pending);
+            let mut life_inject: Option<Value> = None;
             if propose_first {
                 // Propose-first is its own framing; drop topic frame for this turn.
                 outbound = frame_propose_first(&outbound);
             } else if let Some(ref topic) = discuss_topic {
+                life_inject = life_inject_for_topic(&text, topic);
                 outbound = frame_discuss_outbound(&outbound, topic);
             }
             let user_request = text.clone();
@@ -3987,7 +3942,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         }
                     },
                 };
-                run_chat_turn(sid, outbound, event_tx, approval_rx, cancel);
+                run_chat_turn(sid, outbound, life_inject, event_tx, approval_rx, cancel);
             });
 
             let messages = messages.clone();
