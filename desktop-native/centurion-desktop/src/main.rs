@@ -526,7 +526,7 @@ mod linux {
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
 keeps your data here, and stays on your mission.\n\n\
-Chat is the conversation. Home is the command center: mission, plans, and decisions. \
+Chat is the conversation. Missions is the command center: mission stack, plans, and decisions. \
 Settings is how you shape Soul, memory, and thinking.\n\n\
 An iPhone remote is optional later — only when you want the Brain in your pocket. \
 For now, sit here and meet your Centurion.";
@@ -982,7 +982,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&backup_thinking_row);
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
-            .subtitle("Add peers and ping across machines (moved from Home).")
+            .subtitle("Add peers and ping across machines (moved from Missions).")
             .icon_name("network-server-symbolic")
             .build();
         let fleet_peer_button = gtk::Button::with_label("Configure");
@@ -991,7 +991,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain — manage here, not on Home.")
+            .subtitle("Agent plugins on this Brain — manage here, not on Missions.")
             .icon_name("application-x-addon-symbolic")
             .build();
         let plugins_button = gtk::Button::with_label("View");
@@ -1000,7 +1000,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
             .title("Scheduled & board")
-            .subtitle("Cron jobs and kanban glance — desk ops, not Home pulse.")
+            .subtitle("Cron jobs and kanban glance — desk ops, not Missions pulse.")
             .icon_name("view-list-symbolic")
             .build();
         let ops_button = gtk::Button::with_label("View");
@@ -1009,7 +1009,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
-            .subtitle("Connect or invite another Sovereign. Live orbs stay on Home.")
+            .subtitle("Connect or invite another Sovereign. Live orbs stay on Missions.")
             .icon_name("system-users-symbolic")
             .build();
         let collab_connect_button = gtk::Button::with_label("Connect");
@@ -1062,7 +1062,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let life_mission_row = adw::ActionRow::builder()
             .title("Life Mission")
-            .subtitle("What you're building toward — shown on Home; edit here.")
+            .subtitle("What you're building toward — shown on Missions; edit here.")
             .icon_name("emblem-favorite-symbolic")
             .build();
         let life_mission_edit_button = gtk::Button::with_label("Edit");
@@ -1072,10 +1072,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let mission_stack_row = adw::ActionRow::builder()
             .title("Mission Stack")
-            .subtitle("Primary, supporting Missions, subjects, and dreams — offline on this Brain")
+            .subtitle("Primary, supporting, dreams — open the Missions tab")
             .icon_name("view-list-symbolic")
             .build();
-        let mission_stack_button = gtk::Button::with_label("Open");
+        let mission_stack_button = gtk::Button::with_label("Open tab");
         mission_stack_button.set_valign(gtk::Align::Center);
         mission_stack_button.add_css_class("suggested-action");
         mission_stack_row.add_suffix(&mission_stack_button);
@@ -1145,8 +1145,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         you_group.add(&privacy_row);
 
         let pulse_pref_row = adw::ActionRow::builder()
-            .title("Home attention")
-            .subtitle("Prefer opening Home on decisions when something needs you")
+            .title("Missions attention")
+            .subtitle("Prefer opening Missions on decisions when something needs you")
             .icon_name("emblem-important-symbolic")
             .build();
         let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
@@ -1338,7 +1338,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         };
 
         stack.add_titled(&chat, Some("chat"), "Chat");
-        stack.add_titled(&home, Some("home"), "Home");
+        stack.add_titled(&home, Some("missions"), "Missions");
         stack.add_titled(&settings_scroll, Some("settings"), "Settings");
         stack.set_visible_child_name("chat");
         chat.set_vexpand(true);
@@ -1353,9 +1353,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             Rc::new(move || {
                 let n = home_handle.attention_count();
                 let home_title = if n > 0 {
-                    format!("Home ({n})")
+                    format!("Missions ({n})")
                 } else {
-                    "Home".to_owned()
+                    "Missions".to_owned()
                 };
                 stack.page(&home).set_title(&home_title);
             }) as Rc<dyn Fn()>
@@ -1408,7 +1408,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             if stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&tab_refresh_list);
             }
-            if stack.visible_child_name().as_deref() == Some("home") {
+            if stack.visible_child_name().as_deref() == Some("missions") {
                 tab_home_handle.refresh();
             }
             tab_badges();
@@ -1608,16 +1608,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             }
         });
         mission_stack_button.connect_clicked({
-            let window = window.clone();
-            let home_handle = home_handle.clone();
+            let stack = stack.clone();
             move |_| {
-                show_mission_stack_dialog(
-                    &window,
-                    Rc::new({
-                        let home_handle = home_handle.clone();
-                        move || home_handle.refresh()
-                    }),
-                );
+                stack.set_visible_child_name("missions");
             }
         });
         mission_discover_button.connect_clicked({
@@ -3897,118 +3890,6 @@ Being · Continuity\n\
         dialog.present(Some(parent));
     }
 
-    fn show_mission_stack_dialog(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn()>) {
-        let payload = run_bridge_action("life_stack_get", serde_json::json!({}));
-        let body = match payload {
-            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                let stack = p.get("stack").cloned().unwrap_or(serde_json::json!({}));
-                let mut lines = Vec::new();
-                if let Some(primary) = stack.get("primary") {
-                    let title = primary
-                        .get("title")
-                        .or_else(|| primary.get("statement"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("(untitled)");
-                    let phase = primary
-                        .get("phase")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("executing");
-                    lines.push(format!("Primary Mission\n• {title} ({phase})"));
-                    if let Some(targets) = primary.get("targets").and_then(|v| v.as_array()) {
-                        for t in targets.iter().take(8) {
-                            let ttitle = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
-                            let focus = t
-                                .get("focus_target")
-                                .and_then(|v| {
-                                    v.as_bool()
-                                        .or_else(|| v.as_i64().map(|n| n != 0))
-                                })
-                                .unwrap_or(false);
-                            let mark = if focus { "◎" } else { "•" };
-                            lines.push(format!("  {mark} {ttitle}"));
-                        }
-                    }
-                } else {
-                    lines.push("Primary Mission\n• (none yet — use Mission Discovery)".to_owned());
-                }
-                lines.push(String::new());
-                lines.push("Supporting".to_owned());
-                let supporting = stack
-                    .get("supporting")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                if supporting.is_empty() {
-                    lines.push("• (none)".to_owned());
-                } else {
-                    for m in supporting.iter().take(12) {
-                        let title = m
-                            .get("title")
-                            .or_else(|| m.get("statement"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("?");
-                        lines.push(format!("• {title}"));
-                    }
-                }
-                lines.push(String::new());
-                lines.push("Dreams".to_owned());
-                let dreams = stack
-                    .get("dreams")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                if dreams.is_empty() {
-                    lines.push("• (none — capture ideas from Discovery)".to_owned());
-                } else {
-                    for d in dreams.iter().take(12) {
-                        let title = d.get("title").and_then(|v| v.as_str()).unwrap_or("?");
-                        lines.push(format!("• {title}"));
-                    }
-                }
-                let subjects = run_bridge_action("life_subjects_list", serde_json::json!({}))
-                    .and_then(|r| {
-                        r.get("subjects")
-                            .and_then(|v| v.as_array())
-                            .cloned()
-                    })
-                    .unwrap_or_default();
-                if !subjects.is_empty() {
-                    lines.push(String::new());
-                    lines.push("Subjects".to_owned());
-                    for s in subjects.iter().take(20) {
-                        let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                        lines.push(format!("• {name}"));
-                    }
-                }
-                lines.push(String::new());
-                lines.push(
-                    "Edit primary statement via Life Mission · Edit. Dreams promote from Remote."
-                        .to_owned(),
-                );
-                lines.join("\n")
-            }
-            Some(p) => p
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Could not load Mission Stack.")
-                .to_owned(),
-            None => "Could not reach the bridge.".to_owned(),
-        };
-        let dialog = adw::AlertDialog::builder()
-            .heading("Mission Stack")
-            .body(&body)
-            .close_response("close")
-            .build();
-        dialog.add_response("close", "Close");
-        dialog.add_response("refresh", "Refresh Home");
-        dialog.set_response_appearance("refresh", adw::ResponseAppearance::Suggested);
-        dialog.connect_response(None, move |_d, response| {
-            if response == "refresh" {
-                on_saved();
-            }
-        });
-        dialog.present(Some(parent));
-    }
 
     fn show_skills_tools_dialog(parent: &adw::ApplicationWindow) {
         let payload = run_bridge_action("tools_skills_snapshot", serde_json::json!({}));
@@ -4446,7 +4327,7 @@ Being · Continuity\n\
         let dialog = adw::AlertDialog::builder()
             .heading("Fleet peer")
             .body(
-                "Peers and ping live here (moved off Home). Add another Centurion’s \
+                "Peers and ping live here (moved off Missions). Add another Centurion’s \
 LAN or public address and the shared fleet token.",
             )
             .extra_child(&form)
@@ -4510,7 +4391,7 @@ LAN or public address and the shared fleet token.",
                     .unwrap_or_default();
                 if cron.is_empty() && kanban.is_empty() {
                     "No upcoming jobs or board tasks right now.\n\n\
-Schedule work with cron or kanban; this glance stays in Settings, not Home."
+Schedule work with cron or kanban; this glance stays in Settings, not Missions."
                         .to_owned()
                 } else {
                     if !cron.is_empty() {
@@ -5165,7 +5046,7 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
                     show_get_help_dialog(&window, &thinking_settings_row, &thinking_detail)
                 }
                 "try_auto_fix" => show_support_auto_fix_dialog(&window),
-                "open_mission" => stack.set_visible_child_name("chat"),
+                "open_mission" => stack.set_visible_child_name("missions"),
                 _ => {}
             }),
         };

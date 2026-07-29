@@ -1,7 +1,7 @@
-//! Brain Home tab — iPhone Mission Portfolio / Pulse parity.
+//! Brain Missions tab — Mission Stack + iPhone Pulse parity.
 //!
-//! Projects `swarm_snapshot` + `plans_list` (+ `mission_get`) into the six
-//! pills: Working on now, Plans, Finished, Documents, Needs your choice, Updates.
+//! Mission Stack (Primary / Supporting / Dreams) sits above the pulse feed
+//! from `swarm_snapshot` + `plans_list` (+ legacy `mission_get`).
 
 use adw::prelude::*;
 use gtk4 as gtk;
@@ -35,7 +35,7 @@ impl HomeHandle {
         (self.refresh)();
     }
 
-    /// Sum of pill new-counts (Live = presence 0/1). Used for the Home tab badge.
+    /// Sum of pill new-counts (Live = presence 0/1). Used for the Missions tab badge.
     pub fn attention_count(&self) -> u32 {
         self.attention.get()
     }
@@ -2192,12 +2192,538 @@ fn show_plan_dialog(
     dialog.present(Some(parent));
 }
 
-/// Build the Home (Pulse) tab.
+fn target_type_label(ttype: &str) -> &'static str {
+    match ttype {
+        "shouldHave" | "should" => "Should Do",
+        "niceToHave" | "nice" => "Nice to Do",
+        _ => "Must Do",
+    }
+}
+
+fn mission_display_title(mission: &Value) -> String {
+    mission
+        .get("title")
+        .or_else(|| mission.get("statement"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Mission")
+        .trim()
+        .to_owned()
+}
+
+fn mission_discuss_topic(mission: &Value, target: Option<&Value>) -> DiscussTopic {
+    let statement = mission
+        .get("statement")
+        .or_else(|| mission.get("title"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let title = mission
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_owned());
+    let id = mission
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_owned());
+    let (target_id, target_title) = match target {
+        Some(t) => (
+            t.get("id").and_then(|v| v.as_str()).map(|s| s.to_owned()),
+            t.get("title").and_then(|v| v.as_str()).map(|s| s.to_owned()),
+        ),
+        None => (None, None),
+    };
+    DiscussTopic::Mission {
+        statement,
+        id,
+        title,
+        target_id,
+        target_title,
+    }
+}
+
+fn show_mission_detail_dialog(
+    parent: &gtk::Widget,
+    mission: Value,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
+) {
+    let Some(window) = parent.root().and_downcast::<gtk::Window>() else {
+        return;
+    };
+    let title = mission_display_title(&mission);
+    let statement = mission
+        .get("statement")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let situation = mission
+        .get("situation")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let why = mission
+        .get("why")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let purpose = mission
+        .get("purpose")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let phase = mission
+        .get("phase")
+        .and_then(|v| v.as_str())
+        .unwrap_or("executing")
+        .to_owned();
+
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    body.set_margin_top(8);
+    body.set_margin_bottom(8);
+    body.set_margin_start(4);
+    body.set_margin_end(4);
+
+    let add_section = |box_: &gtk::Box, heading: &str, text: &str| {
+        box_.append(
+            &gtk::Label::builder()
+                .label(heading)
+                .css_classes(["caption-heading"])
+                .xalign(0.0)
+                .build(),
+        );
+        let content = if text.trim().is_empty() {
+            "—"
+        } else {
+            text
+        };
+        box_.append(
+            &gtk::Label::builder()
+                .label(content)
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+    };
+    add_section(&body, "Phase", &phase);
+    add_section(&body, "Where I’m At", &situation);
+    add_section(&body, "Why", &why);
+    add_section(
+        &body,
+        "Success Looks Like",
+        if purpose.trim().is_empty() {
+            &statement
+        } else {
+            &purpose
+        },
+    );
+
+    let targets = mission
+        .get("targets")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    for kind in ["essential", "shouldHave", "niceToHave"] {
+        let group: Vec<Value> = targets
+            .iter()
+            .filter(|t| t.get("target_type").and_then(|v| v.as_str()).unwrap_or("essential") == kind)
+            .cloned()
+            .collect();
+        if group.is_empty() {
+            continue;
+        }
+        body.append(
+            &gtk::Label::builder()
+                .label(target_type_label(kind))
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(8)
+                .build(),
+        );
+        for t in group {
+            let ttitle = t
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Target")
+                .to_owned();
+            let focus = t
+                .get("focus_target")
+                .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n != 0)))
+                .unwrap_or(false);
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let mark = if focus { "◎" } else { "•" };
+            row.append(
+                &gtk::Label::builder()
+                    .label(&format!("{mark} {ttitle}"))
+                    .wrap(true)
+                    .xalign(0.0)
+                    .hexpand(true)
+                    .build(),
+            );
+            let discuss = discuss_icon_button("Discuss this target");
+            let on_ask_t = on_ask.clone();
+            let mission_t = mission.clone();
+            let target_t = t.clone();
+            discuss.connect_clicked(move |_| {
+                let topic = mission_discuss_topic(&mission_t, Some(&target_t));
+                let name = mission_display_title(&mission_t);
+                on_ask_t(
+                    topic,
+                    format!("Let's discuss the target “{ttitle}” on mission “{name}”."),
+                );
+            });
+            row.append(&discuss);
+            body.append(&row);
+        }
+    }
+
+    let scroll = gtk::ScrolledWindow::builder()
+        .child(&body)
+        .min_content_height(280)
+        .min_content_width(420)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .build();
+
+    let dialog = adw::AlertDialog::builder()
+        .heading(&title)
+        .body("Mission detail — Discuss opens Chat with mission context.")
+        .extra_child(&scroll)
+        .close_response("close")
+        .default_response("discuss")
+        .build();
+    dialog.add_response("close", "Close");
+    dialog.add_response("discuss", "Discuss");
+    dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
+    let on_ask_d = on_ask.clone();
+    let mission_d = mission.clone();
+    dialog.connect_response(None, move |_d, response| {
+        if response == "discuss" {
+            let topic = mission_discuss_topic(&mission_d, None);
+            let name = mission_display_title(&mission_d);
+            on_ask_d(
+                topic,
+                format!("Let's discuss my Mission: {name}\n\nWhat should we focus on next?"),
+            );
+        }
+    });
+    dialog.present(Some(&window));
+}
+
+fn rebuild_mission_stack_section(
+    stack_box: &gtk::Box,
+    parent: &gtk::Box,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
+    on_refresh: Rc<dyn Fn()>,
+) {
+    clear_box(stack_box);
+    stack_box.append(
+        &gtk::Label::builder()
+            .label("MISSION STACK")
+            .css_classes(["caption-heading"])
+            .xalign(0.0)
+            .build(),
+    );
+
+    let payload = run_bridge_action("life_stack_get", serde_json::json!({}));
+    let stack = payload
+        .as_ref()
+        .filter(|p| p.get("ok").and_then(|v| v.as_bool()) == Some(true))
+        .and_then(|p| p.get("stack").cloned());
+    let Some(stack) = stack else {
+        stack_box.append(&empty_label(
+            "Could not load Mission Stack. Check that Centurion is installed on this Brain.",
+        ));
+        return;
+    };
+
+    let subjects = run_bridge_action("life_subjects_list", serde_json::json!({}))
+        .and_then(|r| {
+            r.get("subjects")
+                .and_then(|v| v.as_array())
+                .cloned()
+        })
+        .unwrap_or_default();
+
+    if let Some(primary) = stack.get("primary").cloned() {
+        stack_box.append(
+            &gtk::Label::builder()
+                .label("Primary Mission")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(4)
+                .build(),
+        );
+        stack_box.append(&mission_stack_row(
+            parent,
+            primary,
+            Some("Primary"),
+            on_ask.clone(),
+            on_refresh.clone(),
+            false,
+        ));
+    } else {
+        stack_box.append(&empty_label(
+            "No Primary Mission yet — use Settings → Mission Discovery to set one.",
+        ));
+    }
+
+    let supporting = stack
+        .get("supporting")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if !supporting.is_empty() {
+        stack_box.append(
+            &gtk::Label::builder()
+                .label("Supporting Missions")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(10)
+                .build(),
+        );
+        for m in supporting.into_iter().take(12) {
+            stack_box.append(&mission_stack_row(
+                parent,
+                m,
+                None,
+                on_ask.clone(),
+                on_refresh.clone(),
+                true,
+            ));
+        }
+    }
+
+    let dreams = stack
+        .get("dreams")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if !dreams.is_empty() {
+        stack_box.append(
+            &gtk::Label::builder()
+                .label("Dreams")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(10)
+                .build(),
+        );
+        for d in dreams.into_iter().take(12) {
+            let title = d
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Dream")
+                .to_owned();
+            let desc = d
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let labels = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            labels.set_hexpand(true);
+            labels.append(
+                &gtk::Label::builder()
+                    .label(&title)
+                    .xalign(0.0)
+                    .wrap(true)
+                    .css_classes(["heading"])
+                    .build(),
+            );
+            if !desc.trim().is_empty() {
+                labels.append(
+                    &gtk::Label::builder()
+                        .label(&desc)
+                        .xalign(0.0)
+                        .wrap(true)
+                        .css_classes(["dim-label", "caption"])
+                        .build(),
+                );
+            }
+            row.append(&labels);
+            let promote = gtk::Button::with_label("Promote");
+            promote.set_valign(gtk::Align::Center);
+            promote.add_css_class("flat");
+            let dream_id = d
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            let on_refresh_p = on_refresh.clone();
+            promote.connect_clicked(move |_| {
+                if dream_id.is_empty() {
+                    return;
+                }
+                let _ = run_bridge_action(
+                    "life_dream_promote",
+                    serde_json::json!({ "dream_id": dream_id }),
+                );
+                on_refresh_p();
+            });
+            row.append(&promote);
+            stack_box.append(&row);
+        }
+    }
+
+    if !subjects.is_empty() {
+        stack_box.append(
+            &gtk::Label::builder()
+                .label("Subjects")
+                .css_classes(["title-4"])
+                .xalign(0.0)
+                .margin_top(10)
+                .build(),
+        );
+        for s in subjects.into_iter().take(20) {
+            let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+            stack_box.append(
+                &gtk::Label::builder()
+                    .label(&format!("• {name}"))
+                    .xalign(0.0)
+                    .build(),
+            );
+        }
+    }
+}
+
+fn mission_stack_row(
+    parent: &gtk::Box,
+    mission: Value,
+    badge: Option<&str>,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
+    on_refresh: Rc<dyn Fn()>,
+    allow_make_primary: bool,
+) -> gtk::Box {
+    let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    row.add_css_class("centurion-mission-row");
+    row.set_margin_top(4);
+    row.set_margin_bottom(4);
+
+    let title = mission_display_title(&mission);
+    let phase = mission
+        .get("phase")
+        .and_then(|v| v.as_str())
+        .unwrap_or("executing");
+    let completed = mission
+        .get("completed_target_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let total = mission
+        .get("target_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+        .max(1);
+    let focus = mission
+        .get("targets")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter().find(|t| {
+                t.get("focus_target")
+                    .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n != 0)))
+                    .unwrap_or(false)
+            })
+        });
+    let focus_line = focus
+        .and_then(|t| t.get("title").and_then(|v| v.as_str()))
+        .map(|t| format!("Focus · {t}"))
+        .unwrap_or_default();
+
+    let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let title_col = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    title_col.set_hexpand(true);
+    let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    title_row.append(
+        &gtk::Label::builder()
+            .label(&title)
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["heading"])
+            .hexpand(true)
+            .build(),
+    );
+    if let Some(badge) = badge {
+        title_row.append(
+            &gtk::Label::builder()
+                .label(badge)
+                .css_classes(["caption", "centurion-mission-badge"])
+                .build(),
+        );
+    }
+    title_col.append(&title_row);
+    title_col.append(
+        &gtk::Label::builder()
+            .label(&format!("{phase} · {completed}/{total} targets"))
+            .xalign(0.0)
+            .css_classes(["dim-label", "caption"])
+            .build(),
+    );
+    if !focus_line.is_empty() {
+        title_col.append(
+            &gtk::Label::builder()
+                .label(&focus_line)
+                .xalign(0.0)
+                .css_classes(["dim-label", "caption"])
+                .build(),
+        );
+    }
+    head.append(&title_col);
+
+    let open = gtk::Button::with_label("Open");
+    open.set_valign(gtk::Align::Center);
+    open.add_css_class("suggested-action");
+    let parent_w: gtk::Widget = parent.clone().upcast();
+    let mission_o = mission.clone();
+    let on_ask_o = on_ask.clone();
+    open.connect_clicked(move |_| {
+        show_mission_detail_dialog(&parent_w, mission_o.clone(), on_ask_o.clone());
+    });
+    head.append(&open);
+
+    let discuss = discuss_icon_button("Discuss this Mission");
+    let on_ask_d = on_ask.clone();
+    let mission_d = mission.clone();
+    discuss.connect_clicked(move |_| {
+        let topic = mission_discuss_topic(&mission_d, None);
+        let name = mission_display_title(&mission_d);
+        on_ask_d(
+            topic,
+            format!("Let's discuss my Mission: {name}\n\nWhat should we focus on next?"),
+        );
+    });
+    head.append(&discuss);
+
+    if allow_make_primary {
+        let make = gtk::Button::with_label("Make Primary");
+        make.set_valign(gtk::Align::Center);
+        make.add_css_class("flat");
+        let mid = mission
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let on_refresh_m = on_refresh.clone();
+        make.connect_clicked(move |_| {
+            if mid.is_empty() {
+                return;
+            }
+            let _ = run_bridge_action(
+                "life_stack_set_primary",
+                serde_json::json!({ "mission_id": mid }),
+            );
+            on_refresh_m();
+        });
+        head.append(&make);
+    }
+
+    row.append(&head);
+    row
+}
+
+/// Build the Missions tab (Mission Stack + pulse).
 pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
     container.set_vexpand(true);
     container.set_hexpand(true);
     container.add_css_class("centurion-home");
+    container.add_css_class("centurion-missions");
 
     let header = gtk::Box::new(gtk::Orientation::Vertical, 4);
     header.set_margin_top(16);
@@ -2206,14 +2732,14 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     header.set_margin_bottom(8);
     header.append(
         &gtk::Label::builder()
-            .label("Home")
+            .label("Missions")
             .css_classes(["title-1"])
             .xalign(0.0)
             .build(),
     );
     header.append(
         &gtk::Label::builder()
-            .label("What your Sovereign is doing, has finished, and needs from you.")
+            .label("What you’re building toward, and what needs you.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(["dim-label"])
@@ -2224,7 +2750,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
     body.set_hexpand(true);
 
-    // Match iPhone Home: mission + commitments + live collab orbs, then pills + feed.
+    // Mission Stack first (dominant), then pulse (commitments / orbs / pills / feed).
     // Fleet / Extensions / Scheduled & board / Connect live under Settings.
     let chrome = gtk::Box::new(gtk::Orientation::Vertical, 10);
     chrome.set_margin_start(20);
@@ -2232,31 +2758,9 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     chrome.set_margin_top(4);
     chrome.set_margin_bottom(8);
 
-    // Mission statement only — Edit / Discover live under Settings (iPhone You tab).
-    let mission_banner = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    mission_banner.add_css_class("centurion-home-mission");
-    mission_banner.append(
-        &gtk::Label::builder()
-            .label("WHAT YOU'RE BUILDING TOWARD")
-            .css_classes(["caption-heading"])
-            .xalign(0.0)
-            .build(),
-    );
-    let mission_statement = gtk::Label::builder()
-        .label("Set a Life Mission to guide your Sovereign.")
-        .wrap(true)
-        .xalign(0.0)
-        .build();
-    mission_banner.append(&mission_statement);
-    mission_banner.append(
-        &gtk::Label::builder()
-            .label("Edit or discover under Settings.")
-            .wrap(true)
-            .xalign(0.0)
-            .css_classes(["dim-label", "caption"])
-            .build(),
-    );
-    chrome.append(&mission_banner);
+    let mission_stack_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    mission_stack_box.add_css_class("centurion-mission-stack");
+    chrome.append(&mission_stack_box);
 
     let commitments = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     commitments.add_css_class("centurion-home-commitments");
@@ -2324,7 +2828,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let feed = feed.clone();
         let selected = selected.clone();
         let constellation = constellation.clone();
-        let mission_statement = mission_statement.clone();
+        let mission_stack_box = mission_stack_box.clone();
         let commitments = commitments.clone();
         let error_label = error_label.clone();
         let category_body = category_body.clone();
@@ -2396,11 +2900,21 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             attention.set(total);
             (hooks.on_attention_changed)(total);
 
-            if data.mission.statement.is_empty() {
-                mission_statement.set_label("Set a Life Mission to guide your Sovereign.");
-            } else {
-                mission_statement.set_label(&data.mission.statement);
-            }
+            let refresh_stack = {
+                let render_slot = render_slot.clone();
+                Rc::new(move || {
+                    if let Some(f) = render_slot.borrow().as_ref() {
+                        f();
+                    }
+                }) as Rc<dyn Fn()>
+            };
+            rebuild_mission_stack_section(
+                &mission_stack_box,
+                &container,
+                hooks.on_ask_about.clone(),
+                refresh_stack,
+            );
+
             clear_box(&commitments);
             let mission_statement_for_chips = data.mission.statement.clone();
             for target in &data.mission.targets {
@@ -2560,6 +3074,10 @@ What should we focus on next?"
                                 on_ask2(
                                     DiscussTopic::Mission {
                                         statement: mission_text.clone(),
+                                        id: None,
+                                        title: None,
+                                        target_id: None,
+                                        target_title: None,
                                     },
                                     prompt,
                                 );

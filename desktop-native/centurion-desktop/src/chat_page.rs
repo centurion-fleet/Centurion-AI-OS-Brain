@@ -97,6 +97,11 @@ pub enum DiscussTopic {
     },
     Mission {
         statement: String,
+        /// Offline life.db mission id when known (for context inject).
+        id: Option<String>,
+        title: Option<String>,
+        target_id: Option<String>,
+        target_title: Option<String>,
     },
     Commitment {
         id: String,
@@ -122,7 +127,24 @@ impl DiscussTopic {
             Self::Plan { title, .. } => format!("Discussing plan · {title}"),
             Self::Collab { name, .. } => format!("Discussing collaboration · {name}"),
             Self::Document { title, .. } => format!("Discussing document · {title}"),
-            Self::Mission { .. } => "Discussing Life Mission".to_owned(),
+            Self::Mission {
+                title,
+                target_title,
+                ..
+            } => {
+                let mission = title
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or("Life Mission");
+                match target_title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(t) => format!("Discussing Mission · {mission} · {t}"),
+                    None => format!("Discussing Mission · {mission}"),
+                }
+            }
             Self::Commitment { title, .. } => format!("Discussing commitment · {title}"),
             Self::Horizon { layer, .. } => format!("Discussing Memory Horizon · {layer}"),
             Self::Generic { title, kind, .. } => {
@@ -424,7 +446,14 @@ User message:\n\
 }
 
 fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
-    let DiscussTopic::Mission { statement } = topic else {
+    let DiscussTopic::Mission {
+        statement,
+        id,
+        title,
+        target_id,
+        target_title,
+    } = topic
+    else {
         return user_text.to_owned();
     };
     let statement = if statement.trim().is_empty() {
@@ -432,29 +461,46 @@ fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     } else {
         statement.as_str()
     };
+    let mission_label = title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(statement);
+    let target_line = target_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|t| format!("Focus target: {t}\n"))
+        .unwrap_or_default();
     // New discuss turn only — inject Brain life context into the user message
     // (never mutate the system prompt / prompt cache).
-    let life_block = run_bridge_action(
-        "life_context_inject",
-        serde_json::json!({ "message": user_text }),
-    )
-    .and_then(|r| {
-        if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-            r.get("formatted_for_ai")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_owned())
-        } else {
-            None
-        }
-    })
-    .filter(|s| !s.trim().is_empty())
-    .map(|s| format!("Mission context:\n{s}\n\n"))
-    .unwrap_or_default();
+    let mut inject = serde_json::json!({ "message": user_text });
+    if id.is_some() || target_id.is_some() {
+        inject["current_view"] = serde_json::json!({
+            "mission_id": id,
+            "target_id": target_id,
+        });
+    }
+    let life_block = run_bridge_action("life_context_inject", inject)
+        .and_then(|r| {
+            if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                r.get("formatted_for_ai")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_owned())
+            } else {
+                None
+            }
+        })
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| format!("Mission context:\n{s}\n\n"))
+        .unwrap_or_default();
     format!(
-        "[Sovereign AI Brain — Life Mission discuss]\n\
-The user is discussing their Life Mission (direction), not a single reviewable Plan.\n\n\
-Current Mission:\n\
-{statement}\n\n\
+        "[Sovereign AI Brain — Mission discuss]\n\
+The user is discussing a Life Mission (direction), not a single reviewable Plan.\n\n\
+Mission: {mission_label}\n\
+Statement:\n\
+{statement}\n\
+{target_line}\n\
 {life_block}Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\
 Use Must Do / Should Do / Nice to Do vocabulary for targets.\n\n\
 User message:\n\
