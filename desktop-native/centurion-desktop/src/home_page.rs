@@ -1201,6 +1201,56 @@ fn total_attention_count(data: &HomeFeed, seen: &Value) -> u32 {
         .sum()
 }
 
+/// Categories with new/unread items — used for the in-tab attention banner.
+fn attention_breakdown(data: &HomeFeed, seen: &Value) -> Vec<(String, u32)> {
+    PulseCategory::ALL
+        .iter()
+        .filter_map(|cat| {
+            let n = new_count_for_category(data, *cat, seen) as u32;
+            if n > 0 {
+                Some((cat.title().to_owned(), n))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn rebuild_attention_banner(banner: &gtk::Box, lines: &[(String, u32)]) {
+    clear_box(banner);
+    if lines.is_empty() {
+        banner.set_visible(false);
+        return;
+    }
+    banner.set_visible(true);
+    let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    title_row.append(
+        &gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .build(),
+    );
+    title_row.append(
+        &gtk::Label::builder()
+            .label("New since you last looked")
+            .css_classes(["centurion-attention-banner-title"])
+            .xalign(0.0)
+            .hexpand(true)
+            .build(),
+    );
+    banner.append(&title_row);
+    for (name, n) in lines {
+        banner.append(
+            &gtk::Label::builder()
+                .label(&format!("• {name} ({n}) — open that pill to review"))
+                .css_classes(["centurion-attention-item"])
+                .xalign(0.0)
+                .wrap(true)
+                .build(),
+        );
+    }
+}
+
 fn mark_category_seen(data: &HomeFeed, cat: PulseCategory) {
     let mut store = load_pulse_seen();
     let key = pulse_key(cat);
@@ -2747,6 +2797,14 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     );
     container.append(&header);
 
+    let attention_banner = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    attention_banner.add_css_class("centurion-attention-banner");
+    attention_banner.set_margin_start(20);
+    attention_banner.set_margin_end(20);
+    attention_banner.set_margin_bottom(8);
+    attention_banner.set_visible(false);
+    container.append(&attention_banner);
+
     let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
     body.set_hexpand(true);
 
@@ -2837,6 +2895,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let render_slot = render_slot.clone();
         let pill_buttons = pill_buttons.clone();
         let attention = attention.clone();
+        let attention_banner = attention_banner.clone();
         move || {
             let data = feed.borrow().clone();
             clear_box(&constellation);
@@ -2899,6 +2958,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             let total = total_attention_count(&data, &seen);
             attention.set(total);
             (hooks.on_attention_changed)(total);
+            rebuild_attention_banner(&attention_banner, &attention_breakdown(&data, &seen));
 
             let refresh_stack = {
                 let render_slot = render_slot.clone();

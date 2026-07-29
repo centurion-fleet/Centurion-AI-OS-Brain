@@ -68,6 +68,7 @@ mod linux {
     use libadwaita as adw;
     use serde::Deserialize;
     use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::io::Write;
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
@@ -865,9 +866,16 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 .label("Connected Devices")
                 .css_classes(["title-2"])
                 .xalign(0.0)
-                .hexpand(true)
                 .build(),
         );
+        let devices_attention_mark = gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .visible(false)
+            .hexpand(true)
+            .xalign(0.0)
+            .build();
+        devices_heading.append(&devices_attention_mark);
         let refresh_devices_button = gtk::Button::from_icon_name("view-refresh-symbolic");
         refresh_devices_button.set_tooltip_text(Some("Refresh devices"));
         devices_heading.append(&refresh_devices_button);
@@ -901,6 +909,11 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 .xalign(0.0)
                 .build(),
         );
+
+        let settings_attention_banner = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        settings_attention_banner.add_css_class("centurion-attention-banner");
+        settings_attention_banner.set_visible(false);
+        settings.append(&settings_attention_banner);
 
         settings.append(
             &gtk::Label::builder()
@@ -961,6 +974,13 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .subtitle("Checking thinking service…")
             .icon_name("preferences-system-symbolic")
             .build();
+        let thinking_attention_mark = gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .visible(false)
+            .valign(gtk::Align::Center)
+            .build();
+        thinking_settings_row.add_suffix(&thinking_attention_mark);
         let restore_thinking_button = gtk::Button::with_label("Restore");
         restore_thinking_button.set_tooltip_text(Some("Restore last working thinking setup"));
         restore_thinking_button.set_valign(gtk::Align::Center);
@@ -1346,40 +1366,88 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         settings_scroll.set_vexpand(true);
         settings_scroll.set_hexpand(true);
 
+        let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
+            &stack,
+            &[("chat", "Chat"), ("missions", "Missions"), ("settings", "Settings")],
+        );
+
+        let refresh_settings_attention_ui = {
+            let banner = settings_attention_banner.clone();
+            let thinking_settings_row = thinking_settings_row.clone();
+            let thinking_attention_mark = thinking_attention_mark.clone();
+            let devices_section = devices_section.clone();
+            let devices_attention_mark = devices_attention_mark.clone();
+            let fix_thinking_row = fix_thinking_row.clone();
+            Rc::new(move || {
+                let items = settings_attention_items();
+                rebuild_settings_attention_banner(&banner, &items);
+                let thinking = items
+                    .iter()
+                    .any(|i| matches!(i, SettingsAttentionItem::Thinking { .. }));
+                let remotes = items
+                    .iter()
+                    .any(|i| matches!(i, SettingsAttentionItem::RemotesOffline { .. }));
+                thinking_attention_mark.set_visible(thinking);
+                if thinking {
+                    thinking_settings_row.add_css_class("centurion-needs-attention");
+                    fix_thinking_row.add_css_class("centurion-needs-attention");
+                } else {
+                    thinking_settings_row.remove_css_class("centurion-needs-attention");
+                    fix_thinking_row.remove_css_class("centurion-needs-attention");
+                }
+                devices_attention_mark.set_visible(remotes);
+                if remotes {
+                    devices_section.add_css_class("centurion-needs-attention");
+                } else {
+                    devices_section.remove_css_class("centurion-needs-attention");
+                }
+            }) as Rc<dyn Fn()>
+        };
+
         let refresh_home_badge = {
-            let stack = stack.clone();
-            let home = home.clone();
+            let tab_badges_ui = tab_badges_ui.clone();
             let home_handle = home_handle.clone();
             Rc::new(move || {
                 let n = home_handle.attention_count();
-                let home_title = if n > 0 {
-                    format!("Missions ({n})")
+                if n > 0 {
+                    tab_badges_ui.set_badge("missions", Some(&n.to_string()));
                 } else {
-                    "Missions".to_owned()
-                };
-                stack.page(&home).set_title(&home_title);
+                    tab_badges_ui.set_badge("missions", None);
+                }
             }) as Rc<dyn Fn()>
         };
         let refresh_settings_badge = {
-            let stack = stack.clone();
-            let settings_scroll = settings_scroll.clone();
+            let tab_badges_ui = tab_badges_ui.clone();
+            let refresh_settings_attention_ui = refresh_settings_attention_ui.clone();
             Rc::new(move || {
-                let settings_title = if settings_needs_attention() {
-                    "Settings (!)"
+                if settings_needs_attention() {
+                    tab_badges_ui.set_badge("settings", Some("!"));
                 } else {
-                    "Settings"
-                };
-                stack
-                    .page(&settings_scroll)
-                    .set_title(settings_title);
+                    tab_badges_ui.set_badge("settings", None);
+                }
+                refresh_settings_attention_ui();
+            }) as Rc<dyn Fn()>
+        };
+        let refresh_chat_badge = {
+            let tab_badges_ui = tab_badges_ui.clone();
+            let chat_handle = chat_handle.clone();
+            Rc::new(move || {
+                let n = chat_handle.attention_count();
+                if n > 0 {
+                    tab_badges_ui.set_badge("chat", Some("!"));
+                } else {
+                    tab_badges_ui.set_badge("chat", None);
+                }
             }) as Rc<dyn Fn()>
         };
         let refresh_stack_badges = {
             let refresh_home_badge = refresh_home_badge.clone();
             let refresh_settings_badge = refresh_settings_badge.clone();
+            let refresh_chat_badge = refresh_chat_badge.clone();
             Rc::new(move || {
                 refresh_home_badge();
                 refresh_settings_badge();
+                refresh_chat_badge();
             }) as Rc<dyn Fn()>
         };
         *attention_sink.borrow_mut() = {
@@ -1388,6 +1456,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 refresh_home_badge();
             })
         };
+        chat_handle.set_on_attention_changed({
+            let refresh_chat_badge = refresh_chat_badge.clone();
+            Rc::new(move |_n: u32| {
+                refresh_chat_badge();
+            })
+        });
         refresh_stack_badges();
 
         let poll_list = device_list.clone();
@@ -1414,7 +1488,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             tab_badges();
         });
 
-        let switcher = gtk::StackSwitcher::builder().stack(&stack).build();
+        let switcher = tab_bar;
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&switcher));
         // Ensure DE window buttons (minimize/maximize/close) are available.
@@ -1866,19 +1940,52 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     }
 
     fn settings_needs_attention() -> bool {
+        !settings_attention_items().is_empty()
+    }
+
+    #[derive(Debug, Clone)]
+    enum SettingsAttentionItem {
+        Thinking { detail: String },
+        RemotesOffline { count: usize },
+    }
+
+    fn settings_attention_items() -> Vec<SettingsAttentionItem> {
         // iPhone You tab "!": thinking unhealthy / unavailable, or remotes
         // previously linked but now offline — not a pending-device queue count.
         // Use --skip-probe so the 5s tab-badge poll stays light.
+        let mut items = Vec::new();
         let thinking_attention = match run_provider_command(&["status", "--skip-probe"]) {
             Some(response) => match response.status {
-                Some(status) => status.health != "ok",
-                None => true,
+                Some(status) => {
+                    if status.health != "ok" {
+                        items.push(SettingsAttentionItem::Thinking {
+                            detail: format!(
+                                "Thinking service is {} — open Fix Thinking Service or Change Thinking.",
+                                status.health
+                            ),
+                        });
+                        true
+                    } else {
+                        false
+                    }
+                }
+                None => {
+                    items.push(SettingsAttentionItem::Thinking {
+                        detail: "Thinking service status is unavailable — open Fix Thinking Service."
+                            .to_owned(),
+                    });
+                    true
+                }
             },
-            None => true,
+            None => {
+                items.push(SettingsAttentionItem::Thinking {
+                    detail: "Thinking service status is unavailable — open Fix Thinking Service."
+                        .to_owned(),
+                });
+                true
+            }
         };
-        if thinking_attention {
-            return true;
-        }
+        let _ = thinking_attention;
 
         let centurion_remote = std::env::var("HOME")
             .ok()
@@ -1895,10 +2002,151 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             if !listing.approved.is_empty()
                 && listing.approved.iter().all(|device| !device.connected)
             {
-                return true;
+                items.push(SettingsAttentionItem::RemotesOffline {
+                    count: listing.approved.len(),
+                });
             }
         }
-        false
+        items
+    }
+
+    fn rebuild_settings_attention_banner(banner: &gtk::Box, items: &[SettingsAttentionItem]) {
+        while let Some(child) = banner.first_child() {
+            banner.remove(&child);
+        }
+        if items.is_empty() {
+            banner.set_visible(false);
+            return;
+        }
+        banner.set_visible(true);
+        let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        title_row.append(
+            &gtk::Label::builder()
+                .label("(!)")
+                .css_classes(["centurion-attention-mark"])
+                .build(),
+        );
+        title_row.append(
+            &gtk::Label::builder()
+                .label("Needs your attention")
+                .css_classes(["centurion-attention-banner-title"])
+                .xalign(0.0)
+                .hexpand(true)
+                .build(),
+        );
+        banner.append(&title_row);
+        for item in items {
+            let text = match item {
+                SettingsAttentionItem::Thinking { detail } => format!("• {detail}"),
+                SettingsAttentionItem::RemotesOffline { count } => format!(
+                    "• Linked remote{s} offline ({count}) — check Connected Devices above",
+                    s = if *count == 1 { "" } else { "s" },
+                    count = count
+                ),
+            };
+            banner.append(
+                &gtk::Label::builder()
+                    .label(&text)
+                    .css_classes(["centurion-attention-item"])
+                    .xalign(0.0)
+                    .wrap(true)
+                    .build(),
+            );
+        }
+    }
+
+    /// Tab titles stay ink; badge mark (!) / (N) is red — global attention chrome.
+    #[derive(Clone)]
+    struct AttentionTabBar {
+        badges: Rc<RefCell<HashMap<String, gtk::Label>>>,
+    }
+
+    impl AttentionTabBar {
+        fn set_badge(&self, tab: &str, mark: Option<&str>) {
+            let badges = self.badges.borrow();
+            let Some(badge) = badges.get(tab) else {
+                return;
+            };
+            match mark {
+                Some(m) if !m.trim().is_empty() => {
+                    badge.set_label(&format!("({m})"));
+                    badge.set_visible(true);
+                }
+                _ => {
+                    badge.set_label("");
+                    badge.set_visible(false);
+                }
+            }
+        }
+    }
+
+    fn build_attention_tab_bar(
+        stack: &gtk::Stack,
+        tabs: &[(&str, &str)],
+    ) -> (gtk::Box, AttentionTabBar) {
+        let bar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        bar.add_css_class("centurion-tab-bar");
+        bar.set_halign(gtk::Align::Center);
+
+        let badges: Rc<RefCell<HashMap<String, gtk::Label>>> =
+            Rc::new(RefCell::new(HashMap::new()));
+        let buttons: Rc<RefCell<HashMap<String, gtk::ToggleButton>>> =
+            Rc::new(RefCell::new(HashMap::new()));
+        let mut group_leader: Option<gtk::ToggleButton> = None;
+
+        for &(name, title) in tabs {
+            let btn = gtk::ToggleButton::new();
+            btn.add_css_class("centurion-tab");
+            if let Some(leader) = group_leader.as_ref() {
+                btn.set_group(Some(leader));
+            } else {
+                group_leader = Some(btn.clone());
+            }
+
+            let content = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+            content.append(
+                &gtk::Label::builder()
+                    .label(title)
+                    .css_classes(["centurion-tab-title"])
+                    .build(),
+            );
+            let badge = gtk::Label::builder()
+                .label("")
+                .css_classes(["centurion-tab-badge"])
+                .visible(false)
+                .build();
+            content.append(&badge);
+            btn.set_child(Some(&content));
+
+            let stack_c = stack.clone();
+            let name_owned = name.to_owned();
+            btn.connect_clicked(move |_| {
+                stack_c.set_visible_child_name(&name_owned);
+            });
+
+            badges.borrow_mut().insert(name.to_owned(), badge);
+            buttons.borrow_mut().insert(name.to_owned(), btn.clone());
+            bar.append(&btn);
+        }
+
+        let buttons_sync = buttons.clone();
+        stack.connect_visible_child_name_notify(move |stack| {
+            let visible = stack
+                .visible_child_name()
+                .map(|s| s.as_str().to_owned())
+                .unwrap_or_default();
+            for (name, btn) in buttons_sync.borrow().iter() {
+                let on = name == &visible;
+                if btn.is_active() != on {
+                    btn.set_active(on);
+                }
+            }
+        });
+        if let Some(btn) = buttons.borrow().get("chat") {
+            btn.set_active(true);
+        }
+
+        (bar, AttentionTabBar { badges })
     }
 
     fn refresh_devices(list: &gtk::ListBox) {

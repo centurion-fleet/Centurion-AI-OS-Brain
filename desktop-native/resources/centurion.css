@@ -7,6 +7,9 @@
 @define-color centurion_interactive_soft #60a5fa;
 @define-color centurion_warm #b87a36;
 @define-color centurion_warm_soft #d7a868;
+/* Tab / pill / banner attention marks — red only for the mark itself */
+@define-color centurion_attention #c62828;
+@define-color centurion_attention_soft #ef9a9a;
 
 window {
   background: linear-gradient(145deg, alpha(@centurion_ink, 0.03), transparent 42%),
@@ -116,6 +119,59 @@ stackswitcher button {
   min-width: 96px;
 }
 
+/* Global attention tab chrome: title stays ink; (!) / (N) is red */
+.centurion-tab-bar {
+  spacing: 4px;
+}
+
+.centurion-tab {
+  min-height: 36px;
+  min-width: 96px;
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.centurion-tab-title {
+  color: @centurion_ink;
+  font-weight: 600;
+}
+
+.centurion-tab:checked .centurion-tab-title {
+  color: @centurion_ink;
+}
+
+.centurion-tab-badge {
+  color: @centurion_attention;
+  font-weight: 700;
+}
+
+.centurion-attention-banner {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid @centurion_attention_soft;
+  background: alpha(@centurion_attention, 0.08);
+}
+
+.centurion-attention-banner-title {
+  font-weight: 700;
+  color: @centurion_ink;
+}
+
+.centurion-attention-mark {
+  color: @centurion_attention;
+  font-weight: 700;
+}
+
+.centurion-attention-item {
+  color: @centurion_ink;
+}
+
+.centurion-needs-attention {
+  border-left: 3px solid @centurion_attention;
+  padding-left: 8px;
+}
+
 .centurion-chat-composer {
   background: @window_bg_color;
   border-top: 2px solid @centurion_border;
@@ -162,13 +218,15 @@ stackswitcher button {
   border-radius: 999px;
   font-size: 0.75em;
   font-weight: 700;
-  background: @centurion_interactive;
-  color: @centurion_canvas;
+  background: transparent;
+  color: @centurion_attention;
+  border: 1px solid @centurion_attention_soft;
 }
 
 .centurion-home-pill:checked .centurion-home-pill-badge {
-  background: @centurion_canvas;
-  color: @centurion_ink;
+  background: alpha(@centurion_attention, 0.15);
+  color: @centurion_attention;
+  border-color: @centurion_attention;
 }
 
 .centurion-home-discuss {

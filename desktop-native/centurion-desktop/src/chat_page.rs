@@ -69,6 +69,7 @@ struct SessionSummary {
     title: String,
     preview: String,
     last_active_label: String,
+    message_count: u64,
 }
 
 /// Structured topic for Home → Chat discuss so Centurion knows *what* is in play.
@@ -157,6 +158,53 @@ impl DiscussTopic {
         }
     }
 
+    /// Conversations sidebar title for this topic (find-or-create on Discuss).
+    pub fn session_title(&self) -> String {
+        let raw = match self {
+            Self::Plan { title, .. } => title.clone(),
+            Self::Collab { name, .. } => name.clone(),
+            Self::Document { title, .. } => title.clone(),
+            Self::Mission {
+                title,
+                target_title,
+                statement,
+                ..
+            } => {
+                let mission = title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| {
+                        let s = statement.trim();
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    })
+                    .unwrap_or("Life Mission");
+                let mission = truncate_chars(mission, 48);
+                match target_title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(t) => format!("{mission} · {}", truncate_chars(t, 32)),
+                    None => mission,
+                }
+            }
+            Self::Commitment { title, .. } => title.clone(),
+            Self::Horizon { layer, .. } => format!("Memory Horizon · {layer}"),
+            Self::Generic { title, .. } => title.clone(),
+        };
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            "Discussion".to_owned()
+        } else {
+            truncate_chars(trimmed, 64)
+        }
+    }
+
     pub fn from_title_detail(title: &str, detail: &str) -> Self {
         Self::Generic {
             title: title.to_owned(),
@@ -173,6 +221,14 @@ impl DiscussTopic {
     }
 }
 
+fn truncate_chars(s: &str, max: usize) -> String {
+    let mut out: String = s.chars().take(max).collect();
+    if s.chars().count() > max {
+        out.push('…');
+    }
+    out
+}
+
 /// Handle for other tabs (Home) to seed the Chat composer with topic context.
 #[derive(Clone)]
 pub struct ChatHandle {
@@ -181,6 +237,12 @@ pub struct ChatHandle {
     context_banner: gtk::Label,
     context_bar: gtk::Box,
     on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    /// Pending tool-approval prompts (drives Chat tab badge).
+    attention: Rc<Cell<u32>>,
+    on_attention_changed: Rc<RefCell<Option<Rc<dyn Fn(u32)>>>>,
+    /// Find-or-create a conversation titled for the topic. Returns true when an
+    /// existing transcript was resumed (skip dumping a fresh kickoff).
+    open_topic_session: Rc<RefCell<Option<Rc<dyn Fn(String) -> bool>>>>,
 }
 
 impl ChatHandle {
@@ -197,10 +259,23 @@ impl ChatHandle {
         }
     }
 
-    /// Prefill composer and remember structured topic for outbound framing.
+    /// Open/create a Chat conversation named for this topic, then prefill discuss.
     pub fn seed_discuss_topic(&self, topic: DiscussTopic, kickoff: &str) {
+        let title = topic.session_title();
+        let resumed = self
+            .open_topic_session
+            .borrow()
+            .as_ref()
+            .map(|open| open(title))
+            .unwrap_or(false);
         *self.active_discuss.borrow_mut() = Some(topic);
         self.refresh_banner();
+        if resumed {
+            // Continuing the topic thread — don't paste kickoff into an old chat.
+            self.input.set_text("");
+            self.input.grab_focus();
+            return;
+        }
         let body = if kickoff.trim().is_empty() {
             String::new()
         } else if kickoff.ends_with('\n') {
@@ -233,6 +308,21 @@ impl ChatHandle {
     /// Wire Settings Fix Thinking wizard (set after the main window exists).
     pub fn set_on_fix_thinking(&self, handler: Rc<dyn Fn()>) {
         *self.on_fix_thinking.borrow_mut() = Some(handler);
+    }
+
+    pub fn attention_count(&self) -> u32 {
+        self.attention.get()
+    }
+
+    pub fn set_on_attention_changed(&self, handler: Rc<dyn Fn(u32)>) {
+        *self.on_attention_changed.borrow_mut() = Some(handler);
+        if let Some(cb) = self.on_attention_changed.borrow().as_ref() {
+            cb(self.attention.get());
+        }
+    }
+
+    fn set_open_topic_session(&self, handler: Rc<dyn Fn(String) -> bool>) {
+        *self.open_topic_session.borrow_mut() = Some(handler);
     }
 }
 
@@ -1237,6 +1327,38 @@ fn ensure_session_id() -> Result<String, String> {
     Ok(session_id)
 }
 
+fn create_named_session(title: &str, previous_session_id: Option<&str>) -> Result<String, String> {
+    let mut payload = serde_json::json!({ "title": title });
+    if let Some(prev) = previous_session_id.map(str::trim).filter(|s| !s.is_empty()) {
+        payload["previous_session_id"] = serde_json::json!(prev);
+    }
+    let response = run_bridge_json("session_new", payload)?;
+    if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return Err(response
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Could not start a chat session.")
+            .to_owned());
+    }
+    let session_id = response
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Could not start a chat session.".to_owned())?
+        .to_owned();
+    save_session_id(&session_id);
+    Ok(session_id)
+}
+
+fn find_session_by_title(title: &str) -> Option<SessionSummary> {
+    let needle = title.trim();
+    if needle.is_empty() {
+        return None;
+    }
+    list_sessions_including_empty()
+        .into_iter()
+        .find(|s| s.title.trim().eq_ignore_ascii_case(needle))
+}
+
 fn parse_bridge_messages(messages: &[Value]) -> Vec<ChatMessage> {
     messages
         .iter()
@@ -1330,6 +1452,16 @@ fn format_last_active(value: Option<&Value>) -> String {
 }
 
 fn list_sessions() -> Vec<SessionSummary> {
+    list_sessions_filtered(false)
+}
+
+/// Include zero-message sessions so Discuss find-or-create can reuse a titled
+/// thread that was opened but not yet sent to.
+fn list_sessions_including_empty() -> Vec<SessionSummary> {
+    list_sessions_filtered(true)
+}
+
+fn list_sessions_filtered(include_empty: bool) -> Vec<SessionSummary> {
     let Ok(response) = run_bridge_json(
         "session_list",
         serde_json::json!({ "limit": 50, "source": "remote" }),
@@ -1351,13 +1483,13 @@ fn list_sessions() -> Vec<SessionSummary> {
             if id.is_empty() {
                 return None;
             }
-            // Hide brand-new empty sessions (e.g. after delete used to spawn a
-            // replacement). They reappear once the first message is sent.
+            // Hide brand-new empty sessions in the sidebar. Discuss matching still
+            // needs them so we don't open duplicates before the first send.
             let message_count = row
                 .get("message_count")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            if message_count == 0 {
+            if !include_empty && message_count == 0 {
                 return None;
             }
             let title = row
@@ -1384,6 +1516,7 @@ fn list_sessions() -> Vec<SessionSummary> {
                 title: display_title,
                 preview,
                 last_active_label: format_last_active(row.get("last_active")),
+                message_count,
             })
         })
         .collect()
@@ -2371,18 +2504,27 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     approval_box.set_margin_bottom(4);
     approval_box.set_visible(false);
     approval_box.add_css_class("centurion-chat-approval");
+    let approval_heading = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    approval_heading.append(
+        &gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .build(),
+    );
     let approval_title = gtk::Label::builder()
         .label("Your Sovereign needs approval")
         .css_classes(["title-4"])
         .xalign(0.0)
+        .hexpand(true)
         .build();
+    approval_heading.append(&approval_title);
     let approval_detail = gtk::Label::builder()
         .label("")
         .wrap(true)
         .xalign(0.0)
         .build();
     let approval_buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    approval_box.append(&approval_title);
+    approval_box.append(&approval_heading);
     approval_box.append(&approval_detail);
     approval_box.append(&approval_buttons);
     bottom.append(&approval_box);
@@ -2695,14 +2837,29 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
         Rc::new(RefCell::new(None));
 
+    let chat_attention = Rc::new(Cell::new(0u32));
+    let chat_on_attention: Rc<RefCell<Option<Rc<dyn Fn(u32)>>>> = Rc::new(RefCell::new(None));
+    let set_chat_attention: Rc<dyn Fn(u32)> = Rc::new({
+        let chat_attention = chat_attention.clone();
+        let chat_on_attention = chat_on_attention.clone();
+        move |n: u32| {
+            chat_attention.set(n);
+            if let Some(cb) = chat_on_attention.borrow().as_ref() {
+                cb(n);
+            }
+        }
+    });
+
     let clear_approval: Rc<dyn Fn()> = Rc::new({
         let approval_box = approval_box.clone();
         let approval_buttons = approval_buttons.clone();
+        let set_chat_attention = set_chat_attention.clone();
         move || {
             while let Some(child) = approval_buttons.first_child() {
                 approval_buttons.remove(&child);
             }
             approval_box.set_visible(false);
+            set_chat_attention(0);
         }
     });
 
@@ -2719,11 +2876,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let active_discuss = active_discuss.clone();
         let context_banner = context_banner.clone();
         let context_bar = context_bar.clone();
+        let title_label = title.clone();
         move || {
             clear_approval();
             set_sending(false);
             set_error(None);
             *assistant_name.borrow_mut() = load_assistant_display_name();
+            title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
             messages.borrow_mut().clear();
             *active_discuss.borrow_mut() = None;
             context_banner.set_label("");
@@ -2977,8 +3136,22 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let prompt_rename_session = prompt_rename_session.clone();
             let prompt_delete_session = prompt_delete_session.clone();
             let (tx, rx) = mpsc::channel::<Vec<SessionSummary>>();
+            let active_for_fetch = session_id.borrow().clone();
             thread::spawn(move || {
-                let _ = tx.send(list_sessions());
+                let mut out: Vec<SessionSummary> = list_sessions_including_empty()
+                    .into_iter()
+                    .filter(|s| {
+                        s.message_count > 0
+                            || active_for_fetch.as_deref() == Some(s.id.as_str())
+                    })
+                    .collect();
+                if let Some(ref aid) = active_for_fetch {
+                    if let Some(idx) = out.iter().position(|s| s.id == *aid) {
+                        let cur = out.remove(idx);
+                        out.insert(0, cur);
+                    }
+                }
+                let _ = tx.send(out);
             });
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
                 Ok(sessions) => {
@@ -3105,6 +3278,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let switching = switching.clone();
         let follow_bottom = follow_bottom.clone();
         let assistant_name = assistant_name.clone();
+        let active_discuss = active_discuss.clone();
+        let context_banner = context_banner.clone();
+        let context_bar = context_bar.clone();
+        let title_label = title.clone();
         session_list.connect_row_activated(move |_, row| {
             if *is_sending.borrow() || switching.get() {
                 return;
@@ -3119,6 +3296,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             switching.set(true);
             clear_approval();
             set_error(None);
+            // Leaving a Discuss thread — drop topic framing for the resumed chat.
+            *active_discuss.borrow_mut() = None;
+            context_banner.set_label("");
+            context_bar.set_visible(false);
             let messages = messages.clone();
             let session_id = session_id.clone();
             let refresh_messages = refresh_messages.clone();
@@ -3127,6 +3308,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let switching = switching.clone();
             let follow_bottom = follow_bottom.clone();
             let assistant_name = assistant_name.clone();
+            let title_label = title_label.clone();
             let (tx, rx) = mpsc::channel::<Result<(String, Vec<ChatMessage>), String>>();
             thread::spawn(move || {
                 let _ = tx.send(resume_session(&target_id));
@@ -3137,6 +3319,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     *session_id.borrow_mut() = Some(sid);
                     *messages.borrow_mut() = history;
                     *assistant_name.borrow_mut() = load_assistant_display_name();
+                    title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
                     follow_bottom.set(true);
                     refresh_messages();
                     refresh_sessions();
@@ -3163,6 +3346,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let approval_buttons = approval_buttons.clone();
         let pending_approval_tx = pending_approval_tx.clone();
         let clear_approval = clear_approval.clone();
+        let set_chat_attention = set_chat_attention.clone();
         move |request: ApprovalRequest| {
             while let Some(child) = approval_buttons.first_child() {
                 approval_buttons.remove(&child);
@@ -3176,6 +3360,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             };
             approval_detail.set_label(&detail);
             approval_box.set_visible(true);
+            set_chat_attention(1);
 
             let choices = if request.choices.is_empty() {
                 vec![
@@ -3254,9 +3439,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
             let _ = honor_soul_session_reset(&session_id, &messages);
-            // Always refresh the title from disk so Settings → Name shows up.
+            // Always refresh the assistant name from disk so Settings → Name shows up.
             *assistant_name.borrow_mut() = load_assistant_display_name();
-            title.set_label(&format!("Chat with {}", assistant_name.borrow()));
+            if let Some(topic) = active_discuss.borrow().as_ref() {
+                title.set_label(&topic.session_title());
+            } else {
+                title.set_label(&format!("Chat with {}", assistant_name.borrow()));
+            }
             input.set_text("");
             attachments.borrow_mut().clear();
             refresh_attachments();
@@ -3442,6 +3631,92 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         context_banner: context_banner.clone(),
         context_bar: context_bar.clone(),
         on_fix_thinking,
+        attention: chat_attention,
+        on_attention_changed: chat_on_attention,
+        open_topic_session: Rc::new(RefCell::new(None)),
     };
+
+    // Discuss from Missions / Settings must open a topic-named conversation —
+    // never continue whatever unrelated chat was already on screen (iPhone parity).
+    handle.set_open_topic_session(Rc::new({
+        let messages = messages.clone();
+        let session_id = session_id.clone();
+        let refresh_messages = refresh_messages.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        let set_error = set_error.clone();
+        let clear_approval = clear_approval.clone();
+        let set_sending = set_sending.clone();
+        let follow_bottom = follow_bottom.clone();
+        let assistant_name = assistant_name.clone();
+        let title_label = title.clone();
+        move |topic_title: String| {
+            clear_approval();
+            set_sending(false);
+            set_error(None);
+            *assistant_name.borrow_mut() = load_assistant_display_name();
+            // Show the topic name in the chat header (conversation identity).
+            title_label.set_label(&topic_title);
+            follow_bottom.set(true);
+
+            let previous = session_id.borrow().clone();
+
+            if let Some(existing) = find_session_by_title(&topic_title) {
+                // Already discussing this topic — resume that thread.
+                if previous.as_deref() == Some(existing.id.as_str()) {
+                    // Same session already active; keep transcript, just re-bind discuss.
+                    return !messages.borrow().is_empty();
+                }
+                if let Some(ref sid) = previous {
+                    let _ = run_bridge_json(
+                        "session_end_continuity",
+                        serde_json::json!({ "session_id": sid }),
+                    );
+                }
+                match resume_session(&existing.id) {
+                    Ok((sid, history)) => {
+                        save_session_id(&sid);
+                        *session_id.borrow_mut() = Some(sid);
+                        *messages.borrow_mut() = history;
+                        refresh_messages();
+                        refresh_sessions();
+                        return true;
+                    }
+                    Err(err) => {
+                        set_error(Some(err));
+                        // Fall through and create a fresh named session.
+                    }
+                }
+            }
+
+            if let Some(ref sid) = previous {
+                let _ = run_bridge_json(
+                    "session_end_continuity",
+                    serde_json::json!({ "session_id": sid }),
+                );
+            }
+            match create_named_session(&topic_title, previous.as_deref()) {
+                Ok(sid) => {
+                    *session_id.borrow_mut() = Some(sid);
+                    messages.borrow_mut().clear();
+                    refresh_messages();
+                    refresh_sessions();
+                    false
+                }
+                Err(err) => {
+                    // Soft-fail: still clear the transcript so Discuss doesn't
+                    // continue an unrelated thread; first send will create a session.
+                    *session_id.borrow_mut() = None;
+                    let path = session_store_path();
+                    let _ = std::fs::remove_file(&path);
+                    messages.borrow_mut().clear();
+                    refresh_messages();
+                    refresh_sessions();
+                    set_error(Some(err));
+                    false
+                }
+            }
+        }
+    }));
+
     (container, handle)
 }
