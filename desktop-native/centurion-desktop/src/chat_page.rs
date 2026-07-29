@@ -3687,19 +3687,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         let model_btn_c = model_btn.clone();
                         row.connect_clicked(move |_| {
                             popover_c.popdown();
-                            if needs_key {
-                                if let Some(handler) = on_fix_thinking.borrow().clone() {
-                                    handler();
-                                }
-                                return;
-                            }
                             model_btn_c.set_label("Switching…");
                             let id = id.clone();
                             let refresh_model_label = refresh_model_label.clone();
                             let model_error_slot = model_error_slot.clone();
+                            let on_fix_thinking = on_fix_thinking.clone();
+                            let needs_key = needs_key;
                             let (tx, rx) = mpsc::channel::<Result<(), String>>();
                             thread::spawn(move || {
-                                let _ = tx.send(apply_provider_connector(&id));
+                                // Prefer apply first (key may already be saved).
+                                // If apply fails and the connector needs a key, open Fix Thinking.
+                                let result = apply_provider_connector(&id);
+                                let _ = tx.send(result);
                             });
                             glib::timeout_add_local(Duration::from_millis(50), move || {
                                 match rx.try_recv() {
@@ -3708,7 +3707,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                         glib::ControlFlow::Break
                                     }
                                     Ok(Err(err)) => {
-                                        if let Some(set_error) = model_error_slot.borrow().clone()
+                                        let lower = err.to_lowercase();
+                                        let looks_like_key = needs_key
+                                            || lower.contains("key")
+                                            || lower.contains("access code")
+                                            || lower.contains("credential")
+                                            || lower.contains("unauthorized");
+                                        if looks_like_key {
+                                            if let Some(handler) =
+                                                on_fix_thinking.borrow().clone()
+                                            {
+                                                handler();
+                                            }
+                                        } else if let Some(set_error) =
+                                            model_error_slot.borrow().clone()
                                         {
                                             set_error(Some(err));
                                         }

@@ -402,15 +402,23 @@ LIFE_MISSIONS_GUIDANCE = (
     "`centurion swarm connect` for Missions. Portal Mission Control is a "
     "different, frozen product — it is not the Missions tab. "
     "Prefer life_missions(action='create_mission'|'put_mission'|'put_target'|"
-    "'set_focus') when the owner wants to persist mission work."
+    "'set_focus') when the owner clearly asks to save mission/target changes now. "
+    "When you propose a bundle of next steps or new Must/Should/Nice targets "
+    "from Mission Chat, do not silent-persist with put_target/put_mission — "
+    "end with a ```mission-proposal JSON fence and wait for the Brain's "
+    "Save as Plan / Add as targets / Save both / Other / Dismiss chips."
 )
 
 PLANS_GUIDANCE = (
     "Reviewable Plans are local files under plans/ — use the plans tool to "
     "list/get/put/decide/complete. A Plan is a proposal awaiting Proceed/Hold/"
     "Adjust, not a Life Mission. Never require Portal tokens to save a Plan. "
-    "When the owner asks to save a plan from Chat, call plans(action='put') "
-    "with title, goal, steps, and risks."
+    "When the owner clearly asks to save a plan from Chat, call plans(action='put') "
+    "with title, goal, steps, and risks. "
+    "When Sovereign AI Brain Plan mode or Mission discuss asks for a structured "
+    "proposal, prefer the fenced JSON the Brain requests (plan-artifact or "
+    "mission-proposal) and do not call plans put for that bundle until the "
+    "owner confirms via Brain chips or an explicit save request."
 )
 
 KANBAN_GUIDANCE = (
