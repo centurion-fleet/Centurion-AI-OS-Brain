@@ -918,7 +918,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         // visually sat under "Support Tools" and the middle headers looked empty.
         let brain_group = adw::PreferencesGroup::builder()
             .title("Brain")
-            .description("Screen app, updates, and how your Centurion thinks")
+            .description("Sovereign AI Brain version, updates, and how your Centurion thinks")
             .build();
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
@@ -933,7 +933,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             &adw::ActionRow::builder()
                 .title("Version")
                 .subtitle(&format!(
-                    "Screen app {} — use Check for update below for brain software",
+                    "Sovereign AI Brain {}",
                     env!("CARGO_PKG_VERSION")
                 ))
                 .icon_name("dialog-information-symbolic")
@@ -941,15 +941,15 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         );
         let update_row = adw::ActionRow::builder()
             .title("Check for update")
-            .subtitle("Checks published brain software — branch screen fixes use Rebuild")
+            .subtitle("Check whether a newer Sovereign AI Brain is available")
             .icon_name("software-update-available-symbolic")
             .build();
         let update_check_button = gtk::Button::with_label("Check");
         update_check_button.add_css_class("suggested-action");
         update_check_button.set_valign(gtk::Align::Center);
-        let rebuild_screen_button = gtk::Button::with_label("Rebuild screen");
+        let rebuild_screen_button = gtk::Button::with_label("Rebuild Brain");
         rebuild_screen_button.set_tooltip_text(Some(
-            "Rebuild this screen app from the Centurion folder on this brain (does not need an iPhone).",
+            "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
         ));
         rebuild_screen_button.set_valign(gtk::Align::Center);
         update_row.add_suffix(&rebuild_screen_button);
@@ -2250,7 +2250,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     fn truncate_update_error(raw: &str) -> String {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return "Screen app update failed.".to_owned();
+            return "Sovereign AI Brain update failed.".to_owned();
         }
         let lines: Vec<&str> = trimmed.lines().collect();
         if lines.len() <= 40 {
@@ -2353,7 +2353,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .arg("-lc")
             .arg(shell_cmd)
             .output()
-            .map_err(|error| format!("Could not start screen update: {error}"))?;
+            .map_err(|error| format!("Could not start Sovereign AI Brain update: {error}"))?;
         if output.status.success() {
             Ok(())
         } else {
@@ -2364,7 +2364,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             } else if !stdout.is_empty() {
                 stdout
             } else {
-                "Screen app update failed.".to_owned()
+                "Sovereign AI Brain update failed.".to_owned()
             };
             Err(truncate_update_error(&combined))
         }
@@ -2376,13 +2376,13 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .output();
     }
 
-    /// Rebuild only the screen app + remote from the local checkout (no OS update).
+    /// Rebuild only Sovereign AI Brain + remote from the local checkout (no OS update).
     fn run_screen_rebuild_pipeline() -> Result<String, String> {
         let repo_root = resolve_centurion_repo_root()?;
         run_native_brain_install(&repo_root)?;
         restart_centurion_remote_best_effort();
         Ok(format!(
-            "Screen app rebuilt from {}.\n\nQuit and reopen Sovereign AI Brain to load it.\n\
+            "Sovereign AI Brain rebuilt from {}.\n\nQuit and reopen Sovereign AI Brain to load it.\n\
              Brain Chat is local on this computer — no iPhone pairing required.",
             repo_root.display()
         ))
@@ -2391,7 +2391,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     fn run_screen_rebuild(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
         // No progress AlertDialog — stacking a modal then replacing it left
         // response buttons dead on the Brain (Wayland / touch). Subtitle is enough.
-        update_row.set_subtitle("Rebuilding this screen…");
+        update_row.set_subtitle("Rebuilding Sovereign AI Brain…");
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -2404,9 +2404,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     match result {
                         Ok(body) => {
                             update_row_for_result
-                                .set_subtitle("Rebuild finished — quit to load new screen");
+                                .set_subtitle("Rebuild finished — quit to load the new Brain");
                             let done = adw::AlertDialog::builder()
-                                .heading("Screen rebuilt")
+                                .heading("Sovereign AI Brain rebuilt")
                                 .body(&body)
                                 .close_response("later")
                                 .default_response("quit")
@@ -2430,10 +2430,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                             done.present(Some(&parent_for_result));
                         }
                         Err(error) => {
-                            update_row_for_result.set_subtitle("Rebuild failed");
+                            update_row_for_result.set_subtitle("Sovereign AI Brain rebuild failed");
                             show_copyable_error_dialog(
                                 &parent_for_result,
-                                "Rebuild failed",
+                                "Sovereign AI Brain rebuild failed",
                                 &enrich_update_error_for_support(&error),
                             );
                         }
@@ -2442,7 +2442,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    update_row_for_result.set_subtitle("Rebuild failed");
+                    update_row_for_result.set_subtitle("Sovereign AI Brain rebuild failed");
                     glib::ControlFlow::Break
                 }
             }
@@ -2459,10 +2459,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
         match (os_result, install_result) {
             (Ok(os_message), Ok(())) => Ok(format!(
-                "{os_message}\n\nScreen app and private connection were rebuilt."
+                "{os_message}\n\nSovereign AI Brain and the private connection were rebuilt."
             )),
             (Err(os_err), Ok(())) => Ok(format!(
-                "Screen app and private connection were rebuilt.\n\n\
+                "Sovereign AI Brain and the private connection were rebuilt.\n\n\
                  Brain software git update did not finish: {os_err}\n\
                  If Chat and Soul look correct, you can ignore the git step."
             )),
@@ -2528,19 +2528,19 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         match payload.status.as_str() {
             "up_to_date" => {
-                update_row.set_subtitle(&format!("Brain software {os_version} — up to date"));
+                update_row.set_subtitle(&format!("Sovereign AI Brain {os_version} — up to date"));
                 let dialog = adw::AlertDialog::builder()
                     .heading("You're up to date")
                     .body(&format!(
-                        "Published brain software is current (v{os_version}).\n\n{message}\n\n\
-                         If Chat or this screen still looks wrong, rebuild from the Centurion \
-                         folder on this brain (no iPhone needed)."
+                        "Sovereign AI Brain is current (v{os_version}).\n\n{message}\n\n\
+                         If Chat or Settings still look wrong, rebuild Sovereign AI Brain from \
+                         the Centurion folder on this computer (no iPhone needed)."
                     ))
                     .close_response("ok")
                     .default_response("rebuild")
                     .build();
                 dialog.add_response("ok", "OK");
-                dialog.add_response("rebuild", "Rebuild this screen");
+                dialog.add_response("rebuild", "Rebuild Brain");
                 dialog.set_response_appearance("rebuild", adw::ResponseAppearance::Suggested);
                 let parent_for_cb = parent.clone();
                 let update_row_for_cb = update_row.clone();
@@ -2564,24 +2564,24 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     || (payload.screen_rebuild_available && payload.behind == 0);
                 if screen_only {
                     update_row.set_subtitle(&format!(
-                        "Screen update available ({})",
+                        "Sovereign AI Brain update available ({})",
                         payload
                             .screen_checkout_version
                             .as_deref()
                             .unwrap_or(os_version)
                     ));
                     let body = format!(
-                        "{message}\n\nRebuild this screen from the Centurion folder on this \
-                         brain. No published main update is required."
+                        "{message}\n\nRebuild Sovereign AI Brain from the Centurion folder on this \
+                         computer. No published main update is required."
                     );
                     let dialog = adw::AlertDialog::builder()
-                        .heading("Screen update available")
+                        .heading("Sovereign AI Brain update available")
                         .body(&body)
                         .close_response("cancel")
                         .default_response("rebuild")
                         .build();
                     dialog.add_response("cancel", "Not now");
-                    dialog.add_response("rebuild", "Rebuild this screen");
+                    dialog.add_response("rebuild", "Rebuild Brain");
                     dialog.set_response_appearance(
                         "rebuild",
                         adw::ResponseAppearance::Suggested,
@@ -2599,14 +2599,16 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     });
                     dialog.present(Some(parent));
                 } else {
-                    update_row.set_subtitle(&format!("Update available (v{os_version})"));
+                    update_row.set_subtitle(&format!(
+                        "Sovereign AI Brain update available (v{os_version})"
+                    ));
                     let body = format!(
-                        "{message}\n\nAn update is available. This updates brain software and \
-                         this screen. It may take several minutes; Sovereign AI Remote may \
-                         briefly disconnect."
+                        "{message}\n\nA Sovereign AI Brain update is available. This updates the \
+                         Centurion software on this computer and rebuilds the Brain app. It may \
+                         take several minutes; Sovereign AI Remote may briefly disconnect."
                     );
                     let dialog = adw::AlertDialog::builder()
-                        .heading("Update available")
+                        .heading("Sovereign AI Brain update available")
                         .body(&body)
                         .close_response("cancel")
                         .default_response("update")
@@ -2643,9 +2645,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
     }
 
-    /// One-confirm full Brain update (OS + screen + remote).
+    /// One-confirm full Brain update (OS + desktop + remote).
     fn run_full_brain_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
-        update_row.set_subtitle("Updating brain software and this screen…");
+        update_row.set_subtitle("Updating Sovereign AI Brain…");
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -2658,11 +2660,11 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     match result {
                         Ok(body) => {
                             update_row_for_result
-                                .set_subtitle("Update finished — quit to load new screen");
+                                .set_subtitle("Update finished — quit to load the new Brain");
                             let done = adw::AlertDialog::builder()
                                 .heading("Update complete")
                                 .body(&format!(
-                                    "{body}\n\nQuit and reopen Sovereign AI Brain to load the new screen. \
+                                    "{body}\n\nQuit and reopen Sovereign AI Brain to load the update. \
                                      Sovereign AI Remote may reconnect automatically."
                                 ))
                                 .close_response("later")

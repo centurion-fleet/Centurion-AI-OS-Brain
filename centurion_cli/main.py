@@ -8568,7 +8568,7 @@ def _screen_rebuild_needed(
             checkout_version,
             installed_hint,
             (
-                f"Screen app {checkout_version} is in your Centurion folder "
+                f"Sovereign AI Brain {checkout_version} is in your Centurion folder "
                 f"(running {installed_hint})."
             ),
         )
@@ -8590,7 +8590,7 @@ def _screen_rebuild_needed(
             True,
             checkout_version,
             installed_hint or str(stamp.get("version") or ""),
-            "Your Centurion folder has newer screen code than the installed Brain app.",
+            "Your Centurion folder has a newer Sovereign AI Brain than the installed app.",
         )
 
     binary = _installed_desktop_binary()
@@ -8616,7 +8616,7 @@ def _screen_rebuild_needed(
                     True,
                     checkout_version,
                     installed_hint,
-                    "Screen source in your Centurion folder is newer than the installed Brain app.",
+                    "Sovereign AI Brain source in your Centurion folder is newer than the installed app.",
                 )
 
     return (False, checkout_version, installed_hint, "")
@@ -8870,7 +8870,7 @@ def _cmd_update_check(args=None):
                     "desktop-native/scripts/install-user.sh"
                 ),
                 "message": screen_reason
-                or "Screen app update available — rebuild from your Centurion folder.",
+                or "Sovereign AI Brain update available — rebuild from your Centurion folder.",
             }
         )
         return
@@ -14004,8 +14004,8 @@ Examples:
         "--screen-version",
         default=None,
         help=(
-            "With --check: version of the running Brain screen app. Desktop clients "
-            "pass this so Check can detect a newer screen build in the local checkout."
+            "With --check: version of the running Sovereign AI Brain app. Desktop clients "
+            "pass this so Check can detect a newer Brain build in the local checkout."
         ),
     )
     update_parser.add_argument(
