@@ -109,6 +109,54 @@ def handle_request(
         return _handle_mission_get(request_id)
     if action == "mission_put":
         return _handle_mission_put(request, request_id)
+    if action == "life_subjects_list":
+        return _handle_life_subjects_list(request_id)
+    if action == "life_subject_put":
+        return _handle_life_subject_put(request, request_id)
+    if action == "life_subject_delete":
+        return _handle_life_subject_delete(request, request_id)
+    if action == "life_subjects_reorder":
+        return _handle_life_subjects_reorder(request, request_id)
+    if action == "life_stack_get":
+        return _handle_life_stack_get(request_id)
+    if action == "life_stack_set_primary":
+        return _handle_life_stack_set_primary(request, request_id)
+    if action == "life_stack_reorder":
+        return _handle_life_stack_reorder(request, request_id)
+    if action == "life_missions_list":
+        return _handle_life_missions_list(request_id)
+    if action == "life_mission_get":
+        return _handle_life_mission_get(request, request_id)
+    if action == "life_mission_put":
+        return _handle_life_mission_put(request, request_id)
+    if action == "life_target_put":
+        return _handle_life_target_put(request, request_id)
+    if action == "life_focus_set":
+        return _handle_life_focus_set(request, request_id)
+    if action == "life_sequence_validate":
+        return _handle_life_sequence_validate(request, request_id)
+    if action == "life_dreams_list":
+        return _handle_life_dreams_list(request, request_id)
+    if action == "life_dream_put":
+        return _handle_life_dream_put(request, request_id)
+    if action == "life_dream_delete":
+        return _handle_life_dream_delete(request, request_id)
+    if action == "life_dream_promote":
+        return _handle_life_dream_promote(request, request_id)
+    if action == "life_decisions_list":
+        return _handle_life_decisions_list(request, request_id)
+    if action == "life_decision_log":
+        return _handle_life_decision_log(request, request_id)
+    if action == "life_thoughts_list":
+        return _handle_life_thoughts_list(request, request_id)
+    if action == "life_thought_post":
+        return _handle_life_thought_post(request, request_id)
+    if action == "life_context_resolve":
+        return _handle_life_context_resolve(request, request_id)
+    if action == "life_context_inject":
+        return _handle_life_context_inject(request, request_id)
+    if action == "life_snapshot":
+        return _handle_life_snapshot(request, request_id)
     if action == "plans_list":
         return _handle_plans_list(request, request_id)
     if action == "plan_get":
@@ -438,6 +486,14 @@ def _handle_swarm_snapshot(request: dict[str, Any], request_id: str) -> dict[str
         from centurion_cli.swarm_state import get_swarm_snapshot
 
         snapshot = get_swarm_snapshot(since=request.get("since"))
+        try:
+            from centurion_cli.life_missions import snapshot_extras
+
+            extras = snapshot_extras(since=request.get("since"))
+            if isinstance(snapshot, dict):
+                snapshot = {**snapshot, "life": extras}
+        except Exception:
+            pass
         return {
             "id": request_id,
             "ok": True,
@@ -2241,9 +2297,9 @@ def _handle_soul_put(request: dict[str, Any], request_id: str) -> dict[str, Any]
 
 def _handle_mission_get(request_id: str) -> dict[str, Any]:
     try:
-        from centurion_cli.mission_sync import read_mission
+        from centurion_cli.life_missions import legacy_mission_get
 
-        mission = read_mission()
+        mission = legacy_mission_get()
         return {
             "id": request_id,
             "ok": True,
@@ -2256,7 +2312,8 @@ def _handle_mission_get(request_id: str) -> dict[str, Any]:
 
 def _handle_mission_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     try:
-        from centurion_cli.mission_sync import write_mission
+        from centurion_cli.life_missions import legacy_mission_put
+        from centurion_cli.mission_sync import markdown_to_structured, write_mission
 
         fields = request.get("mission")
         if not isinstance(fields, dict):
@@ -2272,10 +2329,10 @@ def _handle_mission_put(request: dict[str, Any], request_id: str) -> dict[str, A
                 "message": "Mission fields or markdown are required.",
                 "retryable": False,
             }
-        mission = write_mission(
-            fields if isinstance(fields, dict) else None,
-            markdown=markdown if isinstance(markdown, str) else None,
-        )
+        if isinstance(markdown, str) and not isinstance(fields, dict):
+            fields = markdown_to_structured(markdown)
+            write_mission(fields, markdown=markdown)
+        mission = legacy_mission_put(fields if isinstance(fields, dict) else {})
         return {
             "id": request_id,
             "ok": True,
@@ -2285,6 +2342,484 @@ def _handle_mission_put(request: dict[str, Any], request_id: str) -> dict[str, A
         }
     except Exception as exc:
         return _error_response(request_id, action="mission_put", exc=exc)
+
+
+def _handle_life_subjects_list(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_subjects
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_subjects_list",
+            "subjects": list_subjects(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_subjects_list", exc=exc)
+
+
+def _handle_life_subject_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import put_subject
+
+        fields = request.get("subject") if isinstance(request.get("subject"), dict) else request
+        subject = put_subject(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_subject_put",
+            "subject": subject,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_subject_put", exc=exc)
+
+
+def _handle_life_subject_delete(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import delete_subject
+
+        subject_id = str(request.get("subject_id") or request.get("id") or "").strip()
+        if not subject_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_subject_delete",
+                "code": "INVALID_REQUEST",
+                "error": "subject_id required",
+                "message": "subject_id required",
+                "retryable": False,
+            }
+        delete_subject(subject_id)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_subject_delete",
+            "deleted": True,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_subject_delete", exc=exc)
+
+
+def _handle_life_subjects_reorder(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_subjects, reorder_subjects
+
+        ordered = request.get("ordered_ids") or request.get("ids") or []
+        if not isinstance(ordered, list):
+            ordered = []
+        reorder_subjects([str(x) for x in ordered])
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_subjects_reorder",
+            "subjects": list_subjects(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_subjects_reorder", exc=exc)
+
+
+def _handle_life_stack_get(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import get_stack
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_stack_get",
+            "stack": get_stack(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_stack_get", exc=exc)
+
+
+def _handle_life_stack_set_primary(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import set_primary
+
+        mid = request.get("mission_id")
+        stack = set_primary(str(mid) if mid else None)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_stack_set_primary",
+            "stack": stack,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_stack_set_primary", exc=exc)
+
+
+def _handle_life_stack_reorder(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import reorder_supporting
+
+        ordered = request.get("ordered_ids") or request.get("ids") or []
+        if not isinstance(ordered, list):
+            ordered = []
+        stack = reorder_supporting([str(x) for x in ordered])
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_stack_reorder",
+            "stack": stack,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_stack_reorder", exc=exc)
+
+
+def _handle_life_missions_list(request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_missions
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_missions_list",
+            "missions": list_missions(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_missions_list", exc=exc)
+
+
+def _handle_life_mission_get(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import get_mission
+
+        mid = str(request.get("mission_id") or request.get("id") or "").strip()
+        if not mid:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_mission_get",
+                "code": "INVALID_REQUEST",
+                "error": "mission_id required",
+                "message": "mission_id required",
+                "retryable": False,
+            }
+        mission = get_mission(mid)
+        if mission is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_mission_get",
+                "code": "NOT_FOUND",
+                "error": "Mission not found",
+                "message": "Mission not found",
+                "retryable": False,
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_mission_get",
+            "mission": mission,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_mission_get", exc=exc)
+
+
+def _handle_life_mission_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import put_mission
+
+        fields = request.get("mission") if isinstance(request.get("mission"), dict) else request
+        mission = put_mission(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_mission_put",
+            "mission": mission,
+            "message": "Saved. Life Mission changes apply on the next conversation.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_mission_put", exc=exc)
+
+
+def _handle_life_target_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import put_target
+
+        fields = request.get("target") if isinstance(request.get("target"), dict) else request
+        target = put_target(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_target_put",
+            "target": target,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_target_put", exc=exc)
+
+
+def _handle_life_focus_set(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import set_focus_target
+
+        mid = str(request.get("mission_id") or "").strip()
+        tid = request.get("target_id")
+        if not mid:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_focus_set",
+                "code": "INVALID_REQUEST",
+                "error": "mission_id required",
+                "message": "mission_id required",
+                "retryable": False,
+            }
+        state = set_focus_target(mid, str(tid) if tid else None)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_focus_set",
+            "state": state,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_focus_set", exc=exc)
+
+
+def _handle_life_sequence_validate(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import validate_sequence
+
+        mid = str(request.get("mission_id") or "").strip()
+        if not mid:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_sequence_validate",
+                "code": "INVALID_REQUEST",
+                "error": "mission_id required",
+                "message": "mission_id required",
+                "retryable": False,
+            }
+        result = validate_sequence(mid)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_sequence_validate",
+            **result,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_sequence_validate", exc=exc)
+
+
+def _handle_life_dreams_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_dreams
+
+        include = bool(request.get("include_promoted"))
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_dreams_list",
+            "dreams": list_dreams(include_promoted=include),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_dreams_list", exc=exc)
+
+
+def _handle_life_dream_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import put_dream
+
+        fields = request.get("dream") if isinstance(request.get("dream"), dict) else request
+        dream = put_dream(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_dream_put",
+            "dream": dream,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_dream_put", exc=exc)
+
+
+def _handle_life_dream_delete(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import delete_dream
+
+        did = str(request.get("dream_id") or request.get("id") or "").strip()
+        if not did:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_dream_delete",
+                "code": "INVALID_REQUEST",
+                "error": "dream_id required",
+                "message": "dream_id required",
+                "retryable": False,
+            }
+        delete_dream(did)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_dream_delete",
+            "deleted": True,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_dream_delete", exc=exc)
+
+
+def _handle_life_dream_promote(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import promote_dream
+
+        did = str(request.get("dream_id") or request.get("id") or "").strip()
+        if not did:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "life_dream_promote",
+                "code": "INVALID_REQUEST",
+                "error": "dream_id required",
+                "message": "dream_id required",
+                "retryable": False,
+            }
+        result = promote_dream(did, subject_id=request.get("subject_id"))
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_dream_promote",
+            **result,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_dream_promote", exc=exc)
+
+
+def _handle_life_decisions_list(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_decisions
+
+        mid = request.get("mission_id")
+        limit = int(request.get("limit") or 50)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_decisions_list",
+            "decisions": list_decisions(
+                mission_id=str(mid) if mid else None,
+                limit=limit,
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_decisions_list", exc=exc)
+
+
+def _handle_life_decision_log(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import log_decision
+
+        fields = (
+            request.get("decision") if isinstance(request.get("decision"), dict) else request
+        )
+        decision = log_decision(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_decision_log",
+            "decision": decision,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_decision_log", exc=exc)
+
+
+def _handle_life_thoughts_list(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_thoughts
+
+        since = request.get("since")
+        limit = int(request.get("limit") or 50)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_thoughts_list",
+            "thoughts": list_thoughts(
+                since=str(since) if since else None,
+                limit=limit,
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_thoughts_list", exc=exc)
+
+
+def _handle_life_thought_post(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import post_thought
+
+        fields = request.get("thought") if isinstance(request.get("thought"), dict) else request
+        thought = post_thought(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_thought_post",
+            "thought": thought,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_thought_post", exc=exc)
+
+
+def _handle_life_context_resolve(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import resolve_context
+
+        query = str(request.get("query") or request.get("message") or "")
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_context_resolve",
+            "matches": resolve_context(query),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_context_resolve", exc=exc)
+
+
+def _handle_life_context_inject(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import inject_context
+
+        message = str(request.get("message") or request.get("query") or "")
+        current_view = request.get("current_view")
+        if not isinstance(current_view, dict):
+            current_view = {
+                "mission_id": request.get("mission_id"),
+                "target_id": request.get("target_id"),
+                "subject_id": request.get("subject_id"),
+            }
+        result = inject_context(message, current_view=current_view)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_context_inject",
+            **result,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_context_inject", exc=exc)
+
+
+def _handle_life_snapshot(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import snapshot_extras
+
+        since = request.get("since")
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_snapshot",
+            "snapshot": snapshot_extras(since=str(since) if since else None),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_snapshot", exc=exc)
 
 
 def _handle_memory_horizon_snapshot(request_id: str) -> dict[str, Any]:

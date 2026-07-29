@@ -230,7 +230,12 @@ TOOLSETS = {
     
     "clarify": {
         "description": "Ask the user clarifying questions (multiple-choice or open-ended)",
-        "tools": ["clarify"],
+        "tools": [
+            "clarify",
+            "life_missions",
+            "subject_resolver",
+            "thought_stream",
+        ],
         "includes": []
     },
     

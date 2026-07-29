@@ -1070,6 +1070,17 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         life_mission_row.add_suffix(&life_mission_edit_button);
         you_group.add(&life_mission_row);
 
+        let mission_stack_row = adw::ActionRow::builder()
+            .title("Mission Stack")
+            .subtitle("Primary, supporting Missions, subjects, and dreams — offline on this Brain")
+            .icon_name("view-list-symbolic")
+            .build();
+        let mission_stack_button = gtk::Button::with_label("Open");
+        mission_stack_button.set_valign(gtk::Align::Center);
+        mission_stack_button.add_css_class("suggested-action");
+        mission_stack_row.add_suffix(&mission_stack_button);
+        you_group.add(&mission_stack_row);
+
         let mission_discover_row = adw::ActionRow::builder()
             .title("Mission Discovery")
             .subtitle("Ceremonial interview to set your Life Mission")
@@ -1589,6 +1600,19 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 crate::home_page::show_mission_edit_dialog(
                     &window,
                     &current,
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
+                    }),
+                );
+            }
+        });
+        mission_stack_button.connect_clicked({
+            let window = window.clone();
+            let home_handle = home_handle.clone();
+            move |_| {
+                show_mission_stack_dialog(
+                    &window,
                     Rc::new({
                         let home_handle = home_handle.clone();
                         move || home_handle.refresh()
@@ -3868,6 +3892,119 @@ Being · Continuity\n\
             .close_response("ok")
             .build();
         dialog.add_response("ok", "OK");
+        dialog.present(Some(parent));
+    }
+
+    fn show_mission_stack_dialog(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn()>) {
+        let payload = run_bridge_action("life_stack_get", serde_json::json!({}));
+        let body = match payload {
+            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+                let stack = p.get("stack").cloned().unwrap_or(serde_json::json!({}));
+                let mut lines = Vec::new();
+                if let Some(primary) = stack.get("primary") {
+                    let title = primary
+                        .get("title")
+                        .or_else(|| primary.get("statement"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("(untitled)");
+                    let phase = primary
+                        .get("phase")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("executing");
+                    lines.push(format!("Primary Mission\n• {title} ({phase})"));
+                    if let Some(targets) = primary.get("targets").and_then(|v| v.as_array()) {
+                        for t in targets.iter().take(8) {
+                            let ttitle = t.get("title").and_then(|v| v.as_str()).unwrap_or("?");
+                            let focus = t
+                                .get("focus_target")
+                                .and_then(|v| {
+                                    v.as_bool()
+                                        .or_else(|| v.as_i64().map(|n| n != 0))
+                                })
+                                .unwrap_or(false);
+                            let mark = if focus { "◎" } else { "•" };
+                            lines.push(format!("  {mark} {ttitle}"));
+                        }
+                    }
+                } else {
+                    lines.push("Primary Mission\n• (none yet — use Mission Discovery)".to_owned());
+                }
+                lines.push(String::new());
+                lines.push("Supporting".to_owned());
+                let supporting = stack
+                    .get("supporting")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if supporting.is_empty() {
+                    lines.push("• (none)".to_owned());
+                } else {
+                    for m in supporting.iter().take(12) {
+                        let title = m
+                            .get("title")
+                            .or_else(|| m.get("statement"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
+                        lines.push(format!("• {title}"));
+                    }
+                }
+                lines.push(String::new());
+                lines.push("Dreams".to_owned());
+                let dreams = stack
+                    .get("dreams")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if dreams.is_empty() {
+                    lines.push("• (none — capture ideas from Discovery)".to_owned());
+                } else {
+                    for d in dreams.iter().take(12) {
+                        let title = d.get("title").and_then(|v| v.as_str()).unwrap_or("?");
+                        lines.push(format!("• {title}"));
+                    }
+                }
+                let subjects = run_bridge_action("life_subjects_list", serde_json::json!({}))
+                    .and_then(|r| {
+                        r.get("subjects")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                    })
+                    .unwrap_or_default();
+                if !subjects.is_empty() {
+                    lines.push(String::new());
+                    lines.push("Subjects".to_owned());
+                    for s in subjects.iter().take(20) {
+                        let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                        lines.push(format!("• {name}"));
+                    }
+                }
+                lines.push(String::new());
+                lines.push(
+                    "Edit primary statement via Life Mission · Edit. Dreams promote from Remote."
+                        .to_owned(),
+                );
+                lines.join("\n")
+            }
+            Some(p) => p
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not load Mission Stack.")
+                .to_owned(),
+            None => "Could not reach the bridge.".to_owned(),
+        };
+        let dialog = adw::AlertDialog::builder()
+            .heading("Mission Stack")
+            .body(&body)
+            .close_response("close")
+            .build();
+        dialog.add_response("close", "Close");
+        dialog.add_response("refresh", "Refresh Home");
+        dialog.set_response_appearance("refresh", adw::ResponseAppearance::Suggested);
+        dialog.connect_response(None, move |_d, response| {
+            if response == "refresh" {
+                on_saved();
+            }
+        });
         dialog.present(Some(parent));
     }
 

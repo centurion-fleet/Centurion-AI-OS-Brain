@@ -432,12 +432,31 @@ fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     } else {
         statement.as_str()
     };
+    // New discuss turn only — inject Brain life context into the user message
+    // (never mutate the system prompt / prompt cache).
+    let life_block = run_bridge_action(
+        "life_context_inject",
+        serde_json::json!({ "message": user_text }),
+    )
+    .and_then(|r| {
+        if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            r.get("formatted_for_ai")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+        } else {
+            None
+        }
+    })
+    .filter(|s| !s.trim().is_empty())
+    .map(|s| format!("Mission context:\n{s}\n\n"))
+    .unwrap_or_default();
     format!(
         "[Sovereign AI Brain — Life Mission discuss]\n\
 The user is discussing their Life Mission (direction), not a single reviewable Plan.\n\n\
 Current Mission:\n\
 {statement}\n\n\
-Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\n\
+{life_block}Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\
+Use Must Do / Should Do / Nice to Do vocabulary for targets.\n\n\
 User message:\n\
 {user_text}"
     )

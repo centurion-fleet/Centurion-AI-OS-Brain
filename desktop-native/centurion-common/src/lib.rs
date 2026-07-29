@@ -347,6 +347,23 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    /// Generic offline Life Missions proxy — `call` is a `life_*` bridge action.
+    LifeCall {
+        id: Uuid,
+        call: String,
+        #[serde(default, flatten)]
+        params: serde_json::Map<String, serde_json::Value>,
+    },
+    LifeCallResponse {
+        id: Uuid,
+        call: String,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        /// Full bridge JSON (stack, subjects, mission, …).
+        #[serde(default)]
+        result: serde_json::Value,
+    },
     MemoryHorizonSnapshot {
         id: Uuid,
     },

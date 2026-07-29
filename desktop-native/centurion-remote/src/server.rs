@@ -1045,6 +1045,41 @@ async fn handle_connection(
                     Err(error) => bridge_error_response(Some(id), error),
                 }
             }
+            RemoteMessage::LifeCall { id, call, params } => {
+                if !call.starts_with("life_") {
+                    RemoteMessage::Error {
+                        id: Some(id),
+                        code: "INVALID_REQUEST".to_owned(),
+                        message: "life_call requires a life_* bridge action.".to_owned(),
+                        retryable: false,
+                    }
+                } else {
+                    match state
+                        .bridge
+                        .invoke(
+                            &id.to_string(),
+                            &call,
+                            serde_json::Value::Object(params),
+                        )
+                        .await
+                    {
+                        Ok(payload) => RemoteMessage::LifeCallResponse {
+                            id,
+                            call,
+                            ok: payload
+                                .get("ok")
+                                .and_then(serde_json::Value::as_bool)
+                                .unwrap_or(false),
+                            message: payload
+                                .get("message")
+                                .and_then(|v| v.as_str())
+                                .map(str::to_owned),
+                            result: payload,
+                        },
+                        Err(error) => bridge_error_response(Some(id), error),
+                    }
+                }
+            }
             RemoteMessage::MemoryHorizonSnapshot { id } => {
                 match state
                     .bridge
