@@ -2744,17 +2744,51 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         )
     }
 
-    /// Prefer a richer blob for support: truncated stderr + last lines of the build log.
+    /// Prefer a richer blob for support: real rustc errors first, then log tail.
     fn enrich_update_error_for_support(raw: &str) -> String {
         let mut body = truncate_update_error(raw);
         let log_path = PathBuf::from(crate::chat_page::resolve_centurion_home())
             .join("logs")
             .join("desktop-build.log");
         if let Ok(contents) = std::fs::read_to_string(&log_path) {
-            let lines: Vec<&str> = contents.lines().collect();
+            // Strip ANSI so `error[E…]:` lines match even when color was forced.
+            let plain: String = {
+                let mut out = String::with_capacity(contents.len());
+                let mut chars = contents.chars().peekable();
+                while let Some(c) = chars.next() {
+                    if c == '\u{1b}' {
+                        if chars.peek() == Some(&'[') {
+                            chars.next();
+                            while let Some(x) = chars.next() {
+                                if x.is_ascii_alphabetic() {
+                                    break;
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    out.push(c);
+                }
+                out
+            };
+            let error_lines: Vec<&str> = plain
+                .lines()
+                .filter(|line| {
+                    let t = line.trim_start();
+                    t.starts_with("error[")
+                        || t.starts_with("error:")
+                        || t.starts_with("error :")
+                })
+                .collect();
+            if !error_lines.is_empty() {
+                let start = error_lines.len().saturating_sub(80);
+                body.push_str("\n\n—— rustc errors (from desktop-build.log) ——\n");
+                body.push_str(&error_lines[start..].join("\n"));
+            }
+            let lines: Vec<&str> = plain.lines().collect();
             if !lines.is_empty() {
-                let tail = lines[lines.len().saturating_sub(80)..].join("\n");
-                body.push_str("\n\n—— desktop-build.log (last 80 lines) ——\n");
+                let tail = lines[lines.len().saturating_sub(40)..].join("\n");
+                body.push_str("\n\n—— desktop-build.log (last 40 lines) ——\n");
                 body.push_str(&tail);
             }
         }

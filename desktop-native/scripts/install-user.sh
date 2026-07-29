@@ -36,8 +36,11 @@ if git -C "${ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   done
 fi
 
-# Apply platform-specific patches (Fedora 44 glib-rs compat, etc.)
-if [[ -f "${HOME}/.centurion/scripts/apply-fedora-patches.sh" ]]; then
+# Apply platform-specific patches (Fedora 44 glib-rs compat, etc.).
+# Prefer the repo-local script (idempotent); fall back to a machine-local copy.
+if [[ -f "${DESKTOP_NATIVE}/scripts/apply-fedora-patches.sh" ]]; then
+  bash "${DESKTOP_NATIVE}/scripts/apply-fedora-patches.sh" "${ROOT}"
+elif [[ -f "${HOME}/.centurion/scripts/apply-fedora-patches.sh" ]]; then
   bash "${HOME}/.centurion/scripts/apply-fedora-patches.sh" "${ROOT}"
 fi
 
@@ -67,20 +70,31 @@ CENTURION_HOME_DIR="$(resolve_centurion_home_dir)"
 echo "Building native binaries…"
 BUILD_LOG="${CENTURION_HOME_DIR}/logs/desktop-build.log"
 mkdir -p "$(dirname "${BUILD_LOG}")"
-if ! cargo build --release \
+export CARGO_TERM_COLOR=never
+export CARGO_TERM_PROGRESS_WHEN=never
+if ! cargo build --release --color never \
   --manifest-path "${DESKTOP_NATIVE}/Cargo.toml" \
   -p centurion-remote \
   -p centurion-desktop >"${BUILD_LOG}" 2>&1
 then
   echo "ERROR: cargo build failed. Last lines:" >&2
   # Prefer real rustc errors over trailing deprecation warnings (icon_name, etc.).
-  if rg -n '^error(\[E[0-9]+\])?:' "${BUILD_LOG}" >/tmp/centurion-desktop-build-errors.txt 2>/dev/null \
-    || grep -nE '^error(\[E[0-9]+\])?:' "${BUILD_LOG}" >/tmp/centurion-desktop-build-errors.txt 2>/dev/null; then
-    tail -n 60 /tmp/centurion-desktop-build-errors.txt >&2 || true
+  # Strip ANSI just in case an outer env forced color.
+  if command -v perl >/dev/null 2>&1; then
+    perl -pe 's/\e\[[0-9;]*[A-Za-z]//g' "${BUILD_LOG}" > /tmp/centurion-desktop-build-plain.txt 2>/dev/null \
+      || cp "${BUILD_LOG}" /tmp/centurion-desktop-build-plain.txt
+  else
+    cp "${BUILD_LOG}" /tmp/centurion-desktop-build-plain.txt
+  fi
+  if rg -n '^error(\[E[0-9]+\])?:' /tmp/centurion-desktop-build-plain.txt >/tmp/centurion-desktop-build-errors.txt 2>/dev/null \
+    || grep -nE '^error(\[E[0-9]+\])?:' /tmp/centurion-desktop-build-plain.txt >/tmp/centurion-desktop-build-errors.txt 2>/dev/null; then
+    tail -n 80 /tmp/centurion-desktop-build-errors.txt >&2 || true
     echo >&2
     echo "—— build log tail —— " >&2
+  else
+    echo "(no '^error:' lines matched — showing log tail; full log may have the real failure)" >&2
   fi
-  tail -n 40 "${BUILD_LOG}" >&2 || true
+  tail -n 40 /tmp/centurion-desktop-build-plain.txt >&2 || true
   echo "Full log: ${BUILD_LOG}" >&2
   exit 1
 fi
