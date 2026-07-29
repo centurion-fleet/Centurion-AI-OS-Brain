@@ -305,10 +305,26 @@ def _portal_snapshot(since: str | None = None) -> dict[str, Any]:
 
 
 def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
-    """Return the Brain-owned collaboration snapshot for Remote/dashboard."""
+    """Return the Brain-owned collaboration snapshot for Remote/dashboard.
+
+    Local boards only — portal Mission Control sync is frozen so Brain never
+    blocks on personalcenturion.com (was up to 120s).
+    """
+    del since  # portal incremental sync unused while MC is quarantined
     local = _local_board_snapshot()
-    portal = _portal_snapshot(since)
-    swarms = [*portal.get("swarms", []), *local["swarms"]]
+    portal = {
+        "ok": False,
+        "source": "local",
+        "message": (
+            "Mission Control portal sync is frozen — collaborations are "
+            "local boards only. Life Missions live in life.db."
+        ),
+        "swarms": [],
+        "projects": [],
+        "targets": [],
+        "tasks": [],
+    }
+    swarms = list(local["swarms"])
     swarms.sort(key=lambda item: int(item.get("attention_score") or 0), reverse=True)
     return {
         "ok": True,
@@ -318,9 +334,9 @@ def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
         "signals": local["signals"],
         "outcomes": local["outcomes"],
         "activities": local["activities"],
-        "projects": portal.get("projects", []),
-        "targets": portal.get("targets", []),
-        "tasks": portal.get("tasks", []),
+        "projects": [],
+        "targets": [],
+        "tasks": [],
         "message": portal.get("message"),
     }
 

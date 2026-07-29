@@ -1121,10 +1121,10 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
-            .subtitle("Connect or invite another Sovereign. Live orbs stay on Missions.")
+            .subtitle("Local boards on this Brain — no portal tokens. Missions stay offline.")
             .icon_name("system-users-symbolic")
             .build();
-        let collab_connect_button = gtk::Button::with_label("Connect");
+        let collab_connect_button = gtk::Button::with_label("New board");
         collab_connect_button.add_css_class("suggested-action");
         collab_connect_button.set_valign(gtk::Align::Center);
         collab_connect_row.add_suffix(&collab_connect_button);
@@ -1571,17 +1571,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         });
         refresh_stack_badges();
 
-        // Quiet update probe shortly after launch, then hourly — so Settings (!)
-        // can mean "update available" without waiting for a manual Check.
+        // Update check is deferred off critical path — only hourly after first
+        // hour, or when the user opens Settings → Update. Avoids git/PyPI WAN
+        // during Brain startup.
         {
-            let update_row = update_row.clone();
-            let refresh_settings_badge = refresh_settings_badge.clone();
             let update_row2 = update_row.clone();
             let refresh_settings_badge2 = refresh_settings_badge.clone();
-            glib::timeout_add_seconds_local(12, move || {
-                probe_update_attention_async(update_row.clone(), refresh_settings_badge.clone());
-                glib::ControlFlow::Break
-            });
             glib::timeout_add_seconds_local(3600, move || {
                 probe_update_attention_async(update_row2.clone(), refresh_settings_badge2.clone());
                 glib::ControlFlow::Continue
@@ -4229,7 +4224,9 @@ Being · Continuity\n\
     }
 
     fn refresh_thinking_status(detail: &gtk::Label, settings_row: &adw::ActionRow) {
-        refresh_thinking_status_inner(detail, settings_row, false);
+        // Auto refresh never live-probes providers (was ~12s cold start).
+        // Explicit health Check uses refresh_thinking_status_inner(..., false).
+        refresh_thinking_status_inner(detail, settings_row, true);
     }
 
     fn refresh_thinking_status_inner(

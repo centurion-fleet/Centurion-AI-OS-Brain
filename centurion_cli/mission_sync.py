@@ -356,8 +356,16 @@ def write_mission(fields: dict[str, Any] | None = None, *, markdown: str | None 
 
 
 def build_mission_guidance(config: dict[str, Any] | None = None) -> str:
-    """Stable system-prompt guidance so Mission shapes agent performance."""
+    """Stable system-prompt guidance so Mission shapes agent performance.
+
+    Prefers the offline life.db Mission Stack (primary + supporting) when
+    present; falls back to legacy LIFE_MISSION.md sync fields.
+    """
     del config  # reserved for future config-gated behavior
+    stack_block = _guidance_from_life_stack()
+    if stack_block:
+        return stack_block
+
     mission = read_mission()
     statement = str(mission.get("statement") or "").strip()
     if not statement and not mission.get("exists"):
@@ -391,6 +399,82 @@ def build_mission_guidance(config: dict[str, Any] | None = None) -> str:
             "- Prioritize actions and advice that advance this Life Mission and its commitments.",
             "- Do not contradict the owner's values or the Sovereign Soul never-do rules.",
             "- When the owner is off-mission, gently reconnect work to this north star.",
+            "- Persist Mission/Target changes with life_missions (local life.db) — never portal tokens.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _guidance_from_life_stack() -> str:
+    """Build north-star text from life.db stack when a primary mission exists."""
+    try:
+        from centurion_cli.life_missions import get_stack
+    except Exception:
+        return ""
+    try:
+        stack = get_stack()
+    except Exception:
+        return ""
+    primary = stack.get("primary") if isinstance(stack, dict) else None
+    if not isinstance(primary, dict):
+        return ""
+    statement = str(primary.get("statement") or primary.get("title") or "").strip()
+    title = str(primary.get("title") or "").strip()
+    why = str(primary.get("why") or "").strip()
+    purpose = str(primary.get("purpose") or "").strip()
+    profile = primary.get("profile") if isinstance(primary.get("profile"), dict) else {}
+    if not why:
+        why = str(profile.get("whyThisMission") or "").strip()
+    values = profile.get("yourValues") if isinstance(profile.get("yourValues"), list) else []
+    targets = primary.get("targets") if isinstance(primary.get("targets"), list) else []
+    supporting = stack.get("supporting") if isinstance(stack.get("supporting"), list) else []
+
+    lines = [
+        "LIFE MISSION STACK (authoritative — offline life.db on this Brain):",
+        f"- Primary: {title or '(untitled)'}",
+        f"- Statement: {statement or '(not set yet — help the owner clarify when relevant)'}",
+    ]
+    if why:
+        lines.append(f"- Why: {why}")
+    if purpose:
+        lines.append(f"- Purpose: {purpose}")
+    if values:
+        lines.append("- Values: " + "; ".join(str(v) for v in values if str(v).strip()))
+    if targets:
+        lines.append("- Target sequence (Must Do / Should Do / Nice to Do):")
+        type_label = {
+            "essential": "Must Do",
+            "shouldHave": "Should Do",
+            "niceToHave": "Nice to Do",
+        }
+        for t in targets[:16]:
+            if not isinstance(t, dict):
+                continue
+            ttitle = str(t.get("title") or "").strip()
+            if not ttitle:
+                continue
+            label = type_label.get(str(t.get("target_type") or ""), "Target")
+            status = str(t.get("status") or "").strip()
+            desc = str(t.get("description") or "").strip()
+            bit = f"  • [{label}] {ttitle}"
+            if status:
+                bit += f" ({status})"
+            if desc:
+                bit += f" — {desc}"
+            lines.append(bit)
+    if supporting:
+        lines.append("- Supporting missions:")
+        for m in supporting[:8]:
+            if isinstance(m, dict):
+                mt = str(m.get("title") or "").strip()
+                if mt:
+                    lines.append(f"  • {mt}")
+    lines.extend(
+        [
+            "- Prioritize actions that advance the primary and active supporting missions.",
+            "- Do not contradict the owner's values or the Sovereign Soul never-do rules.",
+            "- Persist changes with life_missions only — never ask for Portal / ctk_proj tokens.",
+            "- Reviewable proposals belong in the plans tool, not portal Mission Control.",
         ]
     )
     return "\n".join(lines)

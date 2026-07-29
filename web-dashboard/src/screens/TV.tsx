@@ -12,7 +12,7 @@ const SLIDES: Slide[] = ["progress", "wins", "thoughts"];
 const INTERVAL_MS = 8000;
 
 export function TV() {
-  const { stack } = useMissionStack(12_000);
+  const { stack } = useMissionStack(20_000);
   const { thoughts, connected } = useSSE();
   const [index, setIndex] = useState(0);
 

@@ -101,7 +101,12 @@ export function Mission() {
         <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
           Target sequence
         </h2>
-        <TargetSequence targets={mission.targets || []} />
+        <TargetSequence
+          targets={mission.targets || []}
+          missionId={mission.id}
+          missionTitle={mission.title}
+          missionStatement={mission.statement || mission.purpose}
+        />
       </section>
 
       <ActivityFeed thoughts={merged} title="Thought stream" />

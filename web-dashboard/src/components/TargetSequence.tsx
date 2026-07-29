@@ -17,13 +17,53 @@ function groupProgress(targets: MissionTarget[]): number {
 
 interface TargetSequenceProps {
   targets: MissionTarget[];
+  missionId: string;
+  missionTitle: string;
+  missionStatement?: string;
 }
 
-export function TargetSequence({ targets }: TargetSequenceProps) {
+function discussTarget(
+  mission: {
+    id: string;
+    title: string;
+    statement?: string;
+  },
+  t: MissionTarget,
+) {
+  const w = window as Window & {
+    centurionDiscuss?: (p: Record<string, unknown>) => void;
+  };
+  if (typeof w.centurionDiscuss !== "function") return;
+  const label = TARGET_LABELS[t.target_type] || "Target";
+  w.centurionDiscuss({
+    id: mission.id,
+    title: mission.title,
+    statement: mission.statement || "",
+    target_id: t.id,
+    target_title: t.title,
+    target_type: t.target_type,
+    target_description: t.description || "",
+    target_status: t.status,
+    sequence_number: t.sequence_number,
+    kickoff: `Let's discuss this ${label} target: ${t.title}`,
+  });
+}
+
+export function TargetSequence({
+  targets,
+  missionId,
+  missionTitle,
+  missionStatement,
+}: TargetSequenceProps) {
   const ordered = [...targets].sort(
     (a, b) => a.sequence_number - b.sequence_number,
   );
   const groups: TargetType[] = ["essential", "shouldHave", "niceToHave"];
+  const mission = {
+    id: missionId,
+    title: missionTitle,
+    statement: missionStatement,
+  };
 
   return (
     <div className="space-y-6">
@@ -79,6 +119,13 @@ export function TargetSequence({ targets }: TargetSequenceProps) {
                       </p>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => discussTarget(mission, t)}
+                    className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                  >
+                    Discuss
+                  </button>
                 </motion.li>
               ))}
             </ul>
@@ -101,7 +148,7 @@ function StatusDot({ status }: { status: string }) {
   return (
     <span
       className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${color}`}
-      aria-label={status}
+      aria-hidden
     />
   );
 }
