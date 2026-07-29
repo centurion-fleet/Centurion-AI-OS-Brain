@@ -105,6 +105,10 @@ pub enum DiscussTopic {
         title: Option<String>,
         target_id: Option<String>,
         target_title: Option<String>,
+        target_type: Option<String>,
+        target_description: Option<String>,
+        target_status: Option<String>,
+        sequence_number: Option<i64>,
     },
     Commitment {
         id: String,
@@ -632,7 +636,9 @@ Risks:\n\
 Summary: {summary}\n\n\
 Help them refine, proceed guidance, or revise the plan. Do not take irreversible \
 external actions unless they clearly ask you to execute after Proceed.\n\n\
-If you and the user agree on plan edits, end your reply with a fenced JSON block \
+Prefer the plans tool (put / decide / complete) to persist changes locally — \
+never ask for Portal tokens. If you and the user agree on plan edits, you may \
+also end your reply with a fenced JSON block \
 exactly like this (omit fields you are not changing):\n\n\
 ```{PLAN_UPDATE_FENCE}\n\
 {{\"plan_id\":\"{id}\",\"title\":\"Updated title\",\"goal\":\"Updated goal\",\"steps\":[\"Step 1\"],\"risks\":[],\"open_questions\":[],\"summary\":\"Short summary\",\"status\":\"pending_review\"}}\n\
@@ -705,10 +711,14 @@ User message:\n\
 fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     let DiscussTopic::Mission {
         statement,
-        id: _,
+        id,
         title,
-        target_id: _,
+        target_id,
         target_title,
+        target_type,
+        target_description,
+        target_status,
+        sequence_number,
     } = topic
     else {
         return user_text.to_owned();
@@ -723,11 +733,42 @@ fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or(statement);
-    let target_line = target_title
+    let type_label = match target_type.as_deref().map(str::trim).unwrap_or("") {
+        "essential" => "Must Do",
+        "shouldHave" => "Should Do",
+        "niceToHave" => "Nice to Do",
+        other if !other.is_empty() => other,
+        _ => "Target",
+    };
+    let mut target_block = String::new();
+    if let Some(t) = target_title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        target_block.push_str(&format!("Focus target ({type_label}): {t}\n"));
+        if let Some(desc) = target_description
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            target_block.push_str(&format!("Target description: {desc}\n"));
+        }
+        if let Some(st) = target_status
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            target_block.push_str(&format!("Target status: {st}\n"));
+        }
+        if let Some(n) = sequence_number {
+            target_block.push_str(&format!("Sequence #: {n}\n"));
+        }
+        if let Some(tid) = target_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            target_block.push_str(&format!("target_id: {tid}\n"));
+        }
+    }
+    let mission_id_line = id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|t| format!("Focus target: {t}\n"))
+        .map(|mid| format!("mission_id: {mid}\n"))
         .unwrap_or_default();
     // Life context is injected inside remote_bridge via `life_inject` on the
     // chat request (one round-trip) — do not sync-spawn here on the UI thread.
@@ -735,10 +776,14 @@ fn frame_mission_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         "[Sovereign AI Brain — Mission discuss]\n\
 The user is discussing a Life Mission (direction), not a single reviewable Plan.\n\n\
 Mission: {mission_label}\n\
-Statement:\n\
+{mission_id_line}Statement:\n\
 {statement}\n\
-{target_line}\n\
-Help them clarify direction and next focus. Prefer proposing Plans over silent execution.\n\
+{target_block}\n\
+Help them clarify direction and next focus for THIS context. \
+When they want to update the mission or this target, use life_missions \
+(put_mission / put_target / set_focus) — local life.db only. \
+Never ask for Portal tokens, mc.json, or ctk_proj. \
+When they want a reviewable proposal, use the plans tool (put). \
 Use Must Do / Should Do / Nice to Do vocabulary for targets.\n\n\
 User message:\n\
 {user_text}"

@@ -167,7 +167,7 @@ Canonical state lives under the human's active Centurion home on the computer:
 |------|-------|------------|
 | Collaboration summaries | Brain | slim snapshot |
 | Task graph | kanban on Brain | summarized only |
-| Cloud portal projects | Brain (Mission Control) | projected fields |
+| Cloud portal projects | Frozen / unused on Brain | — (local boards only) |
 | Workspace files | Brain | outcomes/artifacts only |
 | Signals (decisions, ceremonies) | Brain | human-facing Signals only |
 | Digest / last-seen | iPhone | local preference |
@@ -178,7 +178,7 @@ Centurions share information **only inside one collaboration boundary**:
 
 - **Local collaboration** — one board on the computer; workers pinned to that board cannot see
   other boards.
-- **Cloud collaboration** — one Mission Control project; sharing stops at that project.
+- **Cloud collaboration** — frozen on Brain; use local boards. Life Missions are offline `life.db`.
 - **Files** — one workspace per collaboration; the phone sees outputs, not raw folder paths.
 - **Memory and chat** — future conversations will carry collaboration context so memory stays
   scoped before broader mission context is added.
@@ -194,8 +194,8 @@ Adrian can confidently describe these as **shipped or wired**:
 1. **Design rules** — `ios/CenturionApp/DESIGN_RULES.md` §11 locks placement, language, attention
    model, and Brain vs Remote rules.
 2. **Brain snapshot service** — `centurion_cli/swarm_state.get_swarm_snapshot()` builds the
-   collaboration DTO from local kanban boards plus Mission Control portal projection. Empty
-   default kanban board is hidden from the snapshot.
+   collaboration DTO from **local kanban boards only** (portal Mission Control sync is frozen).
+   Empty default kanban board is hidden from the snapshot.
 3. **Dashboard sync** — `GET /api/swarm/sync` on the Brain dashboard uses the same snapshot
    service (mobile and dashboard should not drift).
 4. **Encrypted Remote protocol** — iPhone requests `swarm_snapshot`; Brain returns

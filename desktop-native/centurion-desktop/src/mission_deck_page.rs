@@ -361,6 +361,26 @@ fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebV
                         .get("target_title")
                         .and_then(|t| t.as_str())
                         .map(str::to_string),
+                    target_type: v
+                        .get("target_type")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string),
+                    target_description: v
+                        .get("target_description")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string),
+                    target_status: v
+                        .get("target_status")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string),
+                    sequence_number: v
+                        .get("sequence_number")
+                        .and_then(|t| t.as_i64())
+                        .or_else(|| {
+                            v.get("sequence_number")
+                                .and_then(|t| t.as_u64())
+                                .map(|n| n as i64)
+                        }),
                 };
                 (hooks.on_ask_about)(topic, kickoff);
             }

@@ -394,6 +394,25 @@ SKILLS_GUIDANCE = (
     "Skills that aren't maintained become liabilities."
 )
 
+LIFE_MISSIONS_GUIDANCE = (
+    "Life Missions live offline on this Brain in life.db — use the life_missions "
+    "tool for create/update/list of Missions, Targets (Must Do / Should Do / "
+    "Nice to Do), Dreams, focus, thoughts, and decisions. "
+    "Never ask for a Portal token, mc.json, ctk_proj_*, Supabase, or "
+    "`centurion swarm connect` for Missions. Portal Mission Control is a "
+    "different, frozen product — it is not the Missions tab. "
+    "Prefer life_missions(action='create_mission'|'put_mission'|'put_target'|"
+    "'set_focus') when the owner wants to persist mission work."
+)
+
+PLANS_GUIDANCE = (
+    "Reviewable Plans are local files under plans/ — use the plans tool to "
+    "list/get/put/decide/complete. A Plan is a proposal awaiting Proceed/Hold/"
+    "Adjust, not a Life Mission. Never require Portal tokens to save a Plan. "
+    "When the owner asks to save a plan from Chat, call plans(action='put') "
+    "with title, goal, steps, and risks."
+)
+
 KANBAN_GUIDANCE = (
     "# Kanban task execution protocol\n"
     "You have been assigned ONE task from "

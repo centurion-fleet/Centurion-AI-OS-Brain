@@ -8,7 +8,7 @@ import type {
   Thought,
 } from "../types/life";
 
-export function useMissionStack(pollMs = 8000) {
+export function useMissionStack(pollMs = 20000) {
   const [stack, setStack] = useState<MissionStack | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);

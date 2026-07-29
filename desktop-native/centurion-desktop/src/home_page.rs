@@ -1549,99 +1549,46 @@ fn show_collab_detail_dialog(
 }
 
 pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+    // Portal Mission Control (ctk_proj tokens) is frozen. Local boards only.
     let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    let token = gtk::Entry::builder()
-        .placeholder_text("Mission Control token (ctk_proj_…)")
-        .hexpand(true)
-        .build();
-    let project_id = gtk::Entry::builder()
-        .placeholder_text("Project id")
-        .hexpand(true)
-        .build();
-    let install_id = gtk::Entry::builder()
-        .placeholder_text("Install id")
-        .hexpand(true)
-        .build();
-    let friend_id = gtk::Entry::builder()
-        .placeholder_text("Friend customer id (for Invite)")
-        .hexpand(true)
-        .build();
     let board_title = gtk::Entry::builder()
-        .placeholder_text("Board title (for Create board)")
+        .placeholder_text("Board title")
         .hexpand(true)
         .build();
-    box_.append(&token);
-    box_.append(&project_id);
-    box_.append(&install_id);
-    box_.append(&friend_id);
     box_.append(&board_title);
     let dialog = adw::AlertDialog::builder()
-        .heading("Connect another Sovereign")
+        .heading("Local collaboration board")
         .body(
-            "Connect with a Mission Control project token, invite a friend by customer id, or create a local collaboration board.",
+            "Create a local board on this Brain. Portal Mission Control tokens \
+             are not used — Life Missions stay offline in life.db.",
         )
         .extra_child(&box_)
         .close_response("cancel")
-        .default_response("connect")
+        .default_response("board")
         .build();
     dialog.add_response("cancel", "Cancel");
-    dialog.add_response("connect", "Connect");
-    dialog.add_response("invite", "Invite");
     dialog.add_response("board", "Create board");
-    dialog.set_response_appearance("connect", adw::ResponseAppearance::Suggested);
+    dialog.set_response_appearance("board", adw::ResponseAppearance::Suggested);
     let parent_w = parent.clone().upcast::<gtk::Widget>();
     dialog.connect_response(None, move |_d, response| {
-        if response == "cancel" {
+        if response != "board" {
             return;
         }
-        let token_v = token.text().trim().to_owned();
-        let project_v = project_id.text().trim().to_owned();
-        let install_v = install_id.text().trim().to_owned();
-        let friend_v = friend_id.text().trim().to_owned();
         let board_v = board_title.text().trim().to_owned();
         let refresh = refresh.clone();
         let parent_w = parent_w.clone();
-        let action = response.to_owned();
         run_async_result(parent_w, refresh, move || {
-            let payload = match action.as_str() {
-                "connect" => {
-                    if token_v.is_empty() || project_v.is_empty() || install_v.is_empty() {
-                        return Err(
-                            "Connect needs token, project id, and install id.".to_owned(),
-                        );
-                    }
-                    run_bridge_action(
-                        "swarm_connect",
-                        serde_json::json!({
-                            "token": token_v,
-                            "project_id": project_v,
-                            "install_id": install_v,
-                        }),
-                    )
-                }
-                "invite" => {
-                    if friend_v.is_empty() {
-                        return Err("Enter a friend customer id to invite.".to_owned());
-                    }
-                    let mut body = serde_json::json!({ "invited_customer_id": friend_v });
-                    if !project_v.is_empty() {
-                        body["project_id"] = serde_json::Value::String(project_v);
-                    }
-                    run_bridge_action("swarm_invite", body)
-                }
-                "board" => run_bridge_action(
-                    "swarm_create_board",
-                    serde_json::json!({
-                        "name": if board_v.is_empty() {
-                            "Desk collaboration".to_owned()
-                        } else {
-                            board_v
-                        },
-                        "objective": "Desk collaboration board",
-                    }),
-                ),
-                _ => return Ok(()),
-            }
+            let payload = run_bridge_action(
+                "swarm_create_board",
+                serde_json::json!({
+                    "name": if board_v.is_empty() {
+                        "Desk collaboration".to_owned()
+                    } else {
+                        board_v
+                    },
+                    "objective": "Desk collaboration board",
+                }),
+            )
             .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
             if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
                 Ok(())
@@ -1649,7 +1596,7 @@ pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dy
                 Err(payload
                     .get("message")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("Collaboration action failed.")
+                    .unwrap_or("Could not create local board.")
                     .to_owned())
             }
         });
@@ -2282,19 +2229,40 @@ fn mission_discuss_topic(mission: &Value, target: Option<&Value>) -> DiscussTopi
         .get("id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_owned());
-    let (target_id, target_title) = match target {
-        Some(t) => (
-            t.get("id").and_then(|v| v.as_str()).map(|s| s.to_owned()),
-            t.get("title").and_then(|v| v.as_str()).map(|s| s.to_owned()),
-        ),
-        None => (None, None),
-    };
+    let (target_id, target_title, target_type, target_description, target_status, sequence_number) =
+        match target {
+            Some(t) => (
+                t.get("id").and_then(|v| v.as_str()).map(|s| s.to_owned()),
+                t.get("title").and_then(|v| v.as_str()).map(|s| s.to_owned()),
+                t.get("target_type")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_owned()),
+                t.get("description")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_owned()),
+                t.get("status")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_owned()),
+                t.get("sequence_number")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        t.get("sequence_number")
+                            .and_then(|v| v.as_u64())
+                            .map(|n| n as i64)
+                    }),
+            ),
+            None => (None, None, None, None, None, None),
+        };
     DiscussTopic::Mission {
         statement,
         id,
         title,
         target_id,
         target_title,
+        target_type,
+        target_description,
+        target_status,
+        sequence_number,
     }
 }
 
@@ -3145,6 +3113,10 @@ What should we focus on next?"
                                         title: None,
                                         target_id: None,
                                         target_title: None,
+                                        target_type: None,
+                                        target_description: None,
+                                        target_status: None,
+                                        sequence_number: None,
                                     },
                                     prompt,
                                 );

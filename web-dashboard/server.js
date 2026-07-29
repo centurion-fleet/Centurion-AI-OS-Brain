@@ -24,7 +24,7 @@ const DIST = path.join(__dirname, "dist");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const SSE_MS = Math.max(
   1000,
-  Number(process.env.CENTURION_DECK_SSE_MS || 2000) || 2000,
+  Number(process.env.CENTURION_DECK_SSE_MS || 8000) || 8000,
 );
 
 const MIME = {

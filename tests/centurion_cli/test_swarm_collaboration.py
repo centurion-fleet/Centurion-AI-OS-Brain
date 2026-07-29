@@ -24,6 +24,11 @@ def test_create_collaboration_board_tethers_mission(tmp_path, monkeypatch):
     match = next(s for s in snapshot["swarms"] if s["id"] == slug)
     assert match["mission_id"] == "mission-abc"
     assert "Q3 Launch" in match["display_name"]
+    assert snapshot["portal"]["ok"] is False
+    assert snapshot["projects"] == []
+    assert "frozen" in str(snapshot["portal"].get("message") or "").lower() or snapshot[
+        "portal"
+    ].get("source") == "local"
 
 
 def test_resolve_signal_unblocks_and_receipt(tmp_path, monkeypatch):

@@ -54,6 +54,8 @@ _CENTURION_CORE_TOOLS = [
     "clarify",
     # Life Missions (Brain offline SQLite — Subjects → Missions → Targets)
     "life_missions", "subject_resolver", "thought_stream",
+    # Reviewable Plans (local plans/ — not Life Missions, not portal MC)
+    "plans",
     # Code execution + delegation
     "execute_code", "delegate_task",
     # Cronjob management
@@ -248,6 +250,15 @@ TOOLSETS = {
             "subject_resolver",
             "thought_stream",
         ],
+        "includes": []
+    },
+
+    "plans": {
+        "description": (
+            "Reviewable Plans on this Brain — local proposals under plans/ "
+            "(put, decide, complete). Not Life Missions; not portal MC."
+        ),
+        "tools": ["plans"],
         "includes": []
     },
     
