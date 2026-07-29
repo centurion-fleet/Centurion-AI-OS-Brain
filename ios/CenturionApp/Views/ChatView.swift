@@ -24,7 +24,7 @@ struct ChatView: View {
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
     @State private var showCollaborationSheet = false
-    /// Talk = normal reply. Propose first = draft a plan and stop for Home review.
+    /// Chat = typed reply (not voice). Propose first = draft a plan and stop for Home review.
     @State private var proposeFirst = false
     @FocusState private var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -685,7 +685,7 @@ struct ChatView: View {
     private var chatIntentPicker: some View {
         HStack(spacing: Spacing.xs) {
             intentChip(
-                title: "Talk",
+                title: "Chat",
                 systemImage: "bubble.left.fill",
                 selected: !proposeFirst
             ) {

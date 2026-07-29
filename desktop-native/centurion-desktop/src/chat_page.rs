@@ -362,7 +362,8 @@ fn looks_like_thinking_error(message: &str) -> bool {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChatIntent {
-    Talk,
+    /// Normal typed conversation (not voice). Renamed from Talk to avoid mic confusion.
+    Chat,
     /// Cursor-like Plan mode: structured proposal this turn (mission-proposal or plan-artifact).
     Plan,
 }
@@ -3829,7 +3830,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     }
 
     // Cursor-like chrome: queue strip → chips → input → toolbar (mode · model · attach · send).
-    let intent = Rc::new(Cell::new(ChatIntent::Talk));
+    let intent = Rc::new(Cell::new(ChatIntent::Chat));
     let message_queue: Rc<RefCell<Vec<QueuedFollowUp>>> = Rc::new(RefCell::new(Vec::new()));
 
     let queue_strip = gtk::Box::new(gtk::Orientation::Vertical, 6);
@@ -3856,9 +3857,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     bottom.append(&queue_strip);
 
     let mode_btn = gtk::MenuButton::builder()
-        .label("Talk")
+        .label("Chat")
         .css_classes(["centurion-chat-pill"])
-        .tooltip_text("Talk = converse. Plan = ask for a structured proposal this turn.")
+        .tooltip_text("Chat = typed conversation. Plan = ask for a structured proposal this turn. (Not voice.)")
         .halign(gtk::Align::Start)
         .build();
     {
@@ -3868,9 +3869,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         list.set_margin_end(8);
         list.set_margin_top(8);
         list.set_margin_bottom(8);
-        let talk_item = gtk::Button::with_label("Talk — normal conversation");
-        talk_item.add_css_class("flat");
-        talk_item.set_halign(gtk::Align::Start);
+        let chat_item = gtk::Button::with_label("Chat — typed conversation");
+        chat_item.add_css_class("flat");
+        chat_item.set_halign(gtk::Align::Start);
         let plan_item = gtk::Button::with_label("Plan — structured proposal");
         plan_item.add_css_class("flat");
         plan_item.set_halign(gtk::Align::Start);
@@ -3878,9 +3879,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let intent = intent.clone();
             let mode_btn = mode_btn.clone();
             let popover = popover.clone();
-            talk_item.connect_clicked(move |_| {
-                intent.set(ChatIntent::Talk);
-                mode_btn.set_label("Talk");
+            chat_item.connect_clicked(move |_| {
+                intent.set(ChatIntent::Chat);
+                mode_btn.set_label("Chat");
                 popover.popdown();
             });
         }
@@ -3894,7 +3895,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 popover.popdown();
             });
         }
-        list.append(&talk_item);
+        list.append(&chat_item);
         list.append(&plan_item);
         popover.set_child(Some(&list));
         mode_btn.set_popover(Some(&popover));
@@ -5508,9 +5509,9 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                             intent.set(if next.plan_mode {
                                 ChatIntent::Plan
                             } else {
-                                ChatIntent::Talk
+                                ChatIntent::Chat
                             });
-                            mode_btn.set_label(if next.plan_mode { "Plan" } else { "Talk" });
+                            mode_btn.set_label(if next.plan_mode { "Plan" } else { "Chat" });
                             input.set_text(&next.text);
                             *attachments.borrow_mut() = next.attachments;
                             refresh_attachments();

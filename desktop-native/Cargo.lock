@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-common"
-version = "5.2.81"
+version = "5.2.82"
 dependencies = [
  "serde",
  "serde_json",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-desktop"
-version = "5.2.81"
+version = "5.2.82"
 dependencies = [
  "centurion-common",
  "gio",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-remote"
-version = "5.2.81"
+version = "5.2.82"
 dependencies = [
  "async-trait",
  "base64",
