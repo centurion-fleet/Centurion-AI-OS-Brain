@@ -5,6 +5,7 @@
 
 use libadwaita as adw;
 use adw::prelude::*;
+use gio;
 use gtk4 as gtk;
 use gtk4::glib;
 use std::cell::{Cell, RefCell};
@@ -163,6 +164,10 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
 
     let attention = Rc::new(Cell::new(0u32));
     let hooks = Rc::new(hooks);
+    // Window starts on Chat — keep Deck suspended until Missions is shown.
+    let suspended = Rc::new(Cell::new(true));
+    // GTK widgets are !Send — keep WebView on the UI thread via Rc/RefCell.
+    let webview_slot: Rc<RefCell<Option<webkit6::WebView>>> = Rc::new(RefCell::new(None));
 
     let status = gtk::Label::new(Some("Opening Mission Deck…"));
     status.add_css_class("centurion-mission-deck-status");
@@ -180,9 +185,10 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let root_weak = root.downgrade();
     let supervisor_c = supervisor.clone();
     let hooks_c = hooks.clone();
+    let webview_slot_c = webview_slot.clone();
+    let suspended_c = suspended.clone();
 
     // Poll server readiness on the main thread (no std::thread::spawn needed).
-    // Retries up to ~8 seconds before showing the fallback message.
     glib::timeout_add_seconds_local(0, move || {
         let result: Result<(), String> = match supervisor_c.borrow().as_ref() {
             Some(m) => m
@@ -202,11 +208,17 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         match result {
             Ok(()) => {
                 status.set_visible(false);
-                if attach_webview(&root, hooks_c.clone()).is_none() {
-                    status.set_visible(true);
-                    status.set_label(
-                        "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
-                    );
+                match attach_webview(&root, hooks_c.clone()) {
+                    Some(wv) => {
+                        apply_deck_suspend(&wv, suspended_c.get());
+                        *webview_slot_c.borrow_mut() = Some(wv);
+                    }
+                    None => {
+                        status.set_visible(true);
+                        status.set_label(
+                            "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
+                        );
+                    }
                 }
             }
             Err(err) => {
@@ -219,33 +231,57 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
 
     let refresh: Rc<dyn Fn()> = {
         let supervisor = supervisor.clone();
-        let root = root.clone();
+        let webview_slot = webview_slot.clone();
+        let suspended = suspended.clone();
         Rc::new(move || {
+            if suspended.get() {
+                return;
+            }
             if let Some(m) = supervisor.borrow().as_ref() {
                 if let Ok(mut s) = m.lock() {
                     let _ = s.ensure_running();
                 }
             }
-            if let Some(child) = root.first_child() {
-                let mut w = Some(child);
-                while let Some(widget) = w {
-                    if let Ok(wv) = widget.clone().downcast::<webkit6::WebView>() {
-                        use webkit6::prelude::WebViewExt;
-                        wv.reload();
-                        break;
-                    }
-                    w = widget.next_sibling();
-                }
+            if let Some(wv) = webview_slot.borrow().as_ref() {
+                use webkit6::prelude::WebViewExt;
+                wv.reload();
             }
         })
     };
 
-    let handle = HomeHandle::new(refresh, attention.clone());
+    let notify_tab_visible: Rc<dyn Fn(bool)> = {
+        let webview_slot = webview_slot.clone();
+        let suspended = suspended.clone();
+        let refresh = refresh.clone();
+        Rc::new(move |visible: bool| {
+            let was_suspended = suspended.get();
+            let now_suspended = !visible;
+            if was_suspended == now_suspended {
+                if let Some(wv) = webview_slot.borrow().as_ref() {
+                    apply_deck_suspend(wv, now_suspended);
+                }
+                return;
+            }
+            suspended.set(now_suspended);
+            if let Some(wv) = webview_slot.borrow().as_ref() {
+                apply_deck_suspend(wv, now_suspended);
+            }
+            if visible {
+                refresh();
+            }
+        })
+    };
+
+    let handle = HomeHandle::new(refresh, attention.clone(), notify_tab_visible);
 
     {
         let attention = attention.clone();
         let hooks = hooks.clone();
+        let suspended = suspended.clone();
         glib::timeout_add_seconds_local(12, move || {
+            if suspended.get() {
+                return glib::ControlFlow::Continue;
+            }
             let attention = attention.clone();
             let hooks = hooks.clone();
             let (tx, rx) = std::sync::mpsc::channel::<u32>();
@@ -288,6 +324,24 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     (root, handle)
 }
 
+/// Mute WebView media and tell the React deck to pause SSE / stack polls.
+fn apply_deck_suspend(webview: &webkit6::WebView, suspended: bool) {
+    use webkit6::prelude::WebViewExt;
+    webview.set_is_muted(suspended);
+    let flag = if suspended { "false" } else { "true" };
+    let script = format!(
+        r#"(function(){{
+  window.__centurionDeckVisible = {flag};
+  try {{
+    window.dispatchEvent(new CustomEvent('centurion-deck-visibility', {{
+      detail: {{ visible: {flag} }}
+    }}));
+  }} catch (e) {{}}
+}})();"#
+    );
+    webview.evaluate_javascript(&script, None, None, gio::Cancellable::NONE, |_| {});
+}
+
 fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebView> {
     use webkit6::prelude::*;
 
@@ -306,6 +360,10 @@ fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebV
 
     let script = webkit6::UserScript::new(
         r#"
+        // Brain embeds start on Chat — pause Deck work until Missions is visible.
+        if (typeof window.__centurionDeckVisible === 'undefined') {
+          window.__centurionDeckVisible = false;
+        }
         window.centurionDiscuss = function(payload) {
           try {
             var msg = typeof payload === 'string' ? payload : JSON.stringify(payload);

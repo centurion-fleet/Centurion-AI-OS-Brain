@@ -1601,11 +1601,16 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             if stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&tab_refresh_list);
             }
-            if stack.visible_child_name().as_deref() == Some("missions") {
+            let missions_visible = stack.visible_child_name().as_deref() == Some("missions");
+            // Pause Mission Deck WebView + 12s poll while Chat/Settings is active.
+            tab_home_handle.notify_tab_visible(missions_visible);
+            if missions_visible {
                 tab_home_handle.refresh();
             }
             tab_badges();
         });
+        // Default tab is Chat — suspend Deck immediately after wire-up.
+        home_handle.notify_tab_visible(false);
 
         let switcher = tab_bar;
         let header = adw::HeaderBar::new();

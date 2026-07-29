@@ -8,7 +8,7 @@ import type {
   Thought,
 } from "../types/life";
 
-export function useMissionStack(pollMs = 20000) {
+export function useMissionStack(pollMs = 20000, enabled = true) {
   const [stack, setStack] = useState<MissionStack | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,10 +31,11 @@ export function useMissionStack(pollMs = 20000) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     void refresh();
     const id = setInterval(() => void refresh(), pollMs);
     return () => clearInterval(id);
-  }, [refresh, pollMs]);
+  }, [refresh, pollMs, enabled]);
 
   return { stack, subjects, loading, error, refresh };
 }

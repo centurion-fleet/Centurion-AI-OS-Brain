@@ -5,12 +5,14 @@ import { ActivityFeed } from "../components/ActivityFeed";
 import { ProgressBar } from "../components/PrimaryCard";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
+import { useDeckVisible } from "../hooks/useDeckVisible";
 import { missionProgress } from "../types/life";
 
 export function Mission() {
   const { id } = useParams<{ id: string }>();
+  const deckVisible = useDeckVisible();
   const { mission, decisions, thoughts, loading, error } = useMissionDetail(id);
-  const { thoughts: live } = useSSE();
+  const { thoughts: live } = useSSE({ enabled: deckVisible });
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMissionStack } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
+import { useDeckVisible } from "../hooks/useDeckVisible";
 import { missionProgress } from "../types/life";
 import { ProgressBar } from "../components/PrimaryCard";
 
@@ -12,17 +13,19 @@ const SLIDES: Slide[] = ["progress", "wins", "thoughts"];
 const INTERVAL_MS = 8000;
 
 export function TV() {
-  const { stack } = useMissionStack(20_000);
-  const { thoughts, connected } = useSSE();
+  const deckVisible = useDeckVisible();
+  const { stack } = useMissionStack(20_000, deckVisible);
+  const { thoughts, connected } = useSSE({ enabled: deckVisible });
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
+    if (!deckVisible) return;
     const id = setInterval(
       () => setIndex((i) => (i + 1) % SLIDES.length),
       INTERVAL_MS,
     );
     return () => clearInterval(id);
-  }, []);
+  }, [deckVisible]);
 
   const primary = stack?.primary;
   const progress = missionProgress(primary);

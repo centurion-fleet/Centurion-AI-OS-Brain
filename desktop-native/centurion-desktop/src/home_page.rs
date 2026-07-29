@@ -28,18 +28,30 @@ pub struct HomeHooks {
 pub struct HomeHandle {
     refresh: Rc<dyn Fn()>,
     attention: Rc<Cell<u32>>,
+    /// Missions tab visibility — pause WebView / polls when Chat (or Settings) is active.
+    notify_tab_visible: Rc<dyn Fn(bool)>,
 }
 
 impl HomeHandle {
-    pub(crate) fn new(refresh: Rc<dyn Fn()>, attention: Rc<Cell<u32>>) -> Self {
+    pub(crate) fn new(
+        refresh: Rc<dyn Fn()>,
+        attention: Rc<Cell<u32>>,
+        notify_tab_visible: Rc<dyn Fn(bool)>,
+    ) -> Self {
         Self {
             refresh,
             attention,
+            notify_tab_visible,
         }
     }
 
     pub fn refresh(&self) {
         (self.refresh)();
+    }
+
+    /// Tell Missions whether its stack page is the visible tab.
+    pub fn notify_tab_visible(&self, visible: bool) {
+        (self.notify_tab_visible)(visible);
     }
 
     /// Sum of pill new-counts (Live = presence 0/1). Used for the Missions tab badge.
@@ -3773,9 +3785,10 @@ What should we focus on next?"
         }
     });
 
-    let handle = HomeHandle {
-        refresh: refresh_feed.clone(),
-        attention: attention.clone(),
-    };
+    let handle = HomeHandle::new(
+        refresh_feed.clone(),
+        attention.clone(),
+        Rc::new(|_: bool| {}),
+    );
     (container, handle)
 }

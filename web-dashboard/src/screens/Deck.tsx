@@ -7,12 +7,14 @@ import { ActivityFeed } from "../components/ActivityFeed";
 import { PulseIndicators } from "../components/PulseIndicators";
 import { useMissionStack } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
+import { useDeckVisible } from "../hooks/useDeckVisible";
 import { bridgeCall } from "../hooks/useBridge";
 
 export function Deck() {
   const navigate = useNavigate();
-  const { stack, loading, error, refresh } = useMissionStack();
-  const { thoughts, connected } = useSSE();
+  const deckVisible = useDeckVisible();
+  const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
+  const { thoughts, connected } = useSSE({ enabled: deckVisible });
 
   const primary = stack?.primary ?? null;
   const supporting = stack?.supporting ?? [];
