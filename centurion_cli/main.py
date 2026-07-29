@@ -7127,14 +7127,9 @@ def _update_via_zip(args):
 
 
 def _update_stash_pathspecs(cwd: Path) -> list[str]:
-    """Pathspecs for update autostash — skip nested checkouts / heavy local trees.
-
-    ``git stash -u`` fails when a nested git repo sits inside the checkout
-    (common on advisor machines with sibling clones). Exclude those so Brain
-    Settings → Update can still pull and rebuild the screen.
-    """
+    """Pathspecs for optional untracked cleanup — skip nested checkouts / heavy trees."""
     specs: list[str] = ["."]
-    skip_names = {"build", "dist", "node_modules", ".venv", "venv"}
+    skip_names = {"build", "dist", "node_modules", ".venv", "venv", "target"}
     try:
         for child in cwd.iterdir():
             name = child.name
@@ -7150,6 +7145,18 @@ def _update_stash_pathspecs(cwd: Path) -> list[str]:
     except OSError:
         pass
     return specs
+
+
+def _porcelain_has_tracked_changes(porcelain: str) -> bool:
+    """True when ``git status --porcelain`` lists tracked modifications (not ?? / !!)."""
+    for line in porcelain.splitlines():
+        raw = line.rstrip("\n")
+        if not raw:
+            continue
+        if raw.startswith("??") or raw.startswith("!!"):
+            continue
+        return True
+    return False
 
 
 def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[str]:
@@ -7177,18 +7184,24 @@ def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[st
         print("→ Clearing unmerged index entries from a previous conflict...")
         subprocess.run(git_cmd + ["reset"], cwd=cwd, capture_output=True)
 
+    # Untracked-only dirt does not block ``git pull --ff-only``. Avoid
+    # ``stash -u`` with pathspecs — that hits "ignored by .gitignore" on some
+    # Brains (Legio) and aborts Settings → Update before the pull.
+    if not _porcelain_has_tracked_changes(status.stdout):
+        print(
+            "  ℹ️  Working tree has untracked files only — "
+            "skipping stash so update can pull."
+        )
+        return None
+
     from datetime import datetime, timezone
 
     stash_name = datetime.now(timezone.utc).strftime(
         "centurion-update-autostash-%Y%m%d-%H%M%S"
     )
-    print("→ Local changes detected — stashing before update...")
-    pathspecs = _update_stash_pathspecs(cwd)
-    stash_cmd = (
-        git_cmd
-        + ["stash", "push", "--include-untracked", "-m", stash_name, "--"]
-        + pathspecs
-    )
+    print("→ Local changes detected — stashing tracked changes before update...")
+    # Tracked-only (no --include-untracked): reliable on Fedora Brains.
+    stash_cmd = git_cmd + ["stash", "push", "-m", stash_name]
     stash_result = subprocess.run(
         stash_cmd,
         cwd=cwd,
@@ -7197,11 +7210,9 @@ def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[st
     )
     if stash_result.returncode != 0:
         stderr = (stash_result.stderr or "").strip()
-        # Nothing left to stash after excludes (only nested repos / build dirt).
-        if "No local changes to save" in (stash_result.stdout or "") or (
-            "No local changes to save" in stderr
-        ):
-            print("  ℹ️  No stashable local changes after excluding nested checkouts.")
+        stdout = (stash_result.stdout or "").strip()
+        if "No local changes to save" in stdout or "No local changes to save" in stderr:
+            print("  ℹ️  No tracked changes to stash — continuing update.")
             return None
         print("✗ Failed to stash local changes before update.")
         if stderr:

@@ -34,9 +34,8 @@ def test_stash_local_changes_if_needed_returns_specific_stash_commit(monkeypatch
             return SimpleNamespace(stdout=" M centurion_cli/main.py\n?? notes.txt\n", returncode=0)
         if cmd[-2:] == ["ls-files", "--unmerged"]:
             return SimpleNamespace(stdout="", returncode=0)
-        if cmd[1:4] == ["stash", "push", "--include-untracked"]:
-            assert cmd[-1] == "." or cmd[-2:] == ["--", "."] or "--" in cmd
-            assert cmd[cmd.index("--") + 1] == "."
+        # Tracked-only stash (no --include-untracked) — Brain-safe path.
+        if cmd[1:3] == ["stash", "push"] and "--include-untracked" not in cmd:
             return SimpleNamespace(stdout="Saved working directory\n", returncode=0)
         if cmd[-3:] == ["rev-parse", "--verify", "refs/stash"]:
             return SimpleNamespace(stdout="abc123\n", returncode=0)
@@ -48,8 +47,8 @@ def test_stash_local_changes_if_needed_returns_specific_stash_commit(monkeypatch
 
     assert stash_ref == "abc123"
     assert calls[1][0][-2:] == ["ls-files", "--unmerged"]
-    assert calls[2][0][1:4] == ["stash", "push", "--include-untracked"]
-    assert "--" in calls[2][0]
+    assert calls[2][0][1:3] == ["stash", "push"]
+    assert "--include-untracked" not in calls[2][0]
     assert calls[3][0][-3:] == ["rev-parse", "--verify", "refs/stash"]
 
 
@@ -65,28 +64,27 @@ def test_update_stash_pathspecs_excludes_nested_git(tmp_path):
     assert ":(exclude)build" in specs
 
 
-def test_stash_local_changes_if_needed_handles_nothing_to_stash(monkeypatch, tmp_path, capsys):
+def test_stash_skips_untracked_only_tree(monkeypatch, tmp_path, capsys):
     def fake_run(cmd, **kwargs):
         if cmd[-2:] == ["status", "--porcelain"]:
-            return SimpleNamespace(stdout="?? help-center/\n", returncode=0)
+            return SimpleNamespace(stdout="?? help-center/\n?? notes.txt\n", returncode=0)
         if cmd[-2:] == ["ls-files", "--unmerged"]:
             return SimpleNamespace(stdout="", returncode=0)
-        if cmd[1:4] == ["stash", "push", "--include-untracked"]:
-            return SimpleNamespace(
-                stdout="No local changes to save\n",
-                stderr="",
-                returncode=1,
-            )
         raise AssertionError(f"unexpected command: {cmd}")
 
     monkeypatch.setattr(centurion_main.subprocess, "run", fake_run)
-    (tmp_path / "help-center").mkdir()
-    (tmp_path / "help-center" / ".git").mkdir()
 
     stash_ref = centurion_main._stash_local_changes_if_needed(["git"], tmp_path)
     assert stash_ref is None
     out = capsys.readouterr().out
-    assert "No stashable local changes" in out
+    assert "untracked files only" in out
+
+
+def test_porcelain_has_tracked_changes():
+    assert centurion_main._porcelain_has_tracked_changes(" M foo.py\n")
+    assert centurion_main._porcelain_has_tracked_changes("M  foo.py\n?? bar\n")
+    assert not centurion_main._porcelain_has_tracked_changes("?? bar\n!! baz\n")
+    assert not centurion_main._porcelain_has_tracked_changes("")
 
 
 def test_resolve_stash_selector_returns_matching_entry(monkeypatch, tmp_path):
@@ -318,7 +316,7 @@ def test_stash_local_changes_if_needed_raises_when_stash_ref_missing(monkeypatch
             return SimpleNamespace(stdout=" M centurion_cli/main.py\n", returncode=0)
         if cmd[-2:] == ["ls-files", "--unmerged"]:
             return SimpleNamespace(stdout="", returncode=0)
-        if cmd[1:4] == ["stash", "push", "--include-untracked"]:
+        if cmd[1:3] == ["stash", "push"] and "--include-untracked" not in cmd:
             return SimpleNamespace(stdout="Saved working directory\n", returncode=0)
         if cmd[-3:] == ["rev-parse", "--verify", "refs/stash"]:
             raise CalledProcessError(returncode=128, cmd=cmd)
