@@ -66,6 +66,10 @@ export function Deck() {
         <div className="glass-strong animate-pulse-soft rounded-3xl px-6 py-20 text-center text-ink-dim">
           Opening your deck…
         </div>
+      ) : !deckVisible && !stack ? (
+        <div className="glass-strong rounded-3xl px-6 py-20 text-center text-ink-dim">
+          Mission Deck is paused while another Brain tab is active.
+        </div>
       ) : empty ? (
         <motion.div
           initial={{ opacity: 0, y: 16 }}

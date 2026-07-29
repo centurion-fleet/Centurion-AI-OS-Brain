@@ -208,7 +208,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         match result {
             Ok(()) => {
                 status.set_visible(false);
-                match attach_webview(&root, hooks_c.clone()) {
+                match attach_webview(&root, hooks_c.clone(), suspended_c.clone()) {
                     Some(wv) => {
                         apply_deck_suspend(&wv, suspended_c.get());
                         *webview_slot_c.borrow_mut() = Some(wv);
@@ -234,17 +234,20 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         Rc::new(move || {
-            if suspended.get() {
-                return;
-            }
             if let Some(m) = supervisor.borrow().as_ref() {
                 if let Ok(mut s) = m.lock() {
                     let _ = s.ensure_running();
                 }
             }
+            // Never hard-reload while suspended — that resets __centurionDeckVisible
+            // to false and leaves the React deck stuck on "Opening your deck…".
+            if suspended.get() {
+                return;
+            }
             if let Some(wv) = webview_slot.borrow().as_ref() {
-                use webkit6::prelude::WebViewExt;
-                wv.reload();
+                // Soft resume: push visibility into the live page so polls start.
+                // Avoid wv.reload() here — reload races the visibility flag.
+                apply_deck_suspend(wv, false);
             }
         })
     };
@@ -252,22 +255,19 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let notify_tab_visible: Rc<dyn Fn(bool)> = {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
-        let refresh = refresh.clone();
+        let supervisor = supervisor.clone();
         Rc::new(move |visible: bool| {
-            let was_suspended = suspended.get();
             let now_suspended = !visible;
-            if was_suspended == now_suspended {
-                if let Some(wv) = webview_slot.borrow().as_ref() {
-                    apply_deck_suspend(wv, now_suspended);
-                }
-                return;
-            }
             suspended.set(now_suspended);
+            if visible {
+                if let Some(m) = supervisor.borrow().as_ref() {
+                    if let Ok(mut s) = m.lock() {
+                        let _ = s.ensure_running();
+                    }
+                }
+            }
             if let Some(wv) = webview_slot.borrow().as_ref() {
                 apply_deck_suspend(wv, now_suspended);
-            }
-            if visible {
-                refresh();
             }
         })
     };
@@ -342,7 +342,11 @@ fn apply_deck_suspend(webview: &webkit6::WebView, suspended: bool) {
     webview.evaluate_javascript(&script, None, None, gio::Cancellable::NONE, |_| {});
 }
 
-fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebView> {
+fn attach_webview(
+    root: &gtk::Box,
+    hooks: Rc<HomeHooks>,
+    suspended: Rc<Cell<bool>>,
+) -> Option<webkit6::WebView> {
     use webkit6::prelude::*;
 
     let ucm = webkit6::UserContentManager::new();
@@ -360,7 +364,8 @@ fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebV
 
     let script = webkit6::UserScript::new(
         r#"
-        // Brain embeds start on Chat — pause Deck work until Missions is visible.
+        // Default false for Brain embed; GTK re-applies true after load when
+        // the Missions tab is visible (see connect_load_changed).
         if (typeof window.__centurionDeckVisible === 'undefined') {
           window.__centurionDeckVisible = false;
         }
@@ -378,6 +383,24 @@ fn attach_webview(root: &gtk::Box, hooks: Rc<HomeHooks>) -> Option<webkit6::WebV
         &[],
     );
     ucm.add_script(&script);
+
+    // After every navigation/reload, re-push tab visibility so React polls start.
+    // Also retry shortly after Finished — React may mount after the first inject.
+    {
+        let suspended = suspended.clone();
+        webview.connect_load_changed(move |wv, event| {
+            if event != webkit6::LoadEvent::Finished {
+                return;
+            }
+            apply_deck_suspend(wv, suspended.get());
+            let wv = wv.clone();
+            let suspended = suspended.clone();
+            glib::timeout_add_local(Duration::from_millis(300), move || {
+                apply_deck_suspend(&wv, suspended.get());
+                glib::ControlFlow::Break
+            });
+        });
+    }
 
     {
         let hooks = hooks.clone();

@@ -31,7 +31,12 @@ export function useMissionStack(pollMs = 20000, enabled = true) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      // Avoid infinite "Opening your deck…" while the Brain Chat tab is active.
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     void refresh();
     const id = setInterval(() => void refresh(), pollMs);
     return () => clearInterval(id);

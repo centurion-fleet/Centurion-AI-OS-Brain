@@ -1602,8 +1602,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 refresh_devices(&tab_refresh_list);
             }
             let missions_visible = stack.visible_child_name().as_deref() == Some("missions");
-            // Pause Mission Deck WebView + 12s poll while Chat/Settings is active.
+            // Pause Mission Deck WebView + polls while Chat/Settings is active.
             tab_home_handle.notify_tab_visible(missions_visible);
+            // Soft refresh (visibility inject) — do not hard-reload the WebView.
             if missions_visible {
                 tab_home_handle.refresh();
             }

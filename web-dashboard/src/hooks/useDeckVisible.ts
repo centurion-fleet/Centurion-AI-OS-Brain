@@ -29,6 +29,10 @@ export function useDeckVisible(): boolean {
   });
 
   useEffect(() => {
+    // Sync after mount — LoadFinished may have set the flag before React listened.
+    if (typeof window.__centurionDeckVisible === "boolean") {
+      setVisible(window.__centurionDeckVisible);
+    }
     const onVis = (ev: Event) => {
       const detail = (ev as CustomEvent<{ visible?: boolean }>).detail;
       if (typeof detail?.visible === "boolean") {
@@ -40,7 +44,16 @@ export function useDeckVisible(): boolean {
       }
     };
     window.addEventListener("centurion-deck-visibility", onVis);
-    return () => window.removeEventListener("centurion-deck-visibility", onVis);
+    // Late inject from GTK after first paint.
+    const t = window.setTimeout(() => {
+      if (typeof window.__centurionDeckVisible === "boolean") {
+        setVisible(window.__centurionDeckVisible);
+      }
+    }, 250);
+    return () => {
+      window.removeEventListener("centurion-deck-visibility", onVis);
+      window.clearTimeout(t);
+    };
   }, []);
 
   return visible;
