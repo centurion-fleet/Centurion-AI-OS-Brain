@@ -106,12 +106,16 @@ StartupNotify=true
 StartupWMClass=com.centurion.desktop
 EOF
 chmod 0644 "${APP_DIR}/com.centurion.desktop.desktop"
+# mkdir -p + install (no GNU install -D): BSD install on macOS treats -D differently
+# and aborts the whole Settings → Update run before build stamp / systemd.
 for size in 16 22 24 32 48 64 128 256 512; do
-  install -D -m 0644 \
+  mkdir -p "${ICON_DIR}/${size}x${size}/apps"
+  install -m 0644 \
     "${DESKTOP_NATIVE}/resources/icons/hicolor/${size}x${size}/apps/com.centurion.desktop.png" \
     "${ICON_DIR}/${size}x${size}/apps/com.centurion.desktop.png"
 done
-install -D -m 0644 \
+mkdir -p "${ICON_DIR}/scalable/apps"
+install -m 0644 \
   "${DESKTOP_NATIVE}/resources/icons/hicolor/scalable/apps/com.centurion.desktop.png" \
   "${ICON_DIR}/scalable/apps/com.centurion.desktop.png"
 
@@ -181,8 +185,12 @@ if ! "${PYTHON_BIN}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; th
 fi
 
 export PATH="${BIN_DIR}:${PATH}"
-systemctl --user daemon-reload
-systemctl --user enable --now centurion-remote.service
+if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
+  systemctl --user enable --now centurion-remote.service
+else
+  echo "NOTE: systemctl --user unavailable — skipping centurion-remote unit (expected on macOS)."
+  echo "  Start Crypto Chat manually: ${BIN_DIR}/centurion-remote serve"
+fi
 
 echo
 echo "Away-from-home pairing (required for iPhone Remote):"
