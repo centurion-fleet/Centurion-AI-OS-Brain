@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::cell::{Cell, RefCell};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::cell::Cell;
+use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
@@ -1972,7 +1972,7 @@ fn wire_transcript_size_follow(
     programmatic: Rc<Cell<bool>>,
 ) {
     let pending = Rc::new(Cell::new(false));
-    transcript.connect("size-allocate", false, {
+    transcript.connect_notify(Some("allocation"), {
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
         let follow_bottom = follow_bottom.clone();
