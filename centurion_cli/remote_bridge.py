@@ -614,6 +614,17 @@ def _handle_swarm_resolve_signal(request: dict[str, Any], request_id: str) -> di
         signal_id = str(request.get("signal_id") or "").strip()
         choice_note = str(request.get("choice_note") or "").strip()
         result = resolve_signal(signal_id, choice_note=choice_note)
+        if result.get("ok"):
+            signal_obj = result.get("signal") if isinstance(result.get("signal"), dict) else {}
+            mission_ref = result.get("mission_id") or signal_obj.get("mission_id")
+            _record_life_decision(
+                title=f"Collaboration choice · {signal_id[:8] or 'signal'}",
+                chosen="resolved",
+                human_said=choice_note,
+                context=f"swarm_resolve_signal:{signal_id}",
+                options=["resolve"],
+                mission_id=str(mission_ref).strip() if mission_ref else None,
+            )
         return {
             "id": request_id,
             "ok": bool(result.get("ok")),
@@ -812,6 +823,41 @@ def _handle_telegram_import_preview(request_id: str) -> dict[str, Any]:
         }
     except Exception as exc:
         return _error_response(request_id, action="telegram_import_preview", exc=exc)
+
+
+def _record_life_decision(
+    *,
+    title: str,
+    chosen: str,
+    human_said: str = "",
+    context: str = "",
+    options: list[str] | None = None,
+    mission_id: str | None = None,
+) -> None:
+    """Best-effort write into offline Decision Log — never fail the primary action."""
+    try:
+        from centurion_cli.life_missions import log_decision
+
+        payload: dict[str, Any] = {
+            "title": title,
+            "chosen": chosen,
+            "human_said": human_said,
+            "context": context,
+            "options": options or [],
+        }
+        if mission_id:
+            # Only attach when it looks like a life mission UUID already in life.db
+            payload["mission_id"] = mission_id
+            try:
+                from centurion_cli.life_missions import get_mission
+
+                if get_mission(mission_id) is None:
+                    payload.pop("mission_id", None)
+            except Exception:
+                payload.pop("mission_id", None)
+        log_decision(payload)
+    except Exception:
+        logger.debug("life decision log skipped", exc_info=True)
 
 
 def _error_response(
@@ -2932,15 +2978,35 @@ def _handle_plan_decide(request: dict[str, Any], request_id: str) -> dict[str, A
                 "error": "plan_id and choice are required",
                 "message": "plan_id and choice are required",
             }
+        note = request.get("note")
         plan = decide_plan(
             plan_id,
             choice,
-            note=request.get("note"),
+            note=note,
             reviewer_customer_id=(
                 str(request["reviewer_customer_id"]).strip()
                 if request.get("reviewer_customer_id")
                 else None
             ),
+        )
+        plan_title = ""
+        related_mission = None
+        if isinstance(plan, dict):
+            plan_title = str(plan.get("title") or plan.get("goal") or plan_id)
+            related_mission = plan.get("related_mission") or plan.get("mission_id")
+        choice_labels = {
+            "approve": "Approved — proceed",
+            "reject": "Rejected",
+            "request_changes": "Requested changes",
+            "hold": "Held for later",
+        }
+        _record_life_decision(
+            title=f"Plan · {plan_title or plan_id}",
+            chosen=choice_labels.get(choice.lower(), choice),
+            human_said=str(note or "").strip(),
+            context=f"plan_decide:{plan_id}",
+            options=["approve", "reject", "request_changes", "hold"],
+            mission_id=str(related_mission).strip() if related_mission else None,
         )
         messages = {
             "approve": "Proceed recorded. Your Sovereign can continue with this plan.",

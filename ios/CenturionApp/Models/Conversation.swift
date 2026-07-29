@@ -18,6 +18,15 @@ enum ConversationContext: Codable, Equatable, Hashable {
     case commitment(id: UUID, title: String)
     /// A reviewable Plan from Home — same thread reopens anytime via Discuss.
     case plan(id: UUID, title: String)
+    /// Full Mission hierarchy (Subject → Mission → Target) from Brain life.db.
+    case mission(id: UUID, name: String, subjectName: String?)
+    case missionTarget(
+        id: UUID,
+        name: String,
+        missionId: UUID,
+        missionName: String,
+        subjectName: String?
+    )
     case standalone(title: String)
 
     var displayTitle: String {
@@ -27,6 +36,8 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .task(_, let name, _, _): return name
         case .commitment(_, let title): return title
         case .plan(_, let title): return title
+        case .mission(_, let name, _): return name
+        case .missionTarget(_, let name, _, _, _): return name
         case .standalone(let title): return title
         }
     }
@@ -38,6 +49,12 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .task(_, let name, let target, let program): return "\(program) > \(target) > \(name)"
         case .commitment(_, let title): return "Commitment · \(title)"
         case .plan(_, let title): return "Plan · \(title)"
+        case .mission(_, let name, let subject):
+            if let subject, !subject.isEmpty { return "\(subject) > \(name)" }
+            return "Mission · \(name)"
+        case .missionTarget(_, let name, _, let mission, let subject):
+            if let subject, !subject.isEmpty { return "\(subject) > \(mission) > \(name)" }
+            return "\(mission) > \(name)"
         case .standalone: return "Chat"
         }
     }
@@ -49,6 +66,8 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .task: return "checkmark.circle"
         case .commitment: return "target"
         case .plan: return "list.clipboard"
+        case .mission: return "flag.fill"
+        case .missionTarget: return "checkmark.circle.fill"
         case .standalone: return "message.fill"
         }
     }
@@ -66,6 +85,11 @@ enum ConversationContext: Codable, Equatable, Hashable {
             return ("Commitment · \(title)", ColorTheme.accent())
         case .plan(_, let title):
             return ("Plan · \(title)", ColorTheme.accent())
+        case .mission(_, let name, let subject):
+            let label = subject.map { "\($0) · \(name)" } ?? name
+            return (label, ColorTheme.accent())
+        case .missionTarget(_, let name, _, let mission, _):
+            return ("\(mission) > \(name)", ColorTheme.accent().opacity(0.85))
         case .standalone:
             return ("Chat", ColorTheme.mutedText())
         }
@@ -81,9 +105,22 @@ enum ConversationContext: Codable, Equatable, Hashable {
         return nil
     }
 
+    var missionID: UUID? {
+        switch self {
+        case .mission(let id, _, _): return id
+        case .missionTarget(_, _, let missionId, _, _): return missionId
+        default: return nil
+        }
+    }
+
+    var missionTargetID: UUID? {
+        if case .missionTarget(let id, _, _, _, _) = self { return id }
+        return nil
+    }
+
     /// Coding keys — flattened for Codable conformance
     enum CodingKeys: String, CodingKey {
-        case type, id, name, programName, targetName, title
+        case type, id, name, programName, targetName, title, subjectName, missionName, missionId
     }
 
     init(from decoder: Decoder) throws {
@@ -113,6 +150,25 @@ enum ConversationContext: Codable, Equatable, Hashable {
             let id = try container.decode(UUID.self, forKey: .id)
             let title = try container.decode(String.self, forKey: .title)
             self = .plan(id: id, title: title)
+        case "mission":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let name = try container.decode(String.self, forKey: .name)
+            let subjectName = try container.decodeIfPresent(String.self, forKey: .subjectName)
+            self = .mission(id: id, name: name, subjectName: subjectName)
+        case "missionTarget":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let name = try container.decode(String.self, forKey: .name)
+            let missionName = try container.decode(String.self, forKey: .missionName)
+            let subjectName = try container.decodeIfPresent(String.self, forKey: .subjectName)
+            let missionId = try container.decodeIfPresent(UUID.self, forKey: .missionId)
+                ?? UUID()
+            self = .missionTarget(
+                id: id,
+                name: name,
+                missionId: missionId,
+                missionName: missionName,
+                subjectName: subjectName
+            )
         case "standalone":
             let title = try container.decode(String.self, forKey: .title)
             self = .standalone(title: title)
@@ -147,6 +203,18 @@ enum ConversationContext: Codable, Equatable, Hashable {
             try container.encode("plan", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(title, forKey: .title)
+        case .mission(let id, let name, let subjectName):
+            try container.encode("mission", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            try container.encodeIfPresent(subjectName, forKey: .subjectName)
+        case .missionTarget(let id, let name, let missionId, let missionName, let subjectName):
+            try container.encode("missionTarget", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            try container.encode(missionId, forKey: .missionId)
+            try container.encode(missionName, forKey: .missionName)
+            try container.encodeIfPresent(subjectName, forKey: .subjectName)
         case .standalone(let title):
             try container.encode("standalone", forKey: .type)
             try container.encode(title, forKey: .title)

@@ -155,6 +155,45 @@ def test_legacy_mission_get_put(life_home):
     assert again["life"]["mission_type"] == "primary"
 
 
+def test_plan_decide_writes_life_decision(life_home):
+    from centurion_cli.life_missions import list_decisions, put_mission
+    from centurion_cli.plans import put_plan
+    from centurion_cli.remote_bridge import handle_request
+
+    mission = put_mission(
+        {
+            "title": "Ship product",
+            "statement": "Ship product",
+            "mission_type": "primary",
+            "targets": [{"title": "MVP", "target_type": "essential"}],
+        }
+    )
+    plan = put_plan(
+        {
+            "title": "Launch checklist",
+            "goal": "Ship v1",
+            "steps": ["Build", "Ship"],
+            "status": "pending_review",
+            "related_mission": mission["id"],
+        }
+    )
+    plan_id = plan.get("id") if isinstance(plan, dict) else plan
+    resp = handle_request(
+        {
+            "id": "t1",
+            "action": "plan_decide",
+            "plan_id": str(plan_id),
+            "choice": "approve",
+            "note": "Go with the amber colour direction",
+        }
+    )
+    assert resp["ok"] is True
+    decisions = list_decisions(limit=10)
+    assert decisions
+    assert any("amber" in (d.get("human_said") or "").lower() for d in decisions)
+    assert any("Approved" in (d.get("chosen") or "") for d in decisions)
+
+
 def test_bridge_life_actions(life_home):
     from centurion_cli.remote_bridge import handle_request
 

@@ -129,10 +129,32 @@ final class MessageService: ObservableObject {
         } else if case .commitment(let id, _) = context,
            let missionStore,
            let commitment = missionStore.commitment(with: id) {
-            outboundBody = MissionCommitmentChat.frameOutbound(
+            // Commitment discuss + Brain life context (Subject > Mission > Target).
+            let framed = MissionCommitmentChat.frameOutbound(
                 userText: text,
                 commitment: commitment,
                 mission: missionStore.mission
+            )
+            outboundBody = await prependLifeContextIfAvailable(
+                userText: framed,
+                missionId: missionStore.stack.primary?.id.uuidString
+                    ?? missionStore.mission.id.uuidString,
+                targetId: id.uuidString,
+                subjectId: missionStore.stack.primary?.subjectId?.uuidString
+            )
+        } else if case .mission(let id, _, _) = context {
+            outboundBody = await prependLifeContextIfAvailable(
+                userText: text,
+                missionId: id.uuidString,
+                targetId: nil,
+                subjectId: nil
+            )
+        } else if case .missionTarget(let targetId, _, let missionId, _, _) = context {
+            outboundBody = await prependLifeContextIfAvailable(
+                userText: text,
+                missionId: missionId.uuidString,
+                targetId: targetId.uuidString,
+                subjectId: nil
             )
         } else {
             outboundBody = text
@@ -200,6 +222,36 @@ final class MessageService: ObservableObject {
             )
         )
         return conversation
+    }
+
+    /// Prefix Brain life context onto outbound user text (cache-safe; never mutates system prompt).
+    private func prependLifeContextIfAvailable(
+        userText: String,
+        missionId: String?,
+        targetId: String?,
+        subjectId: String?
+    ) async -> String {
+        guard connectionManager.connectionState == .connected else { return userText }
+        do {
+            let payload = try await connectionManager.injectLifeContext(
+                message: userText,
+                missionId: missionId,
+                targetId: targetId,
+                subjectId: subjectId
+            )
+            let formatted = (payload["formatted_for_ai"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !formatted.isEmpty else { return userText }
+            return """
+            [Sovereign AI Remote — Mission context]
+            \(formatted)
+
+            User message:
+            \(userText)
+            """
+        } catch {
+            return userText
+        }
     }
 
     /// Include recent local Crypto Chat turns so oneshot brain sessions keep continuity.

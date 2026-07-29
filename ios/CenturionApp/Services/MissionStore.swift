@@ -10,6 +10,12 @@ final class MissionStore: ObservableObject {
     @Published private(set) var soulSyncedWithSovereign = false
     @Published private(set) var missionSyncedWithSovereign = false
     @Published var activeTargetIDs: Set<UUID>
+    /// Offline Life Missions stack from Brain `life.db` (UserDefaults cache only).
+    @Published private(set) var stack: MissionStack = MissionStack()
+    @Published private(set) var subjects: [MissionSubject] = []
+    @Published private(set) var decisions: [DecisionRecord] = []
+    @Published private(set) var thoughts: [ThoughtEntry] = []
+    @Published private(set) var lifeSyncedWithSovereign = false
 
     private static let missionKey = "centurion.lifeMission.v1"
     private static let soulKey = "centurion.soulDocument.v1"
@@ -18,6 +24,8 @@ final class MissionStore: ObservableObject {
     private static let discoveryAnswersKey = "centurion.missionDiscoveryAnswers.v1"
     private static let hasPersistedKey = "centurion.mission.hasPersisted"
     private static let migrationKey = "centurion.soulMissionSplit.v1"
+    private static let stackCacheKey = "centurion.life.stack.v1"
+    private static let subjectsCacheKey = "centurion.life.subjects.v1"
 
     @Published private(set) var discoveryAnswers: [String: String] = [:]
 
@@ -49,6 +57,13 @@ final class MissionStore: ObservableObject {
         }
 
         discoveryAnswers = Self.loadDiscoveryAnswers() ?? [:]
+
+        if let cachedStack = Self.loadCachedStack() {
+            stack = cachedStack
+        }
+        if let cachedSubjects = Self.loadCachedSubjects() {
+            subjects = cachedSubjects
+        }
 
         if beforeAlwaysDo != resolvedSoul.alwaysDo {
             persistSoul()
@@ -626,6 +641,104 @@ final class MissionStore: ObservableObject {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    /// Pull Mission Stack / subjects / streams from Brain via `life_call`.
+    func refreshLifeStack(from connectionManager: ConnectionManager) async {
+        guard connectionManager.connectionState == .connected else { return }
+        do {
+            let stackPayload = try await connectionManager.fetchLifeStack()
+            let rawStack = (stackPayload["stack"] as? [String: Any]) ?? stackPayload
+            if let decoded = LifeJSON.decode(MissionStack.self, from: rawStack) {
+                stack = decoded
+                if let data = try? JSONSerialization.data(withJSONObject: rawStack) {
+                    UserDefaults.standard.set(data, forKey: Self.stackCacheKey)
+                }
+            }
+            let subjectRows = try await connectionManager.fetchLifeSubjects()
+            if let decoded = LifeJSON.decode([MissionSubject].self, from: subjectRows) {
+                subjects = decoded
+                if let data = try? JSONSerialization.data(withJSONObject: subjectRows) {
+                    UserDefaults.standard.set(data, forKey: Self.subjectsCacheKey)
+                }
+            }
+            let snap = try await connectionManager.fetchLifeSnapshot()
+            if let dec = snap["decisions"],
+               let decoded = LifeJSON.decode([DecisionRecord].self, from: dec) {
+                decisions = decoded
+            }
+            if let thoughtsRaw = snap["thought_stream"],
+               let decoded = LifeJSON.decode([ThoughtEntry].self, from: thoughtsRaw) {
+                thoughts = decoded
+            }
+            lifeSyncedWithSovereign = true
+            if let primary = stack.primary {
+                var updated = LifeMission(
+                    id: primary.id,
+                    statement: primary.statement.isEmpty ? primary.title : primary.statement,
+                    targets: primary.targets.map {
+                        LifeMissionTarget(
+                            id: $0.id,
+                            title: $0.title,
+                            description: $0.description
+                        )
+                    },
+                    profile: mission.profile
+                )
+                if !primary.why.isEmpty {
+                    updated.profile.whyThisMission = primary.why
+                }
+                mission = updated
+                persistMission()
+                missionSyncedWithSovereign = true
+            }
+        } catch {
+            // Offline — keep cache
+        }
+    }
+
+    func promoteDream(_ dreamId: UUID, connectionManager: ConnectionManager) async -> String? {
+        guard connectionManager.connectionState == .connected else {
+            return "Link your Sovereign to promote a dream."
+        }
+        do {
+            _ = try await connectionManager.invokeLife(
+                "life_dream_promote",
+                extra: ["dream_id": dreamId.uuidString]
+            )
+            await refreshLifeStack(from: connectionManager)
+            return "Dream promoted to a Mission."
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func setPrimaryMission(_ missionId: UUID, connectionManager: ConnectionManager) async -> String? {
+        guard connectionManager.connectionState == .connected else {
+            return "Link your Sovereign to set the primary Mission."
+        }
+        do {
+            _ = try await connectionManager.invokeLife(
+                "life_stack_set_primary",
+                extra: ["mission_id": missionId.uuidString]
+            )
+            await refreshLifeStack(from: connectionManager)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private static func loadCachedStack() -> MissionStack? {
+        guard let data = UserDefaults.standard.data(forKey: stackCacheKey),
+              let obj = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return LifeJSON.decode(MissionStack.self, from: obj)
+    }
+
+    private static func loadCachedSubjects() -> [MissionSubject]? {
+        guard let data = UserDefaults.standard.data(forKey: subjectsCacheKey),
+              let obj = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return LifeJSON.decode([MissionSubject].self, from: obj)
     }
 
     static func discoveryShareMessage(answers: [String: String], questions: [MissionQuestion]) -> String {

@@ -151,6 +151,7 @@ struct MissionPortfolioView: View {
         }
         .task {
             await reloadPulseFeed()
+            await missionStore.refreshLifeStack(from: connectionManager)
         }
         .onChange(of: connectionManager.connectionState) { _, _ in
             Task { await reloadPulseFeed(forceRefresh: true) }
@@ -505,12 +506,23 @@ struct MissionPortfolioView: View {
     // MARK: - Mission Banner
 
     private var missionBanner: some View {
-        NavigationLink {
-            MissionView()
-        } label: {
-            missionStatement
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            NavigationLink {
+                MissionStackView()
+            } label: {
+                missionStatement
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink {
+                MissionView()
+            } label: {
+                Text("Life Mission settings")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     private var activeTargetsStrip: some View {

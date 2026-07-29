@@ -1138,6 +1138,54 @@ final class ConnectionManager: ObservableObject {
         return payload["mission"] as? [String: Any] ?? [:]
     }
 
+    /// Offline Life Missions — Crypto Chat `life_call` → Brain `life_*` bridge actions.
+    @discardableResult
+    func invokeLife(_ call: String, extra: [String: Any] = [:]) async throws -> [String: Any] {
+        var body = extra
+        body["call"] = call
+        let payload = try await invokeRemote(action: "life_call", extra: body)
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String
+                    ?? ((payload["result"] as? [String: Any])?["message"] as? String)
+                    ?? "Life Missions request failed."
+            )
+        }
+        if let result = payload["result"] as? [String: Any] {
+            return result
+        }
+        return payload
+    }
+
+    func fetchLifeStack() async throws -> [String: Any] {
+        try await invokeLife("life_stack_get")
+    }
+
+    func fetchLifeSubjects() async throws -> [[String: Any]] {
+        let r = try await invokeLife("life_subjects_list")
+        return r["subjects"] as? [[String: Any]] ?? []
+    }
+
+    func fetchLifeSnapshot(since: String? = nil) async throws -> [String: Any] {
+        var extra: [String: Any] = [:]
+        if let since { extra["since"] = since }
+        let r = try await invokeLife("life_snapshot", extra: extra)
+        return r["snapshot"] as? [String: Any] ?? r
+    }
+
+    func injectLifeContext(
+        message: String,
+        missionId: String? = nil,
+        targetId: String? = nil,
+        subjectId: String? = nil
+    ) async throws -> [String: Any] {
+        var extra: [String: Any] = ["message": message]
+        if let missionId { extra["mission_id"] = missionId }
+        if let targetId { extra["target_id"] = targetId }
+        if let subjectId { extra["subject_id"] = subjectId }
+        return try await invokeLife("life_context_inject", extra: extra)
+    }
+
     func setFamilyBeneficiary(firstName: String) async throws -> [String: Any] {
         let payload = try await invokeRemote(
             action: "beneficiary_set_family_member",
@@ -1317,6 +1365,7 @@ final class ConnectionManager: ObservableObject {
             "soul_put_response": "soul_put",
             "mission_get_response": "mission_get",
             "mission_put_response": "mission_put",
+            "life_call_response": "life_call",
             "memory_horizon_snapshot_response": "memory_horizon_snapshot",
             "plans_list_response": "plans_list",
             "plan_get_response": "plan_get",
@@ -1338,6 +1387,10 @@ final class ConnectionManager: ObservableObject {
         ]
 
         if let expected = expectedResponses[responseType], expected == action {
+            return json
+        }
+        // Allow `<action>_response` for any bridge action (life_* via life_call already mapped).
+        if responseType == "\(action)_response" {
             return json
         }
         // Lifecycle start/stop/restart share one response type.
