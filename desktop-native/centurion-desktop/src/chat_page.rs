@@ -30,6 +30,15 @@ enum ChatRole {
 struct ChatMessage {
     role: ChatRole,
     content: String,
+    /// Frozen activity trail for System rows after a turn (Cursor-like work history).
+    activity: Option<ActivityArchive>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct ActivityArchive {
+    summary: String,
+    thinking: String,
+    tool_lines: Vec<String>,
 }
 
 struct ApprovalRequest {
@@ -385,10 +394,18 @@ struct PendingAttachment {
     filename: String,
 }
 
+#[derive(Clone, Debug)]
+struct QueuedFollowUp {
+    text: String,
+    attachments: Vec<PendingAttachment>,
+    plan_mode: bool,
+}
+
 const COMPOSER_MIN_HEIGHT: i32 = 88;
 const COMPOSER_MAX_HEIGHT: i32 = 220;
 const COMPOSER_PLACEHOLDER: &str =
-    "Message your Centurion…  ·  Enter to send  ·  Shift+Enter for new line";
+    "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
+const TRANSCRIPT_SPACER_PX: i32 = 112;
 
 /// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
 #[derive(Clone)]
@@ -2044,7 +2061,7 @@ fn parse_bridge_messages(messages: &[Value]) -> Vec<ChatMessage> {
                 "assistant" => ChatRole::Assistant,
                 _ => return None,
             };
-            Some(ChatMessage { role, content })
+            Some(ChatMessage { role, content, activity: None })
         })
         .collect()
 }
@@ -2612,7 +2629,133 @@ fn run_chat_turn(
     let _ = event_tx.send(WorkerEvent::Done(result));
 }
 
-fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
+fn humanize_tool_name(tool: &str) -> String {
+    let t = tool.trim();
+    if t.is_empty() {
+        return "Tool".to_owned();
+    }
+    match t {
+        "terminal" | "run_terminal_cmd" | "Shell" => "Terminal".to_owned(),
+        "read_file" | "Read" => "Read file".to_owned(),
+        "write_file" | "Write" | "patch" | "StrReplace" => "Edit file".to_owned(),
+        "web_search" | "WebSearch" | "search_files" => "Search".to_owned(),
+        "browser_navigate" => "Browse".to_owned(),
+        "delegate_task" => "Delegate".to_owned(),
+        other => {
+            let pretty = other.replace('_', " ");
+            let mut chars = pretty.chars();
+            match chars.next() {
+                Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                None => "Tool".to_owned(),
+            }
+        }
+    }
+}
+
+fn humanize_activity_title(tool: &str, line: &str) -> String {
+    let tool_l = tool.to_lowercase();
+    let line_l = line.to_lowercase();
+    if tool_l.contains("terminal") || line_l.contains("terminal") || line.starts_with("$") {
+        return "Running terminal…".to_owned();
+    }
+    if tool_l.contains("search") || line_l.contains("search") || line_l.contains("grep") {
+        return "Searching…".to_owned();
+    }
+    if tool_l.contains("read") || line_l.starts_with("read") {
+        return "Reading…".to_owned();
+    }
+    if tool_l.contains("write") || tool_l.contains("patch") || line_l.contains("edit") {
+        return "Editing…".to_owned();
+    }
+    if tool_l.contains("web") || tool_l.contains("browser") {
+        return "Browsing…".to_owned();
+    }
+    if !tool.trim().is_empty() {
+        return format!("{}…", humanize_tool_name(tool));
+    }
+    "Working…".to_owned()
+}
+
+fn build_tool_card(title: &str, detail: &str) -> gtk::Box {
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    card.add_css_class("centurion-chat-tool-card");
+    let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    header.append(
+        &gtk::Image::from_icon_name("utilities-terminal-symbolic"),
+    );
+    let title_label = gtk::Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .hexpand(true)
+        .css_classes(["centurion-chat-tool-card-title"])
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .build();
+    header.append(&title_label);
+    card.append(&header);
+    let body_text = detail.trim();
+    if !body_text.is_empty() && body_text != title {
+        let preview: String = body_text.chars().take(600).collect();
+        let expander = gtk::Expander::builder()
+            .label("Output")
+            .expanded(false)
+            .build();
+        let body = gtk::Label::builder()
+            .label(&preview)
+            .wrap(true)
+            .wrap_mode(gtk::pango::WrapMode::Char)
+            .xalign(0.0)
+            .selectable(true)
+            .css_classes(["centurion-chat-tool-card-body"])
+            .build();
+        expander.set_child(Some(&body));
+        card.append(&expander);
+    }
+    card
+}
+
+fn build_archived_activity_widget(archive: &ActivityArchive) -> gtk::Box {
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    card.add_css_class("centurion-chat-activity");
+    card.set_hexpand(true);
+    card.append(
+        &gtk::Label::builder()
+            .label(&archive.summary)
+            .xalign(0.0)
+            .css_classes(["caption-heading"])
+            .build(),
+    );
+    if !archive.thinking.trim().is_empty() {
+        let thinking_label = gtk::Label::builder()
+            .label(archive.thinking.trim())
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .selectable(true)
+            .build();
+        let expander = gtk::Expander::builder()
+            .label("Thought briefly")
+            .expanded(false)
+            .build();
+        expander.set_child(Some(&thinking_label));
+        card.append(&expander);
+    }
+    for line in &archive.tool_lines {
+        let title = line.lines().next().unwrap_or(line.as_str());
+        let detail = if line.len() > title.len() {
+            line[title.len()..].trim_start_matches('\n')
+        } else {
+            ""
+        };
+        card.append(&build_tool_card(title, detail));
+    }
+    card
+}
+
+fn message_row(
+    message: &ChatMessage,
+    assistant_name: &str,
+    actions: Option<MessageRowActions>,
+) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
     row.set_activatable(false);
     row.set_selectable(false);
@@ -2627,6 +2770,15 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
     bubble.set_hexpand(false);
     bubble.add_css_class("centurion-chat-bubble");
 
+    if let Some(archive) = message.activity.as_ref() {
+        bubble.set_halign(gtk::Align::Fill);
+        bubble.set_hexpand(true);
+        bubble.append(&build_archived_activity_widget(archive));
+        outer.append(&bubble);
+        row.set_child(Some(&outer));
+        return row;
+    }
+
     if message.role == ChatRole::Assistant {
         bubble.append(
             &gtk::Label::builder()
@@ -2638,6 +2790,7 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
     } else if message.role == ChatRole::System {
         let caption = if message.content.starts_with("Worked with")
             || message.content.starts_with("Thinking")
+            || message.content.starts_with("Thought")
         {
             "Activity"
         } else {
@@ -2653,6 +2806,30 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
     }
 
     bubble.append(&formatted_message_body(&message.content));
+
+    if message.role == ChatRole::Assistant {
+        if let Some(actions) = actions {
+            let action_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+            action_row.add_css_class("centurion-chat-msg-actions");
+            action_row.set_halign(gtk::Align::Start);
+            let copy_btn = gtk::Button::from_icon_name("edit-copy-symbolic");
+            copy_btn.add_css_class("flat");
+            copy_btn.set_tooltip_text(Some("Copy message"));
+            let content = message.content.clone();
+            copy_btn.connect_clicked(move |btn| {
+                btn.clipboard().set_text(&content);
+            });
+            action_row.append(&copy_btn);
+            if let Some(on_regen) = actions.on_regenerate {
+                let regen = gtk::Button::from_icon_name("view-refresh-symbolic");
+                regen.add_css_class("flat");
+                regen.set_tooltip_text(Some("Regenerate"));
+                regen.connect_clicked(move |_| on_regen());
+                action_row.append(&regen);
+            }
+            bubble.append(&action_row);
+        }
+    }
 
     match message.role {
         ChatRole::User => {
@@ -2681,6 +2858,11 @@ fn message_row(message: &ChatMessage, assistant_name: &str) -> gtk::ListBoxRow {
 
     row.set_child(Some(&outer));
     row
+}
+
+#[derive(Clone)]
+struct MessageRowActions {
+    on_regenerate: Option<Rc<dyn Fn()>>,
 }
 
 fn pango_escape(text: &str) -> String {
@@ -2860,30 +3042,43 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 body.append(&chat_text_label(&markup, false, heading));
             }
             MessageBlock::Code { text, lang } => {
-                let header = if lang.is_empty() {
-                    None
+                let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                block.add_css_class("centurion-chat-code-block");
+                let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                header.add_css_class("centurion-chat-code-header");
+                let lang_label = if lang.is_empty() {
+                    "code".to_owned()
                 } else {
-                    Some(lang)
+                    lang
                 };
-                if let Some(lang) = header {
-                    body.append(
-                        &gtk::Label::builder()
-                            .label(&lang)
-                            .xalign(0.0)
-                            .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
-                            .build(),
-                    );
-                }
+                header.append(
+                    &gtk::Label::builder()
+                        .label(&lang_label)
+                        .xalign(0.0)
+                        .hexpand(true)
+                        .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
+                        .build(),
+                );
+                let copy_btn = gtk::Button::with_label("Copy");
+                copy_btn.add_css_class("flat");
+                copy_btn.set_tooltip_text(Some("Copy code"));
+                let code_for_copy = text.clone();
+                copy_btn.connect_clicked(move |btn| {
+                    btn.clipboard().set_text(&code_for_copy);
+                });
+                header.append(&copy_btn);
+                block.append(&header);
                 let code_label = gtk::Label::builder()
                     .label(&text)
                     .wrap(true)
                     .wrap_mode(gtk::pango::WrapMode::Char)
                     .xalign(0.0)
                     .selectable(true)
-                    .max_width_chars(52)
+                    .max_width_chars(64)
                     .css_classes(["centurion-chat-code"])
                     .build();
-                body.append(&code_label);
+                block.append(&code_label);
+                body.append(&block);
             }
             MessageBlock::Rule => {
                 body.append(
@@ -3221,7 +3416,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     let transcript_spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_spacer.add_css_class("centurion-chat-transcript-spacer");
-    transcript_spacer.set_size_request(-1, 40);
+    transcript_spacer.set_size_request(-1, TRANSCRIPT_SPACER_PX);
     transcript_spacer.set_hexpand(true);
 
     // Cursor-style: bubbles + live Activity share one scroll surface; composer stays fixed below.
@@ -3246,13 +3441,53 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         follow_bottom.clone(),
         programmatic_scroll.clone(),
     );
+
+    // Jump-to-latest when user scrolls up during a run (Cursor escape hatch).
+    let jump_latest = gtk::Button::with_label("Jump to latest");
+    jump_latest.add_css_class("centurion-chat-jump-latest");
+    jump_latest.set_halign(gtk::Align::Center);
+    jump_latest.set_valign(gtk::Align::End);
+    jump_latest.set_margin_bottom(12);
+    jump_latest.set_visible(false);
+    let scroll_overlay = gtk::Overlay::new();
+    scroll_overlay.set_child(Some(&message_scroll));
+    scroll_overlay.add_overlay(&jump_latest);
+    scroll_overlay.set_vexpand(true);
+    scroll_overlay.set_hexpand(true);
+    {
+        let follow_bottom = follow_bottom.clone();
+        let message_scroll = message_scroll.clone();
+        let message_list = message_list.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        let jump_latest = jump_latest.clone();
+        jump_latest.connect_clicked(move |btn| {
+            follow_bottom.set(true);
+            btn.set_visible(false);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &message_list,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
+        });
+    }
+    {
+        let jump_latest = jump_latest.clone();
+        let follow_bottom = follow_bottom.clone();
+        let adj = message_scroll.vadjustment();
+        adj.connect_value_changed(move |_| {
+            jump_latest.set_visible(!follow_bottom.get());
+        });
+    }
     // Stick-to-bottom is driven by Adjustment::changed / value_changed above.
     // Do not use connect_size_allocate (GTK3) or connect_notify("allocation")
     // + Send wrappers — those break Fedora 44 / glib-rs 0.22 Brain rebuilds.
-    chat_column.append(&message_scroll);
+    chat_column.append(&scroll_overlay);
 
     let activity_tool_count = Rc::new(Cell::new(0usize));
     let activity_has_thinking = Rc::new(Cell::new(false));
+    let activity_thinking_text = Rc::new(RefCell::new(String::new()));
+    let activity_tool_lines = Rc::new(RefCell::new(Vec::<String>::new()));
 
     let clear_activity_box = {
         let activity_tools = activity_tools.clone();
@@ -3271,14 +3506,19 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let clear_activity_box = clear_activity_box.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
+        let activity_thinking_text = activity_thinking_text.clone();
+        let activity_tool_lines = activity_tool_lines.clone();
         move || {
             clear_activity_box();
             thinking_label.set_label("");
+            thinking_expander.set_label(Some("Thinking"));
             thinking_expander.set_visible(false);
             thinking_expander.set_expanded(true);
             activity_title.set_label("Working…");
             activity_tool_count.set(0);
             activity_has_thinking.set(false);
+            activity_thinking_text.borrow_mut().clear();
+            activity_tool_lines.borrow_mut().clear();
             activity_card.set_visible(false);
         }
     });
@@ -3313,6 +3553,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_tools = activity_tools.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
+        let activity_thinking_text = activity_thinking_text.clone();
+        let activity_tool_lines = activity_tool_lines.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
@@ -3330,26 +3572,33 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         return;
                     }
                     thinking_label.set_label(&text);
+                    thinking_expander.set_label(Some("Thinking"));
                     thinking_expander.set_visible(true);
+                    thinking_expander.set_expanded(true);
                     activity_has_thinking.set(true);
+                    *activity_thinking_text.borrow_mut() = text;
                     activity_title.set_label("Thinking…");
                 }
                 "tool" => {
-                    let line = if event.line.is_empty() {
-                        format!("⚙️ {}", event.tool)
+                    let title = if event.tool.trim().is_empty() {
+                        event.line.lines().next().unwrap_or("Tool").to_owned()
+                    } else {
+                        humanize_tool_name(&event.tool)
+                    };
+                    let detail = if event.line.is_empty() {
+                        event.text.clone()
                     } else {
                         event.line.clone()
                     };
-                    activity_tools.append(
-                        &gtk::Label::builder()
-                            .label(&line)
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["dim-label", "centurion-chat-activity-line"])
-                            .build(),
-                    );
+                    let archive_line = if detail.trim().is_empty() || detail == title {
+                        title.clone()
+                    } else {
+                        format!("{title}\n{detail}")
+                    };
+                    activity_tool_lines.borrow_mut().push(archive_line);
+                    activity_tools.append(&build_tool_card(&title, &detail));
                     activity_tool_count.set(activity_tool_count.get().saturating_add(1));
-                    activity_title.set_label("Working…");
+                    activity_title.set_label(&humanize_activity_title(&event.tool, &detail));
                 }
                 _ => {
                     let line = if event.line.is_empty() {
@@ -3360,34 +3609,33 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     if line.trim().is_empty() {
                         return;
                     }
-                    activity_tools.append(
-                        &gtk::Label::builder()
-                            .label(&line)
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["dim-label", "centurion-chat-activity-line"])
-                            .build(),
-                    );
+                    activity_tool_lines.borrow_mut().push(line.clone());
+                    activity_tools.append(&build_tool_card("Status", &line));
+                    activity_title.set_label("Working…");
                 }
             }
-            follow_bottom.set(true);
-            schedule_scroll_to_latest(
-                &message_scroll,
-                &message_list,
-                &follow_bottom,
-                &programmatic_scroll,
-            );
+            if follow_bottom.get() {
+                schedule_scroll_to_latest(
+                    &message_scroll,
+                    &message_list,
+                    &follow_bottom,
+                    &programmatic_scroll,
+                );
+            }
         }
     });
 
     // Freeze the live activity card on Done so thinking stays readable in the
     // scroll surface until the next turn replaces it (show_activity_working).
-    let finish_activity_summary: Rc<dyn Fn() -> Option<String>> = Rc::new({
+    // Also return an ActivityArchive for persisting into the message stream.
+    let finish_activity_summary: Rc<dyn Fn() -> Option<ActivityArchive>> = Rc::new({
         let activity_card = activity_card.clone();
         let activity_title = activity_title.clone();
         let thinking_expander = thinking_expander.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
+        let activity_thinking_text = activity_thinking_text.clone();
+        let activity_tool_lines = activity_tool_lines.clone();
         move || {
             let tools = activity_tool_count.get();
             let thinking = activity_has_thinking.get();
@@ -3407,11 +3655,16 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let summary = format!("Worked with {}.", parts.join(" · "));
             activity_title.set_label(&summary);
             if thinking {
+                thinking_expander.set_label(Some("Thought briefly"));
                 thinking_expander.set_expanded(false);
                 thinking_expander.set_visible(true);
             }
             activity_card.set_visible(true);
-            Some(summary)
+            Some(ActivityArchive {
+                summary,
+                thinking: activity_thinking_text.borrow().clone(),
+                tool_lines: activity_tool_lines.borrow().clone(),
+            })
         }
     });
 
@@ -3575,58 +3828,84 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
 
-    // Intent chips: Talk (default) | Plan — plus in-chat model switcher.
+    // Cursor-like chrome: queue strip → chips → input → toolbar (mode · model · attach · send).
     let intent = Rc::new(Cell::new(ChatIntent::Talk));
-    let intent_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    intent_row.set_margin_start(16);
-    intent_row.set_margin_end(16);
-    intent_row.set_margin_bottom(4);
-    intent_row.add_css_class("centurion-chat-intents");
-    let talk_btn = gtk::ToggleButton::with_label("Talk");
-    talk_btn.add_css_class("centurion-chat-intent");
-    talk_btn.set_active(true);
-    talk_btn.set_tooltip_text(Some("Normal conversation — discuss without forcing a proposal fence."));
-    let plan_btn = gtk::ToggleButton::with_label("Plan");
-    plan_btn.add_css_class("centurion-chat-intent");
-    plan_btn.set_tooltip_text(Some(
-        "Ask for a structured proposal this turn. In Mission discuss you get Save/targets chips; otherwise a Home Plan.",
-    ));
+    let message_queue: Rc<RefCell<Vec<QueuedFollowUp>>> = Rc::new(RefCell::new(Vec::new()));
+
+    let queue_strip = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    queue_strip.set_margin_start(0);
+    queue_strip.set_margin_end(0);
+    queue_strip.set_visible(false);
+    queue_strip.add_css_class("centurion-chat-queue-strip");
+    let queue_header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let queue_label = gtk::Label::builder()
+        .label("Queued")
+        .xalign(0.0)
+        .hexpand(true)
+        .css_classes(["caption-heading"])
+        .build();
+    let strip_stop = gtk::Button::with_label("Stop");
+    strip_stop.add_css_class("centurion-chat-stop");
+    strip_stop.set_tooltip_text(Some("Stop this turn"));
+    strip_stop.set_visible(false);
+    queue_header.append(&queue_label);
+    queue_header.append(&strip_stop);
+    let queue_items = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    queue_strip.append(&queue_header);
+    queue_strip.append(&queue_items);
+    bottom.append(&queue_strip);
+
+    let mode_btn = gtk::MenuButton::builder()
+        .label("Talk")
+        .css_classes(["centurion-chat-pill"])
+        .tooltip_text("Talk = converse. Plan = ask for a structured proposal this turn.")
+        .halign(gtk::Align::Start)
+        .build();
     {
-        let intent = intent.clone();
-        let plan_btn = plan_btn.clone();
-        talk_btn.connect_toggled(move |b| {
-            if b.is_active() {
+        let popover = gtk::Popover::new();
+        let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        list.set_margin_start(8);
+        list.set_margin_end(8);
+        list.set_margin_top(8);
+        list.set_margin_bottom(8);
+        let talk_item = gtk::Button::with_label("Talk — normal conversation");
+        talk_item.add_css_class("flat");
+        talk_item.set_halign(gtk::Align::Start);
+        let plan_item = gtk::Button::with_label("Plan — structured proposal");
+        plan_item.add_css_class("flat");
+        plan_item.set_halign(gtk::Align::Start);
+        {
+            let intent = intent.clone();
+            let mode_btn = mode_btn.clone();
+            let popover = popover.clone();
+            talk_item.connect_clicked(move |_| {
                 intent.set(ChatIntent::Talk);
-                plan_btn.set_active(false);
-            } else if !plan_btn.is_active() {
-                b.set_active(true);
-            }
-        });
-    }
-    {
-        let intent = intent.clone();
-        let talk_btn = talk_btn.clone();
-        plan_btn.connect_toggled(move |b| {
-            if b.is_active() {
+                mode_btn.set_label("Talk");
+                popover.popdown();
+            });
+        }
+        {
+            let intent = intent.clone();
+            let mode_btn = mode_btn.clone();
+            let popover = popover.clone();
+            plan_item.connect_clicked(move |_| {
                 intent.set(ChatIntent::Plan);
-                talk_btn.set_active(false);
-            } else if !talk_btn.is_active() {
-                b.set_active(true);
-            }
-        });
+                mode_btn.set_label("Plan");
+                popover.popdown();
+            });
+        }
+        list.append(&talk_item);
+        list.append(&plan_item);
+        popover.set_child(Some(&list));
+        mode_btn.set_popover(Some(&popover));
     }
-    intent_row.append(&talk_btn);
-    intent_row.append(&plan_btn);
 
     let model_btn = gtk::MenuButton::builder()
-        .label("Model…")
-        .css_classes(["flat", "centurion-chat-model"])
+        .label("Selecting model…")
+        .css_classes(["centurion-chat-pill"])
         .tooltip_text("Switch thinking model (same as Settings)")
-        .halign(gtk::Align::End)
-        .hexpand(true)
+        .halign(gtk::Align::Start)
         .build();
-    intent_row.append(&model_btn);
-    bottom.append(&intent_row);
 
     let refresh_model_label: Rc<dyn Fn()> = Rc::new({
         let model_btn = model_btn.clone();
@@ -3638,7 +3917,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let model_btn = model_btn.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
                 Ok(label) => {
-                    model_btn.set_label(&label);
+                    let shown = if label.trim().is_empty() {
+                        "Model…".to_owned()
+                    } else {
+                        label
+                    };
+                    model_btn.set_label(&shown);
                     glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -3695,8 +3979,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             let needs_key = needs_key;
                             let (tx, rx) = mpsc::channel::<Result<(), String>>();
                             thread::spawn(move || {
-                                // Prefer apply first (key may already be saved).
-                                // If apply fails and the connector needs a key, open Fix Thinking.
                                 let result = apply_provider_connector(&id);
                                 let _ = tx.send(result);
                             });
@@ -3776,45 +4058,140 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         })
     };
 
-    let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    input_row.set_margin_start(16);
-    input_row.set_margin_end(16);
-    input_row.set_margin_top(6);
-    input_row.set_margin_bottom(16);
-    input_row.set_vexpand(false);
+    let input = ComposerInput::build();
+    let input_wrap = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    input_wrap.set_margin_start(16);
+    input_wrap.set_margin_end(16);
+    input_wrap.set_margin_top(4);
+    input_wrap.set_margin_bottom(4);
+    input_wrap.append(input.root());
+    bottom.append(&input_wrap);
+
+    let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    toolbar.add_css_class("centurion-chat-toolbar");
+    toolbar.set_margin_start(16);
+    toolbar.set_margin_end(16);
+    toolbar.set_margin_bottom(14);
+    toolbar.set_margin_top(2);
 
     let attach_button = gtk::Button::from_icon_name("mail-attachment-symbolic");
-    attach_button.set_tooltip_text(Some("Attach files"));
-    attach_button.add_css_class("flat");
-    attach_button.set_valign(gtk::Align::End);
+    attach_button.set_tooltip_text(Some("Attach files · drag & drop · paste image"));
+    attach_button.add_css_class("centurion-chat-attach-btn");
+    attach_button.set_valign(gtk::Align::Center);
     attach_button.set_size_request(44, 44);
-
-    let input = ComposerInput::build();
 
     let send_button = gtk::Button::with_label("Send");
     send_button.add_css_class("suggested-action");
     send_button.set_tooltip_text(Some("Send · Enter"));
-    send_button.set_valign(gtk::Align::End);
-    send_button.set_size_request(88, 44);
+    send_button.set_valign(gtk::Align::Center);
+    send_button.set_size_request(88, 40);
 
     let stop_button = gtk::Button::with_label("Stop");
     stop_button.add_css_class("centurion-chat-stop");
     stop_button.set_tooltip_text(Some("Stop this turn"));
-    stop_button.set_valign(gtk::Align::End);
-    stop_button.set_size_request(88, 44);
+    stop_button.set_valign(gtk::Align::Center);
+    stop_button.set_size_request(88, 40);
     stop_button.set_visible(false);
 
     let sending_spinner = gtk::Spinner::new();
     sending_spinner.set_visible(false);
-    sending_spinner.set_valign(gtk::Align::End);
+    sending_spinner.set_valign(gtk::Align::Center);
 
-    input_row.append(&attach_button);
-    input_row.append(input.root());
-    input_row.append(&send_button);
-    input_row.append(&stop_button);
-    input_row.append(&sending_spinner);
-    bottom.append(&input_row);
+    let toolbar_spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    toolbar_spacer.set_hexpand(true);
+
+    toolbar.append(&mode_btn);
+    toolbar.append(&model_btn);
+    toolbar.append(&toolbar_spacer);
+    toolbar.append(&attach_button);
+    toolbar.append(&send_button);
+    toolbar.append(&stop_button);
+    toolbar.append(&sending_spinner);
+    bottom.append(&toolbar);
     chat_column.append(&bottom);
+
+    let refresh_queue_strip_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(RefCell::new(None));
+    let refresh_queue_strip: Rc<dyn Fn()> = Rc::new({
+        let slot = refresh_queue_strip_slot.clone();
+        move || {
+            if let Some(refresh) = slot.borrow().clone() {
+                refresh();
+            }
+        }
+    });
+    *refresh_queue_strip_slot.borrow_mut() = Some(Rc::new({
+        let queue_strip = queue_strip.clone();
+        let queue_label = queue_label.clone();
+        let queue_items = queue_items.clone();
+        let message_queue = message_queue.clone();
+        let strip_stop = strip_stop.clone();
+        let is_sending = is_sending.clone();
+        let refresh_queue_strip = refresh_queue_strip.clone();
+        move || {
+            while let Some(child) = queue_items.first_child() {
+                queue_items.remove(&child);
+            }
+            let items = message_queue.borrow().clone();
+            let n = items.len();
+            let busy = *is_sending.borrow();
+            strip_stop.set_visible(busy);
+            if n == 0 {
+                queue_label.set_label(if busy { "Working…" } else { "Queued" });
+                queue_strip.set_visible(busy);
+                return;
+            }
+            queue_label.set_label(&format!(
+                "{} Queued",
+                if n == 1 {
+                    "1".to_owned()
+                } else {
+                    n.to_string()
+                }
+            ));
+            for (index, item) in items.iter().enumerate() {
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                row.add_css_class("centurion-chat-queue-item");
+                let preview = {
+                    let t = item.text.trim();
+                    let mut s: String = t.chars().take(80).collect();
+                    if t.chars().count() > 80 {
+                        s.push('…');
+                    }
+                    if s.is_empty() {
+                        format!("{} attachment(s)", item.attachments.len())
+                    } else {
+                        s
+                    }
+                };
+                row.append(
+                    &gtk::Label::builder()
+                        .label(&preview)
+                        .xalign(0.0)
+                        .hexpand(true)
+                        .ellipsize(gtk::pango::EllipsizeMode::End)
+                        .build(),
+                );
+                let remove = gtk::Button::from_icon_name("edit-delete-symbolic");
+                remove.add_css_class("flat");
+                remove.set_tooltip_text(Some("Remove from queue"));
+                let message_queue = message_queue.clone();
+                let refresh_queue_strip = refresh_queue_strip.clone();
+                remove.connect_clicked(move |_| {
+                    {
+                        let mut q = message_queue.borrow_mut();
+                        if index < q.len() {
+                            q.remove(index);
+                        }
+                    }
+                    refresh_queue_strip();
+                });
+                row.append(&remove);
+                queue_items.append(&row);
+            }
+            queue_strip.set_visible(true);
+        }
+    }));
 
     let turn_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::new(RefCell::new(None));
 
@@ -3902,6 +4279,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     paned.set_end_child(Some(&chat_column));
     container.append(&paned);
 
+    let regenerate_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
     let refresh_messages: Rc<dyn Fn()> = Rc::new({
         let message_list = message_list.clone();
         let messages = messages.clone();
@@ -3910,6 +4289,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let title = title.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic_scroll = programmatic_scroll.clone();
+        let regenerate_slot = regenerate_slot.clone();
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
@@ -3924,12 +4304,28 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         content:
                             "Your private conversation starts here. Use the message box at the bottom of this page."
                                 .to_owned(),
+                        activity: None,
                     },
                     &name,
+                    None,
                 ));
             } else {
-                for message in msgs.iter() {
-                    message_list.append(&message_row(message, &name));
+                let last_assistant_idx = msgs
+                    .iter()
+                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
+                for (idx, message) in msgs.iter().enumerate() {
+                    let actions = if Some(idx) == last_assistant_idx {
+                        Some(MessageRowActions {
+                            on_regenerate: regenerate_slot.borrow().clone(),
+                        })
+                    } else if message.role == ChatRole::Assistant && message.activity.is_none() {
+                        Some(MessageRowActions {
+                            on_regenerate: None,
+                        })
+                    } else {
+                        None
+                    };
+                    message_list.append(&message_row(message, &name, actions));
                 }
             }
             schedule_scroll_to_latest(
@@ -4058,6 +4454,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             messages.borrow_mut().push(ChatMessage {
                                 role: ChatRole::System,
                                 content: "Proposal dismissed.".to_owned(),
+                                activity: None,
                             });
                             follow_bottom.set(true);
                             refresh_messages();
@@ -4083,6 +4480,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             messages.borrow_mut().push(ChatMessage {
                                 role: ChatRole::System,
                                 content: "Okay — tell me what you'd rather do. Proposal kept in context until you dismiss or save.".to_owned(),
+                                activity: None,
                             });
                             follow_bottom.set(true);
                             refresh_messages();
@@ -4135,6 +4533,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                         messages.borrow_mut().push(ChatMessage {
                                             role: ChatRole::System,
                                             content: msg,
+                                            activity: None,
                                         });
                                         follow_bottom.set(true);
                                         refresh_messages();
@@ -4169,6 +4568,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let new_chat_button = new_chat_button.clone();
         let session_list = session_list.clone();
         let turn_cancel = turn_cancel.clone();
+        let refresh_queue_strip = refresh_queue_strip.clone();
         move |sending: bool| {
             *is_sending.borrow_mut() = sending;
             send_button.set_visible(!sending);
@@ -4180,19 +4580,28 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 sending_spinner.stop();
                 *turn_cancel.borrow_mut() = None;
             }
-            // Keep composer editable while generating (Cursor-like); submit is gated by is_sending.
+            // Keep composer editable while generating (Cursor-like); busy Send enqueues.
             new_chat_button.set_sensitive(!sending);
             session_list.set_sensitive(!sending);
+            refresh_queue_strip();
         }
     });
 
-    stop_button.connect_clicked({
+    let stop_turn: Rc<dyn Fn()> = Rc::new({
         let turn_cancel = turn_cancel.clone();
-        move |_| {
+        move || {
             if let Some(flag) = turn_cancel.borrow().as_ref() {
                 flag.store(true, Ordering::SeqCst);
             }
         }
+    });
+    stop_button.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
+    });
+    strip_stop.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
     });
 
     let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
@@ -4788,6 +5197,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
+    let submit_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
     let submit: Rc<dyn Fn()> = Rc::new({
         let messages = messages.clone();
         let session_id = session_id.clone();
@@ -4814,13 +5225,28 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let show_proposal_choices = show_proposal_choices.clone();
         let keep_proposal_context = keep_proposal_context.clone();
         let pending_proposal = pending_proposal.clone();
+        let message_queue = message_queue.clone();
+        let refresh_queue_strip = refresh_queue_strip.clone();
+        let reset_activity = reset_activity.clone();
+        let mode_btn = mode_btn.clone();
+        let submit_slot_for_self = submit_slot.clone();
         move || {
-            if *is_sending.borrow() {
-                return;
-            }
             let text = input.text();
             let pending = attachments.borrow().clone();
             if text.trim().is_empty() && pending.is_empty() {
+                return;
+            }
+            // While a turn is running, enqueue follow-ups (Cursor-like).
+            if *is_sending.borrow() {
+                message_queue.borrow_mut().push(QueuedFollowUp {
+                    text,
+                    attachments: pending,
+                    plan_mode: intent.get() == ChatIntent::Plan,
+                });
+                input.clear();
+                attachments.borrow_mut().clear();
+                refresh_attachments();
+                refresh_queue_strip();
                 return;
             }
             let plan_mode = intent.get() == ChatIntent::Plan;
@@ -4840,6 +5266,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             messages.borrow_mut().push(ChatMessage {
                 role: ChatRole::User,
                 content: format_user_display(&text, &pending),
+                activity: None,
             });
             refresh_messages();
             set_error(None);
@@ -4939,6 +5366,15 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let finish_activity_summary = finish_activity_summary.clone();
             let show_proposal_choices = show_proposal_choices.clone();
             let discuss_topic_for_done = discuss_topic.clone();
+            let message_queue = message_queue.clone();
+            let refresh_queue_strip = refresh_queue_strip.clone();
+            let reset_activity = reset_activity.clone();
+            let mode_btn = mode_btn.clone();
+            let intent = intent.clone();
+            let input = input.clone();
+            let attachments = attachments.clone();
+            let refresh_attachments = refresh_attachments.clone();
+            let submit_slot_for_self = submit_slot_for_self.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
                 match event_rx.try_recv() {
                     Ok(WorkerEvent::Approval(request)) => {
@@ -5018,15 +5454,18 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                         let _ = apply_commitment_update_from_response(&raw, &cid);
                                     });
                                 }
-                                if let Some(summary) = summary {
+                                if let Some(archive) = summary {
                                     messages.borrow_mut().push(ChatMessage {
                                         role: ChatRole::System,
-                                        content: summary,
+                                        content: archive.summary.clone(),
+                                        activity: Some(archive),
                                     });
+                                    reset_activity();
                                 }
                                 messages.borrow_mut().push(ChatMessage {
                                     role: ChatRole::Assistant,
                                     content: display,
+                                    activity: None,
                                 });
                                 follow_bottom.set(true);
                                 refresh_messages();
@@ -5034,16 +5473,53 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                             }
                             Err(err) => {
                                 if err == "Stopped." {
+                                    if let Some(archive) = summary {
+                                        messages.borrow_mut().push(ChatMessage {
+                                            role: ChatRole::System,
+                                            content: archive.summary.clone(),
+                                            activity: Some(archive),
+                                        });
+                                        reset_activity();
+                                    }
                                     messages.borrow_mut().push(ChatMessage {
                                         role: ChatRole::System,
                                         content: "Stopped.".to_owned(),
+                                        activity: None,
                                     });
                                     follow_bottom.set(true);
                                     refresh_messages();
                                 } else {
+                                    let _ = summary;
                                     set_error(Some(err));
                                 }
                             }
+                        }
+                        // Drain queued follow-ups (Cursor-like).
+                        let next = {
+                            let mut q = message_queue.borrow_mut();
+                            if q.is_empty() {
+                                None
+                            } else {
+                                Some(q.remove(0))
+                            }
+                        };
+                        refresh_queue_strip();
+                        if let Some(next) = next {
+                            intent.set(if next.plan_mode {
+                                ChatIntent::Plan
+                            } else {
+                                ChatIntent::Talk
+                            });
+                            mode_btn.set_label(if next.plan_mode { "Plan" } else { "Talk" });
+                            input.set_text(&next.text);
+                            *attachments.borrow_mut() = next.attachments;
+                            refresh_attachments();
+                            let submit_slot = submit_slot_for_self.clone();
+                            glib::idle_add_local_once(move || {
+                                if let Some(submit) = submit_slot.borrow().clone() {
+                                    submit();
+                                }
+                            });
                         }
                         glib::ControlFlow::Break
                     }
@@ -5056,12 +5532,75 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         set_error(Some(
                             "Centurion connection dropped before a reply arrived.".to_owned(),
                         ));
+                        refresh_queue_strip();
                         glib::ControlFlow::Break
                     }
                 }
             });
         }
     });
+    *submit_slot.borrow_mut() = Some(submit.clone());
+
+    // Regenerate last assistant turn from the preceding user message.
+    *regenerate_slot.borrow_mut() = Some(Rc::new({
+        let messages = messages.clone();
+        let input = input.clone();
+        let attachments = attachments.clone();
+        let refresh_attachments = refresh_attachments.clone();
+        let submit = submit.clone();
+        let is_sending = is_sending.clone();
+        move || {
+            if *is_sending.borrow() {
+                return;
+            }
+            let msgs = messages.borrow();
+            let Some(last_assistant) = msgs
+                .iter()
+                .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none())
+            else {
+                return;
+            };
+            let Some(user_idx) = msgs[..last_assistant]
+                .iter()
+                .rposition(|m| m.role == ChatRole::User)
+            else {
+                return;
+            };
+            let user_text = msgs[user_idx].content.clone();
+            drop(msgs);
+            // Drop the last assistant (+ optional activity system row before it).
+            {
+                let mut msgs = messages.borrow_mut();
+                while msgs.len() > user_idx + 1 {
+                    let last = msgs.last().map(|m| m.role);
+                    match last {
+                        Some(ChatRole::Assistant) | Some(ChatRole::System) => {
+                            msgs.pop();
+                        }
+                        _ => break,
+                    }
+                }
+                // Also remove the user bubble — submit will re-add it.
+                if msgs.last().map(|m| m.role) == Some(ChatRole::User) {
+                    msgs.pop();
+                }
+            }
+            // Strip attachment display suffixes from user bubble for regenerate text.
+            let regen_text = user_text
+                .lines()
+                .take_while(|l| !l.starts_with("📎 ") && !l.starts_with("Attached:"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let regen_text = regen_text.trim().to_owned();
+            if regen_text.is_empty() {
+                return;
+            }
+            attachments.borrow_mut().clear();
+            refresh_attachments();
+            input.set_text(&regen_text);
+            submit();
+        }
+    }));
 
     send_button.connect_clicked({
         let submit = submit.clone();
