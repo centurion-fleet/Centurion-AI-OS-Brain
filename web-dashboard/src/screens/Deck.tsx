@@ -34,6 +34,15 @@ export function Deck() {
     }
   }
 
+  async function makePrimary(missionId: string) {
+    try {
+      await bridgeCall("life_stack_set_primary", { mission_id: missionId });
+      await refresh();
+    } catch {
+      /* surface via refresh error next cycle */
+    }
+  }
+
   return (
     <div className="mx-auto min-h-screen max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
       <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -111,6 +120,7 @@ export function Deck() {
           <SupportingRow
             missions={supporting}
             onOpen={(id) => navigate(`/mission/${id}`)}
+            onMakePrimary={(id) => void makePrimary(id)}
           />
 
           <DreamList dreams={dreams} onPromote={promoteDream} />

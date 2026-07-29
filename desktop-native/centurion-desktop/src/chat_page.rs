@@ -366,6 +366,8 @@ enum ChatIntent {
     Chat,
     /// Cursor-like Plan mode: structured proposal this turn (mission-proposal or plan-artifact).
     Plan,
+    /// Centre every turn on the Primary Life Mission + current target.
+    Focus,
     /// Evidence-backed research this turn — loads research skills into the message.
     Research,
 }
@@ -417,12 +419,176 @@ const RESEARCH_MODE_SKILLS: &[&str] = &[
     "blogwatcher",
 ];
 
+#[allow(dead_code)]
 fn intent_label(intent: ChatIntent) -> &'static str {
     match intent {
         ChatIntent::Chat => "Chat",
         ChatIntent::Plan => "Plan",
+        ChatIntent::Focus => "Focus",
         ChatIntent::Research => "Research",
     }
+}
+
+#[derive(Clone, Debug)]
+struct PrimaryFocusContext {
+    id: String,
+    title: String,
+    goal: String,
+    target_id: Option<String>,
+    target_title: Option<String>,
+}
+
+/// Load Primary Mission (+ current target) for Focus mode via the bridge.
+fn fetch_primary_focus() -> Option<PrimaryFocusContext> {
+    let resp = run_bridge_action("life_stack_get", serde_json::json!({}))?;
+    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        // Fall back to legacy mission_get (still primary-shaped).
+        return fetch_primary_focus_via_mission_get();
+    }
+    let primary = resp.get("stack")?.get("primary")?;
+    if primary.is_null() {
+        return None;
+    }
+    parse_primary_focus_value(primary)
+}
+
+fn fetch_primary_focus_via_mission_get() -> Option<PrimaryFocusContext> {
+    let resp = run_bridge_action("mission_get", serde_json::json!({}))?;
+    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let mission = resp.get("mission")?;
+    if mission.get("exists").and_then(|v| v.as_bool()) == Some(false) {
+        return None;
+    }
+    let statement = mission
+        .get("statement")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if statement.is_empty() && mission.get("id").and_then(|v| v.as_str()).unwrap_or("").is_empty()
+    {
+        return None;
+    }
+    parse_primary_focus_value(mission)
+}
+
+fn parse_primary_focus_value(primary: &Value) -> Option<PrimaryFocusContext> {
+    let id = primary
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+    let title = primary
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            primary
+                .get("statement")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or("Primary Mission")
+        .to_owned();
+    let goal = primary
+        .get("statement")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            primary
+                .get("purpose")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            primary
+                .get("why")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or(title.as_str())
+        .to_owned();
+    if id.is_empty() && title == "Primary Mission" && goal == title {
+        return None;
+    }
+    let mut target_id = None;
+    let mut target_title = None;
+    if let Some(targets) = primary.get("targets").and_then(|v| v.as_array()) {
+        let current = targets.iter().find(|t| {
+            let status = t
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
+            status != "done" && status != "complete" && status != "completed"
+        }).or_else(|| targets.first());
+        if let Some(t) = current {
+            target_id = t
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+                .filter(|s| !s.is_empty());
+            target_title = t
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty());
+        }
+    }
+    Some(PrimaryFocusContext {
+        id: if id.is_empty() {
+            "primary".to_owned()
+        } else {
+            id
+        },
+        title,
+        goal,
+        target_id,
+        target_title,
+    })
+}
+
+fn frame_focus_mode(user_text: &str, focus: &PrimaryFocusContext) -> String {
+    let target_line = match (&focus.target_title, &focus.target_id) {
+        (Some(t), _) => format!("Current target: {t}\n"),
+        _ => String::new(),
+    };
+    format!(
+        "[Sovereign AI Brain — Focus mode]\n\
+         Centre every reply on the user's Primary Life Mission and current target.\n\
+         Primary Mission: {}\n\
+         Goal: {}\n\
+         {target_line}\n\
+         Keep advice, questions, and next steps aligned with this mission unless the user explicitly pivots.\n\n\
+         [Focus on Primary Mission: {} — {}] {}\n",
+        focus.title,
+        focus.goal,
+        focus.title,
+        focus.goal,
+        user_text
+    )
+}
+
+fn life_inject_for_focus(user_text: &str, focus: &PrimaryFocusContext) -> Value {
+    let mut inject = serde_json::json!({
+        "message": user_text,
+        "mission_id": focus.id,
+        "current_view": {
+            "mission_id": focus.id,
+        }
+    });
+    if let Some(tid) = focus.target_id.as_ref() {
+        inject["target_id"] = Value::String(tid.clone());
+        inject["current_view"]["target_id"] = Value::String(tid.clone());
+    }
+    inject
 }
 
 const COMPOSER_MIN_HEIGHT: i32 = 88;
@@ -760,7 +926,7 @@ fn frame_research_mode(user_text: &str, topic: Option<&DiscussTopic>) -> String 
          The user wants evidence-backed research this turn — not a casual reply and not a plan-to-act.\n\n\
          For this turn only:\n\
          - Use research skills and web tools (`web_search`, `web_extract`, `skill_view`) to gather evidence.\n\
-         - Prefer installed research skills (arxiv, llm-wiki, duckduckgo-search, searxng-search, parallel-cli, scrapling, blogwatcher) when relevant.\n\
+         - Prefer installed research skills (osint-investigation, domain-intel, arxiv, llm-wiki, duckduckgo-search, searxng-search, parallel-cli, scrapling, blogwatcher) when relevant.\n\
          - Cite sources with URLs, paper IDs, or clear references. Separate facts from speculation.\n\
          - Summarize findings clearly; call out gaps and what would need deeper digging.\n\
          - Do not mutate project files, send messages, or take external actions unless the user explicitly asked.\n\
@@ -3910,66 +4076,109 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     queue_strip.append(&queue_items);
     bottom.append(&queue_strip);
 
-    let mode_btn = gtk::MenuButton::builder()
-        .label("Chat")
-        .css_classes(["centurion-chat-pill"])
-        .tooltip_text(
-            "Chat = typed conversation. Research = evidence-backed skills. Plan = structured proposal. (Not voice.)",
-        )
-        .halign(gtk::Align::Start)
+    // Focus nudge when Focus is active but no Primary Mission is set.
+    let focus_banner = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    focus_banner.set_margin_start(16);
+    focus_banner.set_margin_end(16);
+    focus_banner.set_margin_bottom(6);
+    focus_banner.set_visible(false);
+    focus_banner.add_css_class("centurion-chat-focus-banner");
+    focus_banner.append(
+        &gtk::Image::from_icon_name("find-location-symbolic"),
+    );
+    let focus_banner_label = gtk::Label::builder()
+        .label("Set a Primary Mission in Mission Deck → Focus mode will centre everything around it.")
+        .wrap(true)
+        .xalign(0.0)
+        .hexpand(true)
+        .css_classes(["caption"])
         .build();
+    focus_banner.append(&focus_banner_label);
+    bottom.append(&focus_banner);
+
+    // Mode pills: Chat | Plan | Focus | Research
+    let mode_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    mode_row.add_css_class("centurion-chat-intents");
+    mode_row.set_halign(gtk::Align::Start);
+
+    let make_mode_pill = |label: &str, tooltip: &str| -> gtk::ToggleButton {
+        let btn = gtk::ToggleButton::with_label(label);
+        btn.add_css_class("centurion-chat-pill");
+        btn.add_css_class("centurion-chat-intent");
+        btn.set_tooltip_text(Some(tooltip));
+        btn
+    };
+    let chat_pill = make_mode_pill("Chat", "Typed conversation — no special framing. (Not voice.)");
+    chat_pill.set_active(true);
+    let plan_pill = make_mode_pill("Plan", "Ask for a structured proposal this turn.");
+    plan_pill.add_css_class("centurion-chat-intent-plan");
+    let focus_pill = gtk::ToggleButton::new();
+    focus_pill.add_css_class("centurion-chat-pill");
+    focus_pill.add_css_class("centurion-chat-intent");
+    focus_pill.add_css_class("centurion-chat-intent-focus");
+    focus_pill.set_tooltip_text(Some(
+        "Centre every reply on your Primary Life Mission and current target.",
+    ));
     {
-        let popover = gtk::Popover::new();
-        let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        list.set_margin_start(8);
-        list.set_margin_end(8);
-        list.set_margin_top(8);
-        list.set_margin_bottom(8);
-        let chat_item = gtk::Button::with_label("Chat — typed conversation");
-        chat_item.add_css_class("flat");
-        chat_item.set_halign(gtk::Align::Start);
-        let research_item = gtk::Button::with_label("Research — evidence & research skills");
-        research_item.add_css_class("flat");
-        research_item.set_halign(gtk::Align::Start);
-        let plan_item = gtk::Button::with_label("Plan — structured proposal");
-        plan_item.add_css_class("flat");
-        plan_item.set_halign(gtk::Align::Start);
-        {
-            let intent = intent.clone();
-            let mode_btn = mode_btn.clone();
-            let popover = popover.clone();
-            chat_item.connect_clicked(move |_| {
-                intent.set(ChatIntent::Chat);
-                mode_btn.set_label("Chat");
-                popover.popdown();
-            });
-        }
-        {
-            let intent = intent.clone();
-            let mode_btn = mode_btn.clone();
-            let popover = popover.clone();
-            research_item.connect_clicked(move |_| {
-                intent.set(ChatIntent::Research);
-                mode_btn.set_label("Research");
-                popover.popdown();
-            });
-        }
-        {
-            let intent = intent.clone();
-            let mode_btn = mode_btn.clone();
-            let popover = popover.clone();
-            plan_item.connect_clicked(move |_| {
-                intent.set(ChatIntent::Plan);
-                mode_btn.set_label("Plan");
-                popover.popdown();
-            });
-        }
-        list.append(&chat_item);
-        list.append(&research_item);
-        list.append(&plan_item);
-        popover.set_child(Some(&list));
-        mode_btn.set_popover(Some(&popover));
+        let focus_inner = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        focus_inner.append(&gtk::Image::from_icon_name("find-location-symbolic"));
+        focus_inner.append(&gtk::Label::new(Some("Focus")));
+        focus_pill.set_child(Some(&focus_inner));
     }
+    let research_pill =
+        make_mode_pill("Research", "Evidence-backed research — loads research skills.");
+
+    let sync_mode_pills: Rc<dyn Fn(ChatIntent)> = Rc::new({
+        let chat_pill = chat_pill.clone();
+        let plan_pill = plan_pill.clone();
+        let focus_pill = focus_pill.clone();
+        let research_pill = research_pill.clone();
+        let focus_banner = focus_banner.clone();
+        let focus_banner_label = focus_banner_label.clone();
+        move |selected: ChatIntent| {
+            chat_pill.set_active(selected == ChatIntent::Chat);
+            plan_pill.set_active(selected == ChatIntent::Plan);
+            focus_pill.set_active(selected == ChatIntent::Focus);
+            research_pill.set_active(selected == ChatIntent::Research);
+            if selected == ChatIntent::Focus {
+                let has_primary = fetch_primary_focus().is_some();
+                if has_primary {
+                    focus_banner.set_visible(false);
+                } else {
+                    focus_banner_label.set_label(
+                        "No Primary Mission set yet — want to discover one? Set one in Mission Deck → Focus centres everything around it.",
+                    );
+                    focus_banner.set_visible(true);
+                }
+            } else {
+                focus_banner.set_visible(false);
+            }
+        }
+    });
+
+    let wire_mode_pill = |pill: &gtk::ToggleButton, value: ChatIntent| {
+        let intent = intent.clone();
+        let sync_mode_pills = sync_mode_pills.clone();
+        let pill_c = pill.clone();
+        pill.connect_toggled(move |b| {
+            if b.is_active() {
+                intent.set(value);
+                sync_mode_pills(value);
+            } else if intent.get() == value {
+                // Keep at least one selected.
+                pill_c.set_active(true);
+            }
+        });
+    };
+    wire_mode_pill(&chat_pill, ChatIntent::Chat);
+    wire_mode_pill(&plan_pill, ChatIntent::Plan);
+    wire_mode_pill(&focus_pill, ChatIntent::Focus);
+    wire_mode_pill(&research_pill, ChatIntent::Research);
+
+    mode_row.append(&chat_pill);
+    mode_row.append(&plan_pill);
+    mode_row.append(&focus_pill);
+    mode_row.append(&research_pill);
 
     let model_btn = gtk::MenuButton::builder()
         .label("Selecting model…")
@@ -4171,7 +4380,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let toolbar_spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     toolbar_spacer.set_hexpand(true);
 
-    toolbar.append(&mode_btn);
+    toolbar.append(&mode_row);
     toolbar.append(&model_btn);
     toolbar.append(&toolbar_spacer);
     toolbar.append(&attach_button);
@@ -5299,7 +5508,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let message_queue = message_queue.clone();
         let refresh_queue_strip = refresh_queue_strip.clone();
         let reset_activity = reset_activity.clone();
-        let mode_btn = mode_btn.clone();
+        let sync_mode_pills = sync_mode_pills.clone();
         let submit_slot_for_self = submit_slot.clone();
         move || {
             let text = input.text();
@@ -5322,6 +5531,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             }
             let turn_intent = intent.get();
             let plan_mode = turn_intent == ChatIntent::Plan;
+            let focus_mode = turn_intent == ChatIntent::Focus;
             let research_mode = turn_intent == ChatIntent::Research;
             // Soul save clears the on-disk session pointer — drop the stale
             // in-memory session so the next turn loads the new SOUL.md cleanly.
@@ -5379,6 +5589,25 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                     life_inject = life_inject_for_topic(&text, topic);
                 }
                 outbound = frame_plan_mode(&outbound, discuss_topic.as_ref());
+            } else if focus_mode {
+                match fetch_primary_focus() {
+                    Some(focus) => {
+                        life_inject = Some(life_inject_for_focus(&text, &focus));
+                        outbound = frame_focus_mode(&outbound, &focus);
+                        // Refresh banner in case primary appeared since pill select.
+                        sync_mode_pills(ChatIntent::Focus);
+                    }
+                    None => {
+                        sync_mode_pills(ChatIntent::Focus);
+                        outbound = format!(
+                            "[Sovereign AI Brain — Focus mode]\n\
+                             No Primary Mission is set yet. Gently invite the user to discover or \
+                             crown one in Mission Deck. Do not invent a mission for them.\n\n\
+                             User message:\n\
+                             {outbound}"
+                        );
+                    }
+                }
             } else if research_mode {
                 if let Some(ref topic) = discuss_topic {
                     life_inject = life_inject_for_topic(&text, topic);
@@ -5406,11 +5635,11 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                 Some(DiscussTopic::Commitment { id, .. }) => id.clone(),
                 _ => String::new(),
             };
-            // Auto plan-update only in Chat mode (Plan/Research may draft or investigate).
+            // Auto plan-update only in Chat mode (Plan/Focus/Research may draft or investigate).
             let applying_plan_update =
-                !plan_mode && !research_mode && !plan_id_for_update.is_empty();
+                !plan_mode && !focus_mode && !research_mode && !plan_id_for_update.is_empty();
             let applying_commitment_update =
-                !plan_mode && !research_mode && !commitment_id_for_update.is_empty();
+                !plan_mode && !focus_mode && !research_mode && !commitment_id_for_update.is_empty();
             // Non-mission Plan mode still auto-saves plan-artifact to Home.
             let auto_save_plan_artifact = plan_mode && !mission_discuss;
 
@@ -5462,7 +5691,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let message_queue = message_queue.clone();
             let refresh_queue_strip = refresh_queue_strip.clone();
             let reset_activity = reset_activity.clone();
-            let mode_btn = mode_btn.clone();
+            let sync_mode_pills = sync_mode_pills.clone();
             let intent = intent.clone();
             let input = input.clone();
             let attachments = attachments.clone();
@@ -5599,7 +5828,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         refresh_queue_strip();
                         if let Some(next) = next {
                             intent.set(next.intent);
-                            mode_btn.set_label(intent_label(next.intent));
+                            sync_mode_pills(next.intent);
                             input.set_text(&next.text);
                             *attachments.borrow_mut() = next.attachments;
                             refresh_attachments();

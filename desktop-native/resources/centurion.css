@@ -305,6 +305,10 @@ stackswitcher button {
   spacing: 8px;
 }
 
+.centurion-chat-intents {
+  spacing: 6px;
+}
+
 .centurion-chat-pill {
   border-radius: 999px;
   padding: 6px 12px;
@@ -325,6 +329,28 @@ stackswitcher button {
   background: alpha(@centurion_interactive, 0.18);
   border-color: alpha(@centurion_interactive, 0.55);
   color: @centurion_interactive_soft;
+}
+
+/* Plan: cooler blue-tinted active (distinct from Chat / Focus amber). */
+button.centurion-chat-intent-plan:checked {
+  background: alpha(#6ea8fe, 0.18);
+  border-color: alpha(#6ea8fe, 0.55);
+  color: #cfe2ff;
+}
+
+/* Focus: amber #ff9f1c active state. */
+button.centurion-chat-intent-focus:checked {
+  background: alpha(#ff9f1c, 0.28);
+  border-color: #ff9f1c;
+  color: #ff9f1c;
+}
+
+.centurion-chat-focus-banner {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid alpha(#ff9f1c, 0.4);
+  background: alpha(#ff9f1c, 0.12);
+  color: @centurion_ink;
 }
 
 .centurion-chat-attach-btn {

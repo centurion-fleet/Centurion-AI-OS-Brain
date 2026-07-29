@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -7,12 +8,15 @@ import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { missionProgress } from "../types/life";
+import { bridgeCall } from "../hooks/useBridge";
 
 export function Mission() {
   const { id } = useParams<{ id: string }>();
   const deckVisible = useDeckVisible();
-  const { mission, decisions, thoughts, loading, error } = useMissionDetail(id);
+  const { mission, decisions, thoughts, loading, error, refresh } =
+    useMissionDetail(id);
   const { thoughts: live } = useSSE({ enabled: deckVisible });
+  const [primaryBusy, setPrimaryBusy] = useState(false);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -72,25 +76,49 @@ export function Mission() {
           </div>
           <ProgressBar value={progress} height="h-2.5" />
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const w = window as Window & {
-              centurionDiscuss?: (p: Record<string, unknown>) => void;
-            };
-            if (typeof w.centurionDiscuss === "function") {
-              w.centurionDiscuss({
-                id: mission.id,
-                title: mission.title,
-                statement: mission.statement || mission.purpose,
-                kickoff: `Let's talk about my mission: ${mission.title}`,
-              });
-            }
-          }}
-          className="mt-6 rounded-full border border-amber-glow/40 bg-amber-muted px-5 py-2.5 text-sm font-semibold text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25"
-        >
-          Discuss in Chat
-        </button>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const w = window as Window & {
+                centurionDiscuss?: (p: Record<string, unknown>) => void;
+              };
+              if (typeof w.centurionDiscuss === "function") {
+                w.centurionDiscuss({
+                  id: mission.id,
+                  title: mission.title,
+                  statement: mission.statement || mission.purpose,
+                  kickoff: `Let's talk about my mission: ${mission.title}`,
+                });
+              }
+            }}
+            className="rounded-full border border-amber-glow/40 bg-amber-muted px-5 py-2.5 text-sm font-semibold text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25"
+          >
+            Discuss in Chat
+          </button>
+          {mission.mission_type !== "primary" && (
+            <button
+              type="button"
+              disabled={primaryBusy}
+              onClick={() => {
+                void (async () => {
+                  setPrimaryBusy(true);
+                  try {
+                    await bridgeCall("life_stack_set_primary", {
+                      mission_id: mission.id,
+                    });
+                    await refresh();
+                  } finally {
+                    setPrimaryBusy(false);
+                  }
+                })();
+              }}
+              className="rounded-full border border-ink-dim/30 bg-glass px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-amber-glow/40 hover:text-amber-bright disabled:opacity-50"
+            >
+              {primaryBusy ? "Setting…" : "Set as Primary"}
+            </button>
+          )}
+        </div>
       </motion.header>
 
       <div className="mt-10 space-y-6">
