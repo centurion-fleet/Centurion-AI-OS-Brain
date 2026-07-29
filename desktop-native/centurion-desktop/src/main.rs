@@ -73,8 +73,69 @@ mod linux {
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
+    use std::sync::Mutex;
 
     const APP_ID: &str = "com.centurion.desktop";
+
+    /// Cached result of the last update check — drives Settings (!) without
+    /// re-running `centurion update --check` on the 5s attention poll.
+    #[derive(Debug, Default, Clone)]
+    struct UpdateAttentionState {
+        available: bool,
+        detail: String,
+    }
+
+    fn update_attention_state() -> &'static Mutex<UpdateAttentionState> {
+        static STATE: Mutex<UpdateAttentionState> = Mutex::new(UpdateAttentionState {
+            available: false,
+            detail: String::new(),
+        });
+        &STATE
+    }
+
+    fn remember_update_check(payload: &UpdateCheckPayload) {
+        let mut state = update_attention_state()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        match payload.status.as_str() {
+            "update_available" => {
+                let ver = payload
+                    .screen_checkout_version
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| payload.os_version.as_deref())
+                    .unwrap_or("newer");
+                state.available = true;
+                state.detail = format!(
+                    "Sovereign AI Brain update available ({ver}) — open Check for update below"
+                );
+            }
+            "up_to_date" => {
+                state.available = false;
+                state.detail.clear();
+            }
+            _ => {}
+        }
+    }
+
+    fn clear_update_attention() {
+        let mut state = update_attention_state()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        state.available = false;
+        state.detail.clear();
+    }
+
+    fn load_update_attention() -> Option<(bool, String)> {
+        let state = update_attention_state()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if state.available {
+            Some((true, state.detail.clone()))
+        } else {
+            None
+        }
+    }
 
     #[derive(Default)]
     struct RemoteSupervisor {
@@ -957,6 +1018,13 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .subtitle("Check whether a newer Sovereign AI Brain is available")
             .icon_name("software-update-available-symbolic")
             .build();
+        let update_attention_mark = gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .visible(false)
+            .valign(gtk::Align::Center)
+            .build();
+        update_row.add_suffix(&update_attention_mark);
         let update_check_button = gtk::Button::with_label("Check");
         update_check_button.add_css_class("suggested-action");
         update_check_button.set_valign(gtk::Align::Center);
@@ -1378,6 +1446,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let devices_section = devices_section.clone();
             let devices_attention_mark = devices_attention_mark.clone();
             let fix_thinking_row = fix_thinking_row.clone();
+            let update_row = update_row.clone();
+            let update_attention_mark = update_attention_mark.clone();
             Rc::new(move || {
                 let items = settings_attention_items();
                 rebuild_settings_attention_banner(&banner, &items);
@@ -1387,6 +1457,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 let remotes = items
                     .iter()
                     .any(|i| matches!(i, SettingsAttentionItem::RemotesOffline { .. }));
+                let update = items
+                    .iter()
+                    .any(|i| matches!(i, SettingsAttentionItem::UpdateAvailable { .. }));
                 thinking_attention_mark.set_visible(thinking);
                 if thinking {
                     thinking_settings_row.add_css_class("centurion-needs-attention");
@@ -1400,6 +1473,15 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     devices_section.add_css_class("centurion-needs-attention");
                 } else {
                     devices_section.remove_css_class("centurion-needs-attention");
+                }
+                update_attention_mark.set_visible(update);
+                if update {
+                    update_row.add_css_class("centurion-needs-attention");
+                    if let Some((_, detail)) = load_update_attention() {
+                        update_row.set_subtitle(&detail);
+                    }
+                } else {
+                    update_row.remove_css_class("centurion-needs-attention");
                 }
             }) as Rc<dyn Fn()>
         };
@@ -1463,6 +1545,23 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             })
         });
         refresh_stack_badges();
+
+        // Quiet update probe shortly after launch, then hourly — so Settings (!)
+        // can mean "update available" without waiting for a manual Check.
+        {
+            let update_row = update_row.clone();
+            let refresh_settings_badge = refresh_settings_badge.clone();
+            glib::timeout_add_seconds_local(12, move || {
+                probe_update_attention_async(update_row.clone(), refresh_settings_badge.clone());
+                glib::ControlFlow::Break
+            });
+            let update_row = update_row.clone();
+            let refresh_settings_badge = refresh_settings_badge.clone();
+            glib::timeout_add_seconds_local(3600, move || {
+                probe_update_attention_async(update_row.clone(), refresh_settings_badge.clone());
+                glib::ControlFlow::Continue
+            });
+        }
 
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
@@ -1803,12 +1902,18 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         update_check_button.connect_clicked({
             let window = window.clone();
             let update_row = update_row.clone();
-            move |_| show_update_check_dialog(&window, &update_row)
+            let refresh_settings_badge = refresh_settings_badge.clone();
+            move |_| {
+                show_update_check_dialog(&window, &update_row, refresh_settings_badge.clone())
+            }
         });
         rebuild_screen_button.connect_clicked({
             let window = window.clone();
             let update_row = update_row.clone();
-            move |_| run_screen_rebuild(&window, &update_row)
+            let refresh_settings_badge = refresh_settings_badge.clone();
+            move |_| {
+                run_screen_rebuild(&window, &update_row, refresh_settings_badge.clone())
+            }
         });
         bundle_button.connect_clicked({
             let window = window.clone();
@@ -1947,13 +2052,18 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     enum SettingsAttentionItem {
         Thinking { detail: String },
         RemotesOffline { count: usize },
+        UpdateAvailable { detail: String },
     }
 
     fn settings_attention_items() -> Vec<SettingsAttentionItem> {
-        // iPhone You tab "!": thinking unhealthy / unavailable, or remotes
-        // previously linked but now offline — not a pending-device queue count.
-        // Use --skip-probe so the 5s tab-badge poll stays light.
+        // iPhone You tab "!": thinking unhealthy / unavailable, remotes
+        // previously linked but now offline, or a Brain update waiting.
+        // Use --skip-probe so the 5s tab-badge poll stays light; update
+        // availability is cached from Check / background probe.
         let mut items = Vec::new();
+        if let Some((_, detail)) = load_update_attention() {
+            items.push(SettingsAttentionItem::UpdateAvailable { detail });
+        }
         let thinking_attention = match run_provider_command(&["status", "--skip-probe"]) {
             Some(response) => match response.status {
                 Some(status) => {
@@ -2043,6 +2153,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     s = if *count == 1 { "" } else { "s" },
                     count = count
                 ),
+                SettingsAttentionItem::UpdateAvailable { detail } => format!("• {detail}"),
             };
             banner.append(
                 &gtk::Label::builder()
@@ -2629,12 +2740,17 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         ))
     }
 
-    fn run_screen_rebuild(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+    fn run_screen_rebuild(
+        parent: &adw::ApplicationWindow,
+        update_row: &adw::ActionRow,
+        on_attention: Rc<dyn Fn()>,
+    ) {
         // No progress AlertDialog — stacking a modal then replacing it left
         // response buttons dead on the Brain (Wayland / touch). Subtitle is enough.
         update_row.set_subtitle("Rebuilding Sovereign AI Brain…");
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
+        let on_attention = on_attention.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(run_screen_rebuild_pipeline());
@@ -2644,6 +2760,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 Ok(result) => {
                     match result {
                         Ok(body) => {
+                            clear_update_attention();
+                            on_attention();
                             update_row_for_result
                                 .set_subtitle("Rebuild finished — quit to load the new Brain");
                             let done = adw::AlertDialog::builder()
@@ -2716,10 +2834,15 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
     }
 
-    fn show_update_check_dialog(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+    fn show_update_check_dialog(
+        parent: &adw::ApplicationWindow,
+        update_row: &adw::ActionRow,
+        on_attention: Rc<dyn Fn()>,
+    ) {
         update_row.set_subtitle("Checking for updates…");
         let parent = parent.clone();
         let update_row = update_row.clone();
+        let on_attention = on_attention.clone();
         // Worker thread must not capture GTK widgets (!Send). Poll the result
         // on the main loop instead of glib::idle_add_once from the worker.
         let (tx, rx) = std::sync::mpsc::channel();
@@ -2729,14 +2852,53 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
             match rx.try_recv() {
                 Ok(payload) => {
-                    present_update_check_result(&parent, &update_row, payload);
+                    present_update_check_result(&parent, &update_row, payload, on_attention.clone());
                     glib::ControlFlow::Break
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    present_update_check_result(&parent, &update_row, None);
+                    present_update_check_result(&parent, &update_row, None, on_attention.clone());
                     glib::ControlFlow::Break
                 }
+            }
+        });
+    }
+
+    /// Quiet background probe — updates Settings (!) without a dialog.
+    fn probe_update_attention_async(update_row: adw::ActionRow, on_attention: Rc<dyn Fn()>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_update_check());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+            match rx.try_recv() {
+                Ok(Some(payload)) => {
+                    remember_update_check(&payload);
+                    if payload.status == "update_available" {
+                        let os_version = payload.os_version.as_deref().unwrap_or("newer");
+                        let ver = payload
+                            .screen_checkout_version
+                            .as_deref()
+                            .filter(|s| !s.trim().is_empty())
+                            .unwrap_or(os_version);
+                        update_row.set_subtitle(&format!(
+                            "Sovereign AI Brain update available ({ver})"
+                        ));
+                    } else if payload.status == "up_to_date" {
+                        let os_version = payload
+                            .os_version
+                            .as_deref()
+                            .unwrap_or(env!("CARGO_PKG_VERSION"));
+                        update_row.set_subtitle(&format!(
+                            "Sovereign AI Brain {os_version} — up to date"
+                        ));
+                    }
+                    on_attention();
+                    glib::ControlFlow::Break
+                }
+                Ok(None) => glib::ControlFlow::Break,
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
             }
         });
     }
@@ -2745,6 +2907,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         parent: &adw::ApplicationWindow,
         update_row: &adw::ActionRow,
         payload: Option<UpdateCheckPayload>,
+        on_attention: Rc<dyn Fn()>,
     ) {
         let Some(payload) = payload else {
             update_row.set_subtitle("Could not check for updates.");
@@ -2760,6 +2923,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             dialog.present(Some(parent));
             return;
         };
+
+        remember_update_check(&payload);
+        on_attention();
 
         let os_version = payload.os_version.as_deref().unwrap_or("unknown");
         let message = payload
@@ -2785,12 +2951,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 dialog.set_response_appearance("rebuild", adw::ResponseAppearance::Suggested);
                 let parent_for_cb = parent.clone();
                 let update_row_for_cb = update_row.clone();
+                let on_attention_cb = on_attention.clone();
                 dialog.connect_response(None, move |_dialog, response| {
                     if response == "rebuild" {
                         let parent = parent_for_cb.clone();
                         let update_row = update_row_for_cb.clone();
+                        let on_attention = on_attention_cb.clone();
                         glib::idle_add_local_once(move || {
-                            run_screen_rebuild(&parent, &update_row);
+                            run_screen_rebuild(&parent, &update_row, on_attention);
                         });
                     }
                 });
@@ -2829,12 +2997,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     );
                     let parent_for_cb = parent.clone();
                     let update_row_for_cb = update_row.clone();
+                    let on_attention_cb = on_attention.clone();
                     dialog.connect_response(None, move |_dialog, response| {
                         if response == "rebuild" {
                             let parent = parent_for_cb.clone();
                             let update_row = update_row_for_cb.clone();
+                            let on_attention = on_attention_cb.clone();
                             glib::idle_add_local_once(move || {
-                                run_screen_rebuild(&parent, &update_row);
+                                run_screen_rebuild(&parent, &update_row, on_attention);
                             });
                         }
                     });
@@ -2859,12 +3029,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     dialog.set_response_appearance("update", adw::ResponseAppearance::Suggested);
                     let parent_for_cb = parent.clone();
                     let update_row_for_cb = update_row.clone();
+                    let on_attention_cb = on_attention.clone();
                     dialog.connect_response(None, move |_dialog, response| {
                         if response == "update" {
                             let parent = parent_for_cb.clone();
                             let update_row = update_row_for_cb.clone();
+                            let on_attention = on_attention_cb.clone();
                             glib::idle_add_local_once(move || {
-                                run_full_brain_update(&parent, &update_row);
+                                run_full_brain_update(&parent, &update_row, on_attention);
                             });
                         }
                     });
@@ -2887,10 +3059,15 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     }
 
     /// One-confirm full Brain update (OS + desktop + remote).
-    fn run_full_brain_update(parent: &adw::ApplicationWindow, update_row: &adw::ActionRow) {
+    fn run_full_brain_update(
+        parent: &adw::ApplicationWindow,
+        update_row: &adw::ActionRow,
+        on_attention: Rc<dyn Fn()>,
+    ) {
         update_row.set_subtitle("Updating Sovereign AI Brain…");
         let parent_for_result = parent.clone();
         let update_row_for_result = update_row.clone();
+        let on_attention = on_attention.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(run_full_brain_update_pipeline());
@@ -2900,6 +3077,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 Ok(result) => {
                     match result {
                         Ok(body) => {
+                            clear_update_attention();
+                            on_attention();
                             update_row_for_result
                                 .set_subtitle("Update finished — quit to load the new Brain");
                             let done = adw::AlertDialog::builder()
