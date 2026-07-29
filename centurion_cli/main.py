@@ -7126,6 +7126,32 @@ def _update_via_zip(args):
     _kill_stale_dashboard_processes()
 
 
+def _update_stash_pathspecs(cwd: Path) -> list[str]:
+    """Pathspecs for update autostash — skip nested checkouts / heavy local trees.
+
+    ``git stash -u`` fails when a nested git repo sits inside the checkout
+    (common on advisor machines with sibling clones). Exclude those so Brain
+    Settings → Update can still pull and rebuild the screen.
+    """
+    specs: list[str] = ["."]
+    skip_names = {"build", "dist", "node_modules", ".venv", "venv"}
+    try:
+        for child in cwd.iterdir():
+            name = child.name
+            if name in skip_names:
+                specs.append(f":(exclude){name}")
+                continue
+            if not child.is_dir():
+                continue
+            git_marker = child / ".git"
+            if git_marker.exists() or git_marker.is_file():
+                specs.append(f":(exclude){name}")
+                print(f"  ℹ️  Skipping nested git checkout during stash: {name}/")
+    except OSError:
+        pass
+    return specs
+
+
 def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[str]:
     status = subprocess.run(
         git_cmd + ["status", "--porcelain"],
@@ -7157,11 +7183,35 @@ def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[st
         "centurion-update-autostash-%Y%m%d-%H%M%S"
     )
     print("→ Local changes detected — stashing before update...")
-    subprocess.run(
-        git_cmd + ["stash", "push", "--include-untracked", "-m", stash_name],
-        cwd=cwd,
-        check=True,
+    pathspecs = _update_stash_pathspecs(cwd)
+    stash_cmd = (
+        git_cmd
+        + ["stash", "push", "--include-untracked", "-m", stash_name, "--"]
+        + pathspecs
     )
+    stash_result = subprocess.run(
+        stash_cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if stash_result.returncode != 0:
+        stderr = (stash_result.stderr or "").strip()
+        # Nothing left to stash after excludes (only nested repos / build dirt).
+        if "No local changes to save" in (stash_result.stdout or "") or (
+            "No local changes to save" in stderr
+        ):
+            print("  ℹ️  No stashable local changes after excluding nested checkouts.")
+            return None
+        print("✗ Failed to stash local changes before update.")
+        if stderr:
+            print(f"  {stderr.splitlines()[0]}")
+        raise subprocess.CalledProcessError(
+            stash_result.returncode,
+            stash_cmd,
+            output=stash_result.stdout,
+            stderr=stash_result.stderr,
+        )
     stash_ref = subprocess.run(
         git_cmd + ["rev-parse", "--verify", "refs/stash"],
         cwd=cwd,

@@ -18,15 +18,49 @@ APP_DIR="${HOME}/.local/share/applications"
 ICON_DIR="${HOME}/.local/share/icons/hicolor"
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
 
-# Settings → Update can re-apply a dirty autostash after git pull. Reset the
-# screen sources to HEAD so this rebuild matches the release that was pulled.
+# Settings → Update can re-apply a dirty autostash after git pull. Reset
+# screen *sources* to HEAD so the rebuild matches the pulled release — but
+# do not rewrite this running script mid-execution (bash re-reads the file).
 if git -C "${ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git -C "${ROOT}" checkout -- desktop-native >/dev/null 2>&1 || true
-  git -C "${ROOT}" clean -fd -- desktop-native >/dev/null 2>&1 || true
+  for path in \
+    desktop-native/centurion-common \
+    desktop-native/centurion-desktop \
+    desktop-native/centurion-remote \
+    desktop-native/resources \
+    desktop-native/packaging \
+    desktop-native/Cargo.toml \
+    desktop-native/Cargo.lock
+  do
+    git -C "${ROOT}" checkout -- "${path}" >/dev/null 2>&1 || true
+    git -C "${ROOT}" clean -fd -- "${path}" >/dev/null 2>&1 || true
+  done
 fi
 
+# Prefer profile-aware CENTURION_HOME for build logs + stamp (matches Brain error dialog).
+resolve_centurion_home_dir() {
+  local root="${HOME}/.centurion"
+  if [[ -n "${CENTURION_HOME:-}" && -d "${CENTURION_HOME}" ]]; then
+    printf '%s\n' "${CENTURION_HOME}"
+    return
+  fi
+  local ap="${root}/active_profile"
+  if [[ -f "${ap}" ]]; then
+    local name
+    name="$(tr -d '[:space:]' < "${ap}" || true)"
+    if [[ -n "${name}" && "${name}" != "default" ]]; then
+      local profile="${root}/profiles/${name}"
+      if [[ -d "${profile}" ]]; then
+        printf '%s\n' "${profile}"
+        return
+      fi
+    fi
+  fi
+  printf '%s\n' "${root}"
+}
+CENTURION_HOME_DIR="$(resolve_centurion_home_dir)"
+
 echo "Building native binaries…"
-BUILD_LOG="${HOME}/.centurion/logs/desktop-build.log"
+BUILD_LOG="${CENTURION_HOME_DIR}/logs/desktop-build.log"
 mkdir -p "$(dirname "${BUILD_LOG}")"
 if ! cargo build --release \
   --manifest-path "${DESKTOP_NATIVE}/Cargo.toml" \
@@ -67,29 +101,7 @@ do
 done
 
 # Pin Centurion Python + repo for Settings (Autonomy/Soul/Horizon) and Chat tab.
-# CENTURION_HOME is resolved at runtime (see resolve_centurion_home in the desktop
-# app) so a stale active_profile pin cannot hide ~/.centurion/SOUL.md.
-resolve_centurion_home_dir() {
-  local root="${HOME}/.centurion"
-  if [[ -n "${CENTURION_HOME:-}" && -d "${CENTURION_HOME}" ]]; then
-    printf '%s\n' "${CENTURION_HOME}"
-    return
-  fi
-  local ap="${root}/active_profile"
-  if [[ -f "${ap}" ]]; then
-    local name
-    name="$(tr -d '[:space:]' < "${ap}" || true)"
-    if [[ -n "${name}" && "${name}" != "default" ]]; then
-      local profile="${root}/profiles/${name}"
-      if [[ -d "${profile}" ]]; then
-        printf '%s\n' "${profile}"
-        return
-      fi
-    fi
-  fi
-  printf '%s\n' "${root}"
-}
-CENTURION_HOME_DIR="$(resolve_centurion_home_dir)"
+# CENTURION_HOME_DIR was resolved above (profile-aware) for logs + stamp.
 
 cat > "${APP_DIR}/com.centurion.desktop.desktop" <<EOF
 [Desktop Entry]
@@ -109,15 +121,19 @@ chmod 0644 "${APP_DIR}/com.centurion.desktop.desktop"
 # mkdir -p + install (no GNU install -D): BSD install on macOS treats -D differently
 # and aborts the whole Settings → Update run before build stamp / systemd.
 for size in 16 22 24 32 48 64 128 256 512; do
+  src="${DESKTOP_NATIVE}/resources/icons/hicolor/${size}x${size}/apps/com.centurion.desktop.png"
+  if [[ ! -f "${src}" ]]; then
+    echo "NOTE: missing icon ${src} — skipping"
+    continue
+  fi
   mkdir -p "${ICON_DIR}/${size}x${size}/apps"
-  install -m 0644 \
-    "${DESKTOP_NATIVE}/resources/icons/hicolor/${size}x${size}/apps/com.centurion.desktop.png" \
-    "${ICON_DIR}/${size}x${size}/apps/com.centurion.desktop.png"
+  install -m 0644 "${src}" "${ICON_DIR}/${size}x${size}/apps/com.centurion.desktop.png"
 done
-mkdir -p "${ICON_DIR}/scalable/apps"
-install -m 0644 \
-  "${DESKTOP_NATIVE}/resources/icons/hicolor/scalable/apps/com.centurion.desktop.png" \
-  "${ICON_DIR}/scalable/apps/com.centurion.desktop.png"
+scalable_src="${DESKTOP_NATIVE}/resources/icons/hicolor/scalable/apps/com.centurion.desktop.png"
+if [[ -f "${scalable_src}" ]]; then
+  mkdir -p "${ICON_DIR}/scalable/apps"
+  install -m 0644 "${scalable_src}" "${ICON_DIR}/scalable/apps/com.centurion.desktop.png"
+fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "${APP_DIR}" || true

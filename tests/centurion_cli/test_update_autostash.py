@@ -35,6 +35,8 @@ def test_stash_local_changes_if_needed_returns_specific_stash_commit(monkeypatch
         if cmd[-2:] == ["ls-files", "--unmerged"]:
             return SimpleNamespace(stdout="", returncode=0)
         if cmd[1:4] == ["stash", "push", "--include-untracked"]:
+            assert cmd[-1] == "." or cmd[-2:] == ["--", "."] or "--" in cmd
+            assert cmd[cmd.index("--") + 1] == "."
             return SimpleNamespace(stdout="Saved working directory\n", returncode=0)
         if cmd[-3:] == ["rev-parse", "--verify", "refs/stash"]:
             return SimpleNamespace(stdout="abc123\n", returncode=0)
@@ -47,7 +49,44 @@ def test_stash_local_changes_if_needed_returns_specific_stash_commit(monkeypatch
     assert stash_ref == "abc123"
     assert calls[1][0][-2:] == ["ls-files", "--unmerged"]
     assert calls[2][0][1:4] == ["stash", "push", "--include-untracked"]
+    assert "--" in calls[2][0]
     assert calls[3][0][-3:] == ["rev-parse", "--verify", "refs/stash"]
+
+
+def test_update_stash_pathspecs_excludes_nested_git(tmp_path):
+    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+    nested = tmp_path / "help-center"
+    nested.mkdir()
+    (nested / ".git").mkdir()
+    (tmp_path / "build").mkdir()
+    specs = centurion_main._update_stash_pathspecs(tmp_path)
+    assert specs[0] == "."
+    assert ":(exclude)help-center" in specs
+    assert ":(exclude)build" in specs
+
+
+def test_stash_local_changes_if_needed_handles_nothing_to_stash(monkeypatch, tmp_path, capsys):
+    def fake_run(cmd, **kwargs):
+        if cmd[-2:] == ["status", "--porcelain"]:
+            return SimpleNamespace(stdout="?? help-center/\n", returncode=0)
+        if cmd[-2:] == ["ls-files", "--unmerged"]:
+            return SimpleNamespace(stdout="", returncode=0)
+        if cmd[1:4] == ["stash", "push", "--include-untracked"]:
+            return SimpleNamespace(
+                stdout="No local changes to save\n",
+                stderr="",
+                returncode=1,
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(centurion_main.subprocess, "run", fake_run)
+    (tmp_path / "help-center").mkdir()
+    (tmp_path / "help-center" / ".git").mkdir()
+
+    stash_ref = centurion_main._stash_local_changes_if_needed(["git"], tmp_path)
+    assert stash_ref is None
+    out = capsys.readouterr().out
+    assert "No stashable local changes" in out
 
 
 def test_resolve_stash_selector_returns_matching_entry(monkeypatch, tmp_path):
