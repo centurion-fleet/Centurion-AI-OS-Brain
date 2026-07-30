@@ -4,26 +4,18 @@ import { m as motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { ProgressBar } from "../components/PrimaryCard";
+import { PhaseStrip } from "../components/PhaseStrip";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
-import { missionProgress, type Mission, type MissionPhase } from "../types/life";
+import { missionProgress, type Mission } from "../types/life";
 import { bridgeCall } from "../hooks/useBridge";
-
-const PHASE_ORDER: MissionPhase[] = [
-  "briefing",
-  "discovery",
-  "planning",
-  "executing",
-  "verifying",
-  "done",
-];
-
-function nextPhase(current: MissionPhase): MissionPhase | null {
-  const i = PHASE_ORDER.indexOf(current);
-  if (i < 0 || i >= PHASE_ORDER.length - 1) return null;
-  return PHASE_ORDER[i + 1];
-}
+import {
+  missionTypeLabel,
+  nextPhase,
+  phaseHelp,
+  phaseLabel,
+} from "../lib/missionPhases";
 
 export function Mission() {
   const { id } = useParams<{ id: string }>();
@@ -244,7 +236,7 @@ export function Mission() {
         transition={{ type: "spring", stiffness: 160, damping: 22 }}
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
-          {mission.mission_type} · {mission.phase}
+          {missionTypeLabel(mission.mission_type)}
         </p>
         <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
           {mission.title}
@@ -252,6 +244,7 @@ export function Mission() {
         {mission.statement && (
           <p className="mt-3 text-lg text-ink-muted">{mission.statement}</p>
         )}
+        <PhaseStrip phase={mission.phase} />
         <div className="mt-6">
           <div className="mb-2 flex justify-between text-sm text-ink-dim">
             <span>
@@ -286,9 +279,9 @@ export function Mission() {
               type="button"
               disabled={phaseBusy}
               onClick={() => void advancePhase()}
-              className="rounded-full border border-amber-glow/40 bg-amber-muted/80 px-5 py-2.5 text-sm font-semibold capitalize text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25 disabled:opacity-50"
+              className="rounded-full border border-amber-glow/40 bg-amber-muted/80 px-5 py-2.5 text-sm font-semibold text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25 disabled:opacity-50"
             >
-              {phaseBusy ? "Advancing…" : `Advance to ${advanceTo}`}
+              {phaseBusy ? "Moving…" : `Move to ${phaseLabel(advanceTo)}`}
             </button>
           )}
           {mission.mission_type !== "primary" && (
@@ -314,6 +307,12 @@ export function Mission() {
             </button>
           )}
         </div>
+        {advanceTo && (
+          <p className="mt-3 max-w-xl text-sm text-ink-dim">
+            Next: {phaseHelp(advanceTo).replace(/\.$/, "")}. Framing applies on
+            the next conversation.
+          </p>
+        )}
       </motion.header>
 
       <div className="mt-10 space-y-6">
