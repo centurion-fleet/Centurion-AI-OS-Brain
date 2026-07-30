@@ -2566,9 +2566,12 @@ where
     thread::spawn(move || {
         let _ = tx.send(work());
     });
+    let apply = Cell::new(Some(apply));
     glib::timeout_add_local(Duration::from_millis(40), move || match rx.try_recv() {
         Ok(value) => {
-            apply(value);
+            if let Some(apply) = apply.take() {
+                apply(value);
+            }
             glib::ControlFlow::Break
         }
         Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -3588,7 +3591,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 header.append(&copy_btn);
                 block.append(&header);
                 let code_label = gtk::Label::builder()
-                    .label(&text)
+                    .label(&*text)
                     .wrap(true)
                     .wrap_mode(gtk::pango::WrapMode::Char)
                     .xalign(0.0)
