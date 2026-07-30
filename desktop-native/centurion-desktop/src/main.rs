@@ -1452,8 +1452,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             crate::mission_deck_page::build(crate::home_page::HomeHooks {
                 on_ask_about: Rc::new(
                     move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
-                        chat_handle.seed_discuss_topic(topic, &kickoff);
+                        // Switch first so Discuss never waits on Chat session I/O.
                         stack.set_visible_child_name("chat");
+                        chat_handle.seed_discuss_topic(topic, &kickoff);
                     },
                 ),
                 on_attention_changed: Rc::new(move |n: u32| {
@@ -2119,11 +2120,11 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                         let stack = stack.clone();
                         let chat_handle = chat_handle.clone();
                         move |title: String, detail: String| {
+                            stack.set_visible_child_name("chat");
                             chat_handle.seed_discuss_topic(
                                 crate::chat_page::DiscussTopic::horizon(&title, &detail),
                                 &detail,
                             );
-                            stack.set_visible_child_name("chat");
                         }
                     }),
                 )

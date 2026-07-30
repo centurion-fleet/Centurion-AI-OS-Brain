@@ -270,9 +270,9 @@ pub struct ChatHandle {
     /// Pending tool-approval prompts (drives Chat tab badge).
     attention: Rc<Cell<u32>>,
     on_attention_changed: Rc<RefCell<Option<Rc<dyn Fn(u32)>>>>,
-    /// Find-or-create a conversation titled for the topic. Returns true when an
-    /// existing transcript was resumed (skip dumping a fresh kickoff).
-    open_topic_session: Rc<RefCell<Option<Rc<dyn Fn(String) -> bool>>>>,
+    /// Find-or-create a conversation titled for the topic (bridge I/O must be async).
+    /// When an existing transcript is resumed, the handler clears the kickoff.
+    open_topic_session: Rc<RefCell<Option<Rc<dyn Fn(String)>>>>,
     /// Arm Chat composer Focus intent (sync mode pills + banner).
     set_intent_focus: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
     /// Re-sync mode pills/banners for the current intent (e.g. after Discuss clears).
@@ -296,14 +296,12 @@ impl ChatHandle {
     }
 
     /// Open/create a Chat conversation named for this topic, then prefill discuss.
+    ///
+    /// Must stay non-blocking: Focus Discuss runs on the GTK main thread. Banner,
+    /// intent, and kickoff paint immediately; session find/create/resume happens
+    /// async and clears the kickoff if an existing transcript is resumed.
     pub fn seed_discuss_topic(&self, topic: DiscussTopic, kickoff: &str) {
         let title = topic.session_title();
-        let resumed = self
-            .open_topic_session
-            .borrow()
-            .as_ref()
-            .map(|open| open(title))
-            .unwrap_or(false);
         let arm_focus = matches!(
             topic,
             DiscussTopic::Mission { .. }
@@ -315,12 +313,6 @@ impl ChatHandle {
         if arm_focus {
             self.arm_focus_intent();
         }
-        if resumed {
-            // Continuing the topic thread — don't paste kickoff into an old chat.
-            self.input.clear();
-            self.input.grab_focus();
-            return;
-        }
         let body = if kickoff.trim().is_empty() {
             String::new()
         } else if kickoff.ends_with('\n') {
@@ -331,6 +323,9 @@ impl ChatHandle {
         self.input.set_text(&body);
         self.input.place_cursor_end();
         self.input.grab_focus();
+        if let Some(open) = self.open_topic_session.borrow().as_ref() {
+            open(title);
+        }
     }
 
     /// Back-compat: title + detail prose only (Horizon and similar).
@@ -368,7 +363,7 @@ impl ChatHandle {
         }
     }
 
-    fn set_open_topic_session(&self, handler: Rc<dyn Fn(String) -> bool>) {
+    fn set_open_topic_session(&self, handler: Rc<dyn Fn(String)>) {
         *self.open_topic_session.borrow_mut() = Some(handler);
     }
 
@@ -2534,6 +2529,62 @@ fn create_named_session(title: &str, previous_session_id: Option<&str>) -> Resul
         .to_owned();
     save_session_id(&session_id);
     Ok(session_id)
+}
+
+/// Bridge work for Focus → Discuss. Must never run on the GTK main thread.
+enum TopicSessionOutcome {
+    Resumed {
+        sid: String,
+        history: Vec<ChatMessage>,
+        assistant: String,
+    },
+    Created { sid: String, assistant: String },
+    SoftFail { err: String, assistant: String },
+}
+
+fn open_topic_session_worker(
+    topic_title: &str,
+    previous: Option<String>,
+) -> TopicSessionOutcome {
+    let assistant = load_assistant_display_name();
+    let previous = previous.filter(|s| !s.trim().is_empty());
+
+    if let Some(existing) = find_session_by_title(topic_title) {
+        // Same session or resume existing topic thread — always load history off-thread
+        // (UI may have cleared the transcript for a snappy switch).
+        if previous.as_deref() != Some(existing.id.as_str()) {
+            if let Some(ref sid) = previous {
+                let _ = run_bridge_json(
+                    "session_end_continuity",
+                    serde_json::json!({ "session_id": sid }),
+                );
+            }
+        }
+        match resume_session(&existing.id) {
+            Ok((sid, history)) => {
+                save_session_id(&sid);
+                return TopicSessionOutcome::Resumed {
+                    sid,
+                    history,
+                    assistant,
+                };
+            }
+            Err(_) => {
+                // Fall through and create a fresh named session.
+            }
+        }
+    }
+
+    if let Some(ref sid) = previous {
+        let _ = run_bridge_json(
+            "session_end_continuity",
+            serde_json::json!({ "session_id": sid }),
+        );
+    }
+    match create_named_session(topic_title, previous.as_deref()) {
+        Ok(sid) => TopicSessionOutcome::Created { sid, assistant },
+        Err(err) => TopicSessionOutcome::SoftFail { err, assistant },
+    }
 }
 
 fn find_session_by_title(title: &str) -> Option<SessionSummary> {
@@ -6484,6 +6535,8 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
 
     // Discuss from Missions / Settings must open a topic-named conversation —
     // never continue whatever unrelated chat was already on screen (iPhone parity).
+    // Bridge I/O stays off the GTK thread — sync soul_get / session_list / resume
+    // here freezes the whole Brain (Force Quit / Wait) when Focus Discuss is clicked.
     handle.set_open_topic_session(Rc::new({
         let messages = messages.clone();
         let session_id = session_id.clone();
@@ -6495,72 +6548,104 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         let follow_bottom = follow_bottom.clone();
         let assistant_name = assistant_name.clone();
         let title_label = title.clone();
+        let input = input.clone();
+        let discuss_open_gen = Rc::new(Cell::new(0u64));
         move |topic_title: String| {
             clear_approval();
             set_sending(false);
             set_error(None);
-            *assistant_name.borrow_mut() = load_assistant_display_name();
-            // Show the topic name in the chat header (conversation identity).
-            title_label.set_label(&topic_title);
             follow_bottom.set(true);
 
             let previous = session_id.borrow().clone();
+            let already_here = title_label
+                .text()
+                .trim()
+                .eq_ignore_ascii_case(topic_title.trim())
+                && previous.is_some();
+            title_label.set_label(&topic_title);
 
-            if let Some(existing) = find_session_by_title(&topic_title) {
-                // Already discussing this topic — resume that thread.
-                if previous.as_deref() == Some(existing.id.as_str()) {
-                    // Same session already active; keep transcript, just re-bind discuss.
-                    return !messages.borrow().is_empty();
+            if already_here {
+                // Same topic already on screen — no bridge round-trip.
+                if !messages.borrow().is_empty() {
+                    input.clear();
+                    input.grab_focus();
                 }
-                if let Some(ref sid) = previous {
-                    let _ = run_bridge_json(
-                        "session_end_continuity",
-                        serde_json::json!({ "session_id": sid }),
-                    );
-                }
-                match resume_session(&existing.id) {
-                    Ok((sid, history)) => {
-                        save_session_id(&sid);
-                        *session_id.borrow_mut() = Some(sid);
-                        *messages.borrow_mut() = history;
-                        refresh_messages();
-                        refresh_sessions();
-                        return true;
-                    }
-                    Err(err) => {
-                        set_error(Some(err));
-                        // Fall through and create a fresh named session.
-                    }
-                }
+                return;
             }
 
-            if let Some(ref sid) = previous {
-                let _ = run_bridge_json(
-                    "session_end_continuity",
-                    serde_json::json!({ "session_id": sid }),
-                );
-            }
-            match create_named_session(&topic_title, previous.as_deref()) {
-                Ok(sid) => {
-                    *session_id.borrow_mut() = Some(sid);
-                    messages.borrow_mut().clear();
-                    refresh_messages();
-                    refresh_sessions();
-                    false
+            // Drop the unrelated transcript immediately so Discuss never looks like
+            // the previous chat. Session bind finishes async below.
+            messages.borrow_mut().clear();
+            refresh_messages();
+
+            let gen = {
+                let next = discuss_open_gen.get().wrapping_add(1);
+                discuss_open_gen.set(next);
+                next
+            };
+            let (tx, rx) = mpsc::channel::<TopicSessionOutcome>();
+            let title_for_worker = topic_title.clone();
+            thread::spawn(move || {
+                let _ = tx.send(open_topic_session_worker(
+                    &title_for_worker,
+                    previous,
+                ));
+            });
+
+            let messages = messages.clone();
+            let session_id = session_id.clone();
+            let refresh_messages = refresh_messages.clone();
+            let refresh_sessions = refresh_sessions.clone();
+            let set_error = set_error.clone();
+            let assistant_name = assistant_name.clone();
+            let input = input.clone();
+            let discuss_open_gen = discuss_open_gen.clone();
+            glib::timeout_add_local(Duration::from_millis(16), move || match rx.try_recv() {
+                Ok(outcome) => {
+                    if discuss_open_gen.get() != gen {
+                        return glib::ControlFlow::Break;
+                    }
+                    match outcome {
+                        TopicSessionOutcome::Resumed {
+                            sid,
+                            history,
+                            assistant,
+                        } => {
+                            *assistant_name.borrow_mut() = assistant;
+                            *session_id.borrow_mut() = Some(sid);
+                            let has_history = !history.is_empty();
+                            *messages.borrow_mut() = history;
+                            refresh_messages();
+                            if has_history {
+                                // Continuing the topic thread — don't leave a fresh kickoff.
+                                input.clear();
+                                input.grab_focus();
+                            }
+                            refresh_sessions();
+                        }
+                        TopicSessionOutcome::Created { sid, assistant } => {
+                            *assistant_name.borrow_mut() = assistant;
+                            *session_id.borrow_mut() = Some(sid);
+                            messages.borrow_mut().clear();
+                            refresh_messages();
+                            refresh_sessions();
+                        }
+                        TopicSessionOutcome::SoftFail { err, assistant } => {
+                            *assistant_name.borrow_mut() = assistant;
+                            *session_id.borrow_mut() = None;
+                            let path = session_store_path();
+                            let _ = std::fs::remove_file(&path);
+                            messages.borrow_mut().clear();
+                            refresh_messages();
+                            refresh_sessions();
+                            set_error(Some(err));
+                        }
+                    }
+                    glib::ControlFlow::Break
                 }
-                Err(err) => {
-                    // Soft-fail: still clear the transcript so Discuss doesn't
-                    // continue an unrelated thread; first send will create a session.
-                    *session_id.borrow_mut() = None;
-                    let path = session_store_path();
-                    let _ = std::fs::remove_file(&path);
-                    messages.borrow_mut().clear();
-                    refresh_messages();
-                    refresh_sessions();
-                    set_error(Some(err));
-                    false
-                }
-            }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
         }
     }));
 
