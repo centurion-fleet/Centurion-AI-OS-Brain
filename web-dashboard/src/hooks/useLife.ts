@@ -58,10 +58,15 @@ export function useMissionDetail(missionId: string | undefined) {
     if (!missionId) return;
     setLoading(true);
     try {
-      const [mRes, dRes, docRes, tRes] = await Promise.all([
-        bridgeCall<{ ok: true; mission: Mission }>("life_mission_get", {
-          mission_id: missionId,
-        }),
+      // Mission + decisions are required. Documents/thoughts are best-effort so a
+      // newer deck against an older bridge (or missing table) still opens detail.
+      const mRes = await bridgeCall<{ ok: true; mission: Mission }>(
+        "life_mission_get",
+        { mission_id: missionId },
+      );
+      setMission(mRes.mission);
+
+      const [dSettled, docSettled, tSettled] = await Promise.allSettled([
         bridgeCall<{ ok: true; decisions: Decision[] }>("life_decisions_list", {
           mission_id: missionId,
           limit: 40,
@@ -77,15 +82,23 @@ export function useMissionDetail(missionId: string | undefined) {
           limit: 40,
         }),
       ]);
-      setMission(mRes.mission);
-      setDecisions(dRes.decisions || []);
-      setDocuments(docRes.documents || []);
-      const filtered = (tRes.thoughts || []).filter(
-        (t) => !t.mission_id || t.mission_id === missionId,
+
+      setDecisions(
+        dSettled.status === "fulfilled" ? dSettled.value.decisions || [] : [],
       );
-      setThoughts(filtered);
+      setDocuments(
+        docSettled.status === "fulfilled"
+          ? docSettled.value.documents || []
+          : [],
+      );
+      const thoughtsRaw =
+        tSettled.status === "fulfilled" ? tSettled.value.thoughts || [] : [];
+      setThoughts(
+        thoughtsRaw.filter((t) => !t.mission_id || t.mission_id === missionId),
+      );
       setError(null);
     } catch (e) {
+      setMission(null);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);

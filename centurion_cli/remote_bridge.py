@@ -232,14 +232,17 @@ def handle_request(
     if action == "client_plugin_cards":
         return _handle_client_plugin_cards(request_id)
 
-    code, message = classify_llm_error(ValueError(f"unsupported action: {action}"))
+    msg = (
+        f"Unsupported bridge action: {action}. "
+        "Update and restart Sovereign AI Brain so the bridge matches this Focus deck."
+    )
     return {
         "id": request_id,
         "ok": False,
         "action": action,
         "code": "UNSUPPORTED_ACTION",
-        "error": message,
-        "message": message,
+        "error": msg,
+        "message": msg,
     }
 
 
