@@ -155,6 +155,8 @@ def handle_request(
         return _handle_life_document_get(request, request_id)
     if action == "life_document_put":
         return _handle_life_document_put(request, request_id)
+    if action == "life_documents_import_scan":
+        return _handle_life_documents_import_scan(request, request_id)
     if action == "life_thoughts_list":
         return _handle_life_thoughts_list(request, request_id)
     if action == "life_thought_post":
@@ -2912,6 +2914,45 @@ def _handle_life_document_put(
         }
     except Exception as exc:
         return _error_response(request_id, action="life_document_put", exc=exc)
+
+
+def _handle_life_documents_import_scan(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import import_scanned_documents
+
+        roots_raw = request.get("roots") or request.get("paths") or request.get("path")
+        roots: list[str] | None
+        if roots_raw is None:
+            roots = None
+        elif isinstance(roots_raw, str):
+            roots = [roots_raw]
+        elif isinstance(roots_raw, list):
+            roots = [str(r) for r in roots_raw if str(r).strip()]
+        else:
+            roots = None
+        mid = request.get("mission_id")
+        include_plans = request.get("include_plans", True)
+        include_outcomes = request.get("include_outcomes", True)
+        max_files = int(request.get("max_files") or 2000)
+        result = import_scanned_documents(
+            roots=roots,
+            mission_id=str(mid) if mid else None,
+            include_plans=bool(include_plans),
+            include_outcomes=bool(include_outcomes),
+            max_files=max_files,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_documents_import_scan",
+            **result,
+        }
+    except Exception as exc:
+        return _error_response(
+            request_id, action="life_documents_import_scan", exc=exc
+        )
 
 
 def _handle_life_thoughts_list(

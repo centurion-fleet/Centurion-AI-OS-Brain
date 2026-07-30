@@ -158,6 +158,30 @@ def life_missions_tool(
                 ),
                 query=query or title or statement,
             )
+        if action in (
+            "import_documents",
+            "documents_import",
+            "import_docs",
+            "scan_documents",
+        ):
+            roots = fields.get("roots") or fields.get("paths") or fields.get("path")
+            root_list: list[str] | None
+            if roots is None:
+                root_list = None
+            elif isinstance(roots, str):
+                root_list = [roots]
+            elif isinstance(roots, list):
+                root_list = [str(r) for r in roots if str(r).strip()]
+            else:
+                root_list = None
+            result = life.import_scanned_documents(
+                roots=root_list,
+                mission_id=mission_id or None,
+                include_plans=bool(fields.get("include_plans", True)),
+                include_outcomes=bool(fields.get("include_outcomes", True)),
+                max_files=int(fields.get("max_files") or 2000),
+            )
+            return _ok(**result)
         if action in ("get_document", "document"):
             doc_id = str(
                 fields.get("document_id") or fields.get("id") or query or ""
@@ -193,7 +217,7 @@ def life_missions_tool(
             "Unknown action. Use stack, missions, get_mission, put_mission|create_mission, "
             "subjects, dreams, promote_dream, set_primary, put_target, set_focus, resolve, "
             "inject, thought, thoughts, decision, decisions, list_documents, "
-            "search_documents, get_document, put_document, snapshot."
+            "search_documents, import_documents, get_document, put_document, snapshot."
         )
     except Exception as exc:
         return tool_error(str(exc))
@@ -216,6 +240,8 @@ registry.register(
             "Approve/Proceed; after accept, optionally put_document with "
             "plan_id and doc_type plan so it appears under the mission. "
             "Also: stack, dreams, focus, thoughts, decisions, documents. "
+            "Use import_documents to scan this machine (Documents/Desktop/plans) "
+            "into life_documents for Find documents. "
             "Not portal SaaS."
         ),
         "parameters": {
@@ -227,8 +253,8 @@ registry.register(
                         "stack|missions|get_mission|put_mission|create_mission|"
                         "subjects|dreams|promote_dream|set_primary|put_target|"
                         "set_focus|resolve|inject|thought|thoughts|decision|"
-                        "decisions|list_documents|search_documents|get_document|"
-                        "put_document|snapshot"
+                        "decisions|list_documents|search_documents|import_documents|"
+                        "get_document|put_document|snapshot"
                     ),
                 },
                 "mission_id": {"type": "string"},

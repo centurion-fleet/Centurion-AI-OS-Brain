@@ -13268,6 +13268,24 @@ Examples:
         logging.getLogger(__name__).debug("curator CLI wiring failed: %s", _exc)
 
     # =========================================================================
+    # life command — Focus life.db helpers (document import scan)
+    # =========================================================================
+    life_parser = subparsers.add_parser(
+        "life",
+        help="Life Missions helpers — import-docs into Focus Find documents",
+        description=(
+            "Recover early write-ups from disk / plans / kanban outcomes into "
+            "life_documents so Focus Find documents can search them."
+        ),
+    )
+    try:
+        from centurion_cli.life_cli import register_cli as _register_life_cli
+
+        _register_life_cli(life_parser)
+    except Exception as _exc:
+        logging.getLogger(__name__).debug("life CLI wiring failed: %s", _exc)
+
+    # =========================================================================
     # telegram command — bot DM export for Centurion Remote
     # =========================================================================
     telegram_parser = subparsers.add_parser(

@@ -122,7 +122,10 @@ export function Deck() {
         </motion.div>
       ) : (
         <>
-          <DocumentSearch enabled={deckVisible} />
+          <DocumentSearch
+            enabled={deckVisible}
+            preferredMissionId={primary?.id}
+          />
 
           {primary ? (
             <PrimaryCard

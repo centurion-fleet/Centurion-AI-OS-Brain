@@ -489,3 +489,98 @@ def test_search_documents_body_title_agent_filter(life_home):
     )
     assert resp["ok"] is True
     assert any(d["title"] == "Investment memorandum" for d in resp["documents"])
+
+
+def test_import_scanned_documents_files_plans_idempotent(life_home, tmp_path):
+    from centurion_cli.life_missions import (
+        get_document,
+        import_scanned_documents,
+        list_documents,
+        put_mission,
+        search_documents,
+        set_primary,
+    )
+    from centurion_cli.plans import put_plan
+    from centurion_cli.remote_bridge import handle_request
+
+    primary = put_mission(
+        {
+            "title": "Isaac Primary",
+            "statement": "Sail the planet",
+            "mission_type": "primary",
+        }
+    )
+    supporting = put_mission(
+        {
+            "title": "Centurion AI Limited",
+            "statement": "Scale the business",
+            "mission_type": "supporting",
+        }
+    )
+    set_primary(primary["id"])
+
+    docs_dir = tmp_path / "Documents"
+    docs_dir.mkdir()
+    # Path contains supporting mission title so import prefers it over Primary.
+    nested = docs_dir / "Centurion AI Limited" / "memos"
+    nested.mkdir(parents=True)
+    memo = nested / "investment-research.md"
+    memo.write_text(
+        "# Memo\n\nUniqueImportPhraseABC for Centurion AI Limited scale.\n",
+        encoding="utf-8",
+    )
+
+    plan = put_plan(
+        {
+            "title": "Go-to-market plan",
+            "goal": "Win first customers",
+            "summary": "Outbound sequence",
+            "steps": ["List accounts", "Draft outreach"],
+            "status": "pending_review",
+        }
+    )
+
+    result = import_scanned_documents(
+        roots=[docs_dir],
+        mission_id=primary["id"],
+        include_plans=True,
+        include_outcomes=False,
+    )
+    assert result["imported"] >= 2
+    assert result["scanned_files"] >= 1
+
+    hits = search_documents("UniqueImportPhraseABC")
+    assert len(hits) == 1
+    assert hits[0]["source"] == "import"
+    assert hits[0]["mission_id"] == supporting["id"]
+    assert "Imported from:" in (hits[0].get("summary") or "")
+
+    plan_docs = [
+        d for d in list_documents(limit=50) if d.get("plan_id") == plan["id"]
+    ]
+    assert len(plan_docs) == 1
+    assert plan_docs[0]["doc_type"] == "plan"
+
+    first_id = hits[0]["id"]
+    again = import_scanned_documents(
+        roots=[docs_dir],
+        mission_id=primary["id"],
+        include_plans=True,
+        include_outcomes=False,
+    )
+    assert again["imported"] == 0
+    assert again["updated"] >= 1
+    assert get_document(first_id) is not None
+    assert len(search_documents("UniqueImportPhraseABC")) == 1
+
+    resp = handle_request(
+        {
+            "id": "imp1",
+            "action": "life_documents_import_scan",
+            "path": str(docs_dir),
+            "include_plans": False,
+            "include_outcomes": False,
+        }
+    )
+    assert resp["ok"] is True
+    assert resp["updated"] >= 1

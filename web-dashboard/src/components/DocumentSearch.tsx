@@ -26,11 +26,20 @@ function discussDocument(d: LifeDocument) {
 /**
  * Compact global document search on the Focus deck.
  */
-export function DocumentSearch({ enabled = true }: { enabled?: boolean }) {
+export function DocumentSearch({
+  enabled = true,
+  preferredMissionId,
+}: {
+  enabled?: boolean;
+  /** Fallback mission when path/title match is weak (e.g. Primary). */
+  preferredMissionId?: string | null;
+}) {
   const [query, setQuery] = useState("");
   const [agentOnly, setAgentOnly] = useState(false);
   const [results, setResults] = useState<LifeDocument[]>([]);
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +73,43 @@ export function DocumentSearch({ enabled = true }: { enabled?: boolean }) {
     }
   }, []);
 
+  const runScan = useCallback(async () => {
+    setScanning(true);
+    setScanNote(null);
+    setError(null);
+    try {
+      const res = await bridgeCall<{
+        ok: true;
+        imported?: number;
+        updated?: number;
+        skipped?: number;
+        scanned_files?: number;
+        roots?: string[];
+        errors?: string[];
+      }>(
+        "life_documents_import_scan",
+        {
+          mission_id: preferredMissionId || undefined,
+          include_plans: true,
+          include_outcomes: true,
+        },
+      );
+      const imported = Number(res.imported || 0);
+      const updated = Number(res.updated || 0);
+      const skipped = Number(res.skipped || 0);
+      setScanNote(
+        `Imported ${imported} · updated ${updated} · skipped ${skipped}`,
+      );
+      if (query.trim()) {
+        await runSearch(query, agentOnly);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setScanning(false);
+    }
+  }, [preferredMissionId, query, agentOnly, runSearch]);
+
   useEffect(() => {
     if (!enabled) return;
     const t = window.setTimeout(() => {
@@ -81,15 +127,25 @@ export function DocumentSearch({ enabled = true }: { enabled?: boolean }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
             Find documents
           </p>
-          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-dim">
-            <input
-              type="checkbox"
-              checked={agentOnly}
-              onChange={(e) => setAgentOnly(e.target.checked)}
-              className="rounded border-white/20 bg-white/5"
-            />
-            Created by Centurion
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-dim">
+              <input
+                type="checkbox"
+                checked={agentOnly}
+                onChange={(e) => setAgentOnly(e.target.checked)}
+                className="rounded border-white/20 bg-white/5"
+              />
+              Created by Centurion
+            </label>
+            <button
+              type="button"
+              disabled={scanning}
+              onClick={() => void runScan()}
+              className="rounded-full border border-amber-glow/40 bg-amber-muted/70 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25 disabled:opacity-50"
+            >
+              {scanning ? "Scanning…" : "Scan this machine"}
+            </button>
+          </div>
         </div>
         <input
           value={query}
@@ -99,9 +155,14 @@ export function DocumentSearch({ enabled = true }: { enabled?: boolean }) {
         />
         {!query.trim() && (
           <p className="mt-2 text-xs text-ink-dim">
-            Search covers every mission’s current documents (title, summary, and
-            body).
+            Search covers every mission’s current documents. Use{" "}
+            <span className="text-ink-muted">Scan this machine</span> to pull in
+            older write-ups from Documents/Desktop, plans, and completed task
+            outcomes.
           </p>
+        )}
+        {scanNote && (
+          <p className="mt-2 text-xs text-amber-soft">{scanNote}</p>
         )}
         {busy && (
           <p className="mt-2 text-xs text-ink-dim">Searching…</p>

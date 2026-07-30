@@ -7,7 +7,10 @@ No portal / Supabase — Remote and GTK talk to this module only.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -1276,6 +1279,433 @@ def document_excerpt(doc: dict[str, Any], *, max_chars: int = 400) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 1].rstrip() + "…"
+
+
+# ─── Legacy / filesystem document import ─────────────────────────────────────
+
+_SCAN_TEXT_SUFFIXES = frozenset({".md", ".markdown", ".txt", ".rst"})
+_SCAN_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "venv",
+        ".venv",
+        "target",
+        "__pycache__",
+        ".cache",
+        "Library",
+        ".local",
+        ".cargo",
+        ".npm",
+        ".centurion",  # avoid walking home recursively into itself via cwd
+    }
+)
+_MAX_IMPORT_FILE_BYTES = int(1.5 * 1024 * 1024)
+_MAX_SCAN_FILES = 2000
+
+
+def _stable_import_id(kind: str, key: str) -> str:
+    digest = hashlib.sha256(f"{kind}:{key}".encode("utf-8")).hexdigest()[:32]
+    return f"{kind}:{digest}"
+
+
+def _slug_tokens(text: str) -> list[str]:
+    return [t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(t) > 2]
+
+
+def _doc_type_from_name(name: str) -> str:
+    n = (name or "").lower()
+    if "research" in n or "memo" in n or "brief" in n:
+        return "research"
+    if "analys" in n:
+        return "analysis"
+    if "report" in n or "summary" in n:
+        return "report"
+    if "plan" in n:
+        return "plan"
+    if "content" in n or "draft" in n or "post" in n:
+        return "content"
+    return "other"
+
+
+def _terminal_cwd_from_config() -> Path | None:
+    try:
+        from centurion_cli.config import load_config
+
+        cfg = load_config()
+        terminal = cfg.get("terminal") if isinstance(cfg, dict) else None
+        cwd = None
+        if isinstance(terminal, dict):
+            cwd = terminal.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            path = Path(cwd).expanduser()
+            if path.is_dir():
+                return path.resolve()
+    except Exception:
+        pass
+    return None
+
+
+def default_document_scan_roots() -> list[Path]:
+    """Default filesystem roots to scan for legacy text documents."""
+    roots: list[Path] = []
+    home = Path.home()
+    for name in ("Documents", "Desktop"):
+        candidate = home / name
+        if candidate.is_dir():
+            roots.append(candidate.resolve())
+    cwd = _terminal_cwd_from_config()
+    if cwd is not None:
+        roots.append(cwd)
+    extra = os.environ.get("CENTURION_DOC_SCAN_PATHS") or ""
+    for part in extra.split(os.pathsep):
+        part = part.strip()
+        if not part:
+            continue
+        path = Path(part).expanduser()
+        if path.is_dir():
+            roots.append(path.resolve())
+    # Dedupe while preserving order.
+    seen: set[str] = set()
+    out: list[Path] = []
+    for root in roots:
+        key = str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(root)
+    return out
+
+
+def scan_filesystem_documents(
+    roots: list[Path] | None = None,
+    *,
+    max_files: int = _MAX_SCAN_FILES,
+) -> list[dict[str, Any]]:
+    """Walk roots for text documents (md/txt/rst). Does not read bodies yet."""
+    scan_roots = list(roots) if roots is not None else default_document_scan_roots()
+    lim = max(1, min(int(max_files or _MAX_SCAN_FILES), 5000))
+    found: list[dict[str, Any]] = []
+    for root in scan_roots:
+        try:
+            root = Path(root).expanduser().resolve()
+        except OSError:
+            continue
+        if not root.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d not in _SCAN_SKIP_DIRS and not d.startswith(".")
+            ]
+            for name in filenames:
+                if len(found) >= lim:
+                    return found
+                path = Path(dirpath) / name
+                suffix = path.suffix.lower()
+                if suffix not in _SCAN_TEXT_SUFFIXES:
+                    continue
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                if size <= 0 or size > _MAX_IMPORT_FILE_BYTES:
+                    continue
+                found.append(
+                    {
+                        "path": str(path),
+                        "title": path.stem.replace("_", " ").replace("-", " ").strip()
+                        or path.name,
+                        "size": size,
+                        "suffix": suffix,
+                    }
+                )
+    return found
+
+
+def _resolve_import_mission_id(
+    *,
+    preferred_mission_id: str | None,
+    hint_text: str,
+) -> str:
+    hint = (hint_text or "").lower()
+    hint_tokens = set(_slug_tokens(hint_text))
+    missions = list_missions()
+    best_id = ""
+    best_score = 0
+    for mission in missions:
+        mid = str(mission.get("id") or "").strip()
+        title = str(mission.get("title") or "").strip()
+        if not mid or not title:
+            continue
+        title_l = title.lower()
+        score = 0
+        if title_l and title_l in hint:
+            score += 10 + len(title_l)
+        title_tokens = set(_slug_tokens(title))
+        overlap = len(title_tokens & hint_tokens)
+        if overlap:
+            score += overlap * 3
+        # Prefer supporting matches slightly when scores tie on Centurion AI Limited etc.
+        if mission.get("mission_type") == "supporting" and score > 0:
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_id = mid
+    if best_id and best_score >= 3:
+        return best_id
+
+    preferred = str(preferred_mission_id or "").strip()
+    if preferred:
+        mission = get_mission(preferred)
+        if mission and mission.get("id"):
+            return str(mission["id"])
+
+    stack = get_stack()
+    primary = stack.get("primary") or {}
+    pid = str(primary.get("id") or "").strip()
+    if pid:
+        return pid
+    if missions:
+        return str(missions[0].get("id") or "").strip()
+    raise ValueError("No Life Mission available to attach imported documents")
+
+
+def _import_one_document(fields: dict[str, Any]) -> str:
+    """put_document with announce off. Returns 'imported' or 'updated'."""
+    did = str(fields.get("id") or "").strip()
+    existed = bool(did and get_document(did))
+    put_document({**fields, "announce": False})
+    return "updated" if existed else "imported"
+
+
+def _import_filesystem_hits(
+    hits: list[dict[str, Any]],
+    *,
+    mission_id: str | None,
+) -> tuple[int, int, int, list[str]]:
+    imported = updated = skipped = 0
+    errors: list[str] = []
+    for hit in hits:
+        path_s = str(hit.get("path") or "")
+        path = Path(path_s)
+        try:
+            body = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            skipped += 1
+            errors.append(f"{path_s}: {exc}")
+            continue
+        if not body.strip():
+            skipped += 1
+            continue
+        title = str(hit.get("title") or path.stem).strip() or path.name
+        try:
+            mid = _resolve_import_mission_id(
+                preferred_mission_id=mission_id,
+                hint_text=f"{path_s} {title}",
+            )
+            status = _import_one_document(
+                {
+                    "id": _stable_import_id("import", str(path.resolve())),
+                    "mission_id": mid,
+                    "title": title[:200],
+                    "doc_type": _doc_type_from_name(title),
+                    "summary": f"Imported from: {path_s}",
+                    "body_md": body,
+                    "source": "import",
+                }
+            )
+            if status == "imported":
+                imported += 1
+            else:
+                updated += 1
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"{path_s}: {exc}")
+    return imported, updated, skipped, errors
+
+
+def _import_plans(*, mission_id: str | None) -> tuple[int, int, int, list[str]]:
+    imported = updated = skipped = 0
+    errors: list[str] = []
+    try:
+        from centurion_cli.plans import get_plan, list_plans
+    except Exception as exc:
+        return 0, 0, 0, [f"plans unavailable: {exc}"]
+
+    try:
+        plans = list_plans()
+    except Exception as exc:
+        return 0, 0, 0, [f"list_plans failed: {exc}"]
+
+    for entry in plans:
+        pid = str(entry.get("id") or "").strip()
+        if not pid:
+            skipped += 1
+            continue
+        try:
+            plan = get_plan(pid) or entry
+            title = str(plan.get("title") or entry.get("title") or "Plan").strip()
+            goal = str(plan.get("goal") or "").strip()
+            summary = str(plan.get("summary") or "").strip()
+            steps = plan.get("steps") or []
+            if not isinstance(steps, list):
+                steps = []
+            step_lines = "\n".join(
+                f"- {s}" for s in steps if isinstance(s, str) and s.strip()
+            )
+            body_parts = [
+                f"# {title}",
+                f"**Goal:** {goal}" if goal else "",
+                summary,
+                "## Steps\n" + step_lines if step_lines else "",
+            ]
+            body = "\n\n".join(p for p in body_parts if p)
+            if not body.strip():
+                skipped += 1
+                continue
+            mid = _resolve_import_mission_id(
+                preferred_mission_id=mission_id,
+                hint_text=f"{title} {goal} {summary}",
+            )
+            status = _import_one_document(
+                {
+                    "id": _stable_import_id("plan", pid),
+                    "mission_id": mid,
+                    "title": title[:200],
+                    "doc_type": "plan",
+                    "summary": f"Imported from: plan:{pid}"
+                    + (f" — {summary[:120]}" if summary else ""),
+                    "body_md": body,
+                    "plan_id": pid,
+                    "source": "import",
+                }
+            )
+            if status == "imported":
+                imported += 1
+            else:
+                updated += 1
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"plan:{pid}: {exc}")
+    return imported, updated, skipped, errors
+
+
+def _import_kanban_outcomes(
+    *, mission_id: str | None
+) -> tuple[int, int, int, list[str]]:
+    imported = updated = skipped = 0
+    errors: list[str] = []
+    try:
+        from centurion_cli.swarm_state import get_swarm_snapshot
+
+        snap = get_swarm_snapshot()
+    except Exception as exc:
+        return 0, 0, 0, [f"swarm snapshot unavailable: {exc}"]
+
+    outcomes = snap.get("outcomes") if isinstance(snap, dict) else None
+    if not isinstance(outcomes, list):
+        return 0, 0, 0, []
+
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            skipped += 1
+            continue
+        oid = str(outcome.get("id") or "").strip()
+        body = str(outcome.get("description") or outcome.get("result") or "").strip()
+        if not oid or not body:
+            skipped += 1
+            continue
+        title = str(
+            outcome.get("title")
+            or outcome.get("summary")
+            or body.split("\n", 1)[0][:80]
+            or "Task outcome"
+        ).strip()
+        try:
+            mid = _resolve_import_mission_id(
+                preferred_mission_id=mission_id,
+                hint_text=f"{title} {body[:400]}",
+            )
+            status = _import_one_document(
+                {
+                    "id": _stable_import_id("outcome", oid),
+                    "mission_id": mid,
+                    "title": title[:200],
+                    "doc_type": "other",
+                    "summary": f"Imported from: outcome:{oid}",
+                    "body_md": body,
+                    "source": "import",
+                }
+            )
+            if status == "imported":
+                imported += 1
+            else:
+                updated += 1
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"outcome:{oid}: {exc}")
+    return imported, updated, skipped, errors
+
+
+def import_scanned_documents(
+    *,
+    roots: list[str | Path] | None = None,
+    mission_id: str | None = None,
+    include_plans: bool = True,
+    include_outcomes: bool = True,
+    max_files: int = _MAX_SCAN_FILES,
+) -> dict[str, Any]:
+    """Scan filesystem (+ optional plans/outcomes) into life_documents.
+
+    Idempotent via stable ids (``import:<hash>``, ``plan:<hash>``, ``outcome:<hash>``).
+    """
+    path_roots: list[Path] | None
+    if roots is None:
+        path_roots = None
+        root_display = [str(p) for p in default_document_scan_roots()]
+    else:
+        path_roots = []
+        for r in roots:
+            try:
+                path_roots.append(Path(r).expanduser().resolve())
+            except OSError:
+                continue
+        root_display = [str(p) for p in path_roots]
+
+    imported = updated = skipped = 0
+    errors: list[str] = []
+
+    hits = scan_filesystem_documents(path_roots, max_files=max_files)
+    i, u, s, errs = _import_filesystem_hits(hits, mission_id=mission_id)
+    imported += i
+    updated += u
+    skipped += s
+    errors.extend(errs)
+
+    if include_plans:
+        i, u, s, errs = _import_plans(mission_id=mission_id)
+        imported += i
+        updated += u
+        skipped += s
+        errors.extend(errs)
+
+    if include_outcomes:
+        i, u, s, errs = _import_kanban_outcomes(mission_id=mission_id)
+        imported += i
+        updated += u
+        skipped += s
+        errors.extend(errs)
+
+    return {
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped,
+        "scanned_files": len(hits),
+        "roots": root_display,
+        "errors": errors[:40],
+    }
 
 
 def post_thought(fields: dict[str, Any]) -> dict[str, Any]:
