@@ -147,14 +147,6 @@ export function Deck() {
         <Link to="/discovery" className="hover:text-amber-soft">
           Discovery
         </Link>
-        <span aria-hidden>·</span>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="hover:text-amber-soft"
-        >
-          Refresh
-        </button>
       </nav>
     </div>
   );
