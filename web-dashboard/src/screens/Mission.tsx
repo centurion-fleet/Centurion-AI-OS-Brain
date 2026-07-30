@@ -8,7 +8,12 @@ import { PhaseStrip } from "../components/PhaseStrip";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
-import { missionProgress, type Mission } from "../types/life";
+import {
+  DOCUMENT_LIBRARY_MISSION_ID,
+  missionProgress,
+  type LifeDocument,
+  type Mission,
+} from "../types/life";
 import { bridgeCall } from "../hooks/useBridge";
 import {
   missionTypeLabel,
@@ -40,6 +45,11 @@ export function Mission() {
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [libraryDocs, setLibraryDocs] = useState<LifeDocument[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || !mission) return;
@@ -190,6 +200,44 @@ export function Mission() {
       setDocError(e instanceof Error ? e.message : "Could not save document");
     } finally {
       setDocBusy(false);
+    }
+  }
+
+  async function loadLibraryDocs() {
+    setAttachBusy(true);
+    setAttachError(null);
+    try {
+      const res = await bridgeCall<{ ok: true; documents: LifeDocument[] }>(
+        "life_documents_list",
+        { mission_id: DOCUMENT_LIBRARY_MISSION_ID, limit: 40 },
+      );
+      setLibraryDocs(res.documents || []);
+    } catch (e) {
+      setLibraryDocs([]);
+      setAttachError(
+        e instanceof Error ? e.message : "Could not load Document library",
+      );
+    } finally {
+      setAttachBusy(false);
+    }
+  }
+
+  async function assignLibraryDoc(documentId: string) {
+    setAssigningId(documentId);
+    setAttachError(null);
+    try {
+      await bridgeCall("life_document_assign", {
+        document_id: documentId,
+        mission_id: missionId,
+      });
+      setLibraryDocs((prev) => prev.filter((d) => d.id !== documentId));
+      await refresh();
+    } catch (e) {
+      setAttachError(
+        e instanceof Error ? e.message : "Could not assign document",
+      );
+    } finally {
+      setAssigningId(null);
     }
   }
 
@@ -421,18 +469,89 @@ export function Mission() {
       </section>
 
       <section id="documents" className="mt-8 scroll-mt-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
             Documents
           </h2>
-          <button
-            type="button"
-            onClick={() => setDocOpen((o) => !o)}
-            className="rounded-full border border-amber-glow/30 bg-amber-muted/50 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-          >
-            {docOpen ? "Cancel" : "New document"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {mission.id !== DOCUMENT_LIBRARY_MISSION_ID && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDocOpen(false);
+                  setAttachOpen((o) => {
+                    const next = !o;
+                    if (next) void loadLibraryDocs();
+                    return next;
+                  });
+                }}
+                className="rounded-full border border-amber-glow/30 bg-amber-muted/50 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+              >
+                {attachOpen ? "Close library" : "Attach from library"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setAttachOpen(false);
+                setDocOpen((o) => !o);
+              }}
+              className="rounded-full border border-amber-glow/30 bg-amber-muted/50 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+            >
+              {docOpen ? "Cancel" : "New document"}
+            </button>
+          </div>
         </div>
+
+        {attachOpen && mission.id !== DOCUMENT_LIBRARY_MISSION_ID && (
+          <div className="surface mb-3 space-y-3 rounded-2xl p-4">
+            <p className="text-xs text-ink-dim">
+              Unassigned Scan imports live in Document library. Assign one to
+              this mission — or use Find documents on Focus.
+            </p>
+            {attachBusy && (
+              <p className="text-xs text-ink-dim">Loading library…</p>
+            )}
+            {attachError && (
+              <p className="text-sm text-amber-soft">{attachError}</p>
+            )}
+            {!attachBusy && !attachError && libraryDocs.length === 0 && (
+              <p className="text-sm text-ink-dim">
+                Library is empty. Scan this machine from Find documents on
+                Focus.
+              </p>
+            )}
+            {libraryDocs.length > 0 && (
+              <ul className="divide-y divide-white/5 overflow-hidden rounded-xl border border-white/5">
+                {libraryDocs.map((d) => (
+                  <li
+                    key={d.id}
+                    className="flex items-start gap-3 px-3 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink">{d.title}</p>
+                      {(d.summary || d.excerpt) && (
+                        <p className="mt-1 line-clamp-2 text-xs text-ink-muted">
+                          {d.summary || d.excerpt}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={assigningId === d.id}
+                      onClick={() => void assignLibraryDoc(d.id)}
+                      className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25 disabled:opacity-50"
+                    >
+                      {assigningId === d.id
+                        ? "Assigning…"
+                        : "Assign to this mission"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {docOpen && (
           <div className="surface mb-3 space-y-3 rounded-2xl p-4">

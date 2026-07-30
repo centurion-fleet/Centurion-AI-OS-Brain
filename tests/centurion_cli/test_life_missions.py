@@ -726,3 +726,143 @@ def test_search_documents_fts_and_special_char_fallback(life_home):
     # Special chars are sanitized; still finds via FTS or substring fallback.
     noisy = search_documents('UniqueFtsToken99*(")')
     assert len(noisy) >= 1
+
+
+def test_rehome_primary_import_orphans_moves_unmatched(life_home):
+    import centurion_cli.life_missions as lm
+
+    primary = lm.put_mission(
+        {
+            "title": "Isaac Primary Mission",
+            "statement": "Sail the planet",
+            "mission_type": "primary",
+        }
+    )
+    lm.set_primary(primary["id"])
+    supporting = lm.put_mission(
+        {
+            "title": "Side Project",
+            "statement": "Other work",
+            "mission_type": "supporting",
+        }
+    )
+
+    junk = lm.put_document(
+        {
+            "id": "import:orphanjunk1",
+            "mission_id": primary["id"],
+            "title": "Random scan file",
+            "body_md": "No mission title overlap UniqueOrphanJunk99",
+            "source": "import",
+            "announce": False,
+        }
+    )
+    matched = lm.put_document(
+        {
+            "id": "import:primarymatch1",
+            "mission_id": primary["id"],
+            "title": "Notes for Isaac Primary Mission",
+            "body_md": "About Isaac Primary Mission sailing",
+            "source": "import",
+            "announce": False,
+        }
+    )
+    agent_keep = lm.put_document(
+        {
+            "mission_id": primary["id"],
+            "title": "Handwritten note",
+            "body_md": "User/agent doc stays on Primary",
+            "source": "agent",
+            "announce": False,
+        }
+    )
+
+    with lm._conn() as conn:
+        conn.execute(
+            "DELETE FROM life_meta WHERE key = 'rehome_primary_imports_v4'"
+        )
+    lm._REHOME_ATTEMPTED = False
+    lm._REHOME_ATTEMPTED_PATH = None
+    lm._REHOME_IN_PROGRESS = False
+
+    result = lm.rehome_primary_import_orphans()
+    assert result.get("skipped") is not True
+    assert result["moved"] >= 1
+
+    assert lm.get_document(junk["id"])["mission_id"] == lm.DOCUMENT_LIBRARY_MISSION_ID
+    assert lm.get_document(matched["id"])["mission_id"] == primary["id"]
+    assert lm.get_document(agent_keep["id"])["mission_id"] == primary["id"]
+
+    # Idempotent.
+    again = lm.rehome_primary_import_orphans()
+    assert again.get("skipped") is True
+
+    assert supporting["id"]
+
+
+def test_assign_document_preserves_body(life_home):
+    from centurion_cli.life_missions import (
+        DOCUMENT_LIBRARY_MISSION_ID,
+        assign_document,
+        ensure_document_library_mission,
+        get_document,
+        list_documents,
+        put_document,
+        put_mission,
+        set_primary,
+    )
+    from centurion_cli.remote_bridge import handle_request
+
+    primary = put_mission(
+        {
+            "title": "Assign Target Mission",
+            "statement": "Receive docs",
+            "mission_type": "primary",
+        }
+    )
+    set_primary(primary["id"])
+    supporting = put_mission(
+        {
+            "title": "Supporting Receiver",
+            "statement": "Gets the assign",
+            "mission_type": "supporting",
+        }
+    )
+    ensure_document_library_mission()
+    doc = put_document(
+        {
+            "id": "import:toassign1",
+            "mission_id": DOCUMENT_LIBRARY_MISSION_ID,
+            "title": "Library memo",
+            "body_md": "PreserveThisBodyXYZ",
+            "summary": "sum",
+            "source": "import",
+            "announce": False,
+        }
+    )
+
+    out = assign_document(doc["id"], supporting["id"])
+    assert out["mission_id"] == supporting["id"]
+    assert out["body_md"] == "PreserveThisBodyXYZ"
+    assert out["title"] == "Library memo"
+    assert get_document(doc["id"])["mission_id"] == supporting["id"]
+    assert any(
+        d["id"] == doc["id"]
+        for d in list_documents(mission_id=supporting["id"])
+    )
+    assert not any(
+        d["id"] == doc["id"]
+        for d in list_documents(mission_id=DOCUMENT_LIBRARY_MISSION_ID)
+    )
+
+    r = handle_request(
+        {
+            "id": "as1",
+            "action": "life_document_assign",
+            "document_id": doc["id"],
+            "mission_id": primary["id"],
+        }
+    )
+    assert r["ok"] is True
+    assert r["document"]["mission_id"] == primary["id"]
+    assert r["document"]["body_md"] == "PreserveThisBodyXYZ"

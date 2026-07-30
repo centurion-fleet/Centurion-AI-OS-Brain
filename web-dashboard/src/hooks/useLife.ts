@@ -173,7 +173,7 @@ export function useMissionDetail(
       setDocuments(
         docSettled.status === "fulfilled"
           ? (docSettled.value.documents || []).filter(
-              (d) => !d.mission_id || d.mission_id === missionId,
+              (d) => d.mission_id === missionId,
             )
           : [],
       );
@@ -221,7 +221,7 @@ export function usePrimaryDocuments(
         primary_documents?: LifeDocument[];
       };
       const docs = (parsed.primary_documents || []).filter(
-        (d) => !d.mission_id || d.mission_id === missionId,
+        (d) => d.mission_id === missionId,
       );
       if (docs.length) {
         docsFp.current = stableJson(docs);
@@ -246,7 +246,7 @@ export function usePrimaryDocuments(
         { mission_id: missionId, limit: 5 },
       );
       const docs = (res.documents || []).filter(
-        (d) => !d.mission_id || d.mission_id === missionId,
+        (d) => d.mission_id === missionId,
       );
       const fp = stableJson(docs);
       if (fp !== docsFp.current) {

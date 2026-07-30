@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { bridgeCall } from "../hooks/useBridge";
-import type { LifeDocument } from "../types/life";
+import {
+  DOCUMENT_LIBRARY_MISSION_ID,
+  type LifeDocument,
+  type Mission,
+} from "../types/life";
 
 function discussDocument(d: LifeDocument) {
   const w = window as Window & {
@@ -21,6 +25,15 @@ function discussDocument(d: LifeDocument) {
     plan_id: d.plan_id || undefined,
     kickoff: `Let's evolve this document: ${d.title}`,
   });
+}
+
+function isAssignableMission(m: Mission): boolean {
+  if (m.id === DOCUMENT_LIBRARY_MISSION_ID) return false;
+  const profile = m.profile;
+  if (profile && typeof profile === "object") {
+    if (profile.hidden_from_stack || profile.system) return false;
+  }
+  return m.mission_type !== "dream";
 }
 
 /**
@@ -49,6 +62,9 @@ export function DocumentSearch({
   const [scanNote, setScanNote] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assignDocId, setAssignDocId] = useState<string | null>(null);
+  const [assignMissions, setAssignMissions] = useState<Mission[]>([]);
+  const [assignBusy, setAssignBusy] = useState(false);
   const searchSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -58,6 +74,7 @@ export function DocumentSearch({
 
   const close = useCallback(() => {
     setOpen(false);
+    setAssignDocId(null);
     onClose?.();
   }, [onClose]);
 
@@ -99,6 +116,55 @@ export function DocumentSearch({
       }
     }
   }, []);
+
+  const openAssign = useCallback(async (documentId: string) => {
+    setAssignDocId(documentId);
+    setError(null);
+    try {
+      const res = await bridgeCall<{ ok: true; missions: Mission[] }>(
+        "life_missions_list",
+      );
+      setAssignMissions((res.missions || []).filter(isAssignableMission));
+    } catch (e) {
+      setAssignMissions([]);
+      setError(
+        e instanceof Error ? e.message : "Could not load missions for assign",
+      );
+    }
+  }, []);
+
+  const assignToMission = useCallback(
+    async (documentId: string, missionId: string) => {
+      setAssignBusy(true);
+      setError(null);
+      try {
+        const res = await bridgeCall<{ ok: true; document: LifeDocument }>(
+          "life_document_assign",
+          { document_id: documentId, mission_id: missionId },
+        );
+        const updated = res.document;
+        setResults((prev) =>
+          prev.map((d) =>
+            d.id === documentId
+              ? {
+                  ...d,
+                  ...updated,
+                  mission_title:
+                    assignMissions.find((m) => m.id === missionId)?.title ||
+                    d.mission_title,
+                }
+              : d,
+          ),
+        );
+        setAssignDocId(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not assign document");
+      } finally {
+        setAssignBusy(false);
+      }
+    },
+    [assignMissions],
+  );
 
   const runScan = useCallback(async () => {
     setScanning(true);
@@ -226,6 +292,7 @@ export function DocumentSearch({
             older write-ups from Documents/Desktop, ~/centurion,
             /home/Legio/centurion, plans, and completed task outcomes. Unmatched
             imports land in Document library — not on your Primary mission.
+            Assign library hits to a mission from the result row.
           </p>
         )}
         {scanNote && (
@@ -238,39 +305,92 @@ export function DocumentSearch({
         )}
         {results.length > 0 && (
           <ul className="mt-3 divide-y divide-white/5 overflow-hidden rounded-xl border border-white/5">
-            {results.map((d) => (
-              <li key={d.id} className="flex items-start gap-3 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <Link
-                    to={`/mission/${d.mission_id}#documents`}
-                    className="text-sm font-medium text-ink hover:text-amber-soft"
-                  >
-                    {d.title}
-                  </Link>
-                  <p className="mt-0.5 text-[11px] text-ink-dim">
-                    {d.mission_title || "Mission"}
-                    {d.doc_type ? ` · ${d.doc_type}` : ""}
-                    {d.updated_at
-                      ? ` · ${d.updated_at.replace("T", " ").slice(0, 16)}`
-                      : ""}
-                  </p>
-                  {(d.excerpt || d.summary) && (
-                    <p className="mt-1 line-clamp-2 text-xs text-ink-muted">
-                      {d.excerpt || d.summary}
-                    </p>
+            {results.map((d) => {
+              const isLibrary = d.mission_id === DOCUMENT_LIBRARY_MISSION_ID;
+              const assigning = assignDocId === d.id;
+              return (
+                <li key={d.id} className="px-3 py-2.5">
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/mission/${d.mission_id}#documents`}
+                        className="text-sm font-medium text-ink hover:text-amber-soft"
+                      >
+                        {d.title}
+                      </Link>
+                      <p className="mt-0.5 text-[11px] text-ink-dim">
+                        {isLibrary
+                          ? "Document library"
+                          : d.mission_title || "Mission"}
+                        {d.doc_type ? ` · ${d.doc_type}` : ""}
+                        {d.updated_at
+                          ? ` · ${d.updated_at.replace("T", " ").slice(0, 16)}`
+                          : ""}
+                      </p>
+                      {(d.excerpt || d.summary) && (
+                        <p className="mt-1 line-clamp-2 text-xs text-ink-muted">
+                          {d.excerpt || d.summary}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {isLibrary && (
+                        <button
+                          type="button"
+                          disabled={assignBusy}
+                          onClick={() =>
+                            assigning
+                              ? setAssignDocId(null)
+                              : void openAssign(d.id)
+                          }
+                          className="rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25 disabled:opacity-50"
+                        >
+                          {assigning ? "Cancel" : "Assign…"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        title="Discuss in Chat"
+                        aria-label={`Discuss ${d.title}`}
+                        onClick={() => discussDocument(d)}
+                        className="rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                      >
+                        Discuss
+                      </button>
+                    </div>
+                  </div>
+                  {assigning && (
+                    <div className="mt-2 rounded-xl border border-white/5 bg-black/20 p-2">
+                      {assignMissions.length === 0 ? (
+                        <p className="text-xs text-ink-dim">
+                          No missions available to assign.
+                        </p>
+                      ) : (
+                        <ul className="max-h-40 space-y-1 overflow-auto">
+                          {assignMissions.map((m) => (
+                            <li key={m.id}>
+                              <button
+                                type="button"
+                                disabled={assignBusy}
+                                onClick={() =>
+                                  void assignToMission(d.id, m.id)
+                                }
+                                className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-ink transition hover:bg-amber-muted/40 disabled:opacity-50"
+                              >
+                                {m.title}
+                                <span className="ml-2 text-ink-dim">
+                                  {m.mission_type}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
-                </div>
-                <button
-                  type="button"
-                  title="Discuss in Chat"
-                  aria-label={`Discuss ${d.title}`}
-                  onClick={() => discussDocument(d)}
-                  className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                >
-                  Discuss
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

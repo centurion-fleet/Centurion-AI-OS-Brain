@@ -121,6 +121,9 @@ export type DocType =
   | "plan"
   | "other";
 
+/** Hidden system mission for unmatched Scan imports (not null orphans). */
+export const DOCUMENT_LIBRARY_MISSION_ID = "mission:document-library";
+
 export interface LifeDocument {
   id: string;
   mission_id: string;

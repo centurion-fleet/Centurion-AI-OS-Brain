@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 from centurion_constants import get_centurion_home
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 MISSION_PHASES = frozenset(
     {"briefing", "discovery", "planning", "executing", "verifying", "done"}
@@ -86,6 +86,28 @@ def _conn() -> Iterator[sqlite3.Connection]:
 _SCHEMA_READY = False
 _SCHEMA_READY_PATH: str | None = None
 _SCHEMA_READY_LOCK = threading.Lock()
+_REHOME_ATTEMPTED = False
+_REHOME_ATTEMPTED_PATH: str | None = None
+_REHOME_IN_PROGRESS = False
+
+
+def _run_rehome_once() -> None:
+    """Process-once wrapper; skipped while rehome itself is running."""
+    global _REHOME_ATTEMPTED, _REHOME_ATTEMPTED_PATH, _REHOME_IN_PROGRESS
+    if _REHOME_IN_PROGRESS:
+        return
+    path = str(life_db_path())
+    if _REHOME_ATTEMPTED and _REHOME_ATTEMPTED_PATH == path:
+        return
+    _REHOME_ATTEMPTED = True
+    _REHOME_ATTEMPTED_PATH = path
+    _REHOME_IN_PROGRESS = True
+    try:
+        rehome_primary_import_orphans()
+    except Exception:
+        pass
+    finally:
+        _REHOME_IN_PROGRESS = False
 
 
 def ensure_schema_once() -> None:
@@ -98,6 +120,7 @@ def ensure_schema_once() -> None:
         if _SCHEMA_READY and _SCHEMA_READY_PATH == path:
             return
         ensure_schema()
+        _run_rehome_once()
         try:
             # Daemon warm only — never call from hot read paths (get_stack / lists).
             bootstrap_from_markdown_if_empty()
@@ -248,6 +271,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
     if prev_ver < 3:
         _migrate_documents_fts(conn)
 
+    # v4: Primary import rehome runs after schema ready (see ensure_schema_once).
+    # Marker only — actual move is rehome_primary_import_orphans().
+
     conn.execute(
         "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('data_version', '0')"
     )
@@ -281,6 +307,11 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
     if own:
         conn.commit()
         conn.close()
+        _run_rehome_once()
+    else:
+        # Schema ready on this connection; commit so rehome's nested opens see it.
+        conn.commit()
+        _run_rehome_once()
 
 
 def _migrate_documents_fts(conn: sqlite3.Connection) -> None:
@@ -1348,6 +1379,155 @@ def get_document(document_id: str) -> dict[str, Any] | None:
             "SELECT * FROM life_documents WHERE id = ?", (did,)
         ).fetchone()
         return _row_dict(row)
+
+
+def assign_document(
+    document_id: str,
+    mission_id: str,
+    *,
+    announce: bool = False,
+) -> dict[str, Any]:
+    """Move a document to another mission without wiping title/body."""
+    did = str(document_id or "").strip()
+    mid = str(mission_id or "").strip()
+    if not did:
+        raise ValueError("document_id required")
+    if not mid:
+        raise ValueError("mission_id required")
+    mission = get_mission(mid)
+    if not mission or not mission.get("id"):
+        raise ValueError(f"mission not found: {mid}")
+    now = _utc_now()
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM life_documents WHERE id = ?", (did,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"document not found: {did}")
+        conn.execute(
+            "UPDATE life_documents SET mission_id = ?, updated_at = ? WHERE id = ?",
+            (mid, now, did),
+        )
+        bump_data_version(conn)
+        out_row = conn.execute(
+            "SELECT * FROM life_documents WHERE id = ?", (did,)
+        ).fetchone()
+        out = _row_dict(out_row)
+        assert out is not None
+
+    if announce:
+        try:
+            post_thought(
+                {
+                    "mission_id": mid,
+                    "activity_type": "artifact",
+                    "summary": f"Assigned document: {out.get('title') or did}",
+                    "detail": f"Moved to mission {mid}",
+                }
+            )
+        except Exception:
+            pass
+    return out
+
+
+def rehome_primary_import_orphans() -> dict[str, Any]:
+    """Move unmatched Primary Scan dumps into Document library (schema v4).
+
+    Keeps an import on Primary only when soft-match would still pick Primary.
+    Idempotent via ``life_meta.rehome_primary_imports_v4``.
+    Uses a dedicated connection (not ``_conn``) so schema warm hooks cannot
+    recurse into this function mid-flight.
+    """
+    path = str(life_db_path())
+    conn = sqlite3.connect(path, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        ensure_schema(conn)
+        done = conn.execute(
+            "SELECT value FROM life_meta WHERE key = 'rehome_primary_imports_v4'"
+        ).fetchone()
+        if done is not None and str(done["value"]) == "1":
+            return {"moved": 0, "kept": 0, "skipped": True}
+
+        stack_row = conn.execute(
+            "SELECT primary_mission_id FROM life_mission_stack WHERE id = 1"
+        ).fetchone()
+        primary_id = ""
+        if stack_row and stack_row["primary_mission_id"]:
+            primary_id = str(stack_row["primary_mission_id"]).strip()
+        if not primary_id:
+            prow = conn.execute(
+                "SELECT id FROM life_missions WHERE mission_type = 'primary' "
+                "ORDER BY created_at LIMIT 1"
+            ).fetchone()
+            if prow:
+                primary_id = str(prow["id"]).strip()
+        if not primary_id:
+            conn.execute(
+                "INSERT OR REPLACE INTO life_meta(key, value) "
+                "VALUES ('rehome_primary_imports_v4', '1')"
+            )
+            conn.commit()
+            return {"moved": 0, "kept": 0, "skipped": True}
+
+        # Ensure library exists (may open nested work — guarded by in-progress).
+        library_id = ensure_document_library_mission()
+
+        rows = conn.execute(
+            "SELECT * FROM life_documents WHERE mission_id = ? AND source = 'import' "
+            "AND (id LIKE 'import:%' OR id LIKE 'plan:%' OR id LIKE 'outcome:%')",
+            (primary_id,),
+        ).fetchall()
+        docs = [_row_dict(r) for r in rows]
+
+        primary_title = ""
+        prow = conn.execute(
+            "SELECT title FROM life_missions WHERE id = ?", (primary_id,)
+        ).fetchone()
+        if prow:
+            primary_title = str(prow["title"] or "").strip().lower()
+
+        to_move: list[str] = []
+        kept = 0
+        for doc in docs:
+            if not doc:
+                continue
+            hint = " ".join(
+                [
+                    str(doc.get("title") or ""),
+                    str(doc.get("summary") or ""),
+                    str(doc.get("body_md") or "")[:500],
+                ]
+            ).lower()
+            # Keep only when the Primary title itself appears (strong match).
+            # Token soft-match is too loose for migration ("mission" alone).
+            if primary_title and primary_title in hint:
+                kept += 1
+            else:
+                did = str(doc.get("id") or "").strip()
+                if did:
+                    to_move.append(did)
+
+        now = _utc_now()
+        for did in to_move:
+            conn.execute(
+                "UPDATE life_documents SET mission_id = ?, updated_at = ? WHERE id = ?",
+                (library_id, now, did),
+            )
+        if to_move:
+            bump_data_version(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO life_meta(key, value) "
+            "VALUES ('rehome_primary_imports_v4', '1')"
+        )
+        conn.commit()
+        return {"moved": len(to_move), "kept": kept, "skipped": False}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def list_documents(

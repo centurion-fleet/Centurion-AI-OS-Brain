@@ -169,6 +169,8 @@ def handle_request(
         return _handle_life_document_get(request, request_id)
     if action == "life_document_put":
         return _handle_life_document_put(request, request_id)
+    if action == "life_document_assign":
+        return _handle_life_document_assign(request, request_id)
     if action == "life_documents_import_scan":
         return _handle_life_documents_import_scan(request, request_id)
     if action == "life_thoughts_list":
@@ -3082,6 +3084,28 @@ def _handle_life_document_put(
         }
     except Exception as exc:
         return _error_response(request_id, action="life_document_put", exc=exc)
+
+
+def _handle_life_document_assign(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import assign_document
+
+        did = str(
+            request.get("document_id") or request.get("id") or ""
+        ).strip()
+        mid = str(request.get("mission_id") or "").strip()
+        announce = bool(request.get("announce", False))
+        document = assign_document(did, mid, announce=announce)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_document_assign",
+            "document": document,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_document_assign", exc=exc)
 
 
 def _handle_life_documents_import_scan(
