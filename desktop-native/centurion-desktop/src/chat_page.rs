@@ -4988,7 +4988,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         _ => clear_pending_proposal(),
                     }
                 });
-                proposal_buttons.append(&button);
             }
             proposal_box.set_visible(true);
         }
