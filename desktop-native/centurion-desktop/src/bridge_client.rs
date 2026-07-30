@@ -19,9 +19,8 @@ use crate::chat_page::{
 };
 
 static DAEMON: OnceLock<Mutex<DaemonState>> = OnceLock::new();
-/// Recycle any pre-existing socket daemon once per Brain process so updates
-/// to ``centurion_cli`` are loaded (orphans kept serving old code).
-static RECYCLED_ORPHAN: AtomicBool = AtomicBool::new(false);
+/// Once per Brain process: decide whether an orphan listener is still current.
+static ORPHAN_CHECKED: AtomicBool = AtomicBool::new(false);
 
 struct DaemonState {
     child: Option<Child>,
@@ -65,6 +64,45 @@ fn wait_for_socket(path: &Path, timeout: Duration) -> bool {
     socket_connectable(path)
 }
 
+/// Cheap version handshake — does not start a daemon.
+fn ping_bridge_version(path: &Path) -> Option<String> {
+    let mut stream = UnixStream::connect(path).ok()?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(800)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(800)));
+    let payload = r#"{"id":"desktop-ping","action":"bridge_ping"}"#;
+    stream.write_all(payload.as_bytes()).ok()?;
+    stream.write_all(b"\n").ok()?;
+    stream.flush().ok()?;
+    let _ = stream.shutdown(Shutdown::Write);
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let value: Value = serde_json::from_str(trimmed).ok()?;
+    if value.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    value
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+fn expected_bridge_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+fn orphan_is_current(path: &Path) -> bool {
+    match ping_bridge_version(path) {
+        Some(ver) => ver == expected_bridge_version(),
+        None => false,
+    }
+}
+
 fn spawn_daemon(socket_path: &Path) -> Result<Child, String> {
     if let Some(parent) = socket_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -106,6 +144,17 @@ fn stop_listener_on_socket(socket_path: &Path) {
     }
 }
 
+fn recycle_orphan_listener(path: &Path) {
+    stop_listener_on_socket(path);
+    let _ = Command::new("pkill")
+        .args(["-f", "centurion_cli.remote_bridge.*--serve"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    thread::sleep(Duration::from_millis(250));
+    stop_listener_on_socket(path);
+}
+
 /// Ensure the bridge daemon is running and accepting connections.
 pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
     let mut state = daemon_lock()
@@ -113,35 +162,27 @@ pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
         .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
     let path = state.socket_path.clone();
 
-    // First call in this Brain process: drop any orphan daemon left from a
-    // previous run so we do not keep talking to pre-update centurion_cli.
-    let recycled = !RECYCLED_ORPHAN.swap(true, Ordering::SeqCst);
-    if recycled {
-        if let Some(mut child) = state.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+    // First call in this Brain process: reuse orphan only when version matches.
+    let first_check = !ORPHAN_CHECKED.swap(true, Ordering::SeqCst);
+    if first_check {
+        if socket_connectable(&path) && orphan_is_current(&path) {
+            return Ok(path);
         }
-        drop(state);
-        stop_listener_on_socket(&path);
-        // Also try pkill of bridge serve for this socket (best-effort, Linux).
-        let _ = Command::new("pkill")
-            .args(["-f", "centurion_cli.remote_bridge.*--serve"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        thread::sleep(Duration::from_millis(250));
-        stop_listener_on_socket(&path);
-        state = daemon_lock()
-            .lock()
-            .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+        if socket_connectable(&path) {
+            if let Some(mut child) = state.child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            drop(state);
+            recycle_orphan_listener(&path);
+            state = daemon_lock()
+                .lock()
+                .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+        }
     }
 
-    // After a recycle pass, never adopt a leftover listener — spawn ours.
-    if !recycled && socket_connectable(&path) {
+    if socket_connectable(&path) {
         return Ok(path);
-    }
-    if recycled && socket_connectable(&path) {
-        stop_listener_on_socket(&path);
     }
 
     if let Some(child) = state.child.as_mut() {

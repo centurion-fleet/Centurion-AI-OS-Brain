@@ -25,7 +25,7 @@ const DIST = path.join(__dirname, "dist");
 const DECK_DIR = __dirname;
 const SSE_MS = Math.max(
   1000,
-  Number(process.env.CENTURION_DECK_SSE_MS || 8000) || 8000,
+  Number(process.env.CENTURION_DECK_SSE_MS || 15000) || 15000,
 );
 
 const MIME = {
@@ -298,7 +298,14 @@ function serveStatic(req, res) {
       return;
     }
     const ext = path.extname(filePath);
-    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    const headers = {
+      "Content-Type": MIME[ext] || "application/octet-stream",
+    };
+    // Hashed Vite assets under /assets/* are immutable across a build.
+    if (urlPath.startsWith("/assets/")) {
+      headers["Cache-Control"] = "public, max-age=86400, immutable";
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 }
@@ -346,9 +353,11 @@ async function handleStream(req, res) {
   });
 
   const seen = new Set();
+  let inflight = false;
 
   async function tick() {
-    if (closed) return;
+    if (closed || inflight) return;
+    inflight = true;
     try {
       const result = await callBridge({
         id: randomUUID(),
@@ -377,6 +386,8 @@ async function handleStream(req, res) {
       res.write(
         `event: error\ndata: ${JSON.stringify({ message: String(err.message || err) })}\n\n`,
       );
+    } finally {
+      inflight = false;
     }
     res.write(": heartbeat\n\n");
   }

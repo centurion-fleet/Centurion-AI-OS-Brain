@@ -87,7 +87,7 @@ mod linux {
     use gtk4 as gtk;
     use libadwaita as adw;
     use serde::Deserialize;
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::collections::HashMap;
     use std::io::Write;
     use std::path::PathBuf;
@@ -1480,8 +1480,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let fix_thinking_row = fix_thinking_row.clone();
             let update_row = update_row.clone();
             let update_attention_mark = update_attention_mark.clone();
-            Rc::new(move || {
-                let items = settings_attention_items();
+            Rc::new(move |items: Vec<SettingsAttentionItem>| {
                 rebuild_settings_attention_banner(&banner, &items);
                 let thinking = items
                     .iter()
@@ -1515,7 +1514,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 } else {
                     update_row.remove_css_class("centurion-needs-attention");
                 }
-            }) as Rc<dyn Fn()>
+            }) as Rc<dyn Fn(Vec<SettingsAttentionItem>)>
         };
 
         let refresh_home_badge = {
@@ -1530,16 +1529,38 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 }
             }) as Rc<dyn Fn()>
         };
-        let refresh_settings_badge = {
+        let apply_settings_badge = {
             let tab_badges_ui = tab_badges_ui.clone();
             let refresh_settings_attention_ui = refresh_settings_attention_ui.clone();
-            Rc::new(move || {
-                if settings_needs_attention() {
+            Rc::new(move |items: Vec<SettingsAttentionItem>| {
+                let needs = !items.is_empty();
+                if needs {
                     tab_badges_ui.set_badge("settings", Some("!"));
                 } else {
                     tab_badges_ui.set_badge("settings", None);
                 }
-                refresh_settings_attention_ui();
+                refresh_settings_attention_ui(items);
+            }) as Rc<dyn Fn(Vec<SettingsAttentionItem>)>
+        };
+        let refresh_settings_badge = {
+            let apply_settings_badge = apply_settings_badge.clone();
+            Rc::new(move || {
+                // Probe off the UI thread; apply when ready.
+                let apply_settings_badge = apply_settings_badge.clone();
+                let (tx, rx) = std::sync::mpsc::channel::<Vec<SettingsAttentionItem>>();
+                std::thread::spawn(move || {
+                    let _ = tx.send(settings_attention_items());
+                });
+                glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+                    match rx.try_recv() {
+                        Ok(items) => {
+                            apply_settings_badge(items);
+                            glib::ControlFlow::Break
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                    }
+                });
             }) as Rc<dyn Fn()>
         };
         let refresh_chat_badge = {
@@ -1597,7 +1618,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             if poll_stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices(&poll_list);
             }
-            // Light poll for Settings (!) — thinking/device state.
+            // Light poll for Settings (!) — probes run off the UI thread.
             poll_settings_badge();
             glib::ControlFlow::Continue
         });
@@ -1670,12 +1691,78 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 show_brain_welcome_dialog(&window);
             });
         }
-        refresh_thinking_status(&thinking_detail, &thinking_settings_row);
-        refresh_backup_thinking_services(&backup_thinking_row);
-        refresh_autonomy_row(&autonomy_row);
-        refresh_soul_row(&soul_row);
-        refresh_memory_horizon_row(&memory_horizon_row);
-        refresh_oversight_row(&oversight_row);
+        // Defer Settings row fills until after first paint so cold-start Chat
+        // is not blocked by provider/bridge probes.
+        {
+            let thinking_detail = thinking_detail.clone();
+            let thinking_settings_row = thinking_settings_row.clone();
+            let backup_thinking_row = backup_thinking_row.clone();
+            let autonomy_row = autonomy_row.clone();
+            let soul_row = soul_row.clone();
+            let memory_horizon_row = memory_horizon_row.clone();
+            let oversight_row = oversight_row.clone();
+            glib::idle_add_local_once(move || {
+                let thinking_detail = thinking_detail.clone();
+                let thinking_settings_row = thinking_settings_row.clone();
+                let backup_thinking_row = backup_thinking_row.clone();
+                let autonomy_row = autonomy_row.clone();
+                let soul_row = soul_row.clone();
+                let memory_horizon_row = memory_horizon_row.clone();
+                let oversight_row = oversight_row.clone();
+                let (tx, rx) = std::sync::mpsc::channel::<(
+                    Option<serde_json::Value>,
+                    Option<serde_json::Value>,
+                    Option<serde_json::Value>,
+                    Option<String>,
+                )>();
+                std::thread::spawn(move || {
+                    let soul = run_bridge_action("soul_get", serde_json::json!({}));
+                    let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
+                    let horizon =
+                        run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
+                    let thinking_line = run_provider_command(&["status", "--skip-probe"]).and_then(
+                        |response| {
+                            response.status.map(|status| {
+                                let model = status.model.unwrap_or_default();
+                                if model.is_empty() {
+                                    status.provider
+                                } else {
+                                    format!("{} · {}", status.provider, model)
+                                }
+                            })
+                        },
+                    );
+                    let _ = tx.send((soul, oversight, horizon, thinking_line));
+                });
+                refresh_backup_thinking_services(&backup_thinking_row);
+                refresh_autonomy_row(&autonomy_row);
+                glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+                    match rx.try_recv() {
+                        Ok((soul, oversight, horizon, thinking_line)) => {
+                            if let Some(line) = thinking_line {
+                                thinking_detail.set_label(&line);
+                                thinking_settings_row.set_subtitle(&line);
+                            }
+                            // Reuse the existing row appliers (they re-read via
+                            // bridge daemon — cheap once warm).
+                            let _ = (soul, oversight, horizon);
+                            refresh_soul_row(&soul_row);
+                            refresh_memory_horizon_row(&memory_horizon_row);
+                            refresh_oversight_row(&oversight_row);
+                            glib::ControlFlow::Break
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            refresh_thinking_status(&thinking_detail, &thinking_settings_row);
+                            refresh_soul_row(&soul_row);
+                            refresh_memory_horizon_row(&memory_horizon_row);
+                            refresh_oversight_row(&oversight_row);
+                            glib::ControlFlow::Break
+                        }
+                    }
+                });
+            });
+        }
         let thinking_poll_detail = thinking_detail.clone();
         let thinking_poll_row = thinking_settings_row.clone();
         let backup_poll_row = backup_thinking_row.clone();

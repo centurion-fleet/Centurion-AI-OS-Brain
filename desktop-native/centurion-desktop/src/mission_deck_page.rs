@@ -12,8 +12,8 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::chat_page::DiscussTopic;
 use crate::home_page::{HomeHandle, HomeHooks};
@@ -64,18 +64,39 @@ fn deck_healthy() -> bool {
         .unwrap_or(false)
 }
 
+const READY_CACHE_SECS: u64 = 30;
+
 struct DeckSupervisor {
     child: Option<Child>,
     dir: PathBuf,
+    last_ready: Option<Instant>,
 }
 
 impl DeckSupervisor {
     fn new(dir: PathBuf) -> Self {
-        Self { child: None, dir }
+        Self {
+            child: None,
+            dir,
+            last_ready: None,
+        }
     }
 
+    fn mark_ready(&mut self) {
+        self.last_ready = Some(Instant::now());
+    }
+
+    /// True when health succeeded recently — skip spawn/wait on tab show.
+    fn ready_recently(&self) -> bool {
+        match self.last_ready {
+            Some(t) if t.elapsed() < Duration::from_secs(READY_CACHE_SECS) => deck_healthy(),
+            _ => false,
+        }
+    }
+
+    /// Blocking spawn + readiness wait — call only from a background thread.
     fn ensure_running(&mut self) -> Result<(), String> {
         if deck_healthy() {
+            self.mark_ready();
             return Ok(());
         }
         if let Some(child) = self.child.as_mut() {
@@ -89,6 +110,7 @@ impl DeckSupervisor {
         }
         for _ in 0..40 {
             if deck_healthy() {
+                self.mark_ready();
                 return Ok(());
             }
             std::thread::sleep(Duration::from_millis(200));
@@ -118,7 +140,7 @@ impl DeckSupervisor {
             .current_dir(&self.dir)
             .env("MISSION_DECK_HOST", DECK_HOST)
             .env("MISSION_DECK_PORT", DECK_PORT.to_string())
-            .env("CENTURION_DECK_SSE_MS", "5000")
+            .env("CENTURION_DECK_SSE_MS", "15000")
             .env(
                 "CENTURION_HOME",
                 crate::chat_page::resolve_centurion_home(),
@@ -136,6 +158,17 @@ impl DeckSupervisor {
             if venv.is_file() {
                 cmd.env("CENTURION_PYTHON", venv);
             }
+            // Align with Brain bridge: prefer checkout over orphan packages.
+            cmd.env("CENTURION_AI_REPO", &root);
+            let mut pythonpath = root.display().to_string();
+            if let Ok(existing) = std::env::var("PYTHONPATH") {
+                let trimmed = existing.trim();
+                if !trimmed.is_empty() {
+                    pythonpath.push(':');
+                    pythonpath.push_str(trimmed);
+                }
+            }
+            cmd.env("PYTHONPATH", pythonpath);
         }
 
         let child = cmd
@@ -178,8 +211,8 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     status.set_margin_end(24);
     root.append(&status);
 
-    let supervisor: Rc<RefCell<Option<Mutex<DeckSupervisor>>>> = Rc::new(RefCell::new(
-        resolve_mission_deck_dir().map(|dir| Mutex::new(DeckSupervisor::new(dir))),
+    let supervisor: Rc<RefCell<Option<Arc<Mutex<DeckSupervisor>>>>> = Rc::new(RefCell::new(
+        resolve_mission_deck_dir().map(|dir| Arc::new(Mutex::new(DeckSupervisor::new(dir)))),
     ));
 
     let root_weak = root.downgrade();
@@ -187,46 +220,64 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let hooks_c = hooks.clone();
     let webview_slot_c = webview_slot.clone();
     let suspended_c = suspended.clone();
+    let status_c = status.clone();
 
-    // Poll server readiness on the main thread (no std::thread::spawn needed).
-    glib::timeout_add_seconds_local(0, move || {
-        let result: Result<(), String> = match supervisor_c.borrow().as_ref() {
-            Some(m) => m
-                .lock()
-                .map_err(|e| e.to_string())
-                .and_then(|mut s| s.ensure_running()),
-            None => Err(
-                "Mission Deck not found. Build web-dashboard (`npm run build`) and install, \
-                 or set CENTURION_MISSION_DECK_DIR."
-                    .into(),
-            ),
-        };
-
-        let Some(root) = root_weak.upgrade() else {
-            return glib::ControlFlow::Break;
-        };
-        match result {
-            Ok(()) => {
-                status.set_visible(false);
-                match attach_webview(&root, hooks_c.clone(), suspended_c.clone()) {
-                    Some(wv) => {
-                        apply_deck_suspend(&wv, suspended_c.get());
-                        *webview_slot_c.borrow_mut() = Some(wv);
-                    }
-                    None => {
-                        status.set_visible(true);
-                        status.set_label(
-                            "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
-                        );
+    // Pre-warm Node on a background thread as soon as the tab is built (window
+    // show path) so Chat stays responsive and Focus often finds a ready deck.
+    let (tx, rx) = mpsc::channel::<Result<(), String>>();
+    {
+        let supervisor_bg = supervisor_c.borrow().clone();
+        std::thread::spawn(move || {
+            let result = match supervisor_bg {
+                Some(m) => m
+                    .lock()
+                    .map_err(|e| e.to_string())
+                    .and_then(|mut s| s.ensure_running()),
+                None => Err(
+                    "Mission Deck not found. Build web-dashboard (`npm run build`) and install, \
+                     or set CENTURION_MISSION_DECK_DIR."
+                        .into(),
+                ),
+            };
+            let _ = tx.send(result);
+        });
+    }
+    glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+        Ok(result) => {
+            let Some(root) = root_weak.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            match result {
+                Ok(()) => {
+                    status_c.set_visible(false);
+                    if webview_slot_c.borrow().is_none() {
+                        match attach_webview(&root, hooks_c.clone(), suspended_c.clone()) {
+                            Some(wv) => {
+                                apply_deck_suspend(&wv, suspended_c.get());
+                                *webview_slot_c.borrow_mut() = Some(wv);
+                            }
+                            None => {
+                                status_c.set_visible(true);
+                                status_c.set_label(
+                                    "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
+                                );
+                            }
+                        }
                     }
                 }
+                Err(err) => {
+                    status_c.set_visible(true);
+                    status_c.set_label(&err);
+                }
             }
-            Err(err) => {
-                status.set_visible(true);
-                status.set_label(&err);
-            }
+            glib::ControlFlow::Break
         }
-        glib::ControlFlow::Break
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => {
+            status_c.set_visible(true);
+            status_c.set_label("Mission Deck failed to start.");
+            glib::ControlFlow::Break
+        }
     });
 
     let refresh: Rc<dyn Fn()> = {
@@ -234,9 +285,19 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         Rc::new(move || {
+            // Soft path: never block the UI thread on Node health waits.
             if let Some(m) = supervisor.borrow().as_ref() {
-                if let Ok(mut s) = m.lock() {
-                    let _ = s.ensure_running();
+                let skip = m
+                    .lock()
+                    .map(|s| s.ready_recently())
+                    .unwrap_or(false);
+                if !skip {
+                    let m = m.clone();
+                    std::thread::spawn(move || {
+                        if let Ok(mut s) = m.lock() {
+                            let _ = s.ensure_running();
+                        }
+                    });
                 }
             }
             // Never hard-reload while suspended — that resets __centurionDeckVisible
@@ -261,8 +322,17 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             suspended.set(now_suspended);
             if visible {
                 if let Some(m) = supervisor.borrow().as_ref() {
-                    if let Ok(mut s) = m.lock() {
-                        let _ = s.ensure_running();
+                    let skip = m
+                        .lock()
+                        .map(|s| s.ready_recently())
+                        .unwrap_or(false);
+                    if !skip {
+                        let m = m.clone();
+                        std::thread::spawn(move || {
+                            if let Ok(mut s) = m.lock() {
+                                let _ = s.ensure_running();
+                            }
+                        });
                     }
                 }
             }

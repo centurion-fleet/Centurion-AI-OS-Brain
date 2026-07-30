@@ -65,6 +65,16 @@ def handle_request(
         return _handle_provider_restore(request_id)
     if action == "health_check":
         return _handle_health_check(request_id)
+    if action == "bridge_ping":
+        # Cheap handshake for Brain — no support probe, just version.
+        from centurion_cli import __version__ as _bridge_version
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "bridge_ping",
+            "version": _bridge_version,
+        }
     if action == "support_bundle":
         return _handle_support_bundle(request_id)
     if action == "support_auto_fix":

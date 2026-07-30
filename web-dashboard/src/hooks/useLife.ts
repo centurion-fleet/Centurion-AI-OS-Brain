@@ -1,28 +1,38 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { bridgeCall } from "./useBridge";
 import type {
   Decision,
   LifeDocument,
   Mission,
   MissionStack,
-  Subject,
   Thought,
 } from "../types/life";
 
+function stableJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 export function useMissionStack(pollMs = 20000, enabled = true) {
   const [stack, setStack] = useState<MissionStack | null>(null);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const stackFp = useRef<string>("");
 
   const refresh = useCallback(async () => {
     try {
-      const [stackRes, subjectsRes] = await Promise.all([
-        bridgeCall<{ ok: true; stack: MissionStack }>("life_stack_get"),
-        bridgeCall<{ ok: true; subjects: Subject[] }>("life_subjects_list"),
-      ]);
-      setStack(stackRes.stack);
-      setSubjects(subjectsRes.subjects || []);
+      const stackRes = await bridgeCall<{ ok: true; stack: MissionStack }>(
+        "life_stack_get",
+      );
+      const next = stackRes.stack;
+      const fp = stableJson(next);
+      if (fp !== stackFp.current) {
+        stackFp.current = fp;
+        setStack(next);
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -37,13 +47,16 @@ export function useMissionStack(pollMs = 20000, enabled = true) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Don't flash the loading panel when we already have a cached stack.
+    if (!stackFp.current) {
+      setLoading(true);
+    }
     void refresh();
     const id = setInterval(() => void refresh(), pollMs);
     return () => clearInterval(id);
   }, [refresh, pollMs, enabled]);
 
-  return { stack, subjects, loading, error, refresh };
+  return { stack, loading, error, refresh };
 }
 
 export function useMissionDetail(missionId: string | undefined) {
@@ -116,15 +129,17 @@ export function useMissionDetail(missionId: string | undefined) {
 export function usePrimaryDocuments(
   missionId: string | undefined,
   enabled = true,
-  pollMs = 20000,
+  pollMs = 60000,
 ) {
   const [documents, setDocuments] = useState<LifeDocument[]>([]);
   const [count, setCount] = useState(0);
+  const docsFp = useRef<string>("");
 
   const refresh = useCallback(async () => {
     if (!missionId || !enabled) {
       setDocuments([]);
       setCount(0);
+      docsFp.current = "";
       return;
     }
     try {
@@ -133,11 +148,16 @@ export function usePrimaryDocuments(
         { mission_id: missionId, limit: 5 },
       );
       const docs = res.documents || [];
-      setDocuments(docs);
-      setCount(docs.length);
+      const fp = stableJson(docs);
+      if (fp !== docsFp.current) {
+        docsFp.current = fp;
+        setDocuments(docs);
+        setCount(docs.length);
+      }
     } catch {
       setDocuments([]);
       setCount(0);
+      docsFp.current = "";
     }
   }, [missionId, enabled]);
 
@@ -145,6 +165,7 @@ export function usePrimaryDocuments(
     if (!enabled || !missionId) {
       setDocuments([]);
       setCount(0);
+      docsFp.current = "";
       return;
     }
     void refresh();

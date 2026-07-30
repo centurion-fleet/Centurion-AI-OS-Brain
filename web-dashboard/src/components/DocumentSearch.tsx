@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { bridgeCall } from "../hooks/useBridge";
 import type { LifeDocument } from "../types/life";
@@ -42,15 +42,22 @@ export function DocumentSearch({
   const [scanNote, setScanNote] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchSeq = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const runSearch = useCallback(async (q: string, agent: boolean) => {
     const trimmed = q.trim();
-    if (!trimmed) {
+    if (!trimmed || trimmed.length < 2) {
       setResults([]);
       setSearched(false);
       setError(null);
+      setBusy(false);
       return;
     }
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const seq = ++searchSeq.current;
     setBusy(true);
     setError(null);
     try {
@@ -62,14 +69,18 @@ export function DocumentSearch({
           limit: 20,
         },
       );
+      if (ac.signal.aborted || seq !== searchSeq.current) return;
       setResults(res.documents || []);
       setSearched(true);
     } catch (e) {
+      if (ac.signal.aborted || seq !== searchSeq.current) return;
       setResults([]);
       setSearched(true);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      if (!ac.signal.aborted && seq === searchSeq.current) {
+        setBusy(false);
+      }
     }
   }, []);
 
@@ -86,14 +97,11 @@ export function DocumentSearch({
         scanned_files?: number;
         roots?: string[];
         errors?: string[];
-      }>(
-        "life_documents_import_scan",
-        {
-          mission_id: preferredMissionId || undefined,
-          include_plans: true,
-          include_outcomes: true,
-        },
-      );
+      }>("life_documents_import_scan", {
+        mission_id: preferredMissionId || undefined,
+        include_plans: true,
+        include_outcomes: true,
+      });
       const imported = Number(res.imported || 0);
       const updated = Number(res.updated || 0);
       const skipped = Number(res.skipped || 0);
@@ -109,7 +117,7 @@ export function DocumentSearch({
           `${note}. No text files found under Documents/Desktop — try centurion life import-docs --path /path/to/memos`,
         );
       }
-      if (query.trim()) {
+      if (query.trim().length >= 2) {
         await runSearch(query, agentOnly);
       }
     } catch (e) {
@@ -130,8 +138,11 @@ export function DocumentSearch({
     if (!enabled) return;
     const t = window.setTimeout(() => {
       void runSearch(query, agentOnly);
-    }, 280);
-    return () => window.clearTimeout(t);
+    }, 450);
+    return () => {
+      window.clearTimeout(t);
+      abortRef.current?.abort();
+    };
   }, [query, agentOnly, enabled, runSearch]);
 
   if (!enabled) return null;
@@ -180,22 +191,15 @@ export function DocumentSearch({
         {scanNote && (
           <p className="mt-2 text-xs text-amber-soft">{scanNote}</p>
         )}
-        {busy && (
-          <p className="mt-2 text-xs text-ink-dim">Searching…</p>
-        )}
-        {error && (
-          <p className="mt-2 text-xs text-amber-soft">{error}</p>
-        )}
+        {busy && <p className="mt-2 text-xs text-ink-dim">Searching…</p>}
+        {error && <p className="mt-2 text-xs text-amber-soft">{error}</p>}
         {searched && !busy && !error && results.length === 0 && query.trim() && (
           <p className="mt-2 text-xs text-ink-dim">No documents matched.</p>
         )}
         {results.length > 0 && (
           <ul className="mt-3 divide-y divide-white/5 overflow-hidden rounded-xl border border-white/5">
             {results.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-start gap-3 px-3 py-2.5"
-              >
+              <li key={d.id} className="flex items-start gap-3 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <Link
                     to={`/mission/${d.mission_id}#documents`}

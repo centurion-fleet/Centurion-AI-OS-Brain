@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
 import { DocumentSearch } from "../components/DocumentSearch";
@@ -16,7 +16,7 @@ export function Deck() {
   const navigate = useNavigate();
   const deckVisible = useDeckVisible();
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
-  const { thoughts, connected } = useSSE({ enabled: deckVisible });
+  const { thoughts, connected } = useSSE({ enabled: deckVisible, limit: 32 });
   const autoDiscoveryDone = useRef(false);
 
   const primary = stack?.primary ?? null;
@@ -27,6 +27,7 @@ export function Deck() {
   const { documents: primaryDocs, count: primaryDocCount } = usePrimaryDocuments(
     primary?.id,
     deckVisible && !!primary,
+    60_000,
   );
 
   // Guided first-run: empty board → Discovery once per session (don't fight Back).
@@ -45,23 +46,53 @@ export function Deck() {
     thoughts.find((t) => !primary || !t.mission_id || t.mission_id === primary.id)
       ?.summary ?? thoughts[0]?.summary;
 
-  async function promoteDream(dreamId: string) {
-    try {
-      await bridgeCall("life_dream_promote", { dream_id: dreamId });
-      await refresh();
-    } catch {
-      /* surface via refresh error next cycle */
-    }
-  }
+  const promoteDream = useCallback(
+    async (dreamId: string) => {
+      try {
+        await bridgeCall("life_dream_promote", { dream_id: dreamId });
+        await refresh();
+      } catch {
+        /* surface via refresh error next cycle */
+      }
+    },
+    [refresh],
+  );
 
-  async function makePrimary(missionId: string) {
-    try {
-      await bridgeCall("life_stack_set_primary", { mission_id: missionId });
-      await refresh();
-    } catch {
-      /* surface via refresh error next cycle */
-    }
-  }
+  const makePrimary = useCallback(
+    async (missionId: string) => {
+      try {
+        await bridgeCall("life_stack_set_primary", { mission_id: missionId });
+        await refresh();
+      } catch {
+        /* surface via refresh error next cycle */
+      }
+    },
+    [refresh],
+  );
+
+  const openPrimary = useCallback(() => {
+    if (!primary) return;
+    navigate(`/mission/${primary.id}`);
+  }, [navigate, primary]);
+
+  const discussPrimary = useCallback(() => {
+    if (!primary) return;
+    const w = window as Window & {
+      centurionDiscuss?: (p: Record<string, unknown>) => void;
+    };
+    if (typeof w.centurionDiscuss !== "function") return;
+    w.centurionDiscuss({
+      id: primary.id,
+      title: primary.title,
+      statement: primary.statement || primary.purpose,
+      kickoff: `Let's talk about my mission: ${primary.title}`,
+    });
+  }, [primary]);
+
+  const openSupporting = useCallback(
+    (id: string) => navigate(`/mission/${id}`),
+    [navigate],
+  );
 
   return (
     <div className="mx-auto min-h-screen max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
@@ -133,19 +164,8 @@ export function Deck() {
               latestThought={latestThought}
               documents={primaryDocs}
               documentCount={primaryDocCount}
-              onOpen={() => navigate(`/mission/${primary.id}`)}
-              onDiscuss={() => {
-                const w = window as Window & {
-                  centurionDiscuss?: (p: Record<string, unknown>) => void;
-                };
-                if (typeof w.centurionDiscuss !== "function") return;
-                w.centurionDiscuss({
-                  id: primary.id,
-                  title: primary.title,
-                  statement: primary.statement || primary.purpose,
-                  kickoff: `Let's talk about my mission: ${primary.title}`,
-                });
-              }}
+              onOpen={openPrimary}
+              onDiscuss={discussPrimary}
             />
           ) : (
             <div className="glass rounded-3xl p-6 text-center text-ink-muted">
@@ -158,13 +178,13 @@ export function Deck() {
 
           <SupportingRow
             missions={supporting}
-            onOpen={(id) => navigate(`/mission/${id}`)}
+            onOpen={openSupporting}
             onMakePrimary={(id) => void makePrimary(id)}
           />
 
           <DreamList dreams={dreams} onPromote={promoteDream} />
 
-          <ActivityFeed thoughts={thoughts} title="Live pulse" />
+          <ActivityFeed thoughts={thoughts} title="Live pulse" max={32} />
         </>
       )}
 

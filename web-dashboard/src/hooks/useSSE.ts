@@ -29,7 +29,7 @@ function mergeThoughts(
  * Live thought stream via EventSource → /api/stream (local poll SSE).
  */
 export function useSSE(options: UseSSEOptions = {}) {
-  const { limit = 80, enabled = true } = options;
+  const { limit = 32, enabled = true } = options;
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [connected, setConnected] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -79,10 +79,5 @@ export function useSSE(options: UseSSEOptions = {}) {
     };
   }, [enabled, limit]);
 
-  const clear = () => {
-    seen.current.clear();
-    setThoughts([]);
-  };
-
-  return { thoughts, connected, streamError, clear };
+  return { thoughts, connected, streamError };
 }

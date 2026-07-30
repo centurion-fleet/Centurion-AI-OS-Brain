@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import type { Mission } from "../types/life";
 import { missionProgress } from "../types/life";
@@ -9,7 +10,7 @@ interface SupportingRowProps {
   onMakePrimary?: (id: string) => void;
 }
 
-export function SupportingRow({
+export const SupportingRow = memo(function SupportingRow({
   missions,
   onOpen,
   onMakePrimary,
@@ -77,4 +78,4 @@ export function SupportingRow({
       </div>
     </section>
   );
-}
+});

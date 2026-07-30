@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { memo } from "react";
 import { motion } from "framer-motion";
 import type { LifeDocument, Mission } from "../types/life";
 import { missionProgress } from "../types/life";
@@ -38,7 +39,7 @@ interface PrimaryCardProps {
   onDiscuss?: () => void;
 }
 
-export function PrimaryCard({
+export const PrimaryCard = memo(function PrimaryCard({
   mission,
   latestThought,
   documents = [],
@@ -158,4 +159,4 @@ export function PrimaryCard({
       </div>
     </motion.div>
   );
-}
+});

@@ -2335,6 +2335,16 @@ pub fn configure_bridge_command(command: &mut Command) {
     if let Some(root) = resolve_centurion_repo_root() {
         command.env("CENTURION_AI_REPO", root.as_os_str());
         command.current_dir(&root);
+        // Prefer checkout imports over a stale site-packages install.
+        let mut pythonpath = root.display().to_string();
+        if let Ok(existing) = std::env::var("PYTHONPATH") {
+            let trimmed = existing.trim();
+            if !trimmed.is_empty() {
+                pythonpath.push(':');
+                pythonpath.push_str(trimmed);
+            }
+        }
+        command.env("PYTHONPATH", pythonpath);
     }
 }
 
@@ -4909,8 +4919,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     container.append(&paned);
 
     let regenerate_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let rendered_count = Rc::new(Cell::new(0usize));
+    let showing_empty_placeholder = Rc::new(Cell::new(false));
 
-    let refresh_messages: Rc<dyn Fn()> = Rc::new({
+    let rebuild_messages: Rc<dyn Fn()> = Rc::new({
         let message_list = message_list.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
@@ -4919,6 +4931,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let follow_bottom = follow_bottom.clone();
         let programmatic_scroll = programmatic_scroll.clone();
         let regenerate_slot = regenerate_slot.clone();
+        let rendered_count = rendered_count.clone();
+        let showing_empty_placeholder = showing_empty_placeholder.clone();
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
@@ -4938,6 +4952,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     &name,
                     None,
                 ));
+                rendered_count.set(0);
+                showing_empty_placeholder.set(true);
             } else {
                 let last_assistant_idx = msgs
                     .iter()
@@ -4956,6 +4972,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     };
                     message_list.append(&message_row(message, &name, actions));
                 }
+                rendered_count.set(msgs.len());
+                showing_empty_placeholder.set(false);
             }
             schedule_scroll_to_latest(
                 &message_scroll,
@@ -4965,6 +4983,67 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             );
         }
     });
+
+    /// Append newly pushed messages without tearing down the whole ListBox.
+    let sync_messages: Rc<dyn Fn()> = Rc::new({
+        let message_list = message_list.clone();
+        let messages = messages.clone();
+        let message_scroll = message_scroll.clone();
+        let assistant_name = assistant_name.clone();
+        let title = title.clone();
+        let follow_bottom = follow_bottom.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        let regenerate_slot = regenerate_slot.clone();
+        let rendered_count = rendered_count.clone();
+        let showing_empty_placeholder = showing_empty_placeholder.clone();
+        let rebuild_messages = rebuild_messages.clone();
+        move || {
+            let name = assistant_name.borrow().clone();
+            title.set_label(&format!("Chat with {name}"));
+            let msgs = messages.borrow();
+            let n = msgs.len();
+            let already = rendered_count.get();
+            if n == 0 || showing_empty_placeholder.get() || already == 0 || n < already {
+                drop(msgs);
+                rebuild_messages();
+                return;
+            }
+            if n == already {
+                return;
+            }
+            for (idx, message) in msgs.iter().enumerate().skip(already) {
+                let actions = if message.role == ChatRole::Assistant && message.activity.is_none() {
+                    // Only the newest assistant row gets regenerate; older
+                    // buttons stay until the next full rebuild (session switch).
+                    if idx + 1 == n {
+                        Some(MessageRowActions {
+                            on_regenerate: regenerate_slot.borrow().clone(),
+                        })
+                    } else {
+                        Some(MessageRowActions {
+                            on_regenerate: None,
+                        })
+                    }
+                } else {
+                    None
+                };
+                message_list.append(&message_row(message, &name, actions));
+            }
+            rendered_count.set(n);
+            showing_empty_placeholder.set(false);
+            drop(msgs);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &message_list,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
+        }
+    });
+
+    // Full rebuild for session switch / clear; incremental sync for live turns.
+    let refresh_messages = rebuild_messages.clone();
+    let append_messages = sync_messages.clone();
 
     let refresh_sessions_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
         Rc::new(RefCell::new(None));
@@ -5834,7 +5913,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let messages = messages.clone();
         let session_id = session_id.clone();
         let input = input.clone();
-        let refresh_messages = refresh_messages.clone();
+        let append_messages = append_messages.clone();
         let refresh_sessions = refresh_sessions.clone();
         let set_error = set_error.clone();
         let set_sending = set_sending.clone();
@@ -5902,7 +5981,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 content: format_user_display(&text, &pending),
                 activity: None,
             });
-            refresh_messages();
+            append_messages();
             set_error(None);
             clear_approval();
             show_activity_working();
@@ -6038,7 +6117,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
 
             let messages = messages.clone();
             let session_id = session_id.clone();
-            let refresh_messages = refresh_messages.clone();
+            let append_messages = append_messages.clone();
             let refresh_sessions = refresh_sessions.clone();
             let set_error = set_error.clone();
             let set_sending = set_sending.clone();
@@ -6152,7 +6231,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                     activity: None,
                                 });
                                 follow_bottom.set(true);
-                                refresh_messages();
+                                append_messages();
                                 refresh_sessions();
                             }
                             Err(err) => {
@@ -6171,7 +6250,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                         activity: None,
                                     });
                                     follow_bottom.set(true);
-                                    refresh_messages();
+                                    append_messages();
                                 } else {
                                     let _ = summary;
                                     set_error(Some(err));

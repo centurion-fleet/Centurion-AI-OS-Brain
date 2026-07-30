@@ -38,6 +38,7 @@ export function ActivityFeed({
   max = 24,
 }: ActivityFeedProps) {
   const items = thoughts.slice(0, max);
+  const newestId = items[0]?.id;
 
   return (
     <section className="mt-8">
@@ -52,32 +53,38 @@ export function ActivityFeed({
         ) : (
           <ul className="divide-y divide-white/5">
             <AnimatePresence initial={false}>
-              {items.map((t) => (
-                <motion.li
-                  key={t.id}
-                  layout
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 24 }}
-                  className="flex gap-3 px-4 py-3"
-                >
-                  <span className="mt-0.5 text-base leading-none" aria-hidden>
-                    {iconFor(t.activity_type)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-snug text-ink">{t.summary}</p>
-                    {t.detail && (
-                      <p className="mt-0.5 line-clamp-2 text-xs text-ink-dim">
-                        {t.detail}
-                      </p>
-                    )}
-                  </div>
-                  <time className="shrink-0 text-[11px] text-ink-dim">
-                    {timeLabel(t.created_at)}
-                  </time>
-                </motion.li>
-              ))}
+              {items.map((t) => {
+                const isNewest = t.id === newestId;
+                return (
+                  <motion.li
+                    key={t.id}
+                    initial={isNewest ? { opacity: 0, height: 0 } : false}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0 }}
+                    transition={
+                      isNewest
+                        ? { type: "spring", stiffness: 200, damping: 24 }
+                        : { duration: 0 }
+                    }
+                    className="flex gap-3 px-4 py-3"
+                  >
+                    <span className="mt-0.5 text-base leading-none" aria-hidden>
+                      {iconFor(t.activity_type)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-snug text-ink">{t.summary}</p>
+                      {t.detail && (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-ink-dim">
+                          {t.detail}
+                        </p>
+                      )}
+                    </div>
+                    <time className="shrink-0 text-[11px] text-ink-dim">
+                      {timeLabel(t.created_at)}
+                    </time>
+                  </motion.li>
+                );
+              })}
             </AnimatePresence>
           </ul>
         )}
