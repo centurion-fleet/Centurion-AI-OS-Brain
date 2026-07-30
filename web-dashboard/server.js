@@ -317,7 +317,9 @@ async function handleStream(req, res) {
         limit: 40,
       });
       const thoughts = (result && result.thoughts) || [];
-      for (const t of thoughts) {
+      // Emit oldest→newest so clients that prepend stay newest-first.
+      const ordered = [...thoughts].reverse();
+      for (const t of ordered) {
         const id = t.id || `${t.created_at}:${t.summary}`;
         if (seen.has(id)) continue;
         seen.add(id);

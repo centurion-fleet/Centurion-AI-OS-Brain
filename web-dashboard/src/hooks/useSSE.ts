@@ -7,6 +7,24 @@ export interface UseSSEOptions {
   enabled?: boolean;
 }
 
+function thoughtKey(t: Thought): string {
+  return t.id || `${t.created_at}:${t.summary}`;
+}
+
+/** Newest first — server polls DESC but EventSource delivery + prepend inverted that. */
+function mergeThoughts(
+  prev: Thought[],
+  incoming: Thought,
+  limit: number,
+): Thought[] {
+  const id = thoughtKey(incoming);
+  const next = [incoming, ...prev.filter((t) => thoughtKey(t) !== id)];
+  next.sort((a, b) =>
+    String(b.created_at || "").localeCompare(String(a.created_at || "")),
+  );
+  return next.slice(0, limit);
+}
+
 /**
  * Live thought stream via EventSource → /api/stream (local poll SSE).
  */
@@ -31,13 +49,10 @@ export function useSSE(options: UseSSEOptions = {}) {
     es.addEventListener("thought", (ev) => {
       try {
         const t = JSON.parse((ev as MessageEvent).data) as Thought;
-        const id = t.id || `${t.created_at}:${t.summary}`;
+        const id = thoughtKey(t);
         if (seen.current.has(id)) return;
         seen.current.add(id);
-        setThoughts((prev) => {
-          const next = [t, ...prev];
-          return next.slice(0, limit);
-        });
+        setThoughts((prev) => mergeThoughts(prev, t, limit));
       } catch {
         /* ignore malformed */
       }

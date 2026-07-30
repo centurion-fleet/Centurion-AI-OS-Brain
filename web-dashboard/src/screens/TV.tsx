@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMissionStack } from "../hooks/useLife";
@@ -11,12 +11,15 @@ type Slide = "progress" | "wins" | "thoughts";
 
 const SLIDES: Slide[] = ["progress", "wins", "thoughts"];
 const INTERVAL_MS = 8000;
+/** Faster than Focus deck — TV is a live wall. */
+const STACK_POLL_MS = 5_000;
 
 export function TV() {
   const deckVisible = useDeckVisible();
-  const { stack } = useMissionStack(20_000, deckVisible);
+  const { stack, refresh } = useMissionStack(STACK_POLL_MS, deckVisible);
   const { thoughts, connected } = useSSE({ enabled: deckVisible });
   const [index, setIndex] = useState(0);
+  const lastWinRefresh = useRef<string | null>(null);
 
   useEffect(() => {
     if (!deckVisible) return;
@@ -26,6 +29,20 @@ export function TV() {
     );
     return () => clearInterval(id);
   }, [deckVisible]);
+
+  // When a target completes (or similar win), refresh primary progress immediately.
+  useEffect(() => {
+    if (!deckVisible || !thoughts.length) return;
+    const newest = thoughts[0];
+    if (!newest?.id || newest.id === lastWinRefresh.current) return;
+    const isWin =
+      newest.activity_type === "target_update" ||
+      newest.activity_type === "artifact" ||
+      /complete|done|ship|win/i.test(newest.summary || "");
+    if (!isWin) return;
+    lastWinRefresh.current = newest.id;
+    void refresh();
+  }, [thoughts, deckVisible, refresh]);
 
   const primary = stack?.primary;
   const progress = missionProgress(primary);
@@ -82,7 +99,9 @@ export function TV() {
                   {primary?.title || "No primary mission"}
                 </h1>
                 <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-muted sm:text-xl">
-                  {primary?.statement || primary?.purpose || "Crown a mission to fill this wall."}
+                  {primary?.statement ||
+                    primary?.purpose ||
+                    "Crown a mission to fill this wall."}
                 </p>
                 <div className="mx-auto mt-12 max-w-xl">
                   <p className="mb-4 font-display text-5xl font-semibold text-amber-glow sm:text-6xl">
