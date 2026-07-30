@@ -4942,8 +4942,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             )
                                         })
                                     }
-                                    "save_both" => {
-                                        persist_proposal_as_plan(&proposal)?;
+                                    "save_both" => persist_proposal_as_plan(&proposal).map(|_| {
                                         let n =
                                             persist_proposal_as_targets(&proposal).unwrap_or(0);
                                         post_mission_thought(
@@ -4952,11 +4951,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             &format!("Saved proposal: {}", proposal.title),
                                             &proposal.summary,
                                         );
-                                        Ok(format!(
+                                        format!(
                                             "Saved Plan on Home and added {n} target{} to the Target Sequence.",
                                             if n == 1 { "" } else { "s" }
-                                        ))
-                                    }
+                                        )
+                                    }),
                                     _ => Err("Unknown choice.".to_owned()),
                                 };
                                 let _ = tx.send(result);
