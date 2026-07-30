@@ -113,6 +113,28 @@ export interface Decision {
   created_at?: string;
 }
 
+export type DocType =
+  | "research"
+  | "analysis"
+  | "content"
+  | "report"
+  | "plan"
+  | "other";
+
+export interface LifeDocument {
+  id: string;
+  mission_id: string;
+  target_id: string | null;
+  title: string;
+  doc_type: DocType | string;
+  summary: string;
+  body_md: string;
+  plan_id: string | null;
+  source: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Thought {
   id: string;
   mission_id: string | null;

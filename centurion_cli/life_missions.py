@@ -17,7 +17,7 @@ from typing import Any, Iterator
 
 from centurion_constants import get_centurion_home
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 MISSION_PHASES = frozenset(
     {"briefing", "discovery", "planning", "executing", "verifying", "done"}
@@ -26,6 +26,10 @@ MISSION_TYPES = frozenset({"primary", "supporting", "dream"})
 IMPACT_RATINGS = frozenset({"high", "medium", "low"})
 TARGET_TYPES = frozenset({"essential", "shouldHave", "niceToHave"})
 TARGET_STATUSES = frozenset({"not_started", "in_progress", "complete", "blocked"})
+DOC_TYPES = frozenset(
+    {"research", "analysis", "content", "report", "plan", "other"}
+)
+DOC_SOURCES = frozenset({"agent", "user", "import"})
 THOUGHT_TYPES = frozenset(
     {
         "thought",
@@ -182,10 +186,28 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
           checkpoint_json TEXT NOT NULL DEFAULT '{}',
           updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS life_documents (
+          id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL REFERENCES life_missions(id) ON DELETE CASCADE,
+          target_id TEXT REFERENCES life_targets(id) ON DELETE SET NULL,
+          title TEXT NOT NULL,
+          doc_type TEXT NOT NULL DEFAULT 'other',
+          summary TEXT NOT NULL DEFAULT '',
+          body_md TEXT NOT NULL DEFAULT '',
+          plan_id TEXT,
+          source TEXT NOT NULL DEFAULT 'agent',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
         """
     )
     conn.execute(
         "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('schema_version', ?)",
+        (str(_SCHEMA_VERSION),),
+    )
+    conn.execute(
+        "UPDATE life_meta SET value = ? WHERE key = 'schema_version'",
         (str(_SCHEMA_VERSION),),
     )
     now = _utc_now()
@@ -1049,6 +1071,119 @@ def list_decisions(*, mission_id: str | None = None, limit: int = 50) -> list[di
         return out
 
 
+# ─── Documents ───────────────────────────────────────────────────────────────
+
+
+def put_document(fields: dict[str, Any]) -> dict[str, Any]:
+    now = _utc_now()
+    mission_id = str(fields.get("mission_id") or "").strip()
+    if not mission_id:
+        raise ValueError("mission_id required")
+    title = str(fields.get("title") or "").strip()
+    if not title:
+        raise ValueError("title required")
+    did = str(fields.get("id") or _new_id())
+    doc_type = str(fields.get("doc_type") or fields.get("type") or "other").strip().lower()
+    if doc_type not in DOC_TYPES:
+        doc_type = "other"
+    source = str(fields.get("source") or "agent").strip().lower()
+    if source not in DOC_SOURCES:
+        source = "agent"
+    summary = str(fields.get("summary") or "").strip()
+    body_md = str(fields.get("body_md") or fields.get("body") or fields.get("content") or "")
+    if not summary and body_md.strip():
+        summary = " ".join(body_md.strip().split())[:160]
+    target_id = fields.get("target_id")
+    target_id = str(target_id).strip() if target_id else None
+    plan_id = fields.get("plan_id")
+    plan_id = str(plan_id).strip() if plan_id else None
+    with _conn() as conn:
+        existing = conn.execute(
+            "SELECT id FROM life_documents WHERE id = ?", (did,)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE life_documents SET mission_id=?, target_id=?, title=?, doc_type=?, "
+                "summary=?, body_md=?, plan_id=?, source=?, updated_at=? WHERE id=?",
+                (
+                    mission_id,
+                    target_id,
+                    title,
+                    doc_type,
+                    summary,
+                    body_md,
+                    plan_id,
+                    source,
+                    now,
+                    did,
+                ),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO life_documents("
+                "id, mission_id, target_id, title, doc_type, summary, body_md, plan_id, "
+                "source, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    did,
+                    mission_id,
+                    target_id,
+                    title,
+                    doc_type,
+                    summary,
+                    body_md,
+                    plan_id,
+                    source,
+                    now,
+                    now,
+                ),
+            )
+        row = conn.execute("SELECT * FROM life_documents WHERE id = ?", (did,)).fetchone()
+        out = _row_dict(row)
+        assert out is not None
+        return out
+
+
+def get_document(document_id: str) -> dict[str, Any] | None:
+    did = str(document_id or "").strip()
+    if not did:
+        return None
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM life_documents WHERE id = ?", (did,)
+        ).fetchone()
+        return _row_dict(row)
+
+
+def list_documents(
+    *,
+    mission_id: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    lim = max(1, min(int(limit or 50), 200))
+    with _conn() as conn:
+        if mission_id:
+            rows = conn.execute(
+                "SELECT * FROM life_documents WHERE mission_id = ? "
+                "ORDER BY updated_at DESC LIMIT ?",
+                (str(mission_id), lim),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM life_documents ORDER BY updated_at DESC LIMIT ?",
+                (lim,),
+            ).fetchall()
+        return [_row_dict(r) for r in rows]  # type: ignore[misc]
+
+
+def document_excerpt(doc: dict[str, Any], *, max_chars: int = 400) -> str:
+    body = str(doc.get("body_md") or "").strip()
+    summary = str(doc.get("summary") or "").strip()
+    text = body or summary
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+
 def post_thought(fields: dict[str, Any]) -> dict[str, Any]:
     now = _utc_now()
     tid = str(fields.get("id") or _new_id())
@@ -1188,6 +1323,43 @@ def resolve_context(query: str) -> list[dict[str, Any]]:
                                 "matched_term": term,
                             }
                         )
+            docs = conn.execute(
+                "SELECT id, title, summary, doc_type FROM life_documents "
+                "WHERE mission_id = ?",
+                (mission["id"],),
+            ).fetchall()
+            for doc in docs:
+                hay = " ".join(
+                    [doc["title"] or "", doc["summary"] or "", doc["doc_type"] or ""]
+                ).lower()
+                for term in terms:
+                    if term in hay:
+                        matches.append(
+                            {
+                                "subject": (
+                                    {"id": subject["id"], "name": subject["name"]}
+                                    if subject
+                                    else None
+                                ),
+                                "mission": {
+                                    "id": mission["id"],
+                                    "name": mission["title"] or mission["statement"],
+                                    "phase": mission["phase"],
+                                },
+                                "target": None,
+                                "document": {
+                                    "id": doc["id"],
+                                    "title": doc["title"],
+                                    "doc_type": doc["doc_type"],
+                                    "summary": doc["summary"] or "",
+                                },
+                                "confidence": 0.78,
+                                "matched_field": "document.title"
+                                if term in (doc["title"] or "").lower()
+                                else "document",
+                                "matched_term": term,
+                            }
+                        )
     matches.sort(key=lambda m: m["confidence"], reverse=True)
     return matches[:10]
 
@@ -1200,12 +1372,20 @@ def inject_context(
     mission_id = current_view.get("mission_id")
     target_id = current_view.get("target_id")
     subject_id = current_view.get("subject_id")
+    document_ids = current_view.get("document_ids") or []
+    if isinstance(document_ids, str):
+        document_ids = [document_ids]
+    if not isinstance(document_ids, list):
+        document_ids = []
     if not mission_id:
         matches = resolve_context(message)
         if matches:
             mission_id = matches[0]["mission"]["id"]
             target_id = (matches[0].get("target") or {}).get("id")
             subject_id = (matches[0].get("subject") or {}).get("id")
+            doc_match = matches[0].get("document") or {}
+            if doc_match.get("id") and not document_ids:
+                document_ids = [doc_match["id"]]
 
     # Load without nested _conn() — SQLite locks when one write txn is open.
     mission = get_mission(str(mission_id)) if mission_id else None
@@ -1222,6 +1402,28 @@ def inject_context(
         target = next((t for t in targets if t and t.get("focus_target")), None)
     decisions = list_decisions(mission_id=str(mission_id) if mission_id else None, limit=1)
     thoughts = list_thoughts(limit=3)
+    docs = list_documents(mission_id=str(mission_id) if mission_id else None, limit=8)
+    # Pin explicitly requested documents (Discuss) at the front.
+    pinned: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_id in document_ids:
+        did = str(raw_id or "").strip()
+        if not did or did in seen:
+            continue
+        seen.add(did)
+        doc = get_document(did)
+        if doc:
+            pinned.append(doc)
+            if not mission_id and doc.get("mission_id"):
+                mission_id = doc["mission_id"]
+                if mission is None:
+                    mission = get_mission(str(mission_id))
+    for doc in docs:
+        did = str(doc.get("id") or "")
+        if did and did not in seen:
+            pinned.append(doc)
+            seen.add(did)
+    docs = pinned[:5]
     last_decision = decisions[0] if decisions else None
     subject_name = (subject or {}).get("name") or "Uncategorised"
     mission_name = (
@@ -1240,6 +1442,13 @@ def inject_context(
         )
     if thoughts:
         lines.append(f"Recent: {thoughts[0].get('summary')}")
+    if docs:
+        lines.append("Available documents:")
+        for doc in docs:
+            excerpt = document_excerpt(doc, max_chars=280)
+            dtype = doc.get("doc_type") or "other"
+            title = doc.get("title") or "Untitled"
+            lines.append(f"- [{dtype}] {title} (id={doc.get('id')}): {excerpt}")
     return {
         "resolved_context": {
             "subject": (
@@ -1264,6 +1473,18 @@ def inject_context(
                 if target
                 else None
             ),
+            "documents": [
+                {
+                    "id": d.get("id"),
+                    "title": d.get("title"),
+                    "doc_type": d.get("doc_type"),
+                    "summary": d.get("summary") or "",
+                    "excerpt": document_excerpt(d, max_chars=280),
+                    "plan_id": d.get("plan_id"),
+                    "updated_at": d.get("updated_at"),
+                }
+                for d in docs
+            ],
             "state": {
                 "completed_targets": (
                     (mission or {}).get("state", {}).get("completed_target_ids", [])
@@ -1293,6 +1514,7 @@ def snapshot_extras(*, since: str | None = None) -> dict[str, Any]:
         "subjects": list_subjects(),
         "mission_stack": get_stack(),
         "decisions": list_decisions(limit=50),
+        "documents": list_documents(limit=50),
         "thought_stream": list_thoughts(since=since, limit=50),
         "missions": list_missions(),
     }

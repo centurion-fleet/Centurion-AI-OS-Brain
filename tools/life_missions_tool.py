@@ -141,12 +141,43 @@ def life_missions_tool(
                     limit=50,
                 )
             )
+        if action in ("list_documents", "documents"):
+            return _ok(
+                documents=life.list_documents(
+                    mission_id=mission_id or None,
+                    limit=50,
+                )
+            )
+        if action in ("get_document", "document"):
+            doc_id = str(
+                fields.get("document_id") or fields.get("id") or query or ""
+            ).strip()
+            if not doc_id:
+                return tool_error("document id required (fields_json.id or query)")
+            doc = life.get_document(doc_id)
+            if doc is None:
+                return tool_error("Document not found")
+            return _ok(document=doc)
+        if action in ("put_document", "save_document", "life_document_put"):
+            payload = dict(fields)
+            if mission_id:
+                payload.setdefault("mission_id", mission_id)
+            if target_id:
+                payload.setdefault("target_id", target_id)
+            if title:
+                payload.setdefault("title", title)
+            if summary:
+                payload.setdefault("summary", summary)
+            if statement and not payload.get("body_md") and not payload.get("body"):
+                payload.setdefault("body_md", statement)
+            return _ok(document=life.put_document(payload))
         if action in ("snapshot",):
             return _ok(snapshot=life.snapshot_extras())
         return tool_error(
             "Unknown action. Use stack, missions, get_mission, put_mission|create_mission, "
             "subjects, dreams, promote_dream, set_primary, put_target, set_focus, resolve, "
-            "inject, thought, thoughts, decision, decisions, snapshot."
+            "inject, thought, thoughts, decision, decisions, list_documents, get_document, "
+            "put_document, snapshot."
         )
     except Exception as exc:
         return tool_error(str(exc))
@@ -161,7 +192,13 @@ registry.register(
             "Create/update/list Life Missions on this Brain (offline life.db). "
             "Use create_mission or put_mission with fields_json for "
             "mission_type primary|supporting, targets, situation, why. "
-            "Also: stack, dreams, focus, thoughts, decisions. Not portal SaaS."
+            "For finished write-ups bound to a mission (research, analysis, "
+            "content, report), use put_document with mission_id — not "
+            "upload_document. Prefer plans/plan-artifact when the user must "
+            "Approve/Proceed; after accept, optionally put_document with "
+            "plan_id and doc_type plan so it appears under the mission. "
+            "Also: stack, dreams, focus, thoughts, decisions, documents. "
+            "Not portal SaaS."
         ),
         "parameters": {
             "type": "object",
@@ -172,7 +209,7 @@ registry.register(
                         "stack|missions|get_mission|put_mission|create_mission|"
                         "subjects|dreams|promote_dream|set_primary|put_target|"
                         "set_focus|resolve|inject|thought|thoughts|decision|"
-                        "decisions|snapshot"
+                        "decisions|list_documents|get_document|put_document|snapshot"
                     ),
                 },
                 "mission_id": {"type": "string"},
@@ -186,9 +223,12 @@ registry.register(
                 "fields_json": {
                     "type": "string",
                     "description": (
-                        "JSON for put/create. Example create supporting: "
-                        '{"title":"Cashflow","statement":"...","mission_type":"supporting",'
-                        '"situation":"...","why":"..."}'
+                        "JSON for put/create. Mission example: "
+                        '{"title":"Cashflow","statement":"...","mission_type":"supporting"}. '
+                        "Document example: "
+                        '{"mission_id":"...","title":"...","doc_type":"research|analysis|'
+                        'content|report|plan|other","summary":"...","body_md":"...",'
+                        '"plan_id":null,"source":"agent"}'
                     ),
                 },
             },

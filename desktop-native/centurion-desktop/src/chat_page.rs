@@ -102,6 +102,10 @@ pub enum DiscussTopic {
         objective: String,
     },
     Document {
+        /// life.db document id when known (Focus mission docs).
+        id: Option<String>,
+        mission_id: Option<String>,
+        doc_type: Option<String>,
         title: String,
         summary: String,
         plan_id: Option<String>,
@@ -300,7 +304,9 @@ impl ChatHandle {
             .unwrap_or(false);
         let arm_focus = matches!(
             topic,
-            DiscussTopic::Mission { .. } | DiscussTopic::Decision { .. }
+            DiscussTopic::Mission { .. }
+                | DiscussTopic::Decision { .. }
+                | DiscussTopic::Document { .. }
         );
         *self.active_discuss.borrow_mut() = Some(topic);
         self.refresh_banner();
@@ -1110,6 +1116,9 @@ User message:\n\
 
 fn frame_document_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     let DiscussTopic::Document {
+        id,
+        mission_id,
+        doc_type,
         title,
         summary,
         plan_id,
@@ -1123,6 +1132,24 @@ fn frame_document_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         .filter(|p| !p.is_empty())
         .map(|p| format!("Linked plan ID: {p}\n"))
         .unwrap_or_default();
+    let id_line = id
+        .as_ref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("document_id: {s}\n"))
+        .unwrap_or_default();
+    let mission_line = mission_id
+        .as_ref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("mission_id: {s}\n"))
+        .unwrap_or_default();
+    let type_line = doc_type
+        .as_ref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("doc_type: {s}\n"))
+        .unwrap_or_default();
     let excerpt = if body_excerpt.trim().is_empty() {
         summary.clone()
     } else {
@@ -1130,9 +1157,10 @@ fn frame_document_discuss(user_text: &str, topic: &DiscussTopic) -> String {
     };
     format!(
         "[Sovereign AI Brain — Document discuss]\n\
-The user is discussing a document / outcome on Home.\n\n\
+The user is evolving a mission document in Focus. Help refine it; when they clearly ask to save, \
+use life_missions put_document with this document_id / mission_id (not upload_document).\n\n\
 Title: {title}\n\
-{plan_line}Summary: {summary}\n\n\
+{id_line}{mission_line}{type_line}{plan_line}Summary: {summary}\n\n\
 Excerpt:\n\
 {excerpt}\n\n\
 User message:\n\
@@ -1226,24 +1254,51 @@ User message:\n\
     )
 }
 
-/// Build optional `life_inject` payload for Mission Discuss (handled in Python).
+/// Build optional `life_inject` payload for Mission / Document Discuss (handled in Python).
 fn life_inject_for_topic(user_text: &str, topic: &DiscussTopic) -> Option<Value> {
-    let DiscussTopic::Mission {
-        id,
-        target_id,
-        ..
-    } = topic
-    else {
-        return None;
-    };
-    let mut inject = serde_json::json!({ "message": user_text });
-    if id.is_some() || target_id.is_some() {
-        inject["current_view"] = serde_json::json!({
-            "mission_id": id,
-            "target_id": target_id,
-        });
+    match topic {
+        DiscussTopic::Mission { id, target_id, .. } => {
+            let mut inject = serde_json::json!({ "message": user_text });
+            if id.is_some() || target_id.is_some() {
+                inject["current_view"] = serde_json::json!({
+                    "mission_id": id,
+                    "target_id": target_id,
+                });
+            }
+            Some(inject)
+        }
+        DiscussTopic::Document {
+            id,
+            mission_id,
+            ..
+        } => {
+            let mut inject = serde_json::json!({ "message": user_text });
+            if mission_id.is_some() {
+                inject["current_view"] = serde_json::json!({
+                    "mission_id": mission_id,
+                });
+            }
+            if let Some(did) = id.as_ref().map(String::as_str).filter(|s| !s.is_empty()) {
+                inject["document_ids"] = serde_json::json!([did]);
+            }
+            Some(inject)
+        }
+        DiscussTopic::Decision {
+            mission_id,
+            target_id,
+            ..
+        } => {
+            let mut inject = serde_json::json!({ "message": user_text });
+            if mission_id.is_some() || target_id.is_some() {
+                inject["current_view"] = serde_json::json!({
+                    "mission_id": mission_id,
+                    "target_id": target_id,
+                });
+            }
+            Some(inject)
+        }
+        _ => None,
     }
-    Some(inject)
 }
 
 fn frame_generic_discuss(user_text: &str, topic: &DiscussTopic) -> String {
@@ -5765,9 +5820,15 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         );
                     }
                 }
-                // Layer decision discuss framing when Discuss opened a logged decision.
+                // Layer decision/document discuss framing when Discuss opened those topics.
                 if let Some(ref topic @ DiscussTopic::Decision { .. }) = discuss_topic {
                     outbound = frame_decision_discuss(&outbound, topic);
+                }
+                if let Some(ref topic @ DiscussTopic::Document { .. }) = discuss_topic {
+                    outbound = frame_document_discuss(&outbound, topic);
+                    if life_inject.is_none() {
+                        life_inject = life_inject_for_topic(&text, topic);
+                    }
                 }
             } else if research_mode {
                 if let Some(ref topic) = discuss_topic {

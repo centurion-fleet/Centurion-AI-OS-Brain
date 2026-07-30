@@ -1962,6 +1962,9 @@ fn show_document_dialog(
                 "discuss" => {
             on_ask(
                 DiscussTopic::Document {
+                    id: None,
+                    mission_id: None,
+                    doc_type: None,
                     title: title.clone(),
                     summary: summary.clone(),
                     plan_id: plan_id.clone(),
@@ -3425,6 +3428,9 @@ What should we focus on next?"
                             discuss.connect_clicked(move |_| {
                                 on_ask_d(
                                     DiscussTopic::Document {
+                                        id: None,
+                                        mission_id: None,
+                                        doc_type: None,
                                         title: title.clone(),
                                         summary: summary.clone(),
                                         plan_id: plan_id.clone(),

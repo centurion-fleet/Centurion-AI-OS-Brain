@@ -147,6 +147,12 @@ def handle_request(
         return _handle_life_decisions_list(request, request_id)
     if action == "life_decision_log":
         return _handle_life_decision_log(request, request_id)
+    if action == "life_documents_list":
+        return _handle_life_documents_list(request, request_id)
+    if action == "life_document_get":
+        return _handle_life_document_get(request, request_id)
+    if action == "life_document_put":
+        return _handle_life_document_put(request, request_id)
     if action == "life_thoughts_list":
         return _handle_life_thoughts_list(request, request_id)
     if action == "life_thought_post":
@@ -305,6 +311,9 @@ def _handle_chat(
                     "target_id": life_inject.get("target_id"),
                     "subject_id": life_inject.get("subject_id"),
                 }
+            if life_inject.get("document_ids") is not None:
+                current_view = dict(current_view)
+                current_view["document_ids"] = life_inject.get("document_ids")
             result = inject_context(message, current_view=current_view)
             block = str(result.get("formatted_for_ai") or "").strip()
             if block:
@@ -2803,6 +2812,75 @@ def _handle_life_decision_log(request: dict[str, Any], request_id: str) -> dict[
         }
     except Exception as exc:
         return _error_response(request_id, action="life_decision_log", exc=exc)
+
+
+def _handle_life_documents_list(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import list_documents
+
+        mid = request.get("mission_id")
+        limit = int(request.get("limit") or 50)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_documents_list",
+            "documents": list_documents(
+                mission_id=str(mid) if mid else None,
+                limit=limit,
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_documents_list", exc=exc)
+
+
+def _handle_life_document_get(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import get_document
+
+        did = str(
+            request.get("document_id")
+            or request.get("id")
+            or ""
+        ).strip()
+        if not did:
+            raise ValueError("document_id required")
+        doc = get_document(did)
+        if doc is None:
+            raise ValueError("Document not found")
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_document_get",
+            "document": doc,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_document_get", exc=exc)
+
+
+def _handle_life_document_put(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import put_document
+
+        fields = (
+            request.get("document")
+            if isinstance(request.get("document"), dict)
+            else request
+        )
+        document = put_document(fields if isinstance(fields, dict) else {})
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_document_put",
+            "document": document,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_document_put", exc=exc)
 
 
 def _handle_life_thoughts_list(

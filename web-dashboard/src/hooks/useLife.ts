@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bridgeCall } from "./useBridge";
 import type {
   Decision,
+  LifeDocument,
   Mission,
   MissionStack,
   Subject,
@@ -48,6 +49,7 @@ export function useMissionStack(pollMs = 20000, enabled = true) {
 export function useMissionDetail(missionId: string | undefined) {
   const [mission, setMission] = useState<Mission | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [documents, setDocuments] = useState<LifeDocument[]>([]);
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function useMissionDetail(missionId: string | undefined) {
     if (!missionId) return;
     setLoading(true);
     try {
-      const [mRes, dRes, tRes] = await Promise.all([
+      const [mRes, dRes, docRes, tRes] = await Promise.all([
         bridgeCall<{ ok: true; mission: Mission }>("life_mission_get", {
           mission_id: missionId,
         }),
@@ -64,12 +66,20 @@ export function useMissionDetail(missionId: string | undefined) {
           mission_id: missionId,
           limit: 40,
         }),
+        bridgeCall<{ ok: true; documents: LifeDocument[] }>(
+          "life_documents_list",
+          {
+            mission_id: missionId,
+            limit: 40,
+          },
+        ),
         bridgeCall<{ ok: true; thoughts: Thought[] }>("life_thoughts_list", {
           limit: 40,
         }),
       ]);
       setMission(mRes.mission);
       setDecisions(dRes.decisions || []);
+      setDocuments(docRes.documents || []);
       const filtered = (tRes.thoughts || []).filter(
         (t) => !t.mission_id || t.mission_id === missionId,
       );
@@ -86,5 +96,5 @@ export function useMissionDetail(missionId: string | undefined) {
     void refresh();
   }, [refresh]);
 
-  return { mission, decisions, thoughts, loading, error, refresh };
+  return { mission, decisions, documents, thoughts, loading, error, refresh };
 }

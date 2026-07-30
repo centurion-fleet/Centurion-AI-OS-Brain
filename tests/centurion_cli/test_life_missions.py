@@ -247,3 +247,148 @@ def test_bridge_life_actions(life_home):
     assert r["ok"] is True
     assert "subjects" in r["snapshot"]
     assert "mission_stack" in r["snapshot"]
+
+
+def test_put_list_document_resolve_inject(life_home):
+    from centurion_cli.life_missions import (
+        get_document,
+        inject_context,
+        list_documents,
+        put_document,
+        put_mission,
+        resolve_context,
+    )
+
+    mission = put_mission(
+        {
+            "title": "Cashflow clarity",
+            "statement": "Know where money goes",
+            "mission_type": "primary",
+            "targets": [{"title": "Map accounts", "target_type": "essential"}],
+        }
+    )
+    doc = put_document(
+        {
+            "mission_id": mission["id"],
+            "title": "Q3 cashflow research",
+            "doc_type": "research",
+            "summary": "Burn and runway snapshot",
+            "body_md": "# Research\n\nMonthly burn is high; runway ~8 months.",
+            "source": "agent",
+        }
+    )
+    assert doc["id"]
+    assert doc["doc_type"] == "research"
+    assert get_document(doc["id"])["title"] == "Q3 cashflow research"
+    listed = list_documents(mission_id=mission["id"])
+    assert any(d["id"] == doc["id"] for d in listed)
+
+    updated = put_document(
+        {
+            "id": doc["id"],
+            "mission_id": mission["id"],
+            "title": "Q3 cashflow research",
+            "doc_type": "analysis",
+            "summary": "Revised burn analysis",
+            "body_md": "# Analysis\n\nCut burn by 15%.",
+            "source": "agent",
+        }
+    )
+    assert updated["doc_type"] == "analysis"
+
+    matches = resolve_context("cashflow research")
+    assert matches
+    assert any(
+        (m.get("document") or {}).get("id") == doc["id"]
+        or (m.get("mission") or {}).get("id") == mission["id"]
+        for m in matches
+    )
+
+    injected = inject_context(
+        "summarise our cashflow work",
+        current_view={
+            "mission_id": mission["id"],
+            "document_ids": [doc["id"]],
+        },
+    )
+    text = injected["formatted_for_ai"].lower()
+    assert "available documents" in text
+    assert "cashflow" in text
+    docs = injected["resolved_context"]["documents"]
+    assert docs
+    assert docs[0]["id"] == doc["id"]
+
+
+def test_bridge_life_document_actions(life_home):
+    from centurion_cli.life_missions import put_mission
+    from centurion_cli.remote_bridge import handle_request
+
+    mission = put_mission(
+        {
+            "title": "Content sprint",
+            "statement": "Ship newsletter",
+            "mission_type": "supporting",
+        }
+    )
+
+    def call(action, **kwargs):
+        return handle_request({"id": "doc1", "action": action, **kwargs})
+
+    r = call(
+        "life_document_put",
+        document={
+            "mission_id": mission["id"],
+            "title": "Draft outline",
+            "doc_type": "content",
+            "body_md": "Intro, body, CTA",
+            "source": "user",
+        },
+    )
+    assert r["ok"] is True
+    doc_id = r["document"]["id"]
+
+    r = call("life_documents_list", mission_id=mission["id"])
+    assert r["ok"] is True
+    assert any(d["id"] == doc_id for d in r["documents"])
+
+    r = call("life_document_get", document_id=doc_id)
+    assert r["ok"] is True
+    assert r["document"]["title"] == "Draft outline"
+
+
+def test_life_missions_tool_put_document(life_home):
+    import json
+
+    from centurion_cli.life_missions import put_mission
+    from tools.life_missions_tool import life_missions_tool
+
+    mission = put_mission(
+        {
+            "title": "Report mission",
+            "statement": "Write the weekly report",
+            "mission_type": "primary",
+        }
+    )
+    raw = life_missions_tool(
+        action="put_document",
+        mission_id=mission["id"],
+        title="Weekly report",
+        summary="Ops summary",
+        fields_json=json.dumps(
+            {
+                "doc_type": "report",
+                "body_md": "## Wins\n\nShipped Focus documents.",
+                "source": "agent",
+            }
+        ),
+    )
+    data = json.loads(raw)
+    assert data["success"] is True
+    assert data["document"]["doc_type"] == "report"
+    assert data["document"]["mission_id"] == mission["id"]
+
+    listed = json.loads(
+        life_missions_tool(action="list_documents", mission_id=mission["id"])
+    )
+    assert listed["success"] is True
+    assert any(d["title"] == "Weekly report" for d in listed["documents"])

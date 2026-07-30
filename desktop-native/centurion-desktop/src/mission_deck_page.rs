@@ -469,6 +469,61 @@ fn attach_webview(
                     (hooks.on_ask_about)(topic, kickoff);
                     return;
                 }
+                if kind == "document" {
+                    let title = v
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Document")
+                        .to_string();
+                    let id = v
+                        .get("id")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    let mission_id = v
+                        .get("mission_id")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    let doc_type = v
+                        .get("doc_type")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    let summary = v
+                        .get("summary")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let body_excerpt = v
+                        .get("body_excerpt")
+                        .or_else(|| v.get("body_md"))
+                        .or_else(|| v.get("body"))
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let plan_id = v
+                        .get("plan_id")
+                        .and_then(|t| t.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    let kickoff = v
+                        .get("kickoff")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Let's evolve this document.")
+                        .to_string();
+                    let topic = DiscussTopic::Document {
+                        id,
+                        mission_id,
+                        doc_type,
+                        title,
+                        summary,
+                        plan_id,
+                        body_excerpt,
+                    };
+                    (hooks.on_ask_about)(topic, kickoff);
+                    return;
+                }
                 let title = v
                     .get("title")
                     .and_then(|t| t.as_str())
