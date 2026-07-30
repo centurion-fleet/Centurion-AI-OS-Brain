@@ -75,6 +75,8 @@ def handle_request(
             "action": "bridge_ping",
             "version": _bridge_version,
         }
+    if action == "settings_snapshot":
+        return _handle_settings_snapshot(request, request_id)
     if action == "support_bundle":
         return _handle_support_bundle(request_id)
     if action == "support_auto_fix":
@@ -432,6 +434,98 @@ def _handle_provider_status(request_id: str) -> dict[str, Any]:
         }
     except Exception as exc:
         return _error_response(request_id, action="provider_status", exc=exc)
+
+
+def _handle_settings_snapshot(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    """One-shot Settings fill: thinking, backups, soul, oversight, horizon, etc."""
+    try:
+        from centurion_cli.life_missions import get_data_version
+
+        skip_probe = request.get("skip_probe", True)
+        if isinstance(skip_probe, str):
+            skip_probe = skip_probe.strip().lower() in {"1", "true", "yes", "on"}
+        else:
+            skip_probe = bool(skip_probe)
+
+        thinking = get_status(probe=not skip_probe).to_dict()
+        thinking.pop("last_good", None)
+
+        backups = support_control.list_backup_thinking_services()
+
+        soul_resp = _handle_soul_get(request_id)
+        soul = soul_resp.get("soul") if soul_resp.get("ok") else None
+
+        oversight_resp = _handle_oversight_get(request_id)
+        oversight = (
+            oversight_resp.get("oversight") if oversight_resp.get("ok") else None
+        )
+
+        horizon_resp = _handle_memory_horizon_snapshot(request_id)
+        horizon = horizon_resp.get("snapshot") if horizon_resp.get("ok") else None
+
+        license_resp = _handle_license_status(request_id)
+        license_payload: dict[str, Any] = {}
+        if license_resp.get("ok") and isinstance(license_resp.get("license"), dict):
+            license_payload = dict(license_resp["license"])
+        # Desktop SettingsFill visibility: /status/enabled or top-level enabled.
+        license_enabled = False
+        try:
+            from centurion.license.enforcement import enforcement_enabled
+
+            license_enabled = bool(enforcement_enabled())
+        except Exception:
+            pass
+        # Prefer config ``license.enabled`` for row visibility (not just enforcement).
+        try:
+            from centurion_cli.config import load_config
+            from utils import is_truthy_value
+
+            cfg = load_config() or {}
+            lic = cfg.get("license") if isinstance(cfg.get("license"), dict) else {}
+            if lic:
+                license_enabled = is_truthy_value(lic.get("enabled"), default=False)
+        except Exception:
+            pass
+        license_payload["enabled"] = license_enabled
+
+        beneficiary_resp = _handle_beneficiary_snapshot(request_id)
+        beneficiary: dict[str, Any] = {}
+        if beneficiary_resp.get("ok") and isinstance(
+            beneficiary_resp.get("snapshot"), dict
+        ):
+            beneficiary = dict(beneficiary_resp["snapshot"])
+        # Visibility helpers expected by Desktop SettingsFill.
+        if "enabled" not in beneficiary and "program_active" not in beneficiary:
+            cycle = beneficiary.get("current_cycle") or {}
+            family = str(
+                cycle.get("family_beneficiary_first_name")
+                or beneficiary.get("family_beneficiary_first_name")
+                or ""
+            ).strip()
+            beneficiary["enabled"] = bool(family)
+            beneficiary["program_active"] = bool(family)
+            if family and "family_beneficiary_first_name" not in beneficiary:
+                beneficiary["family_beneficiary_first_name"] = family
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "settings_snapshot",
+            "thinking": thinking,
+            "backups": backups,
+            "soul": soul,
+            "oversight": oversight,
+            "horizon": horizon,
+            "license": license_payload,
+            "enabled": license_enabled,
+            "status": {"enabled": license_enabled},
+            "beneficiary": beneficiary,
+            "data_version": get_data_version(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="settings_snapshot", exc=exc)
 
 
 def _handle_provider_options(request_id: str) -> dict[str, Any]:
@@ -3035,7 +3129,7 @@ def _handle_life_thoughts_list(
     request: dict[str, Any], request_id: str
 ) -> dict[str, Any]:
     try:
-        from centurion_cli.life_missions import list_thoughts
+        from centurion_cli.life_missions import get_data_version, list_thoughts
 
         since = request.get("since")
         limit = int(request.get("limit") or 50)
@@ -3047,6 +3141,7 @@ def _handle_life_thoughts_list(
                 since=str(since) if since else None,
                 limit=limit,
             ),
+            "data_version": get_data_version(),
         }
     except Exception as exc:
         return _error_response(request_id, action="life_thoughts_list", exc=exc)
@@ -3876,14 +3971,27 @@ def _events_requested(request: dict[str, Any]) -> bool:
     return _remote_events_enabled()
 
 
-def _handle_socket_connection(conn: Any, addr: Any = None) -> None:
-    """Serve one client connection (one request, optional event stream)."""
+def _close_socket_conn(conn: Any, rfile: Any = None) -> None:
+    if rfile is not None:
+        try:
+            rfile.close()
+        except Exception:
+            pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _serve_parsed_socket_request(
+    conn: Any,
+    rfile: Any,
+    request: dict[str, Any],
+) -> None:
+    """Handle an already-parsed bridge request on the current worker thread."""
     import os
     import threading
 
-    del addr  # unused; accept() returns it for AF_UNIX compatibility
-    conn.settimeout(None)
-    rfile = conn.makefile("rb")
     write_lock = threading.Lock()
 
     def _write_bytes(data: bytes) -> None:
@@ -3892,41 +4000,6 @@ def _handle_socket_connection(conn: Any, addr: Any = None) -> None:
                 conn.sendall(data)
             except OSError:
                 pass
-
-    try:
-        raw = rfile.readline()
-        if not raw:
-            return
-        request = json.loads(raw.decode("utf-8"))
-        if not isinstance(request, dict):
-            raise ValueError("request must be a JSON object")
-    except Exception as exc:
-        code, message = classify_llm_error(exc)
-        _write_bytes(
-            (
-                json.dumps(
-                    {
-                        "id": "",
-                        "ok": False,
-                        "code": code,
-                        "error": message,
-                        "message": message,
-                        "retryable": False,
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            ).encode("utf-8")
-        )
-        try:
-            rfile.close()
-        except Exception:
-            pass
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return
 
     action = str(request.get("action") or "chat").strip().lower()
     events = action == "chat" and _events_requested(request)
@@ -3993,20 +4066,72 @@ def _handle_socket_connection(conn: Any, addr: Any = None) -> None:
             }
 
     _write_bytes((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+    _close_socket_conn(conn, rfile)
+
+
+def _handle_socket_connection(
+    conn: Any,
+    addr: Any = None,
+    chat_pool: Any = None,
+) -> None:
+    """Read one request; chat may re-route onto ``chat_pool`` to free control workers."""
+    import threading
+
+    del addr  # unused; accept() returns it for AF_UNIX compatibility
+    conn.settimeout(None)
+    rfile = conn.makefile("rb")
+    write_lock = threading.Lock()
+
+    def _write_bytes(data: bytes) -> None:
+        with write_lock:
+            try:
+                conn.sendall(data)
+            except OSError:
+                pass
+
     try:
-        rfile.close()
-    except Exception:
-        pass
-    try:
-        conn.close()
-    except Exception:
-        pass
+        raw = rfile.readline()
+        if not raw:
+            _close_socket_conn(conn, rfile)
+            return
+        request = json.loads(raw.decode("utf-8"))
+        if not isinstance(request, dict):
+            raise ValueError("request must be a JSON object")
+    except Exception as exc:
+        code, message = classify_llm_error(exc)
+        _write_bytes(
+            (
+                json.dumps(
+                    {
+                        "id": "",
+                        "ok": False,
+                        "code": code,
+                        "error": message,
+                        "message": message,
+                        "retryable": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+        )
+        _close_socket_conn(conn, rfile)
+        return
+
+    action = str(request.get("action") or "chat").strip().lower()
+    if action == "chat" and chat_pool is not None:
+        # Transfer connection ownership so this control worker frees immediately.
+        chat_pool.submit(_serve_parsed_socket_request, conn, rfile, request)
+        return
+
+    _serve_parsed_socket_request(conn, rfile, request)
 
 
 def serve_bridge(
     socket_path: str | None = None,
     *,
     workers: int = 4,
+    chat_workers: int = 1,
 ) -> int:
     """Run the persistent Unix-socket bridge daemon (Brain latency path)."""
     import os
@@ -4052,14 +4177,22 @@ def serve_bridge(
 
     # Accept immediately — do not block the listen loop on run_agent imports.
     # Chat warms in the background; life_/soul_/session_ stay cold-fast.
-    logger.info("Centurion bridge daemon listening on %s", path)
+    logger.info(
+        "Centurion bridge daemon listening on %s (workers=%s chat_workers=%s)",
+        path,
+        max(1, workers),
+        max(1, chat_workers),
+    )
     threading.Thread(
         target=_warm_bridge_imports,
         name="bridge-warm-imports",
         daemon=True,
     ).start()
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+    with (
+        ThreadPoolExecutor(max_workers=max(1, workers)) as control_pool,
+        ThreadPoolExecutor(max_workers=max(1, chat_workers)) as chat_pool,
+    ):
         try:
             while not stop.is_set():
                 try:
@@ -4070,7 +4203,10 @@ def serve_bridge(
                     if stop.is_set():
                         break
                     continue
-                pool.submit(_handle_socket_connection, conn, addr)
+                # Control pool reads the request, then re-routes chat onto chat_pool.
+                control_pool.submit(
+                    _handle_socket_connection, conn, addr, chat_pool
+                )
         finally:
             try:
                 server.close()
@@ -4102,12 +4238,22 @@ def main(argv: list[str] | None = None) -> int:
         "--workers",
         type=int,
         default=4,
-        help="Thread-pool size for --serve (default: 4).",
+        help="Control thread-pool size for --serve (default: 4).",
+    )
+    parser.add_argument(
+        "--chat-workers",
+        type=int,
+        default=1,
+        help="Chat thread-pool size for --serve (default: 1).",
     )
     args = parser.parse_args(argv)
 
     if args.serve:
-        return serve_bridge(args.socket, workers=args.workers)
+        return serve_bridge(
+            args.socket,
+            workers=args.workers,
+            chat_workers=args.chat_workers,
+        )
 
     try:
         from centurion_cli.profiles import apply_sticky_profile_home

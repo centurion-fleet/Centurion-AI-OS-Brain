@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 from centurion_constants import get_centurion_home
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 MISSION_PHASES = frozenset(
     {"briefing", "discovery", "planning", "executing", "verifying", "done"}
@@ -239,6 +239,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
         "SELECT value FROM life_meta WHERE key = 'schema_version'"
     ).fetchone()
     current = str(row["value"]) if row is not None else ""
+    try:
+        prev_ver = int(current) if current else 0
+    except ValueError:
+        prev_ver = 0
+
+    # v3: FTS5 index over life_documents (create before bumping schema_version).
+    if prev_ver < 3:
+        _migrate_documents_fts(conn)
+
+    conn.execute(
+        "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('data_version', '0')"
+    )
+
     if current != str(_SCHEMA_VERSION):
         conn.execute(
             "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('schema_version', ?)",
@@ -268,6 +281,87 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
     if own:
         conn.commit()
         conn.close()
+
+
+def _migrate_documents_fts(conn: sqlite3.Connection) -> None:
+    """Create life_documents_fts + sync triggers and backfill existing rows."""
+    conn.executescript(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS life_documents_fts USING fts5(
+          doc_id UNINDEXED,
+          title,
+          summary,
+          body_md,
+          tokenize='porter unicode61'
+        );
+
+        CREATE TRIGGER IF NOT EXISTS life_documents_fts_ai
+        AFTER INSERT ON life_documents BEGIN
+          INSERT INTO life_documents_fts(doc_id, title, summary, body_md)
+          VALUES (new.id, new.title, new.summary, new.body_md);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS life_documents_fts_ad
+        AFTER DELETE ON life_documents BEGIN
+          DELETE FROM life_documents_fts WHERE doc_id = old.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS life_documents_fts_au
+        AFTER UPDATE ON life_documents BEGIN
+          DELETE FROM life_documents_fts WHERE doc_id = old.id;
+          INSERT INTO life_documents_fts(doc_id, title, summary, body_md)
+          VALUES (new.id, new.title, new.summary, new.body_md);
+        END;
+        """
+    )
+    fts_count = conn.execute("SELECT COUNT(*) AS n FROM life_documents_fts").fetchone()[
+        "n"
+    ]
+    if int(fts_count or 0) == 0:
+        conn.execute(
+            "INSERT INTO life_documents_fts(doc_id, title, summary, body_md) "
+            "SELECT id, title, summary, body_md FROM life_documents"
+        )
+
+
+def get_data_version() -> int:
+    """Monotonic revision counter for life store changes (thoughts/documents)."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM life_meta WHERE key = 'data_version'"
+        ).fetchone()
+        if row is None:
+            return 0
+        try:
+            return int(row["value"])
+        except (TypeError, ValueError):
+            return 0
+
+
+def bump_data_version(conn: sqlite3.Connection) -> int:
+    """Increment ``data_version`` on an open connection; return the new value."""
+    conn.execute(
+        "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('data_version', '0')"
+    )
+    conn.execute(
+        "UPDATE life_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) "
+        "WHERE key = 'data_version'"
+    )
+    row = conn.execute(
+        "SELECT value FROM life_meta WHERE key = 'data_version'"
+    ).fetchone()
+    try:
+        return int(row["value"]) if row is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _sanitize_fts_query(query: str) -> str:
+    """Strip FTS5 special characters; return space-joined terms or empty."""
+    cleaned = re.sub(r'["*\(\)]', " ", str(query or ""))
+    cleaned = re.sub(r"[^\w\s\-']", " ", cleaned, flags=re.UNICODE)
+    terms = [t for t in cleaned.split() if t]
+    return " ".join(terms)
 
 
 def bootstrap_from_markdown_if_empty() -> dict[str, Any]:
@@ -863,6 +957,7 @@ def deck_snapshot(
         "thoughts": thoughts,
         "primary_documents": documents,
         "primary_document_count": len(documents),
+        "data_version": get_data_version(),
     }
 
 
@@ -1225,6 +1320,7 @@ def put_document(fields: dict[str, Any]) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM life_documents WHERE id = ?", (did,)).fetchone()
         out = _row_dict(row)
         assert out is not None
+        bump_data_version(conn)
 
     # Pulse TV / Focus thought stream only after a real save.
     if announce is not False:
@@ -1282,67 +1378,110 @@ def search_documents(
     mission_id: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """Substring search across title, summary, and body_md (current bodies only)."""
-    q = str(query or "").strip().lower()
+    """Search title/summary/body via FTS5 MATCH; Python substring fallback."""
+    q_raw = str(query or "").strip()
+    fts_query = _sanitize_fts_query(q_raw) if q_raw else ""
+    # Prefer sanitized terms for substring fallback when the raw query is noisy.
+    q = (fts_query or q_raw).lower()
     lim = max(1, min(int(limit or 50), 200))
     src = str(source or "").strip().lower() or None
     if src and src not in DOC_SOURCES:
         src = None
     mid = str(mission_id).strip() if mission_id else None
 
+    def _shape_rows(rows: list[Any]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            d = _row_dict(row)
+            if d is None:
+                continue
+            mission_title = d.pop("mission_title", None)
+            mission_statement = d.pop("mission_statement", None)
+            d["mission_title"] = (
+                (mission_title or mission_statement or "").strip() or None
+            )
+            body = str(d.get("body_md") or "")
+            if len(body) > 400:
+                d["body_md"] = body[:399].rstrip() + "…"
+                d["body_truncated"] = True
+            else:
+                d["body_truncated"] = False
+            d["excerpt"] = document_excerpt(d, max_chars=280)
+            out.append(d)
+            if len(out) >= lim:
+                break
+        return out
+
+    def _python_filter(rows: list[Any]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            d = _row_dict(row)
+            if d is None:
+                continue
+            mission_title = d.pop("mission_title", None)
+            mission_statement = d.pop("mission_statement", None)
+            d["mission_title"] = (
+                (mission_title or mission_statement or "").strip() or None
+            )
+            if q:
+                hay = " ".join(
+                    [
+                        str(d.get("title") or ""),
+                        str(d.get("summary") or ""),
+                        str(d.get("body_md") or ""),
+                        str(d.get("doc_type") or ""),
+                    ]
+                ).lower()
+                terms = [t for t in q.split() if len(t) > 1] or [q]
+                if q not in hay and not any(t in hay for t in terms):
+                    continue
+            body = str(d.get("body_md") or "")
+            if len(body) > 400:
+                d["body_md"] = body[:399].rstrip() + "…"
+                d["body_truncated"] = True
+            else:
+                d["body_truncated"] = False
+            d["excerpt"] = document_excerpt(d, max_chars=280)
+            out.append(d)
+            if len(out) >= lim:
+                break
+        return out
+
     with _conn() as conn:
-        sql = (
+        base_select = (
             "SELECT d.*, m.title AS mission_title, m.statement AS mission_statement "
             "FROM life_documents d "
             "LEFT JOIN life_missions m ON m.id = d.mission_id "
-            "WHERE 1=1"
         )
+        filters = ""
         params: list[Any] = []
         if mid:
-            sql += " AND d.mission_id = ?"
+            filters += " AND d.mission_id = ?"
             params.append(mid)
         if src:
-            sql += " AND d.source = ?"
+            filters += " AND d.source = ?"
             params.append(src)
-        sql += " ORDER BY d.updated_at DESC LIMIT ?"
-        # Over-fetch when filtering by query in Python (SQLite LIKE is fine too).
-        params.append(lim * 4 if q else lim)
-        rows = conn.execute(sql, params).fetchall()
 
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        d = _row_dict(row)
-        if d is None:
-            continue
-        mission_title = d.pop("mission_title", None)
-        mission_statement = d.pop("mission_statement", None)
-        d["mission_title"] = (
-            (mission_title or mission_statement or "").strip() or None
-        )
-        if q:
-            hay = " ".join(
-                [
-                    str(d.get("title") or ""),
-                    str(d.get("summary") or ""),
-                    str(d.get("body_md") or ""),
-                    str(d.get("doc_type") or ""),
-                ]
-            ).lower()
-            terms = [t for t in q.split() if len(t) > 1] or [q]
-            if q not in hay and not any(t in hay for t in terms):
-                continue
-        # Cap body in search results — full body via get_document.
-        body = str(d.get("body_md") or "")
-        if len(body) > 400:
-            d["body_md"] = body[:399].rstrip() + "…"
-            d["body_truncated"] = True
-        else:
-            d["body_truncated"] = False
-        d["excerpt"] = document_excerpt(d, max_chars=280)
-        out.append(d)
-        if len(out) >= lim:
-            break
-    return out
+        if fts_query:
+            try:
+                fts_sql = (
+                    base_select
+                    + "JOIN life_documents_fts f ON f.doc_id = d.id "
+                    + "WHERE f MATCH ?"
+                    + filters
+                    + " ORDER BY d.updated_at DESC LIMIT ?"
+                )
+                fts_params = [fts_query, *params, lim]
+                rows = conn.execute(fts_sql, fts_params).fetchall()
+                if rows:
+                    return _shape_rows(rows)
+            except sqlite3.Error:
+                pass
+
+        sql = base_select + "WHERE 1=1" + filters + " ORDER BY d.updated_at DESC LIMIT ?"
+        # Over-fetch when filtering by query in Python.
+        rows = conn.execute(sql, [*params, lim * 4 if q else lim]).fetchall()
+        return _python_filter(rows)
 
 
 def document_excerpt(doc: dict[str, Any], *, max_chars: int = 400) -> str:
@@ -1919,6 +2058,7 @@ def post_thought(fields: dict[str, Any]) -> dict[str, Any]:
                 now,
             ),
         )
+        bump_data_version(conn)
         row = conn.execute("SELECT * FROM life_thoughts WHERE id = ?", (tid,)).fetchone()
         return _row_dict(row)  # type: ignore[return-value]
 

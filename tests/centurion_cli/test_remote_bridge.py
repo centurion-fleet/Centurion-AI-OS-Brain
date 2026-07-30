@@ -425,3 +425,103 @@ def test_handle_chat_skills_prepends_skill_bodies(monkeypatch):
     assert "What does the arXiv paper say?" in seen["text"]
     # Missing skills that return None are skipped (fake always returns).
     assert "[SKILL /missing-skill]" in seen["text"]
+
+
+def test_settings_snapshot_aggregates_sections(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setattr(
+        rb,
+        "get_status",
+        lambda *, probe=True: type(
+            "S",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "provider": "openrouter",
+                    "model": "test-model",
+                    "health": "ok",
+                    "health_message": "fine",
+                    "last_good": {"provider": "x"},
+                    "last_good_available": False,
+                }
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        rb.support_control,
+        "list_backup_thinking_services",
+        lambda: [{"label": "backup via openrouter", "provider": "openrouter", "model": "b"}],
+    )
+    monkeypatch.setattr(
+        rb,
+        "_handle_soul_get",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "soul": {"name": "Ada", "displayName": "Ada"},
+        },
+    )
+    monkeypatch.setattr(
+        rb,
+        "_handle_oversight_get",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "oversight": {"autonomy_level": "collaborative"},
+        },
+    )
+    monkeypatch.setattr(
+        rb,
+        "_handle_memory_horizon_snapshot",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "snapshot": {"provider": "none", "summary": "empty"},
+        },
+    )
+    monkeypatch.setattr(
+        rb,
+        "_handle_license_status",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "license": {"state": "trial", "tier": "trial"},
+        },
+    )
+    monkeypatch.setattr(
+        rb,
+        "_handle_beneficiary_snapshot",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "snapshot": {
+                "current_cycle": {"family_beneficiary_first_name": "Sam"},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "centurion.license.enforcement.enforcement_enabled",
+        lambda config=None: False,
+    )
+    monkeypatch.setattr(
+        "centurion_cli.life_missions.get_data_version",
+        lambda: 7,
+    )
+
+    result = handle_request(
+        {"id": "settings-1", "action": "settings_snapshot", "skip_probe": True}
+    )
+    assert result["ok"] is True
+    assert result["action"] == "settings_snapshot"
+    assert result["thinking"]["provider"] == "openrouter"
+    assert "last_good" not in result["thinking"]
+    assert result["backups"][0]["provider"] == "openrouter"
+    assert result["soul"]["name"] == "Ada"
+    assert result["oversight"]["autonomy_level"] == "collaborative"
+    assert result["horizon"]["provider"] == "none"
+    assert result["license"]["state"] == "trial"
+    assert "enabled" in result["license"]
+    assert result["beneficiary"]["family_beneficiary_first_name"] == "Sam"
+    assert result["beneficiary"]["enabled"] is True
+    assert result["data_version"] == 7

@@ -2552,6 +2552,39 @@ pub fn run_bridge_action(action: &str, extra: Value) -> Option<Value> {
     crate::bridge_client::bridge_request_resilient(action, extra).ok()
 }
 
+/// Spawn bridge I/O off the GTK thread and apply the result on the UI loop.
+///
+/// Prefer this over `run_bridge_action` inside `connect_clicked` / dialog
+/// open/save handlers. `work` must be `Send`; `apply` runs on the main context.
+pub fn run_bridge_async<T, FWork, FApply>(work: FWork, apply: FApply)
+where
+    T: Send + 'static,
+    FWork: FnOnce() -> T + Send + 'static,
+    FApply: FnOnce(T) + 'static,
+{
+    let (tx, rx) = mpsc::channel::<T>();
+    thread::spawn(move || {
+        let _ = tx.send(work());
+    });
+    glib::timeout_add_local(Duration::from_millis(40), move || match rx.try_recv() {
+        Ok(value) => {
+            apply(value);
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+    });
+}
+
+/// Convenience: one bridge action, then apply `Option<Value>` on the UI thread.
+pub fn run_bridge_action_async<FApply>(action: &str, extra: Value, apply: FApply)
+where
+    FApply: FnOnce(Option<Value>) + 'static,
+{
+    let action = action.to_owned();
+    run_bridge_async(move || run_bridge_action(&action, extra), apply);
+}
+
 fn ensure_session_id() -> Result<String, String> {
     if let Some(existing) = load_session_id() {
         return Ok(existing);
@@ -3518,10 +3551,118 @@ fn pango_escape(text: &str) -> String {
 
 /// Turn markdown into a human-friendly GTK widget tree (not raw `**` / `##` / fences).
 fn formatted_message_body(markdown: &str) -> gtk::Box {
-    use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
-
     let body = gtk::Box::new(gtk::Orientation::Vertical, 8);
     body.set_hexpand(false);
+    let blocks = parse_message_blocks(markdown);
+
+    for block in blocks.iter() {
+        match block {
+            MessageBlock::Paragraph { markup, heading } => {
+                body.append(&chat_text_label(markup, false, *heading));
+            }
+            MessageBlock::Code { text, lang } => {
+                let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                block.add_css_class("centurion-chat-code-block");
+                let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                header.add_css_class("centurion-chat-code-header");
+                let lang_label = if lang.is_empty() {
+                    "code".to_owned()
+                } else {
+                    lang.clone()
+                };
+                header.append(
+                    &gtk::Label::builder()
+                        .label(&lang_label)
+                        .xalign(0.0)
+                        .hexpand(true)
+                        .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
+                        .build(),
+                );
+                let copy_btn = gtk::Button::with_label("Copy");
+                copy_btn.add_css_class("flat");
+                copy_btn.set_tooltip_text(Some("Copy code"));
+                let code_for_copy = text.clone();
+                copy_btn.connect_clicked(move |btn| {
+                    btn.clipboard().set_text(&code_for_copy);
+                });
+                header.append(&copy_btn);
+                block.append(&header);
+                let code_label = gtk::Label::builder()
+                    .label(&text)
+                    .wrap(true)
+                    .wrap_mode(gtk::pango::WrapMode::Char)
+                    .xalign(0.0)
+                    .selectable(true)
+                    .max_width_chars(64)
+                    .css_classes(["centurion-chat-code"])
+                    .build();
+                block.append(&code_label);
+                body.append(&block);
+            }
+            MessageBlock::Rule => {
+                body.append(
+                    &gtk::Separator::builder()
+                        .orientation(gtk::Orientation::Horizontal)
+                        .build(),
+                );
+            }
+        }
+    }
+
+    body
+}
+
+enum MessageBlock {
+    Paragraph { markup: String, heading: Option<u8> },
+    Code { text: String, lang: String },
+    Rule,
+}
+
+impl Clone for MessageBlock {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Paragraph { markup, heading } => Self::Paragraph {
+                markup: markup.clone(),
+                heading: *heading,
+            },
+            Self::Code { text, lang } => Self::Code {
+                text: text.clone(),
+                lang: lang.clone(),
+            },
+            Self::Rule => Self::Rule,
+        }
+    }
+}
+
+/// Parsed markdown blocks — cached so long transcripts do not re-parse on rebuild.
+fn parse_message_blocks(markdown: &str) -> std::sync::Arc<Vec<MessageBlock>> {
+    use std::collections::HashMap;
+    use std::hash::{Hash, Hasher};
+    use std::sync::Mutex;
+
+    static CACHE: OnceLock<Mutex<HashMap<u64, std::sync::Arc<Vec<MessageBlock>>>>> =
+        OnceLock::new();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    markdown.hash(&mut hasher);
+    let key = hasher.finish();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(hit) = guard.get(&key) {
+            return hit.clone();
+        }
+    }
+    let blocks = std::sync::Arc::new(parse_message_blocks_uncached(markdown));
+    if let Ok(mut guard) = cache.lock() {
+        if guard.len() > 256 {
+            guard.clear();
+        }
+        guard.insert(key, blocks.clone());
+    }
+    blocks
+}
+
+fn parse_message_blocks_uncached(markdown: &str) -> Vec<MessageBlock> {
+    use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -3592,12 +3733,11 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                     if let Some(idx) = list_index.last_mut() {
                         *idx += 1;
                     }
-                    format!("{n}. ")
+                    format!("{indent}{n}. ")
                 } else {
-                    "• ".to_owned()
+                    format!("{indent}• ")
                 };
-                inline.push_str(&indent);
-                inline.push_str(&bullet);
+                inline.push_str(&pango_escape(&bullet));
             }
             Event::End(TagEnd::Item) => {
                 flush_inline(&mut inline, &mut blocks, None);
@@ -3613,13 +3753,10 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
             }
             Event::End(TagEnd::CodeBlock) => {
                 in_code_block = false;
-                let code = code_buf.trim_end_matches('\n').to_string();
                 blocks.push(MessageBlock::Code {
-                    text: code,
-                    lang: code_lang.clone(),
+                    text: std::mem::take(&mut code_buf),
+                    lang: std::mem::take(&mut code_lang),
                 });
-                code_buf.clear();
-                code_lang.clear();
             }
             Event::Start(Tag::Emphasis) => inline.push_str("<i>"),
             Event::End(TagEnd::Emphasis) => inline.push_str("</i>"),
@@ -3627,12 +3764,6 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
             Event::End(TagEnd::Strong) => inline.push_str("</b>"),
             Event::Start(Tag::Strikethrough) => inline.push_str("<s>"),
             Event::End(TagEnd::Strikethrough) => inline.push_str("</s>"),
-            Event::Start(Tag::Link { dest_url, .. }) => {
-                inline.push_str("<span foreground=\"#ffb347\"><u>");
-                // Keep URL for title attribute via comment in markup — show as text after.
-                let _ = dest_url;
-            }
-            Event::End(TagEnd::Link) => inline.push_str("</u></span>"),
             Event::Code(code) => {
                 inline.push_str("<tt>");
                 inline.push_str(&pango_escape(&code));
@@ -3645,14 +3776,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                     inline.push_str(&pango_escape(&text));
                 }
             }
-            Event::SoftBreak => {
-                if in_code_block {
-                    code_buf.push('\n');
-                } else {
-                    inline.push(' ');
-                }
-            }
-            Event::HardBreak => {
+            Event::SoftBreak | Event::HardBreak => {
                 if in_code_block {
                     code_buf.push('\n');
                 } else {
@@ -3670,78 +3794,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
         }
     }
     flush_inline(&mut inline, &mut blocks, None);
-
-    if blocks.is_empty() {
-        // Plain fallback (no markdown structure detected).
-        body.append(&chat_text_label(
-            &pango_escape(markdown.trim()),
-            false,
-            None,
-        ));
-        return body;
-    }
-
-    for block in blocks {
-        match block {
-            MessageBlock::Paragraph { markup, heading } => {
-                body.append(&chat_text_label(&markup, false, heading));
-            }
-            MessageBlock::Code { text, lang } => {
-                let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
-                block.add_css_class("centurion-chat-code-block");
-                let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                header.add_css_class("centurion-chat-code-header");
-                let lang_label = if lang.is_empty() {
-                    "code".to_owned()
-                } else {
-                    lang
-                };
-                header.append(
-                    &gtk::Label::builder()
-                        .label(&lang_label)
-                        .xalign(0.0)
-                        .hexpand(true)
-                        .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
-                        .build(),
-                );
-                let copy_btn = gtk::Button::with_label("Copy");
-                copy_btn.add_css_class("flat");
-                copy_btn.set_tooltip_text(Some("Copy code"));
-                let code_for_copy = text.clone();
-                copy_btn.connect_clicked(move |btn| {
-                    btn.clipboard().set_text(&code_for_copy);
-                });
-                header.append(&copy_btn);
-                block.append(&header);
-                let code_label = gtk::Label::builder()
-                    .label(&text)
-                    .wrap(true)
-                    .wrap_mode(gtk::pango::WrapMode::Char)
-                    .xalign(0.0)
-                    .selectable(true)
-                    .max_width_chars(64)
-                    .css_classes(["centurion-chat-code"])
-                    .build();
-                block.append(&code_label);
-                body.append(&block);
-            }
-            MessageBlock::Rule => {
-                body.append(
-                    &gtk::Separator::builder()
-                        .orientation(gtk::Orientation::Horizontal)
-                        .build(),
-                );
-            }
-        }
-    }
-
-    body
-}
-
-enum MessageBlock {
-    Paragraph { markup: String, heading: Option<u8> },
-    Code { text: String, lang: String },
-    Rule,
+    blocks
 }
 
 fn chat_text_label(markup: &str, monospace: bool, heading: Option<u8>) -> gtk::Label {
@@ -3836,22 +3889,14 @@ fn refresh_assistant_name_async(
 
 fn scroll_chat_to_latest(
     message_scroll: &gtk::ScrolledWindow,
-    message_list: &gtk::ListBox,
     programmatic: &Rc<Cell<bool>>,
 ) {
-    // Fedora Brain ships an older GTK4 — ListBox::scroll_to is unavailable there.
-    // Pin via the ScrolledWindow adjustment; follow-bottom wiring keeps chasing
-    // as new rows are laid out.
+    // Pin via the ScrolledWindow adjustment so ListView / ListBox both work
+    // (Fedora Brain: ListBox::scroll_to is unavailable).
     programmatic.set(true);
-    if let Some(child) = message_list.last_child() {
-        if let Ok(row) = child.downcast::<gtk::ListBoxRow>() {
-            message_list.select_row(Some(&row));
-        }
-    }
     let adj = message_scroll.vadjustment();
     let target = (adj.upper() - adj.page_size()).max(adj.lower());
     adj.set_value(target);
-    // Clear on next idle so a late value_changed does not disarm follow_bottom.
     let programmatic = programmatic.clone();
     glib::idle_add_local_once(move || {
         programmatic.set(false);
@@ -3860,23 +3905,21 @@ fn scroll_chat_to_latest(
 
 fn schedule_scroll_to_latest(
     message_scroll: &gtk::ScrolledWindow,
-    message_list: &gtk::ListBox,
     follow_bottom: &Rc<Cell<bool>>,
     programmatic: &Rc<Cell<bool>>,
 ) {
     follow_bottom.set(true);
-    scroll_chat_to_latest(message_scroll, message_list, programmatic);
+    scroll_chat_to_latest(message_scroll, programmatic);
 
     for delay_ms in [16u64, 120] {
         let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic = programmatic.clone();
         glib::timeout_add_local_once(Duration::from_millis(delay_ms), move || {
             if !follow_bottom.get() {
                 return;
             }
-            scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
+            scroll_chat_to_latest(&message_scroll, &programmatic);
         });
     }
 }
@@ -3885,7 +3928,6 @@ fn schedule_scroll_to_latest(
 fn schedule_scroll_coalesced(
     pending: &Rc<Cell<bool>>,
     message_scroll: &gtk::ScrolledWindow,
-    message_list: &gtk::ListBox,
     follow_bottom: &Rc<Cell<bool>>,
     programmatic: &Rc<Cell<bool>>,
 ) {
@@ -3895,15 +3937,13 @@ fn schedule_scroll_coalesced(
     pending.set(true);
     let pending = pending.clone();
     let message_scroll = message_scroll.clone();
-    let message_list = message_list.clone();
     let follow_bottom = follow_bottom.clone();
     let programmatic = programmatic.clone();
     glib::timeout_add_local_once(Duration::from_millis(50), move || {
         pending.set(false);
-        if !follow_bottom.get() {
-            return;
+        if follow_bottom.get() {
+            scroll_chat_to_latest(&message_scroll, &programmatic);
         }
-        scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
     });
 }
 
@@ -4079,13 +4119,81 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let is_sending = Rc::new(RefCell::new(false));
     let switching = Rc::new(Cell::new(false));
 
-    let message_list = gtk::ListBox::new();
-    message_list.set_selection_mode(gtk::SelectionMode::None);
+    // Virtualized transcript — ListView only binds visible rows (long chats stay smooth).
+    #[derive(Clone)]
+    struct TranscriptItem {
+        message: ChatMessage,
+        assistant_name: String,
+        is_last_assistant: bool,
+    }
+    let message_store = gio::ListStore::new::<glib::BoxedAnyObject>();
+    let regenerate_slot_for_factory: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(RefCell::new(None));
+    let factory = gtk::SignalListItemFactory::new();
+    factory.connect_setup(move |_, obj| {
+        let list_item = obj
+            .downcast_ref::<gtk::ListItem>()
+            .expect("ListItem");
+        let placeholder = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        placeholder.set_hexpand(true);
+        list_item.set_child(Some(&placeholder));
+    });
+    {
+        let regenerate_slot_for_factory = regenerate_slot_for_factory.clone();
+        factory.connect_bind(move |_, obj| {
+            let list_item = obj
+                .downcast_ref::<gtk::ListItem>()
+                .expect("ListItem");
+            let Some(item) = list_item.item() else {
+                return;
+            };
+            let Ok(boxed) = item.downcast::<glib::BoxedAnyObject>() else {
+                return;
+            };
+            let data = boxed.borrow::<TranscriptItem>();
+            let actions = if data.message.role == ChatRole::Assistant
+                && data.message.activity.is_none()
+            {
+                Some(MessageRowActions {
+                    on_regenerate: if data.is_last_assistant {
+                        regenerate_slot_for_factory.borrow().clone()
+                    } else {
+                        None
+                    },
+                })
+            } else {
+                None
+            };
+            let row = message_row(&data.message, &data.assistant_name, actions);
+            // message_row returns ListBoxRow — unwrap its child for ListView.
+            let child = row.child();
+            row.set_child(None::<&gtk::Widget>);
+            let Some(inner) = child else {
+                return;
+            };
+            let host = list_item
+                .child()
+                .and_then(|w| w.downcast::<gtk::Box>().ok());
+            if let Some(host) = host {
+                while let Some(c) = host.first_child() {
+                    host.remove(&c);
+                }
+                host.append(&inner);
+            } else {
+                list_item.set_child(Some(&inner));
+            }
+        });
+    }
+    let selection = gtk::NoSelection::new(Some(message_store.clone()));
+    let message_list = gtk::ListView::new(Some(selection), Some(factory));
     message_list.add_css_class("boxed-list");
     message_list.set_margin_start(12);
     message_list.set_margin_end(12);
     message_list.set_margin_top(4);
     message_list.set_margin_bottom(8);
+    message_list.set_hexpand(true);
+    message_list.set_vexpand(false);
+    let message_store = message_store;
 
     let activity_card = gtk::Box::new(gtk::Orientation::Vertical, 6);
     activity_card.add_css_class("centurion-chat-activity");
@@ -4167,7 +4275,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             btn.set_visible(false);
             schedule_scroll_to_latest(
                 &message_scroll,
-                &message_list,
                 &follow_bottom,
                 &programmatic_scroll,
             );
@@ -4240,7 +4347,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             follow_bottom.set(true);
             schedule_scroll_to_latest(
                 &message_scroll,
-                &message_list,
                 &follow_bottom,
                 &programmatic_scroll,
             );
@@ -4325,7 +4431,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 schedule_scroll_coalesced(
                     &activity_scroll_pending,
                     &message_scroll,
-                    &message_list,
                     &follow_bottom,
                     &programmatic_scroll,
                 );
@@ -5135,12 +5240,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     paned.set_end_child(Some(&chat_column));
     container.append(&paned);
 
-    let regenerate_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let regenerate_slot = regenerate_slot_for_factory.clone();
     let rendered_count = Rc::new(Cell::new(0usize));
     let showing_empty_placeholder = Rc::new(Cell::new(false));
 
     let rebuild_messages: Rc<dyn Fn()> = Rc::new({
-        let message_list = message_list.clone();
+        let message_store = message_store.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
@@ -5153,22 +5258,21 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
-            while let Some(child) = message_list.first_child() {
-                message_list.remove(&child);
-            }
+            message_store.remove_all();
             let msgs = messages.borrow();
             if msgs.is_empty() {
-                message_list.append(&message_row(
-                    &ChatMessage {
+                let item = TranscriptItem {
+                    message: ChatMessage {
                         role: ChatRole::System,
                         content:
                             "Your private conversation starts here. Use the message box at the bottom of this page."
                                 .to_owned(),
                         activity: None,
                     },
-                    &name,
-                    None,
-                ));
+                    assistant_name: name.clone(),
+                    is_last_assistant: false,
+                };
+                message_store.append(&glib::BoxedAnyObject::new(item));
                 rendered_count.set(0);
                 showing_empty_placeholder.set(true);
             } else {
@@ -5176,25 +5280,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     .iter()
                     .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
                 for (idx, message) in msgs.iter().enumerate() {
-                    let actions = if Some(idx) == last_assistant_idx {
-                        Some(MessageRowActions {
-                            on_regenerate: regenerate_slot.borrow().clone(),
-                        })
-                    } else if message.role == ChatRole::Assistant && message.activity.is_none() {
-                        Some(MessageRowActions {
-                            on_regenerate: None,
-                        })
-                    } else {
-                        None
+                    let item = TranscriptItem {
+                        message: message.clone(),
+                        assistant_name: name.clone(),
+                        is_last_assistant: Some(idx) == last_assistant_idx,
                     };
-                    message_list.append(&message_row(message, &name, actions));
+                    message_store.append(&glib::BoxedAnyObject::new(item));
                 }
                 rendered_count.set(msgs.len());
                 showing_empty_placeholder.set(false);
             }
             schedule_scroll_to_latest(
                 &message_scroll,
-                &message_list,
                 &follow_bottom,
                 &programmatic_scroll,
             );
@@ -5203,7 +5300,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     /// Append newly pushed messages without tearing down the whole ListBox.
     let sync_messages: Rc<dyn Fn()> = Rc::new({
-        let message_list = message_list.clone();
+        let message_store = message_store.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
@@ -5228,30 +5325,37 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             if n == already {
                 return;
             }
-            for (idx, message) in msgs.iter().enumerate().skip(already) {
-                let actions = if message.role == ChatRole::Assistant && message.activity.is_none() {
-                    // Only the newest assistant row gets regenerate; older
-                    // buttons stay until the next full rebuild (session switch).
-                    if idx + 1 == n {
-                        Some(MessageRowActions {
-                            on_regenerate: regenerate_slot.borrow().clone(),
-                        })
-                    } else {
-                        Some(MessageRowActions {
-                            on_regenerate: None,
-                        })
-                    }
-                } else {
-                    None
-                };
-                message_list.append(&message_row(message, &name, actions));
+            // Re-flag last assistant for regenerate affordance.
+            if already > 0 {
+                message_store.remove_all();
+                let last_assistant_idx = msgs
+                    .iter()
+                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
+                for (idx, message) in msgs.iter().enumerate() {
+                    let item = TranscriptItem {
+                        message: message.clone(),
+                        assistant_name: name.clone(),
+                        is_last_assistant: Some(idx) == last_assistant_idx,
+                    };
+                    message_store.append(&glib::BoxedAnyObject::new(item));
+                }
+            } else {
+                for (idx, message) in msgs.iter().enumerate().skip(already) {
+                    let item = TranscriptItem {
+                        message: message.clone(),
+                        assistant_name: name.clone(),
+                        is_last_assistant: idx + 1 == n
+                            && message.role == ChatRole::Assistant
+                            && message.activity.is_none(),
+                    };
+                    message_store.append(&glib::BoxedAnyObject::new(item));
+                }
             }
             rendered_count.set(n);
             showing_empty_placeholder.set(false);
             drop(msgs);
             schedule_scroll_to_latest(
                 &message_scroll,
-                &message_list,
                 &follow_bottom,
                 &programmatic_scroll,
             );

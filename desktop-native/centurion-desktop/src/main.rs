@@ -1872,25 +1872,33 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let window = window.clone();
             let home_handle = home_handle.clone();
             move |_| {
-                let current = run_bridge_action("mission_get", serde_json::json!({}))
-                    .and_then(|r| {
-                        if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                            r.get("mission")
-                                .and_then(|m| m.get("statement"))
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_owned())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_default();
-                crate::home_page::show_mission_edit_dialog(
-                    &window,
-                    &current,
-                    Rc::new({
-                        let home_handle = home_handle.clone();
-                        move || home_handle.refresh()
-                    }),
+                let window = window.clone();
+                let home_handle = home_handle.clone();
+                crate::chat_page::run_bridge_action_async(
+                    "mission_get",
+                    serde_json::json!({}),
+                    move |payload| {
+                        let current = payload
+                            .and_then(|r| {
+                                if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                                    r.get("mission")
+                                        .and_then(|m| m.get("statement"))
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_owned())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_default();
+                        crate::home_page::show_mission_edit_dialog(
+                            &window,
+                            &current,
+                            Rc::new({
+                                let home_handle = home_handle.clone();
+                                move || home_handle.refresh()
+                            }),
+                        );
+                    },
                 );
             }
         });
@@ -1949,24 +1957,69 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
             move |_| {
-                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
-                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+                let gateway_row = gateway_row.clone();
+                let gateway_platform_list = gateway_platform_list.clone();
+                crate::chat_page::run_bridge_async(
+                    || {
+                        let _ = crate::chat_page::run_bridge_action(
+                            "gateway_start",
+                            serde_json::json!({}),
+                        );
+                        crate::chat_page::run_bridge_action(
+                            "gateway_status",
+                            serde_json::json!({}),
+                        )
+                    },
+                    move |payload| {
+                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
+                    },
+                );
             }
         });
         gateway_stop_btn.connect_clicked({
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
             move |_| {
-                let _ = run_bridge_action("gateway_stop", serde_json::json!({}));
-                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+                let gateway_row = gateway_row.clone();
+                let gateway_platform_list = gateway_platform_list.clone();
+                crate::chat_page::run_bridge_async(
+                    || {
+                        let _ = crate::chat_page::run_bridge_action(
+                            "gateway_stop",
+                            serde_json::json!({}),
+                        );
+                        crate::chat_page::run_bridge_action(
+                            "gateway_status",
+                            serde_json::json!({}),
+                        )
+                    },
+                    move |payload| {
+                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
+                    },
+                );
             }
         });
         gateway_restart_btn.connect_clicked({
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
             move |_| {
-                let _ = run_bridge_action("gateway_restart", serde_json::json!({}));
-                refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+                let gateway_row = gateway_row.clone();
+                let gateway_platform_list = gateway_platform_list.clone();
+                crate::chat_page::run_bridge_async(
+                    || {
+                        let _ = crate::chat_page::run_bridge_action(
+                            "gateway_restart",
+                            serde_json::json!({}),
+                        );
+                        crate::chat_page::run_bridge_action(
+                            "gateway_status",
+                            serde_json::json!({}),
+                        )
+                    },
+                    move |payload| {
+                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
+                    },
+                );
             }
         });
         refresh_gateway_ui_async(&gateway_row, &gateway_platform_list);
@@ -3397,6 +3450,112 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     /// `plain_health` picks the plain-language health phrasing used by the
     /// background poll; the first fill shows provider · model instead.
     fn collect_settings_fill(plain_health: bool) -> SettingsFill {
+        // Prefer one bridge round-trip (no centurion CLI spawn). Fall back to
+        // the legacy multi-call path when the daemon is older.
+        if let Some(snap) =
+            run_bridge_action("settings_snapshot", serde_json::json!({ "skip_probe": true }))
+        {
+            if snap.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                let thinking = snap.get("thinking").cloned().unwrap_or(serde_json::Value::Null);
+                let thinking_line = thinking.as_object().map(|t| {
+                    let provider = t
+                        .get("provider")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    let model = t.get("model").and_then(|v| v.as_str()).unwrap_or("");
+                    let health = t.get("health").and_then(|v| v.as_str()).unwrap_or("ok");
+                    let health_message = t
+                        .get("health_message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let last_good = t
+                        .get("last_good_available")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if !plain_health {
+                        return if model.is_empty() {
+                            provider
+                        } else {
+                            format!("{provider} · {model}")
+                        };
+                    }
+                    let plain = match health {
+                        "ok" => "Working normally",
+                        "degraded" => "May be slow",
+                        _ => "Needs attention",
+                    };
+                    let mut line = format!("{plain} — {health_message}");
+                    if last_good && health != "ok" {
+                        line.push_str(" Last working setup is available.");
+                    }
+                    line
+                });
+                let backups = snap
+                    .get("backups")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let backup_line = if backups.is_empty() {
+                    "No backup thinking services configured.".to_owned()
+                } else {
+                    let labels: Vec<String> = backups
+                        .iter()
+                        .filter_map(|entry| {
+                            entry
+                                .get("label")
+                                .and_then(|label| label.as_str())
+                                .map(str::to_owned)
+                        })
+                        .collect();
+                    if labels.is_empty() {
+                        format!("{} backup thinking service(s) configured.", backups.len())
+                    } else {
+                        labels.join(" · ")
+                    }
+                };
+                let soul = snap.get("soul").cloned().map(|s| {
+                    serde_json::json!({ "ok": true, "soul": s })
+                });
+                let oversight = snap.get("oversight").cloned().map(|o| {
+                    serde_json::json!({ "ok": true, "oversight": o })
+                });
+                let horizon = snap.get("horizon").cloned().map(|h| {
+                    serde_json::json!({ "ok": true, "snapshot": h })
+                });
+                let license_visible = snap
+                    .pointer("/status/enabled")
+                    .or_else(|| snap.get("enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let beneficiary_visible = {
+                    let b = snap.get("beneficiary").unwrap_or(&serde_json::Value::Null);
+                    let enabled = b
+                        .get("enabled")
+                        .or_else(|| b.get("program_active"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let has_family = b
+                        .get("family_beneficiary_first_name")
+                        .or_else(|| b.pointer("/family/first_name"))
+                        .and_then(|v| v.as_str())
+                        .map(|v| !v.trim().is_empty())
+                        .unwrap_or(false);
+                    enabled || has_family
+                };
+                return SettingsFill {
+                    soul,
+                    oversight,
+                    horizon,
+                    thinking_line,
+                    backup_line,
+                    license_visible,
+                    beneficiary_visible,
+                };
+            }
+        }
+
+        // Legacy fallback — older bridge without settings_snapshot.
         let soul = run_bridge_action("soul_get", serde_json::json!({}));
         let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
         let horizon = run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
@@ -3888,68 +4047,89 @@ Being · Continuity\n\
         autonomy_row: &adw::ActionRow,
         oversight_row: &adw::ActionRow,
     ) {
-        let current = run_bridge_action("oversight_get", serde_json::json!({}))
-            .and_then(|p| {
-                p.pointer("/oversight/autonomy_level")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-            })
-            .unwrap_or_else(|| "balanced".to_owned());
-
-        let dialog = adw::AlertDialog::builder()
-            .heading("Autonomy Level")
-            .body(
-                "How much freedom your Centurion has. Changes apply on the next conversation.\n\n\
-                 Strict — follow exactly\n\
-                 Balanced — light interpretation (default)\n\
-                 Proactive — suggest and take small actions\n\
-                 High Autonomy — maximum freedom within boundaries",
-            )
-            .close_response("cancel")
-            .build();
-        dialog.add_response("cancel", "Cancel");
-        for (id, label) in [
-            ("strict", "Strict"),
-            ("balanced", "Balanced"),
-            ("proactive", "Proactive"),
-            ("high", "High Autonomy"),
-        ] {
-            dialog.add_response(id, label);
-            if id == current {
-                dialog.set_response_appearance(id, adw::ResponseAppearance::Suggested);
-                dialog.set_default_response(Some(id));
-            }
-        }
+        let parent = parent.clone();
         let autonomy_row = autonomy_row.clone();
         let oversight_row = oversight_row.clone();
-        dialog.connect_response(None, move |dialog, response| {
-            if matches!(response, "strict" | "balanced" | "proactive" | "high") {
-                match run_bridge_action(
-                    "oversight_put",
-                    serde_json::json!({
-                        "oversight": { "autonomy_level": response },
-                        "apply_level_preset": true,
-                    }),
-                ) {
-                    Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        refresh_autonomy_row(&autonomy_row);
-                        refresh_oversight_row(&oversight_row);
-                    }
-                    Some(payload) => {
-                        let message = payload
-                            .get("message")
+        // Skeleton dialog appears after worker returns current level — never block UI.
+        crate::chat_page::run_bridge_action_async(
+            "oversight_get",
+            serde_json::json!({}),
+            move |payload| {
+                let current = payload
+                    .and_then(|p| {
+                        p.pointer("/oversight/autonomy_level")
                             .and_then(|v| v.as_str())
-                            .unwrap_or("Could not save autonomy level.");
-                        autonomy_row.set_subtitle(message);
-                    }
-                    None => {
-                        autonomy_row.set_subtitle("Could not save autonomy level.");
+                            .map(str::to_owned)
+                    })
+                    .unwrap_or_else(|| "balanced".to_owned());
+
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Autonomy Level")
+                    .body(
+                        "How much freedom your Centurion has. Changes apply on the next conversation.\n\n\
+                         Strict — follow exactly\n\
+                         Balanced — light interpretation (default)\n\
+                         Proactive — suggest and take small actions\n\
+                         High Autonomy — maximum freedom within boundaries",
+                    )
+                    .close_response("cancel")
+                    .build();
+                dialog.add_response("cancel", "Cancel");
+                for (id, label) in [
+                    ("strict", "Strict"),
+                    ("balanced", "Balanced"),
+                    ("proactive", "Proactive"),
+                    ("high", "High Autonomy"),
+                ] {
+                    dialog.add_response(id, label);
+                    if id == current {
+                        dialog.set_response_appearance(id, adw::ResponseAppearance::Suggested);
+                        dialog.set_default_response(Some(id));
                     }
                 }
-            }
-            dialog.close();
-        });
-        dialog.present(Some(parent));
+                let autonomy_row = autonomy_row.clone();
+                let oversight_row = oversight_row.clone();
+                dialog.connect_response(None, move |dialog, response| {
+                    if matches!(response, "strict" | "balanced" | "proactive" | "high") {
+                        let level = response.to_owned();
+                        let autonomy_row = autonomy_row.clone();
+                        let oversight_row = oversight_row.clone();
+                        crate::chat_page::run_bridge_async(
+                            move || {
+                                crate::chat_page::run_bridge_action(
+                                    "oversight_put",
+                                    serde_json::json!({
+                                        "oversight": { "autonomy_level": level },
+                                        "apply_level_preset": true,
+                                    }),
+                                )
+                            },
+                            move |payload| match payload {
+                                Some(payload)
+                                    if payload.get("ok").and_then(|v| v.as_bool())
+                                        == Some(true) =>
+                                {
+                                    refresh_autonomy_row(&autonomy_row);
+                                    refresh_oversight_row(&oversight_row);
+                                }
+                                Some(payload) => {
+                                    let message = payload
+                                        .get("message")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("Could not save autonomy level.");
+                                    autonomy_row.set_subtitle(message);
+                                }
+                                None => {
+                                    autonomy_row.set_subtitle("Could not save autonomy level.");
+                                }
+                            },
+                        );
+                    }
+                    dialog.close();
+                });
+                dialog.present(Some(&parent));
+            },
+        );
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {

@@ -5,6 +5,8 @@ export interface UseSSEOptions {
   /** Max thoughts kept in memory */
   limit?: number;
   enabled?: boolean;
+  /** Fired when the life store data_version changes (docs / thoughts). */
+  onDataVersion?: (version: number) => void;
 }
 
 function thoughtKey(t: Thought): string {
@@ -29,11 +31,14 @@ function mergeThoughts(
  * Live thought stream via EventSource → /api/stream (local poll SSE).
  */
 export function useSSE(options: UseSSEOptions = {}) {
-  const { limit = 32, enabled = true } = options;
+  const { limit = 32, enabled = true, onDataVersion } = options;
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [connected, setConnected] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [dataVersion, setDataVersion] = useState<number | null>(null);
   const seen = useRef(new Set<string>());
+  const onDataVersionRef = useRef(onDataVersion);
+  onDataVersionRef.current = onDataVersion;
 
   useEffect(() => {
     if (!enabled) return;
@@ -53,6 +58,20 @@ export function useSSE(options: UseSSEOptions = {}) {
         if (seen.current.has(id)) return;
         seen.current.add(id);
         setThoughts((prev) => mergeThoughts(prev, t, limit));
+      } catch {
+        /* ignore malformed */
+      }
+    });
+
+    es.addEventListener("data_version", (ev) => {
+      try {
+        const data = JSON.parse((ev as MessageEvent).data) as {
+          version?: number;
+        };
+        if (typeof data.version === "number") {
+          setDataVersion(data.version);
+          onDataVersionRef.current?.(data.version);
+        }
       } catch {
         /* ignore malformed */
       }
@@ -79,5 +98,5 @@ export function useSSE(options: UseSSEOptions = {}) {
     };
   }, [enabled, limit]);
 
-  return { thoughts, connected, streamError };
+  return { thoughts, connected, streamError, dataVersion };
 }

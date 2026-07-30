@@ -19,7 +19,13 @@ export function Deck() {
   const reduce = useReducedMotion();
   const [findOpen, setFindOpen] = useState(false);
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
-  const { thoughts, connected } = useSSE({ enabled: deckVisible, limit: 32 });
+  const { thoughts, connected } = useSSE({
+    enabled: deckVisible,
+    limit: 32,
+    onDataVersion: () => {
+      void refresh();
+    },
+  });
   const autoDiscoveryDone = useRef(false);
 
   const primary = stack?.primary ?? null;

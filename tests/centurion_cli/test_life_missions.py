@@ -637,3 +637,92 @@ def test_life_bridge_errors_are_not_thinking_recovery_copy(life_home):
     assert resp["ok"] is True
     assert "restore your last working setup" not in str(resp).lower()
     assert resp.get("imported", 0) == 0
+
+
+def test_data_version_bumps_on_thought_and_document(life_home):
+    from centurion_cli.life_missions import (
+        deck_snapshot,
+        get_data_version,
+        post_thought,
+        put_document,
+        put_mission,
+        set_primary,
+    )
+    from centurion_cli.remote_bridge import handle_request
+
+    assert get_data_version() == 0
+    m = put_mission(
+        {"title": "Versioned", "statement": "Track revisions", "mission_type": "primary"}
+    )
+    set_primary(m["id"])
+    v0 = get_data_version()
+    post_thought({"summary": "First pulse", "mission_id": m["id"]})
+    v1 = get_data_version()
+    assert v1 == v0 + 1
+    put_document(
+        {
+            "mission_id": m["id"],
+            "title": "Doc A",
+            "body_md": "body",
+            "announce": False,
+        }
+    )
+    v2 = get_data_version()
+    assert v2 == v1 + 1
+
+    snap = deck_snapshot()
+    assert snap["data_version"] == v2
+
+    listed = handle_request(
+        {"id": "tv1", "action": "life_thoughts_list", "limit": 10}
+    )
+    assert listed["ok"] is True
+    assert listed["data_version"] == v2
+
+
+def test_search_documents_fts_and_special_char_fallback(life_home):
+    from centurion_cli.life_missions import (
+        ensure_schema,
+        life_db_path,
+        put_document,
+        put_mission,
+        search_documents,
+        set_primary,
+    )
+    import sqlite3
+
+    ensure_schema()
+    m = put_mission(
+        {
+            "title": "FTS Mission",
+            "statement": "Searchable corpus",
+            "mission_type": "primary",
+        }
+    )
+    set_primary(m["id"])
+    put_document(
+        {
+            "mission_id": m["id"],
+            "title": "Porter stemming note",
+            "summary": "About running",
+            "body_md": "UniqueFtsToken99 and memorandum details.",
+            "source": "agent",
+            "announce": False,
+        }
+    )
+
+    # FTS table exists after v3 migration.
+    conn = sqlite3.connect(str(life_db_path()))
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM life_documents_fts").fetchone()[0]
+        assert n >= 1
+    finally:
+        conn.close()
+
+    hits = search_documents("UniqueFtsToken99")
+    assert len(hits) >= 1
+    assert hits[0]["title"] == "Porter stemming note"
+
+    # Special chars are sanitized; still finds via FTS or substring fallback.
+    noisy = search_documents('UniqueFtsToken99*(")')
+    assert len(noisy) >= 1

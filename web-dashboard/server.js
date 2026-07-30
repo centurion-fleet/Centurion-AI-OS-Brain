@@ -354,6 +354,7 @@ async function handleStream(req, res) {
 
   const seen = new Set();
   let inflight = false;
+  let lastDataVersion = null;
 
   async function tick() {
     if (closed || inflight) return;
@@ -376,6 +377,16 @@ async function handleStream(req, res) {
         if (t.created_at && (!since || t.created_at > since)) {
           since = t.created_at;
         }
+      }
+      if (
+        result &&
+        typeof result.data_version === "number" &&
+        result.data_version !== lastDataVersion
+      ) {
+        lastDataVersion = result.data_version;
+        res.write(
+          `event: data_version\ndata: ${JSON.stringify({ version: lastDataVersion })}\n\n`,
+        );
       }
       // Cap seen set
       if (seen.size > 500) {
