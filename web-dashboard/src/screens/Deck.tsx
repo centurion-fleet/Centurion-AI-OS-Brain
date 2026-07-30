@@ -121,6 +121,18 @@ export function Deck() {
               mission={primary}
               latestThought={latestThought}
               onOpen={() => navigate(`/mission/${primary.id}`)}
+              onDiscuss={() => {
+                const w = window as Window & {
+                  centurionDiscuss?: (p: Record<string, unknown>) => void;
+                };
+                if (typeof w.centurionDiscuss !== "function") return;
+                w.centurionDiscuss({
+                  id: primary.id,
+                  title: primary.title,
+                  statement: primary.statement || primary.purpose,
+                  kickoff: `Let's talk about my mission: ${primary.title}`,
+                });
+              }}
             />
           ) : (
             <div className="glass rounded-3xl p-6 text-center text-ink-muted">

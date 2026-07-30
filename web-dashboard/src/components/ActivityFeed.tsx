@@ -47,7 +47,7 @@ export function ActivityFeed({
       <div className="glass overflow-hidden rounded-2xl">
         {items.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-dim">
-            Quiet for now — thoughts will appear as Centurion works.
+            Quiet for now — complete a target or Focus in Chat to light this up.
           </p>
         ) : (
           <ul className="divide-y divide-white/5">

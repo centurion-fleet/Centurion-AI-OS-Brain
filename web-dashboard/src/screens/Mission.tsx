@@ -7,8 +7,23 @@ import { ProgressBar } from "../components/PrimaryCard";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
-import { missionProgress } from "../types/life";
+import { missionProgress, type MissionPhase } from "../types/life";
 import { bridgeCall } from "../hooks/useBridge";
+
+const PHASE_ORDER: MissionPhase[] = [
+  "briefing",
+  "discovery",
+  "planning",
+  "executing",
+  "verifying",
+  "done",
+];
+
+function nextPhase(current: MissionPhase): MissionPhase | null {
+  const i = PHASE_ORDER.indexOf(current);
+  if (i < 0 || i >= PHASE_ORDER.length - 1) return null;
+  return PHASE_ORDER[i + 1];
+}
 
 export function Mission() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +32,7 @@ export function Mission() {
     useMissionDetail(id);
   const { thoughts: live } = useSSE({ enabled: deckVisible });
   const [primaryBusy, setPrimaryBusy] = useState(false);
+  const [phaseBusy, setPhaseBusy] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logTitle, setLogTitle] = useState("");
   const [logChosen, setLogChosen] = useState("");
@@ -51,6 +67,8 @@ export function Mission() {
   const progress = missionProgress(mission);
   const missionId = mission.id;
   const missionTitle = mission.title;
+  const advanceTo = nextPhase(mission.phase);
+  const missionSnapshot = mission;
 
   function discussDecision(d: {
     id: string;
@@ -107,6 +125,34 @@ export function Mission() {
     }
   }
 
+  async function advancePhase() {
+    if (!advanceTo || phaseBusy) return;
+    setPhaseBusy(true);
+    try {
+      // Omit targets — put_mission replaces the target table when targets[] is sent.
+      await bridgeCall("life_mission_put", {
+        mission: {
+          id: missionSnapshot.id,
+          subject_id: missionSnapshot.subject_id,
+          title: missionSnapshot.title,
+          statement: missionSnapshot.statement,
+          situation: missionSnapshot.situation,
+          why: missionSnapshot.why,
+          purpose: missionSnapshot.purpose,
+          phase: advanceTo,
+          mission_type: missionSnapshot.mission_type,
+          impact_rating: missionSnapshot.impact_rating,
+          stack_sort_order: missionSnapshot.stack_sort_order,
+          status: missionSnapshot.status,
+          profile: missionSnapshot.profile,
+        },
+      });
+      await refresh();
+    } finally {
+      setPhaseBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto min-h-screen max-w-3xl px-4 pb-20 pt-6 sm:px-6">
       <Link
@@ -159,6 +205,16 @@ export function Mission() {
           >
             Discuss in Chat
           </button>
+          {advanceTo && (
+            <button
+              type="button"
+              disabled={phaseBusy}
+              onClick={() => void advancePhase()}
+              className="rounded-full border border-amber-glow/40 bg-amber-muted/80 px-5 py-2.5 text-sm font-semibold capitalize text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25 disabled:opacity-50"
+            >
+              {phaseBusy ? "Advancing…" : `Advance to ${advanceTo}`}
+            </button>
+          )}
           {mission.mission_type !== "primary" && (
             <button
               type="button"
@@ -199,6 +255,7 @@ export function Mission() {
           missionId={mission.id}
           missionTitle={mission.title}
           missionStatement={mission.statement || mission.purpose}
+          onTargetsChanged={() => void refresh()}
         />
       </section>
 
