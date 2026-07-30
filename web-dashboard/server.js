@@ -71,14 +71,20 @@ function bridgeSocketPath() {
  * @returns {Promise<Record<string, unknown>>}
  */
 function callBridge(request) {
+  const action = String(request.action || "");
+  // Document import can walk Documents/Desktop — allow longer than chat probes.
+  const timeoutMs =
+    action === "life_documents_import_scan" ? 120_000 : 30_000;
   const sock = bridgeSocketPath();
   if (fs.existsSync(sock)) {
-    return callBridgeSocket(sock, request).catch(() => callBridgeSpawn(request));
+    return callBridgeSocket(sock, request, timeoutMs).catch(() =>
+      callBridgeSpawn(request, timeoutMs),
+    );
   }
-  return callBridgeSpawn(request);
+  return callBridgeSpawn(request, timeoutMs);
 }
 
-function callBridgeSocket(sockPath, request) {
+function callBridgeSocket(sockPath, request, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
     const client = net.createConnection({ path: sockPath });
     let buf = "";
@@ -92,7 +98,7 @@ function callBridgeSocket(sockPath, request) {
     const timer = setTimeout(() => {
       client.destroy();
       finish(() => reject(new Error("bridge socket timeout")));
-    }, 30_000);
+    }, timeoutMs);
 
     client.on("connect", () => {
       client.write(JSON.stringify(request) + "\n");
@@ -138,7 +144,7 @@ function callBridgeSocket(sockPath, request) {
   });
 }
 
-function callBridgeSpawn(request) {
+function callBridgeSpawn(request, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
     const child = spawn(PYTHON, ["-m", "centurion_cli.remote_bridge"], {
       cwd: REPO_ROOT,
@@ -151,7 +157,7 @@ function callBridgeSpawn(request) {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("bridge timeout"));
-    }, 30_000);
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();

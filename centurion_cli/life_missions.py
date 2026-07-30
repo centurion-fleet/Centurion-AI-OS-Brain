@@ -1298,10 +1298,15 @@ _SCAN_SKIP_DIRS = frozenset(
         ".cargo",
         ".npm",
         ".centurion",  # avoid walking home recursively into itself via cwd
+        "Centurion-AI-OS",  # monorepo — thousands of md files, not user memos
+        "dist",
+        "build",
+        ".tox",
     }
 )
 _MAX_IMPORT_FILE_BYTES = int(1.5 * 1024 * 1024)
 _MAX_SCAN_FILES = 2000
+_MAX_SCAN_DEPTH = 8
 
 
 def _stable_import_id(kind: str, key: str) -> str:
@@ -1381,10 +1386,12 @@ def scan_filesystem_documents(
     roots: list[Path] | None = None,
     *,
     max_files: int = _MAX_SCAN_FILES,
+    max_depth: int = _MAX_SCAN_DEPTH,
 ) -> list[dict[str, Any]]:
     """Walk roots for text documents (md/txt/rst). Does not read bodies yet."""
     scan_roots = list(roots) if roots is not None else default_document_scan_roots()
     lim = max(1, min(int(max_files or _MAX_SCAN_FILES), 5000))
+    depth_lim = max(1, min(int(max_depth or _MAX_SCAN_DEPTH), 32))
     found: list[dict[str, Any]] = []
     for root in scan_roots:
         try:
@@ -1393,7 +1400,15 @@ def scan_filesystem_documents(
             continue
         if not root.is_dir():
             continue
+        root_depth = len(root.parts)
         for dirpath, dirnames, filenames in os.walk(root):
+            try:
+                cur_depth = len(Path(dirpath).parts) - root_depth
+            except Exception:
+                cur_depth = 0
+            if cur_depth >= depth_lim:
+                dirnames[:] = []
+                continue
             dirnames[:] = [
                 d
                 for d in dirnames
@@ -1660,52 +1675,65 @@ def import_scanned_documents(
     """Scan filesystem (+ optional plans/outcomes) into life_documents.
 
     Idempotent via stable ids (``import:<hash>``, ``plan:<hash>``, ``outcome:<hash>``).
+    Never raises — soft-fails into ``errors`` so Focus Scan always gets a payload.
     """
     path_roots: list[Path] | None
-    if roots is None:
-        path_roots = None
-        root_display = [str(p) for p in default_document_scan_roots()]
-    else:
-        path_roots = []
-        for r in roots:
-            try:
-                path_roots.append(Path(r).expanduser().resolve())
-            except OSError:
-                continue
-        root_display = [str(p) for p in path_roots]
+    root_display: list[str] = []
+    try:
+        if roots is None:
+            path_roots = None
+            root_display = [str(p) for p in default_document_scan_roots()]
+        else:
+            path_roots = []
+            for r in roots:
+                try:
+                    path_roots.append(Path(r).expanduser().resolve())
+                except OSError:
+                    continue
+            root_display = [str(p) for p in path_roots]
 
-    imported = updated = skipped = 0
-    errors: list[str] = []
+        imported = updated = skipped = 0
+        errors: list[str] = []
+        hits: list[dict[str, Any]] = []
 
-    hits = scan_filesystem_documents(path_roots, max_files=max_files)
-    i, u, s, errs = _import_filesystem_hits(hits, mission_id=mission_id)
-    imported += i
-    updated += u
-    skipped += s
-    errors.extend(errs)
-
-    if include_plans:
-        i, u, s, errs = _import_plans(mission_id=mission_id)
+        hits = scan_filesystem_documents(path_roots, max_files=max_files)
+        i, u, s, errs = _import_filesystem_hits(hits, mission_id=mission_id)
         imported += i
         updated += u
         skipped += s
         errors.extend(errs)
 
-    if include_outcomes:
-        i, u, s, errs = _import_kanban_outcomes(mission_id=mission_id)
-        imported += i
-        updated += u
-        skipped += s
-        errors.extend(errs)
+        if include_plans:
+            i, u, s, errs = _import_plans(mission_id=mission_id)
+            imported += i
+            updated += u
+            skipped += s
+            errors.extend(errs)
 
-    return {
-        "imported": imported,
-        "updated": updated,
-        "skipped": skipped,
-        "scanned_files": len(hits),
-        "roots": root_display,
-        "errors": errors[:40],
-    }
+        if include_outcomes:
+            i, u, s, errs = _import_kanban_outcomes(mission_id=mission_id)
+            imported += i
+            updated += u
+            skipped += s
+            errors.extend(errs)
+
+        return {
+            "imported": imported,
+            "updated": updated,
+            "skipped": skipped,
+            "scanned_files": len(hits),
+            "roots": root_display,
+            "errors": errors[:40],
+        }
+    except Exception as exc:
+        return {
+            "imported": 0,
+            "updated": 0,
+            "skipped": 0,
+            "scanned_files": 0,
+            "roots": root_display,
+            "errors": [str(exc).strip() or type(exc).__name__],
+        }
 
 
 def post_thought(fields: dict[str, Any]) -> dict[str, Any]:

@@ -584,3 +584,34 @@ def test_import_scanned_documents_files_plans_idempotent(life_home, tmp_path):
     )
     assert resp["ok"] is True
     assert resp["updated"] >= 1
+
+
+def test_life_bridge_errors_are_not_thinking_recovery_copy(life_home):
+    """Focus Scan failures must show the real fault, not LKG recovery copy."""
+    from centurion_cli.remote_bridge import handle_request
+
+    # Force a failure inside the import handler by asking for a nonsense path
+    # that still returns ok:true with soft errors — and a missing function path
+    # via a deliberately bad nested call isn't needed. Probe unsupported first.
+    unsupported = handle_request(
+        {"id": "u1", "action": "life_documents_import_scan_typo"}
+    )
+    assert unsupported["ok"] is False
+    assert unsupported["code"] == "UNSUPPORTED_ACTION"
+    assert "restore your last working setup" not in (
+        unsupported.get("message") or ""
+    ).lower()
+
+    # Real action with no missions yet → soft result (never thinking recovery).
+    resp = handle_request(
+        {
+            "id": "imp2",
+            "action": "life_documents_import_scan",
+            "path": str(life_home / "missing-docs-dir"),
+            "include_plans": False,
+            "include_outcomes": False,
+        }
+    )
+    assert resp["ok"] is True
+    assert "restore your last working setup" not in str(resp).lower()
+    assert resp.get("imported", 0) == 0

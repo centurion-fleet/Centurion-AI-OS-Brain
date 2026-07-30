@@ -871,9 +871,48 @@ def _error_response(
     attempt_recovery: bool = False,
     retry_text: str = "",
     run_agent: Callable[[str], str] | None = None,
+    classify_as_llm: bool | None = None,
 ) -> dict[str, Any]:
-    code, message = classify_llm_error(exc)
-    if attempt_recovery and load_last_known_good() is not None:
+    """Build a bridge error payload.
+
+    Chat/provider failures use thinking-service recovery copy via
+    ``classify_llm_error``. Life / plans / swarm / ops actions must NOT — those
+    are local Focus tooling; remapping them to “restore your last working setup”
+    hides the real fault (and was what Scan this machine showed on Titus).
+    """
+    action_l = str(action or "").strip().lower()
+    if classify_as_llm is None:
+        head = action_l.split("_", 1)[0]
+        classify_as_llm = head not in {
+            "life",
+            "plan",
+            "plans",
+            "swarm",
+            "kanban",
+            "fleet",
+            "ops",
+            "plugin",
+            "client",
+            "tools",
+            "license",
+            "mission",  # legacy mission_* actions
+        }
+
+    if classify_as_llm:
+        code, message = classify_llm_error(exc)
+    else:
+        raw = str(exc).strip() or type(exc).__name__
+        if isinstance(exc, ImportError) or isinstance(exc, ModuleNotFoundError):
+            code = "MODULE_MISSING"
+            message = (
+                f"{raw}. Update Centurion AI OS and quit/reopen Sovereign AI Brain "
+                "so the bridge reloads this action."
+            )
+        else:
+            code = "ACTION_FAILED"
+            message = raw
+
+    if attempt_recovery and classify_as_llm and load_last_known_good() is not None:
         restored = _attempt_lkg_retry(
             request_id=request_id,
             retry_text=retry_text,
@@ -890,7 +929,8 @@ def _error_response(
         "code": code,
         "error": message,
         "message": message,
-        "retryable": retryable or code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"},
+        "retryable": retryable
+        or (classify_as_llm and code in {"LLM_RATE_LIMIT", "LLM_UNAVAILABLE"}),
     }
 
 

@@ -97,14 +97,30 @@ export function DocumentSearch({
       const imported = Number(res.imported || 0);
       const updated = Number(res.updated || 0);
       const skipped = Number(res.skipped || 0);
-      setScanNote(
-        `Imported ${imported} · updated ${updated} · skipped ${skipped}`,
-      );
+      const scanned = Number(res.scanned_files || 0);
+      const errs = Array.isArray(res.errors) ? res.errors : [];
+      let note = `Imported ${imported} · updated ${updated} · skipped ${skipped} · scanned ${scanned} files`;
+      if (errs.length) {
+        note += ` — ${errs[0]}`;
+      }
+      setScanNote(note);
+      if (imported + updated === 0 && scanned === 0 && !errs.length) {
+        setScanNote(
+          `${note}. No text files found under Documents/Desktop — try centurion life import-docs --path /path/to/memos`,
+        );
+      }
       if (query.trim()) {
         await runSearch(query, agentOnly);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/unsupported bridge action/i.test(msg)) {
+        setError(
+          "Scan needs a Brain restart after update — quit and reopen Sovereign AI Brain, then try Scan again.",
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setScanning(false);
     }
