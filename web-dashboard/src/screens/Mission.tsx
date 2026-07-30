@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -45,6 +45,17 @@ export function Mission() {
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || !mission) return;
+    if (window.location.hash !== "#documents") return;
+    const el = document.getElementById("documents");
+    if (el) {
+      window.requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [loading, mission, documents.length]);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -407,7 +418,7 @@ export function Mission() {
         </div>
       </section>
 
-      <section className="mt-8">
+      <section id="documents" className="mt-8 scroll-mt-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
             Documents

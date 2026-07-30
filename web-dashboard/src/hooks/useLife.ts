@@ -111,3 +111,46 @@ export function useMissionDetail(missionId: string | undefined) {
 
   return { mission, decisions, documents, thoughts, loading, error, refresh };
 }
+
+/** Latest documents for the Primary mission (Focus card teaser). */
+export function usePrimaryDocuments(
+  missionId: string | undefined,
+  enabled = true,
+  pollMs = 20000,
+) {
+  const [documents, setDocuments] = useState<LifeDocument[]>([]);
+  const [count, setCount] = useState(0);
+
+  const refresh = useCallback(async () => {
+    if (!missionId || !enabled) {
+      setDocuments([]);
+      setCount(0);
+      return;
+    }
+    try {
+      const res = await bridgeCall<{ ok: true; documents: LifeDocument[] }>(
+        "life_documents_list",
+        { mission_id: missionId, limit: 5 },
+      );
+      const docs = res.documents || [];
+      setDocuments(docs);
+      setCount(docs.length);
+    } catch {
+      setDocuments([]);
+      setCount(0);
+    }
+  }, [missionId, enabled]);
+
+  useEffect(() => {
+    if (!enabled || !missionId) {
+      setDocuments([]);
+      setCount(0);
+      return;
+    }
+    void refresh();
+    const id = setInterval(() => void refresh(), pollMs);
+    return () => clearInterval(id);
+  }, [refresh, pollMs, enabled, missionId]);
+
+  return { documents, count, refresh };
+}

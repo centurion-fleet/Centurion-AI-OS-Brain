@@ -1199,6 +1199,76 @@ def list_documents(
         return [_row_dict(r) for r in rows]  # type: ignore[misc]
 
 
+def search_documents(
+    query: str,
+    *,
+    source: str | None = None,
+    mission_id: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Substring search across title, summary, and body_md (current bodies only)."""
+    q = str(query or "").strip().lower()
+    lim = max(1, min(int(limit or 50), 200))
+    src = str(source or "").strip().lower() or None
+    if src and src not in DOC_SOURCES:
+        src = None
+    mid = str(mission_id).strip() if mission_id else None
+
+    with _conn() as conn:
+        sql = (
+            "SELECT d.*, m.title AS mission_title, m.statement AS mission_statement "
+            "FROM life_documents d "
+            "LEFT JOIN life_missions m ON m.id = d.mission_id "
+            "WHERE 1=1"
+        )
+        params: list[Any] = []
+        if mid:
+            sql += " AND d.mission_id = ?"
+            params.append(mid)
+        if src:
+            sql += " AND d.source = ?"
+            params.append(src)
+        sql += " ORDER BY d.updated_at DESC LIMIT ?"
+        # Over-fetch when filtering by query in Python (SQLite LIKE is fine too).
+        params.append(lim * 4 if q else lim)
+        rows = conn.execute(sql, params).fetchall()
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        d = _row_dict(row)
+        if d is None:
+            continue
+        mission_title = d.pop("mission_title", None)
+        mission_statement = d.pop("mission_statement", None)
+        d["mission_title"] = (
+            (mission_title or mission_statement or "").strip() or None
+        )
+        if q:
+            hay = " ".join(
+                [
+                    str(d.get("title") or ""),
+                    str(d.get("summary") or ""),
+                    str(d.get("body_md") or ""),
+                    str(d.get("doc_type") or ""),
+                ]
+            ).lower()
+            terms = [t for t in q.split() if len(t) > 1] or [q]
+            if q not in hay and not any(t in hay for t in terms):
+                continue
+        # Cap body in search results — full body via get_document.
+        body = str(d.get("body_md") or "")
+        if len(body) > 400:
+            d["body_md"] = body[:399].rstrip() + "…"
+            d["body_truncated"] = True
+        else:
+            d["body_truncated"] = False
+        d["excerpt"] = document_excerpt(d, max_chars=280)
+        out.append(d)
+        if len(out) >= lim:
+            break
+    return out
+
+
 def document_excerpt(doc: dict[str, Any], *, max_chars: int = 400) -> str:
     body = str(doc.get("body_md") or "").strip()
     summary = str(doc.get("summary") or "").strip()
@@ -1348,16 +1418,30 @@ def resolve_context(query: str) -> list[dict[str, Any]]:
                             }
                         )
             docs = conn.execute(
-                "SELECT id, title, summary, doc_type FROM life_documents "
+                "SELECT id, title, summary, doc_type, body_md FROM life_documents "
                 "WHERE mission_id = ?",
                 (mission["id"],),
             ).fetchall()
             for doc in docs:
+                body = doc["body_md"] or ""
+                body_excerpt = body[:400] if body else ""
                 hay = " ".join(
-                    [doc["title"] or "", doc["summary"] or "", doc["doc_type"] or ""]
+                    [
+                        doc["title"] or "",
+                        doc["summary"] or "",
+                        doc["doc_type"] or "",
+                        body_excerpt,
+                    ]
                 ).lower()
                 for term in terms:
                     if term in hay:
+                        matched_field = "document"
+                        if term in (doc["title"] or "").lower():
+                            matched_field = "document.title"
+                        elif term in body_excerpt.lower():
+                            matched_field = "document.body"
+                        elif term in (doc["summary"] or "").lower():
+                            matched_field = "document.summary"
                         matches.append(
                             {
                                 "subject": (
@@ -1376,11 +1460,14 @@ def resolve_context(query: str) -> list[dict[str, Any]]:
                                     "title": doc["title"],
                                     "doc_type": doc["doc_type"],
                                     "summary": doc["summary"] or "",
+                                    "excerpt": body_excerpt[:280] if body_excerpt else (
+                                        doc["summary"] or ""
+                                    ),
                                 },
-                                "confidence": 0.78,
-                                "matched_field": "document.title"
-                                if term in (doc["title"] or "").lower()
-                                else "document",
+                                "confidence": 0.82
+                                if matched_field == "document.body"
+                                else 0.78,
+                                "matched_field": matched_field,
                                 "matched_term": term,
                             }
                         )

@@ -2,11 +2,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
+import { DocumentSearch } from "../components/DocumentSearch";
 import { SupportingRow } from "../components/SupportingRow";
 import { DreamList } from "../components/DreamList";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { PulseIndicators } from "../components/PulseIndicators";
-import { useMissionStack } from "../hooks/useLife";
+import { useMissionStack, usePrimaryDocuments } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { bridgeCall } from "../hooks/useBridge";
@@ -22,6 +23,11 @@ export function Deck() {
   const supporting = stack?.supporting ?? [];
   const dreams = stack?.dreams ?? [];
   const empty = !loading && !primary && supporting.length === 0;
+
+  const { documents: primaryDocs, count: primaryDocCount } = usePrimaryDocuments(
+    primary?.id,
+    deckVisible && !!primary,
+  );
 
   // Guided first-run: empty board → Discovery once per session (don't fight Back).
   useEffect(() => {
@@ -116,10 +122,14 @@ export function Deck() {
         </motion.div>
       ) : (
         <>
+          <DocumentSearch enabled={deckVisible} />
+
           {primary ? (
             <PrimaryCard
               mission={primary}
               latestThought={latestThought}
+              documents={primaryDocs}
+              documentCount={primaryDocCount}
               onOpen={() => navigate(`/mission/${primary.id}`)}
               onDiscuss={() => {
                 const w = window as Window & {

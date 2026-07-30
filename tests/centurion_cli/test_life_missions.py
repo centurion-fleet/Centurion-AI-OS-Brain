@@ -415,3 +415,77 @@ def test_life_missions_tool_put_document(life_home):
     )
     assert listed["success"] is True
     assert any(d["title"] == "Weekly report" for d in listed["documents"])
+
+
+def test_search_documents_body_title_agent_filter(life_home):
+    from centurion_cli.life_missions import (
+        put_document,
+        put_mission,
+        resolve_context,
+        search_documents,
+        set_primary,
+    )
+    from centurion_cli.remote_bridge import handle_request
+
+    m1 = put_mission(
+        {
+            "title": "Swarm Mode",
+            "statement": "Raise capital",
+            "mission_type": "primary",
+        }
+    )
+    m2 = put_mission(
+        {
+            "title": "Side quest",
+            "statement": "Other work",
+            "mission_type": "supporting",
+        }
+    )
+    set_primary(m1["id"])
+    put_document(
+        {
+            "mission_id": m1["id"],
+            "title": "Investment memorandum",
+            "doc_type": "report",
+            "summary": "Term sheet overview",
+            "body_md": "UniquePhraseXYZ runway and valuation for Swarm Mode.",
+            "source": "agent",
+            "announce": False,
+        }
+    )
+    put_document(
+        {
+            "mission_id": m2["id"],
+            "title": "User notes",
+            "body_md": "UniquePhraseXYZ but from a human.",
+            "source": "user",
+            "announce": False,
+        }
+    )
+
+    by_body = search_documents("UniquePhraseXYZ")
+    assert len(by_body) >= 2
+    assert any(d.get("mission_title") for d in by_body)
+
+    agent_only = search_documents("UniquePhraseXYZ", source="agent")
+    assert len(agent_only) == 1
+    assert agent_only[0]["title"] == "Investment memorandum"
+    assert agent_only[0]["source"] == "agent"
+
+    scoped = search_documents("memorandum", mission_id=m1["id"])
+    assert len(scoped) == 1
+    assert scoped[0]["mission_id"] == m1["id"]
+
+    matches = resolve_context("UniquePhraseXYZ valuation")
+    assert any((m.get("document") or {}).get("title") == "Investment memorandum" for m in matches)
+
+    resp = handle_request(
+        {
+            "id": "s1",
+            "action": "life_documents_search",
+            "query": "Investment",
+            "source": "agent",
+        }
+    )
+    assert resp["ok"] is True
+    assert any(d["title"] == "Investment memorandum" for d in resp["documents"])

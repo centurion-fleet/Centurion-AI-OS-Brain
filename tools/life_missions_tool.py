@@ -148,6 +148,16 @@ def life_missions_tool(
                     limit=50,
                 )
             )
+        if action in ("search_documents", "documents_search", "find_documents"):
+            return _ok(
+                documents=life.search_documents(
+                    query or title or statement,
+                    source=str(fields.get("source") or "").strip() or None,
+                    mission_id=mission_id or None,
+                    limit=int(fields.get("limit") or 50),
+                ),
+                query=query or title or statement,
+            )
         if action in ("get_document", "document"):
             doc_id = str(
                 fields.get("document_id") or fields.get("id") or query or ""
@@ -182,8 +192,8 @@ def life_missions_tool(
         return tool_error(
             "Unknown action. Use stack, missions, get_mission, put_mission|create_mission, "
             "subjects, dreams, promote_dream, set_primary, put_target, set_focus, resolve, "
-            "inject, thought, thoughts, decision, decisions, list_documents, get_document, "
-            "put_document, snapshot."
+            "inject, thought, thoughts, decision, decisions, list_documents, "
+            "search_documents, get_document, put_document, snapshot."
         )
     except Exception as exc:
         return tool_error(str(exc))
@@ -200,7 +210,9 @@ registry.register(
             "mission_type primary|supporting, targets, situation, why. "
             "For finished write-ups bound to a mission (research, analysis, "
             "content, report), use put_document with mission_id — not "
-            "upload_document. Prefer plans/plan-artifact when the user must "
+            "upload_document. Use search_documents (query) to find prior "
+            "write-ups before drafting duplicates; put_document with the same "
+            "id updates in place. Prefer plans/plan-artifact when the user must "
             "Approve/Proceed; after accept, optionally put_document with "
             "plan_id and doc_type plan so it appears under the mission. "
             "Also: stack, dreams, focus, thoughts, decisions, documents. "
@@ -215,7 +227,8 @@ registry.register(
                         "stack|missions|get_mission|put_mission|create_mission|"
                         "subjects|dreams|promote_dream|set_primary|put_target|"
                         "set_focus|resolve|inject|thought|thoughts|decision|"
-                        "decisions|list_documents|get_document|put_document|snapshot"
+                        "decisions|list_documents|search_documents|get_document|"
+                        "put_document|snapshot"
                     ),
                 },
                 "mission_id": {"type": "string"},

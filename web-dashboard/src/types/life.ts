@@ -133,6 +133,10 @@ export interface LifeDocument {
   source: string;
   created_at?: string;
   updated_at?: string;
+  /** Present on search results */
+  mission_title?: string | null;
+  excerpt?: string;
+  body_truncated?: boolean;
 }
 
 export interface Thought {

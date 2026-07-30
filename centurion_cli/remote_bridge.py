@@ -149,6 +149,8 @@ def handle_request(
         return _handle_life_decision_log(request, request_id)
     if action == "life_documents_list":
         return _handle_life_documents_list(request, request_id)
+    if action == "life_documents_search":
+        return _handle_life_documents_search(request, request_id)
     if action == "life_document_get":
         return _handle_life_document_get(request, request_id)
     if action == "life_document_put":
@@ -2836,6 +2838,32 @@ def _handle_life_documents_list(
         }
     except Exception as exc:
         return _error_response(request_id, action="life_documents_list", exc=exc)
+
+
+def _handle_life_documents_search(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import search_documents
+
+        query = str(request.get("query") or request.get("q") or "")
+        mid = request.get("mission_id")
+        source = request.get("source")
+        limit = int(request.get("limit") or 50)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_documents_search",
+            "documents": search_documents(
+                query,
+                source=str(source) if source else None,
+                mission_id=str(mid) if mid else None,
+                limit=limit,
+            ),
+            "query": query,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_documents_search", exc=exc)
 
 
 def _handle_life_document_get(
