@@ -2566,6 +2566,7 @@ where
     thread::spawn(move || {
         let _ = tx.send(work());
     });
+    // timeout_add_local requires FnMut; Cell lets us take the FnOnce once.
     let apply = Cell::new(Some(apply));
     glib::timeout_add_local(Duration::from_millis(40), move || match rx.try_recv() {
         Ok(value) => {
@@ -3591,7 +3592,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 header.append(&copy_btn);
                 block.append(&header);
                 let code_label = gtk::Label::builder()
-                    .label(&*text)
+                    .label(text.as_str())
                     .wrap(true)
                     .wrap_mode(gtk::pango::WrapMode::Char)
                     .xalign(0.0)
@@ -4270,7 +4271,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     {
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
         let programmatic_scroll = programmatic_scroll.clone();
         let jump_latest = jump_latest.clone();
         jump_latest.connect_clicked(move |btn| {
@@ -4341,7 +4341,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_title = activity_title.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
         let programmatic_scroll = programmatic_scroll.clone();
         move || {
             reset_activity();
@@ -4368,7 +4367,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_tool_lines = activity_tool_lines.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
-        let message_list = message_list.clone();
         let programmatic_scroll = programmatic_scroll.clone();
         let activity_scroll_pending = activity_scroll_pending.clone();
         move |event: ActivityEvent| {
@@ -5255,7 +5253,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let title = title.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic_scroll = programmatic_scroll.clone();
-        let regenerate_slot = regenerate_slot.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
         move || {
@@ -5310,7 +5307,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let title = title.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic_scroll = programmatic_scroll.clone();
-        let regenerate_slot = regenerate_slot.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
         let rebuild_messages = rebuild_messages.clone();
