@@ -24,18 +24,21 @@ function discussDocument(d: LifeDocument) {
 }
 
 /**
- * Compact global document search on the Focus deck.
+ * Global document search on the Focus deck (Find documents).
+ * Mission pages list only that mission’s documents — this searches all.
  */
 export function DocumentSearch({
   enabled = true,
-  preferredMissionId,
   defaultOpen = false,
+  hideToggle = false,
+  onClose,
 }: {
   enabled?: boolean;
-  /** Fallback mission when path/title match is weak (e.g. Primary). */
-  preferredMissionId?: string | null;
-  /** Start expanded (default collapsed below the Focus hero). */
+  /** Start expanded (parent nav owns the Find documents link). */
   defaultOpen?: boolean;
+  /** When true, skip the collapsed link — parent renders it (e.g. next to Discovery). */
+  hideToggle?: boolean;
+  onClose?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
@@ -48,6 +51,15 @@ export function DocumentSearch({
   const [error, setError] = useState<string | null>(null);
   const searchSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    onClose?.();
+  }, [onClose]);
 
   const runSearch = useCallback(async (q: string, agent: boolean) => {
     const trimmed = q.trim();
@@ -93,6 +105,8 @@ export function DocumentSearch({
     setScanNote(null);
     setError(null);
     try {
+      // Do not pass mission_id — unmatched imports go to Document library so
+      // Primary / supporting mission Documents stay scoped to that mission.
       const res = await bridgeCall<{
         ok: true;
         imported?: number;
@@ -102,7 +116,6 @@ export function DocumentSearch({
         roots?: string[];
         errors?: string[];
       }>("life_documents_import_scan", {
-        mission_id: preferredMissionId || undefined,
         include_plans: true,
         include_outcomes: true,
       });
@@ -136,7 +149,7 @@ export function DocumentSearch({
     } finally {
       setScanning(false);
     }
-  }, [preferredMissionId, query, agentOnly, runSearch]);
+  }, [query, agentOnly, runSearch]);
 
   useEffect(() => {
     if (!enabled || !open) return;
@@ -152,12 +165,13 @@ export function DocumentSearch({
   if (!enabled) return null;
 
   if (!open) {
+    if (hideToggle) return null;
     return (
-      <section className="mt-14 mb-2">
+      <section className="mt-4 mb-2">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim transition hover:text-amber-soft"
+          className="text-sm text-ink-dim transition hover:text-amber-soft"
         >
           Find documents
         </button>
@@ -166,7 +180,7 @@ export function DocumentSearch({
   }
 
   return (
-    <section className="mt-14 mb-2">
+    <section className="mb-2 w-full">
       <div className="surface rounded-2xl p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
@@ -192,7 +206,7 @@ export function DocumentSearch({
             </button>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={close}
               className="text-[11px] text-ink-dim hover:text-ink-muted"
             >
               Hide
@@ -210,7 +224,8 @@ export function DocumentSearch({
             Search covers every mission’s current documents. Use{" "}
             <span className="text-ink-muted">Scan this machine</span> to pull in
             older write-ups from Documents/Desktop, ~/centurion,
-            /home/Legio/centurion, plans, and completed task outcomes.
+            /home/Legio/centurion, plans, and completed task outcomes. Unmatched
+            imports land in Document library — not on your Primary mission.
           </p>
         )}
         {scanNote && (

@@ -2986,9 +2986,11 @@ def _handle_life_documents_import_scan(
         include_plans = request.get("include_plans", True)
         include_outcomes = request.get("include_outcomes", True)
         max_files = int(request.get("max_files") or 2000)
+        force_mission = bool(request.get("force_mission"))
         result = import_scanned_documents(
             roots=roots,
             mission_id=str(mid) if mid else None,
+            force_mission=force_mission,
             include_plans=bool(include_plans),
             include_outcomes=bool(include_outcomes),
             max_files=max_files,

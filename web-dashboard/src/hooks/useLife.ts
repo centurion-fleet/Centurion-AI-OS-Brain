@@ -101,7 +101,9 @@ export function useMissionDetail(missionId: string | undefined) {
       );
       setDocuments(
         docSettled.status === "fulfilled"
-          ? docSettled.value.documents || []
+          ? (docSettled.value.documents || []).filter(
+              (d) => !d.mission_id || d.mission_id === missionId,
+            )
           : [],
       );
       const thoughtsRaw =
@@ -147,7 +149,9 @@ export function usePrimaryDocuments(
         "life_documents_list",
         { mission_id: missionId, limit: 5 },
       );
-      const docs = res.documents || [];
+      const docs = (res.documents || []).filter(
+        (d) => !d.mission_id || d.mission_id === missionId,
+      );
       const fp = stableJson(docs);
       if (fp !== docsFp.current) {
         docsFp.current = fp;

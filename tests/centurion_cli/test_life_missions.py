@@ -493,6 +493,7 @@ def test_search_documents_body_title_agent_filter(life_home):
 
 def test_import_scanned_documents_files_plans_idempotent(life_home, tmp_path):
     from centurion_cli.life_missions import (
+        DOCUMENT_LIBRARY_MISSION_ID,
         get_document,
         import_scanned_documents,
         list_documents,
@@ -555,11 +556,19 @@ def test_import_scanned_documents_files_plans_idempotent(life_home, tmp_path):
     assert hits[0]["mission_id"] == supporting["id"]
     assert "Imported from:" in (hits[0].get("summary") or "")
 
+    # Primary must not inherit the whole scan — only title-matched missions.
+    primary_docs = list_documents(mission_id=primary["id"], limit=50)
+    assert all(
+        "UniqueImportPhraseABC" not in (d.get("body_md") or "") for d in primary_docs
+    )
+
     plan_docs = [
         d for d in list_documents(limit=50) if d.get("plan_id") == plan["id"]
     ]
     assert len(plan_docs) == 1
     assert plan_docs[0]["doc_type"] == "plan"
+    # Unmatched plans land in Document library, not Primary.
+    assert plan_docs[0]["mission_id"] == DOCUMENT_LIBRARY_MISSION_ID
 
     first_id = hits[0]["id"]
     again = import_scanned_documents(

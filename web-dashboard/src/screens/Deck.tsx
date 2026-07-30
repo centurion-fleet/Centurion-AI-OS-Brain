@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
 import { DocumentSearch } from "../components/DocumentSearch";
@@ -16,6 +16,7 @@ export function Deck() {
   const navigate = useNavigate();
   const deckVisible = useDeckVisible();
   const reduce = useReducedMotion();
+  const [findOpen, setFindOpen] = useState(false);
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
   const { thoughts, connected } = useSSE({ enabled: deckVisible, limit: 32 });
   const autoDiscoveryDone = useRef(false);
@@ -174,11 +175,6 @@ export function Deck() {
           )}
 
           {/* Below the fold */}
-          <DocumentSearch
-            enabled={deckVisible}
-            preferredMissionId={primary?.id}
-          />
-
           <SupportingRow
             missions={supporting}
             onOpen={openSupporting}
@@ -191,10 +187,33 @@ export function Deck() {
         </>
       )}
 
-      <nav className="mt-14 flex justify-center gap-4 text-sm text-ink-dim">
-        <Link to="/discovery" className="hover:text-amber-soft">
-          Discovery
-        </Link>
+      <nav className="mt-14 flex w-full flex-col items-center gap-5">
+        {findOpen && (
+          <div className="w-full max-w-2xl">
+            <DocumentSearch
+              enabled={deckVisible}
+              defaultOpen
+              hideToggle
+              onClose={() => setFindOpen(false)}
+            />
+          </div>
+        )}
+        <div className="flex justify-center gap-6 text-sm text-ink-dim">
+          <Link to="/discovery" className="hover:text-amber-soft">
+            Discovery
+          </Link>
+          <button
+            type="button"
+            onClick={() => setFindOpen((o) => !o)}
+            className={
+              findOpen
+                ? "text-amber-soft"
+                : "hover:text-amber-soft"
+            }
+          >
+            Find documents
+          </button>
+        </div>
       </nav>
     </div>
   );

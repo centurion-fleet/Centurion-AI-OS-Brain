@@ -13,6 +13,7 @@ def _cmd_import_docs(args: argparse.Namespace) -> int:
     result = import_scanned_documents(
         roots=roots,
         mission_id=args.mission_id or None,
+        force_mission=bool(args.mission_id),
         include_plans=not args.no_plans,
         include_outcomes=not args.no_outcomes,
         max_files=int(args.max_files or 2000),

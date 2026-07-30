@@ -776,7 +776,12 @@ def get_stack() -> dict[str, Any]:
         supporting = [
             m
             for m in missions
-            if m["id"] != (primary or {}).get("id") and m.get("mission_type") != "dream"
+            if m["id"] != (primary or {}).get("id")
+            and m.get("mission_type") != "dream"
+            and not (
+                isinstance(m.get("profile"), dict)
+                and m["profile"].get("hidden_from_stack")
+            )
         ]
         dreams = [
             _row_dict(r)
@@ -1449,11 +1454,48 @@ def scan_filesystem_documents(
     return found
 
 
+DOCUMENT_LIBRARY_MISSION_ID = "mission:document-library"
+
+
+def ensure_document_library_mission() -> str:
+    """Hidden supporting mission for imports that do not match a real mission."""
+    existing = get_mission(DOCUMENT_LIBRARY_MISSION_ID)
+    if existing and existing.get("id"):
+        return DOCUMENT_LIBRARY_MISSION_ID
+    put_mission(
+        {
+            "id": DOCUMENT_LIBRARY_MISSION_ID,
+            "title": "Document library",
+            "statement": (
+                "Imported write-ups not yet tied to a specific mission. "
+                "Search them with Find documents on Focus."
+            ),
+            "mission_type": "supporting",
+            "phase": "discovery",
+            "status": "active",
+            "stack_sort_order": 10_000,
+            "profile": {
+                "system": True,
+                "hidden_from_stack": True,
+            },
+        }
+    )
+    return DOCUMENT_LIBRARY_MISSION_ID
+
+
 def _resolve_import_mission_id(
     *,
     preferred_mission_id: str | None,
     hint_text: str,
-) -> str:
+    unmatched: str = "library",
+) -> str | None:
+    """Pick a mission for an imported document.
+
+    Strong title/path matches win. Unmatched docs go to the Document library by
+    default so Primary / supporting mission Documents stay mission-scoped —
+    never dump the whole scan onto Primary. Pass ``unmatched=\"preferred\"``
+    when the caller explicitly forced ``--mission-id``.
+    """
     hint = (hint_text or "").lower()
     hint_tokens = set(_slug_tokens(hint_text))
     missions = list_missions()
@@ -1463,6 +1505,12 @@ def _resolve_import_mission_id(
         mid = str(mission.get("id") or "").strip()
         title = str(mission.get("title") or "").strip()
         if not mid or not title:
+            continue
+        # Never soft-match the system library itself.
+        if mid == DOCUMENT_LIBRARY_MISSION_ID:
+            continue
+        profile = mission.get("profile") if isinstance(mission.get("profile"), dict) else {}
+        if profile.get("hidden_from_stack") or profile.get("system"):
             continue
         title_l = title.lower()
         score = 0
@@ -1481,20 +1529,26 @@ def _resolve_import_mission_id(
     if best_id and best_score >= 3:
         return best_id
 
-    preferred = str(preferred_mission_id or "").strip()
-    if preferred:
-        mission = get_mission(preferred)
-        if mission and mission.get("id"):
-            return str(mission["id"])
+    mode = str(unmatched or "library").strip().lower()
+    if mode == "preferred":
+        preferred = str(preferred_mission_id or "").strip()
+        if preferred:
+            mission = get_mission(preferred)
+            if mission and mission.get("id"):
+                return str(mission["id"])
+        stack = get_stack()
+        primary = stack.get("primary") or {}
+        pid = str(primary.get("id") or "").strip()
+        if pid:
+            return pid
+        if missions:
+            return str(missions[0].get("id") or "").strip()
+        raise ValueError("No Life Mission available to attach imported documents")
 
-    stack = get_stack()
-    primary = stack.get("primary") or {}
-    pid = str(primary.get("id") or "").strip()
-    if pid:
-        return pid
-    if missions:
-        return str(missions[0].get("id") or "").strip()
-    raise ValueError("No Life Mission available to attach imported documents")
+    if mode == "skip":
+        return None
+
+    return ensure_document_library_mission()
 
 
 def _import_one_document(fields: dict[str, Any]) -> str:
@@ -1509,6 +1563,7 @@ def _import_filesystem_hits(
     hits: list[dict[str, Any]],
     *,
     mission_id: str | None,
+    unmatched: str = "library",
 ) -> tuple[int, int, int, list[str]]:
     imported = updated = skipped = 0
     errors: list[str] = []
@@ -1529,7 +1584,11 @@ def _import_filesystem_hits(
             mid = _resolve_import_mission_id(
                 preferred_mission_id=mission_id,
                 hint_text=f"{path_s} {title}",
+                unmatched=unmatched,
             )
+            if not mid:
+                skipped += 1
+                continue
             status = _import_one_document(
                 {
                     "id": _stable_import_id("import", str(path.resolve())),
@@ -1551,7 +1610,9 @@ def _import_filesystem_hits(
     return imported, updated, skipped, errors
 
 
-def _import_plans(*, mission_id: str | None) -> tuple[int, int, int, list[str]]:
+def _import_plans(
+    *, mission_id: str | None, unmatched: str = "library"
+) -> tuple[int, int, int, list[str]]:
     imported = updated = skipped = 0
     errors: list[str] = []
     try:
@@ -1593,7 +1654,11 @@ def _import_plans(*, mission_id: str | None) -> tuple[int, int, int, list[str]]:
             mid = _resolve_import_mission_id(
                 preferred_mission_id=mission_id,
                 hint_text=f"{title} {goal} {summary}",
+                unmatched=unmatched,
             )
+            if not mid:
+                skipped += 1
+                continue
             status = _import_one_document(
                 {
                     "id": _stable_import_id("plan", pid),
@@ -1618,7 +1683,7 @@ def _import_plans(*, mission_id: str | None) -> tuple[int, int, int, list[str]]:
 
 
 def _import_kanban_outcomes(
-    *, mission_id: str | None
+    *, mission_id: str | None, unmatched: str = "library"
 ) -> tuple[int, int, int, list[str]]:
     imported = updated = skipped = 0
     errors: list[str] = []
@@ -1652,7 +1717,11 @@ def _import_kanban_outcomes(
             mid = _resolve_import_mission_id(
                 preferred_mission_id=mission_id,
                 hint_text=f"{title} {body[:400]}",
+                unmatched=unmatched,
             )
+            if not mid:
+                skipped += 1
+                continue
             status = _import_one_document(
                 {
                     "id": _stable_import_id("outcome", oid),
@@ -1678,6 +1747,7 @@ def import_scanned_documents(
     *,
     roots: list[str | Path] | None = None,
     mission_id: str | None = None,
+    force_mission: bool = False,
     include_plans: bool = True,
     include_outcomes: bool = True,
     max_files: int = _MAX_SCAN_FILES,
@@ -1686,7 +1756,11 @@ def import_scanned_documents(
 
     Idempotent via stable ids (``import:<hash>``, ``plan:<hash>``, ``outcome:<hash>``).
     Never raises — soft-fails into ``errors`` so Focus Scan always gets a payload.
+
+    Unmatched files attach to the hidden Document library unless ``force_mission``
+    is set (CLI ``--mission-id``), so mission Documents lists stay scoped.
     """
+    unmatched = "preferred" if (force_mission and mission_id) else "library"
     path_roots: list[Path] | None
     root_display: list[str] = []
     try:
@@ -1707,21 +1781,27 @@ def import_scanned_documents(
         hits: list[dict[str, Any]] = []
 
         hits = scan_filesystem_documents(path_roots, max_files=max_files)
-        i, u, s, errs = _import_filesystem_hits(hits, mission_id=mission_id)
+        i, u, s, errs = _import_filesystem_hits(
+            hits, mission_id=mission_id, unmatched=unmatched
+        )
         imported += i
         updated += u
         skipped += s
         errors.extend(errs)
 
         if include_plans:
-            i, u, s, errs = _import_plans(mission_id=mission_id)
+            i, u, s, errs = _import_plans(
+                mission_id=mission_id, unmatched=unmatched
+            )
             imported += i
             updated += u
             skipped += s
             errors.extend(errs)
 
         if include_outcomes:
-            i, u, s, errs = _import_kanban_outcomes(mission_id=mission_id)
+            i, u, s, errs = _import_kanban_outcomes(
+                mission_id=mission_id, unmatched=unmatched
+            )
             imported += i
             updated += u
             skipped += s
