@@ -3734,6 +3734,32 @@ fn schedule_scroll_to_latest(
     }
 }
 
+/// Single coalesced scroll for high-frequency activity events (tools/thinking).
+fn schedule_scroll_coalesced(
+    pending: &Rc<Cell<bool>>,
+    message_scroll: &gtk::ScrolledWindow,
+    message_list: &gtk::ListBox,
+    follow_bottom: &Rc<Cell<bool>>,
+    programmatic: &Rc<Cell<bool>>,
+) {
+    if !follow_bottom.get() || pending.get() {
+        return;
+    }
+    pending.set(true);
+    let pending = pending.clone();
+    let message_scroll = message_scroll.clone();
+    let message_list = message_list.clone();
+    let follow_bottom = follow_bottom.clone();
+    let programmatic = programmatic.clone();
+    glib::timeout_add_local_once(Duration::from_millis(50), move || {
+        pending.set(false);
+        if !follow_bottom.get() {
+            return;
+        }
+        scroll_chat_to_latest(&message_scroll, &message_list, &programmatic);
+    });
+}
+
 fn wire_follow_bottom_scroll(
     message_scroll: &gtk::ScrolledWindow,
     follow_bottom: Rc<Cell<bool>>,
@@ -3963,6 +3989,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     message_scroll.set_child(Some(&transcript_box));
     let follow_bottom = Rc::new(Cell::new(true));
     let programmatic_scroll = Rc::new(Cell::new(false));
+    let activity_scroll_pending = Rc::new(Cell::new(false));
     wire_follow_bottom_scroll(
         &message_scroll,
         follow_bottom.clone(),
@@ -4086,8 +4113,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let message_scroll = message_scroll.clone();
         let message_list = message_list.clone();
         let programmatic_scroll = programmatic_scroll.clone();
+        let activity_scroll_pending = activity_scroll_pending.clone();
         move |event: ActivityEvent| {
             activity_card.set_visible(true);
+            let mut needs_scroll = false;
             match event.kind.as_str() {
                 "thinking" => {
                     let text = if event.text.is_empty() {
@@ -4105,6 +4134,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     activity_has_thinking.set(true);
                     *activity_thinking_text.borrow_mut() = text;
                     activity_title.set_label("Thinking…");
+                    // Label-only updates — skip scroll churn when already following.
                 }
                 "tool" => {
                     let title = if event.tool.trim().is_empty() {
@@ -4126,6 +4156,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     activity_tools.append(&build_tool_card(&title, &detail));
                     activity_tool_count.set(activity_tool_count.get().saturating_add(1));
                     activity_title.set_label(&humanize_activity_title(&event.tool, &detail));
+                    needs_scroll = true;
                 }
                 _ => {
                     let line = if event.line.is_empty() {
@@ -4139,10 +4170,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     activity_tool_lines.borrow_mut().push(line.clone());
                     activity_tools.append(&build_tool_card("Status", &line));
                     activity_title.set_label("Working…");
+                    needs_scroll = true;
                 }
             }
-            if follow_bottom.get() {
-                schedule_scroll_to_latest(
+            if needs_scroll {
+                schedule_scroll_coalesced(
+                    &activity_scroll_pending,
                     &message_scroll,
                     &message_list,
                     &follow_bottom,

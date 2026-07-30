@@ -3,8 +3,13 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Instrument Sans"', "system-ui", "sans-serif"],
+        display: ['"Instrument Serif"', "Georgia", "serif"],
+      },
       colors: {
         canvas: "#1a1410",
+        surface: "#221c17",
         amber: {
           glow: "#ff9f1c",
           bright: "#ffd700",
@@ -21,10 +26,6 @@ export default {
           muted: "rgba(245, 239, 230, 0.55)",
           dim: "rgba(245, 239, 230, 0.35)",
         },
-      },
-      fontFamily: {
-        sans: ['"Instrument Sans"', "system-ui", "sans-serif"],
-        display: ['"Instrument Sans"', "system-ui", "sans-serif"],
       },
       boxShadow: {
         amber: "0 0 40px rgba(255, 159, 28, 0.25)",

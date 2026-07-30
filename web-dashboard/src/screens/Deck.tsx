@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
 import { DocumentSearch } from "../components/DocumentSearch";
 import { SupportingRow } from "../components/SupportingRow";
@@ -15,6 +15,7 @@ import { bridgeCall } from "../hooks/useBridge";
 export function Deck() {
   const navigate = useNavigate();
   const deckVisible = useDeckVisible();
+  const reduce = useReducedMotion();
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
   const { thoughts, connected } = useSSE({ enabled: deckVisible, limit: 32 });
   const autoDiscoveryDone = useRef(false);
@@ -30,7 +31,6 @@ export function Deck() {
     60_000,
   );
 
-  // Guided first-run: empty board → Discovery once per session (don't fight Back).
   useEffect(() => {
     if (!empty || !deckVisible || autoDiscoveryDone.current) return;
     if (sessionStorage.getItem("centurion_discovery_auto") === "1") {
@@ -95,21 +95,22 @@ export function Deck() {
   );
 
   return (
-    <div className="mx-auto min-h-screen max-w-5xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto min-h-screen max-w-5xl px-4 pb-20 pt-8 sm:px-6 sm:pt-10">
+      {/* First viewport: brand + Primary as one composition */}
+      <header className="mb-2 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-soft">
+          <p className="font-display text-3xl font-medium tracking-tight text-ink sm:text-4xl">
             Centurion
           </p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-soft">
             Focus
-          </h1>
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pb-1">
           <PulseIndicators connected={connected} loading={loading} />
           <Link
             to="/tv"
-            className="rounded-full border border-amber-glow/35 bg-amber-muted px-4 py-2 text-sm font-semibold text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25"
+            className="text-sm font-semibold text-ink-dim transition hover:text-amber-soft"
           >
             TV Mode
           </Link>
@@ -117,32 +118,32 @@ export function Deck() {
       </header>
 
       {error && (
-        <div className="glass mb-6 rounded-2xl border-amber-glow/20 px-4 py-3 text-sm text-amber-soft">
+        <div className="surface mt-6 rounded-2xl border-amber-glow/20 px-4 py-3 text-sm text-amber-soft">
           Couldn’t reach the Brain bridge: {error}
         </div>
       )}
 
       {loading && !stack ? (
-        <div className="glass-strong animate-pulse-soft rounded-3xl px-6 py-20 text-center text-ink-dim">
+        <div className="mt-16 animate-pulse-soft text-center text-ink-dim">
           Opening your deck…
         </div>
       ) : !deckVisible && !stack ? (
-        <div className="glass-strong rounded-3xl px-6 py-20 text-center text-ink-dim">
+        <div className="mt-16 text-center text-ink-dim">
           Focus is paused while another Brain tab is active.
         </div>
       ) : empty ? (
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 160, damping: 20 }}
-          className="glass-strong rounded-3xl px-6 py-14 text-center shadow-glass sm:px-10"
+          transition={reduce ? { duration: 0 } : { duration: 0.35 }}
+          className="mt-16 max-w-lg"
         >
-          <p className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+          <p className="font-display text-3xl font-medium text-ink sm:text-4xl">
             Nothing on the board yet
           </p>
-          <p className="mx-auto mt-3 max-w-md text-ink-muted">
-            Let’s find what you’re building toward — a calm ceremony to shape
-            your primary mission.
+          <p className="mt-3 text-ink-muted">
+            Find what you’re building toward — a calm ceremony to shape your
+            primary mission.
           </p>
           <Link
             to="/discovery"
@@ -153,13 +154,9 @@ export function Deck() {
         </motion.div>
       ) : (
         <>
-          <DocumentSearch
-            enabled={deckVisible}
-            preferredMissionId={primary?.id}
-          />
-
           {primary ? (
             <PrimaryCard
+              hero
               mission={primary}
               latestThought={latestThought}
               documents={primaryDocs}
@@ -168,13 +165,19 @@ export function Deck() {
               onDiscuss={discussPrimary}
             />
           ) : (
-            <div className="glass rounded-3xl p-6 text-center text-ink-muted">
+            <div className="mt-10 text-ink-muted">
               No primary mission crowned yet.{" "}
               <Link to="/discovery" className="text-amber-soft underline">
                 Discover one
               </Link>
             </div>
           )}
+
+          {/* Below the fold */}
+          <DocumentSearch
+            enabled={deckVisible}
+            preferredMissionId={primary?.id}
+          />
 
           <SupportingRow
             missions={supporting}
@@ -188,7 +191,7 @@ export function Deck() {
         </>
       )}
 
-      <nav className="mt-10 flex justify-center gap-4 text-sm text-ink-dim">
+      <nav className="mt-14 flex justify-center gap-4 text-sm text-ink-dim">
         <Link to="/discovery" className="hover:text-amber-soft">
           Discovery
         </Link>

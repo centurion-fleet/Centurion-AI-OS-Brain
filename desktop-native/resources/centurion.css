@@ -71,17 +71,18 @@ button.link {
 
 .centurion-adrian-user,
 .centurion-chat-user {
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: alpha(@centurion_interactive, 0.18);
+  padding: 11px 16px;
+  border-radius: 16px 16px 4px 16px;
+  background: alpha(@centurion_interactive, 0.16);
+  border: 1px solid alpha(@centurion_interactive, 0.22);
   color: @centurion_ink;
   max-width: 520px;
 }
 
 .centurion-adrian-bot,
 .centurion-chat-bot {
-  padding: 12px 16px;
-  border-radius: 12px;
+  padding: 4px 4px 8px 4px;
+  border-radius: 0;
   background: transparent;
   border: none;
   color: @centurion_ink;
@@ -89,13 +90,13 @@ button.link {
 }
 
 .centurion-chat-bubble {
-  margin-left: 12px;
-  margin-right: 12px;
+  margin-left: 16px;
+  margin-right: 16px;
 }
 
 .centurion-chat-text {
-  font-size: 14.5px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.5;
   color: @centurion_ink;
 }
 
@@ -149,24 +150,24 @@ button.link {
 }
 
 .centurion-chat-activity {
-  padding: 10px 14px;
-  border-radius: 12px;
-  margin: 4px 12px 0 12px;
-  background: alpha(@centurion_warm, 0.08);
-  border: 1px solid @centurion_border;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin: 2px 16px 0 16px;
+  background: alpha(@centurion_warm, 0.07);
+  border: 1px solid alpha(@centurion_warm, 0.14);
 }
 
 .centurion-chat-activity-line {
   font-family: monospace;
-  font-size: 0.92em;
+  font-size: 0.9em;
   color: @centurion_muted;
 }
 
 .centurion-chat-tool-card {
   padding: 8px 10px;
   border-radius: 10px;
-  background: alpha(#000, 0.28);
-  border: 1px solid @centurion_border;
+  background: alpha(#000, 0.22);
+  border: 1px solid alpha(@centurion_border, 0.8);
 }
 
 .centurion-chat-tool-card-title {
@@ -183,7 +184,7 @@ button.link {
 }
 
 .centurion-chat-transcript-spacer {
-  min-height: 112px;
+  min-height: 72px;
 }
 
 .centurion-chat-jump-latest {
@@ -230,26 +231,36 @@ stackswitcher button {
 }
 
 .centurion-tab-bar {
-  spacing: 4px;
+  spacing: 6px;
+  padding: 2px;
 }
 
 .centurion-tab {
-  min-height: 36px;
-  min-width: 96px;
-  padding: 4px 14px;
+  min-height: 34px;
+  min-width: 88px;
+  padding: 3px 16px;
   border-radius: 999px;
   font-weight: 600;
   background: transparent;
+  color: @centurion_dim;
+  border: 1px solid transparent;
+}
+
+.centurion-tab:hover {
+  background: alpha(#fff, 0.04);
   color: @centurion_muted;
 }
 
 .centurion-tab:checked {
-  background: alpha(@centurion_interactive, 0.18);
+  background: alpha(@centurion_interactive, 0.2);
+  border: 1px solid alpha(@centurion_interactive, 0.35);
+  box-shadow: 0 0 20px alpha(@centurion_interactive, 0.12);
 }
 
 .centurion-tab-title {
-  color: @centurion_muted;
+  color: @centurion_dim;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .centurion-tab:checked .centurion-tab-title {
@@ -264,8 +275,8 @@ stackswitcher button {
 .centurion-attention-banner {
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid alpha(@centurion_attention, 0.35);
-  background: alpha(@centurion_attention, 0.12);
+  border: 1px solid alpha(@centurion_attention, 0.32);
+  background: alpha(@centurion_attention, 0.1);
 }
 
 .centurion-attention-banner-title {
@@ -284,21 +295,22 @@ stackswitcher button {
 
 .centurion-needs-attention {
   border-left: 3px solid @centurion_attention;
-  padding-left: 8px;
+  padding-left: 10px;
 }
 
 .centurion-chat-composer {
-  background: alpha(@centurion_surface, 0.96);
+  background: alpha(@centurion_surface, 0.97);
   border-top: 1px solid @centurion_border;
-  box-shadow: 0 -12px 32px alpha(#000, 0.35);
-  min-height: 120px;
-  padding-top: 4px;
+  box-shadow: 0 -8px 28px alpha(#000, 0.28);
+  min-height: 88px;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .centurion-chat-entry-scroll {
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid @centurion_border;
-  background: alpha(#fff, 0.04);
+  background: alpha(#fff, 0.035);
 }
 
 .centurion-chat-toolbar {

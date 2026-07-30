@@ -977,9 +977,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         );
         let device_list = gtk::ListBox::new();
         device_list.add_css_class("boxed-list");
-        refresh_devices(&device_list);
+        let devices_fp = Rc::new(RefCell::new(String::new()));
+        refresh_devices_async(&device_list, &devices_fp);
         let refresh_list = device_list.clone();
-        refresh_devices_button.connect_clicked(move |_| refresh_devices(&refresh_list));
+        let refresh_fp = devices_fp.clone();
+        refresh_devices_button.connect_clicked(move |_| {
+            refresh_fp.borrow_mut().clear();
+            refresh_devices_async(&refresh_list, &refresh_fp);
+        });
         devices_section.append(&device_list);
 
         let settings = gtk::Box::new(gtk::Orientation::Vertical, 16);
@@ -1425,7 +1430,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
-            .transition_duration(180)
+            .transition_duration(80)
             .vexpand(true)
             .hexpand(true)
             .build();
@@ -1532,7 +1537,13 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let apply_settings_badge = {
             let tab_badges_ui = tab_badges_ui.clone();
             let refresh_settings_attention_ui = refresh_settings_attention_ui.clone();
+            let attention_fp = Rc::new(RefCell::new(String::new()));
             Rc::new(move |items: Vec<SettingsAttentionItem>| {
+                let fp = format!("{items:?}");
+                if *attention_fp.borrow() == fp {
+                    return;
+                }
+                *attention_fp.borrow_mut() = fp;
                 let needs = !items.is_empty();
                 if needs {
                     tab_badges_ui.set_badge("settings", Some("!"));
@@ -1614,20 +1625,23 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
         let poll_settings_badge = refresh_settings_badge.clone();
+        let poll_devices_fp = devices_fp.clone();
         glib::timeout_add_seconds_local(5, move || {
             if poll_stack.visible_child_name().as_deref() == Some("settings") {
-                refresh_devices(&poll_list);
+                refresh_devices_async(&poll_list, &poll_devices_fp);
             }
             // Light poll for Settings (!) — probes run off the UI thread.
             poll_settings_badge();
             glib::ControlFlow::Continue
         });
         let tab_refresh_list = device_list.clone();
-        let tab_badges = refresh_stack_badges.clone();
+        let tab_devices_fp = devices_fp.clone();
+        let tab_home_badge = refresh_home_badge.clone();
+        let tab_chat_badge = refresh_chat_badge.clone();
         let tab_home_handle = home_handle.clone();
         stack.connect_visible_child_name_notify(move |stack| {
             if stack.visible_child_name().as_deref() == Some("settings") {
-                refresh_devices(&tab_refresh_list);
+                refresh_devices_async(&tab_refresh_list, &tab_devices_fp);
             }
             let missions_visible = stack.visible_child_name().as_deref() == Some("missions");
             // Pause Mission Deck WebView + polls while Chat/Settings is active.
@@ -1636,7 +1650,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             if missions_visible {
                 tab_home_handle.refresh();
             }
-            tab_badges();
+            // Local badges only — do not re-probe Settings CLI on every tab switch.
+            tab_home_badge();
+            tab_chat_badge();
         });
         // Default tab is Chat — suspend Deck immediately after wire-up.
         home_handle.notify_tab_visible(false);
@@ -2484,17 +2500,52 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         (bar, AttentionTabBar { badges })
     }
 
-    fn refresh_devices(list: &gtk::ListBox) {
-        while let Some(child) = list.first_child() {
-            list.remove(&child);
-        }
+    fn refresh_devices_async(list: &gtk::ListBox, fingerprint: &Rc<RefCell<String>>) {
+        let list = list.clone();
+        let fingerprint = fingerprint.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<(String, Option<DeviceListing>, String)>();
+        std::thread::spawn(move || {
+            let centurion_remote = std::env::var("HOME")
+                .ok()
+                .map(|home| format!("{home}/.local/bin/centurion-remote"))
+                .filter(|path| std::path::Path::new(path).is_file())
+                .unwrap_or_else(|| "centurion-remote".to_owned());
+            let output = Command::new(&centurion_remote)
+                .args(["devices", "--json"])
+                .output();
+            let (raw, listing) = match output {
+                Ok(output) if output.status.success() => {
+                    let raw = String::from_utf8_lossy(&output.stdout).to_string();
+                    let listing = serde_json::from_str::<DeviceListing>(&raw).ok();
+                    (raw, listing)
+                }
+                _ => (String::new(), None),
+            };
+            let _ = tx.send((raw, listing, centurion_remote));
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+            match rx.try_recv() {
+                Ok((raw, listing, remote)) => {
+                    if !raw.is_empty() && *fingerprint.borrow() == raw {
+                        return glib::ControlFlow::Break;
+                    }
+                    *fingerprint.borrow_mut() = raw;
+                    populate_devices_list(&list, listing, &remote);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            }
+        });
+    }
 
+    fn refresh_devices(list: &gtk::ListBox) {
+        // Sync path for approve/revoke callbacks — force rebuild.
         let centurion_remote = std::env::var("HOME")
             .ok()
             .map(|home| format!("{home}/.local/bin/centurion-remote"))
             .filter(|path| std::path::Path::new(path).is_file())
             .unwrap_or_else(|| "centurion-remote".to_owned());
-
         let output = Command::new(&centurion_remote)
             .args(["devices", "--json"])
             .output();
@@ -2502,6 +2553,17 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .ok()
             .filter(|output| output.status.success())
             .and_then(|output| serde_json::from_slice::<DeviceListing>(&output.stdout).ok());
+        populate_devices_list(list, listing, &centurion_remote);
+    }
+
+    fn populate_devices_list(
+        list: &gtk::ListBox,
+        listing: Option<DeviceListing>,
+        centurion_remote: &str,
+    ) {
+        while let Some(child) = list.first_child() {
+            list.remove(&child);
+        }
 
         let Some(listing) = listing else {
             list.append(
@@ -2542,7 +2604,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let fingerprint = device.fingerprint;
             let name = device.name;
             let list_refresh = list.clone();
-            let remote = centurion_remote.clone();
+            let remote = centurion_remote.to_owned();
             approve.connect_clicked(move |button| {
                 button.set_sensitive(false);
                 let approved = Command::new(&remote)
@@ -2592,7 +2654,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let fingerprint = device.fingerprint;
             let device_name = device.name.clone();
             let list_refresh = list.clone();
-            let remote = centurion_remote.clone();
+            let remote = centurion_remote.to_owned();
             revoke.connect_clicked(move |button| {
                 let confirm = adw::AlertDialog::builder()
                     .heading("Remove this iPhone?")

@@ -2,6 +2,8 @@
 @import "@fontsource/instrument-sans/500.css";
 @import "@fontsource/instrument-sans/600.css";
 @import "@fontsource/instrument-sans/700.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
 
 @tailwind base;
 @tailwind components;
@@ -10,6 +12,7 @@
 :root {
   color-scheme: dark;
   --canvas: #1a1410;
+  --surface: #221c17;
   --amber-glow: #ff9f1c;
   --amber-bright: #ffd700;
   --glass: rgba(255, 255, 255, 0.03);
@@ -38,7 +41,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Ambient horizon glow behind the deck */
+/* Ambient horizon glow behind the deck — one atmospheric plane */
 body::before {
   content: "";
   position: fixed;
@@ -46,8 +49,8 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 159, 28, 0.18), transparent),
-    radial-gradient(ellipse 50% 35% at 90% 90%, rgba(255, 215, 0, 0.05), transparent);
+    radial-gradient(ellipse 90% 55% at 50% -18%, rgba(255, 159, 28, 0.2), transparent 55%),
+    radial-gradient(ellipse 45% 30% at 92% 88%, rgba(255, 215, 0, 0.06), transparent);
 }
 
 #root {
@@ -56,17 +59,24 @@ body::before {
 }
 
 @layer components {
+  /* Solid surface — default for non-interactive stacks (cheap in WebKit). */
+  .surface {
+    background: rgba(34, 28, 23, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  /* Glass only on elevated interactive heroes — lighter blur than before. */
   .glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.035);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .glass-strong {
-    background: rgba(255, 255, 255, 0.055);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+    background: rgba(34, 28, 23, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
@@ -83,10 +93,40 @@ body::before {
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  .live-dot {
+    display: inline-block;
+    height: 0.375rem;
+    width: 0.375rem;
+    border-radius: 9999px;
+    background: #ff9f1c;
+    box-shadow: 0 0 12px rgba(255, 159, 28, 0.45);
+    animation: pulse-soft 2.4s ease-in-out infinite;
+  }
+
+  .live-dot-off {
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: none;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .live-dot {
+    animation: none;
+  }
 }
 
 /* Selection */
 ::selection {
   background: rgba(255, 159, 28, 0.35);
-  color: #fff;
 }

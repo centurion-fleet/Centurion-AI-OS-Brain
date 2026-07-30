@@ -215,12 +215,15 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         resolve_mission_deck_dir().map(|dir| Arc::new(Mutex::new(DeckSupervisor::new(dir)))),
     ));
 
-    let root_weak = root.downgrade();
+    // Node can warm while Chat is active; WebView attaches only on first Focus show.
+    let node_ready = Rc::new(Cell::new(false));
+    let node_error: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+
     let supervisor_c = supervisor.clone();
-    let hooks_c = hooks.clone();
-    let webview_slot_c = webview_slot.clone();
-    let suspended_c = suspended.clone();
+    let node_ready_c = node_ready.clone();
+    let node_error_c = node_error.clone();
     let status_c = status.clone();
+    let suspended_c = suspended.clone();
 
     // Pre-warm Node on a background thread as soon as the tab is built (window
     // show path) so Chat stays responsive and Focus often finds a ready deck.
@@ -244,28 +247,19 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     }
     glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
         Ok(result) => {
-            let Some(root) = root_weak.upgrade() else {
-                return glib::ControlFlow::Break;
-            };
             match result {
                 Ok(()) => {
-                    status_c.set_visible(false);
-                    if webview_slot_c.borrow().is_none() {
-                        match attach_webview(&root, hooks_c.clone(), suspended_c.clone()) {
-                            Some(wv) => {
-                                apply_deck_suspend(&wv, suspended_c.get());
-                                *webview_slot_c.borrow_mut() = Some(wv);
-                            }
-                            None => {
-                                status_c.set_visible(true);
-                                status_c.set_label(
-                                    "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
-                                );
-                            }
-                        }
+                    node_ready_c.set(true);
+                    *node_error_c.borrow_mut() = None;
+                    // Do not attach WebView here — Chat cold path must not pay WebKit.
+                    // Keep status visible until first Focus open attaches the view.
+                    if suspended_c.get() {
+                        status_c.set_label("Mission Deck ready — open Focus when you need it.");
                     }
                 }
                 Err(err) => {
+                    node_ready_c.set(false);
+                    *node_error_c.borrow_mut() = Some(err.clone());
                     status_c.set_visible(true);
                     status_c.set_label(&err);
                 }
@@ -280,10 +274,50 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         }
     });
 
+    let attach_if_needed: Rc<dyn Fn()> = {
+        let root = root.clone();
+        let hooks = hooks.clone();
+        let webview_slot = webview_slot.clone();
+        let suspended = suspended.clone();
+        let status = status.clone();
+        let node_ready = node_ready.clone();
+        let node_error = node_error.clone();
+        Rc::new(move || {
+            if webview_slot.borrow().is_some() {
+                status.set_visible(false);
+                return;
+            }
+            if let Some(err) = node_error.borrow().clone() {
+                status.set_visible(true);
+                status.set_label(&err);
+                return;
+            }
+            if !node_ready.get() {
+                status.set_visible(true);
+                status.set_label("Opening Mission Deck…");
+                return;
+            }
+            match attach_webview(&root, hooks.clone(), suspended.clone()) {
+                Some(wv) => {
+                    apply_deck_suspend(&wv, suspended.get());
+                    *webview_slot.borrow_mut() = Some(wv);
+                    status.set_visible(false);
+                }
+                None => {
+                    status.set_visible(true);
+                    status.set_label(
+                        "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
+                    );
+                }
+            }
+        })
+    };
+
     let refresh: Rc<dyn Fn()> = {
         let supervisor = supervisor.clone();
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
+        let attach_if_needed = attach_if_needed.clone();
         Rc::new(move || {
             // Soft path: never block the UI thread on Node health waits.
             if let Some(m) = supervisor.borrow().as_ref() {
@@ -305,6 +339,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             if suspended.get() {
                 return;
             }
+            attach_if_needed();
             if let Some(wv) = webview_slot.borrow().as_ref() {
                 // Soft resume: push visibility into the live page so polls start.
                 // Avoid wv.reload() here — reload races the visibility flag.
@@ -317,6 +352,9 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         let supervisor = supervisor.clone();
+        let attach_if_needed = attach_if_needed.clone();
+        let node_ready = node_ready.clone();
+        let status = status.clone();
         Rc::new(move |visible: bool| {
             let now_suspended = !visible;
             suspended.set(now_suspended);
@@ -328,12 +366,38 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                         .unwrap_or(false);
                     if !skip {
                         let m = m.clone();
+                        let node_ready = node_ready.clone();
+                        let status = status.clone();
+                        let attach_if_needed = attach_if_needed.clone();
+                        let (tx, rx) = mpsc::channel::<Result<(), String>>();
                         std::thread::spawn(move || {
-                            if let Ok(mut s) = m.lock() {
-                                let _ = s.ensure_running();
+                            let result = m
+                                .lock()
+                                .map_err(|e| e.to_string())
+                                .and_then(|mut s| s.ensure_running());
+                            let _ = tx.send(result);
+                        });
+                        glib::timeout_add_local(Duration::from_millis(40), move || {
+                            match rx.try_recv() {
+                                Ok(Ok(())) => {
+                                    node_ready.set(true);
+                                    attach_if_needed();
+                                    glib::ControlFlow::Break
+                                }
+                                Ok(Err(err)) => {
+                                    status.set_visible(true);
+                                    status.set_label(&err);
+                                    glib::ControlFlow::Break
+                                }
+                                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
                             }
                         });
+                    } else {
+                        attach_if_needed();
                     }
+                } else {
+                    attach_if_needed();
                 }
             }
             if let Some(wv) = webview_slot.borrow().as_ref() {

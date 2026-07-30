@@ -29,11 +29,15 @@ function discussDocument(d: LifeDocument) {
 export function DocumentSearch({
   enabled = true,
   preferredMissionId,
+  defaultOpen = false,
 }: {
   enabled?: boolean;
   /** Fallback mission when path/title match is weak (e.g. Primary). */
   preferredMissionId?: string | null;
+  /** Start expanded (default collapsed below the Focus hero). */
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const [agentOnly, setAgentOnly] = useState(false);
   const [results, setResults] = useState<LifeDocument[]>([]);
@@ -135,7 +139,7 @@ export function DocumentSearch({
   }, [preferredMissionId, query, agentOnly, runSearch]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !open) return;
     const t = window.setTimeout(() => {
       void runSearch(query, agentOnly);
     }, 450);
@@ -143,13 +147,27 @@ export function DocumentSearch({
       window.clearTimeout(t);
       abortRef.current?.abort();
     };
-  }, [query, agentOnly, enabled, runSearch]);
+  }, [query, agentOnly, enabled, open, runSearch]);
 
   if (!enabled) return null;
 
+  if (!open) {
+    return (
+      <section className="mt-14 mb-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim transition hover:text-amber-soft"
+        >
+          Find documents
+        </button>
+      </section>
+    );
+  }
+
   return (
-    <section className="mb-6">
-      <div className="glass rounded-2xl p-4">
+    <section className="mt-14 mb-2">
+      <div className="surface rounded-2xl p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
             Find documents
@@ -171,6 +189,13 @@ export function DocumentSearch({
               className="rounded-full border border-amber-glow/40 bg-amber-muted/70 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25 disabled:opacity-50"
             >
               {scanning ? "Scanning…" : "Scan this machine"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[11px] text-ink-dim hover:text-ink-muted"
+            >
+              Hide
             </button>
           </div>
         </div>
@@ -225,9 +250,9 @@ export function DocumentSearch({
                   title="Discuss in Chat"
                   aria-label={`Discuss ${d.title}`}
                   onClick={() => discussDocument(d)}
-                  className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                  className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
                 >
-                  💬
+                  Discuss
                 </button>
               </li>
             ))}
