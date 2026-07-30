@@ -1134,19 +1134,19 @@ fn frame_document_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         .unwrap_or_default();
     let id_line = id
         .as_ref()
-        .map(str::trim)
+        .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| format!("document_id: {s}\n"))
         .unwrap_or_default();
     let mission_line = mission_id
         .as_ref()
-        .map(str::trim)
+        .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| format!("mission_id: {s}\n"))
         .unwrap_or_default();
     let type_line = doc_type
         .as_ref()
-        .map(str::trim)
+        .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| format!("doc_type: {s}\n"))
         .unwrap_or_default();
