@@ -275,6 +275,8 @@ pub struct ChatHandle {
     open_topic_session: Rc<RefCell<Option<Rc<dyn Fn(String) -> bool>>>>,
     /// Arm Chat composer Focus intent (sync mode pills + banner).
     set_intent_focus: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    /// Re-sync mode pills/banners for the current intent (e.g. after Discuss clears).
+    resync_composer: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
     /// Jump to the Focus (Missions) attention tab.
     on_open_focus: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
 }
@@ -345,6 +347,9 @@ impl ChatHandle {
     pub fn clear_discuss(&self) {
         *self.active_discuss.borrow_mut() = None;
         self.refresh_banner();
+        if let Some(cb) = self.resync_composer.borrow().as_ref() {
+            cb();
+        }
     }
 
     /// Wire Settings Fix Thinking wizard (set after the main window exists).
@@ -376,6 +381,10 @@ impl ChatHandle {
 
     fn set_intent_focus_handler(&self, handler: Rc<dyn Fn()>) {
         *self.set_intent_focus.borrow_mut() = Some(handler);
+    }
+
+    fn set_resync_composer_handler(&self, handler: Rc<dyn Fn()>) {
+        *self.resync_composer.borrow_mut() = Some(handler);
     }
 
     /// Wire the Focus attention tab opener (Chat banner CTA).
@@ -501,6 +510,104 @@ fn fetch_primary_focus() -> Option<PrimaryFocusContext> {
         return None;
     }
     parse_primary_focus_value(primary)
+}
+
+/// Load a specific mission for Focus when Discuss opened a non-primary mission.
+fn fetch_mission_focus(mission_id: &str) -> Option<PrimaryFocusContext> {
+    let mid = mission_id.trim();
+    if mid.is_empty() {
+        return None;
+    }
+    let resp = run_bridge_action(
+        "life_mission_get",
+        serde_json::json!({ "mission_id": mid }),
+    )?;
+    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let mission = resp.get("mission")?;
+    parse_primary_focus_value(mission)
+}
+
+/// Focus centres on the discussed mission when Discuss is active; else Primary.
+fn resolve_focus_context(discuss: Option<&DiscussTopic>) -> Option<PrimaryFocusContext> {
+    match discuss {
+        Some(DiscussTopic::Mission {
+            id,
+            title,
+            statement,
+            target_id,
+            target_title,
+            ..
+        }) => {
+            if let Some(mid) = id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(ctx) = fetch_mission_focus(mid) {
+                    // Prefer discuss target when the topic pinned one.
+                    let mut ctx = ctx;
+                    if target_id.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+                        ctx.target_id = target_id.clone();
+                        ctx.target_title = target_title.clone();
+                    }
+                    return Some(ctx);
+                }
+            }
+            let title = title
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    let s = statement.trim();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                })
+                .unwrap_or("Mission")
+                .to_owned();
+            Some(PrimaryFocusContext {
+                id: id.clone().unwrap_or_default(),
+                title: title.clone(),
+                goal: if statement.trim().is_empty() {
+                    title
+                } else {
+                    statement.clone()
+                },
+                target_id: target_id.clone(),
+                target_title: target_title.clone(),
+            })
+        }
+        Some(DiscussTopic::Decision {
+            mission_id,
+            mission_title,
+            target_id,
+            ..
+        }) => {
+            if let Some(mid) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(mut ctx) = fetch_mission_focus(mid) {
+                    if target_id.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+                        ctx.target_id = target_id.clone();
+                    }
+                    if ctx.title.trim().is_empty() {
+                        if let Some(t) = mission_title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                            ctx.title = t.to_owned();
+                        }
+                    }
+                    return Some(ctx);
+                }
+            }
+            fetch_primary_focus()
+        }
+        Some(DiscussTopic::Document { mission_id, .. }) => {
+            if let Some(mid) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(ctx) = fetch_mission_focus(mid) {
+                    return Some(ctx);
+                }
+            }
+            fetch_primary_focus()
+        }
+        _ => fetch_primary_focus(),
+    }
 }
 
 fn fetch_primary_focus_via_mission_get() -> Option<PrimaryFocusContext> {
@@ -655,8 +762,9 @@ fn frame_focus_mode(user_text: &str, focus: &PrimaryFocusContext) -> String {
     };
     format!(
         "[Sovereign AI Brain — Focus mode]\n\
-         Centre every reply on the user's Primary Life Mission and current target.\n\
-         Primary Mission: {}\n\
+         Centre every reply on THIS Focus mission and its current target \
+         (the mission the user opened from Focus / Discuss — not a different Primary).\n\
+         Focus mission: {}\n\
          Goal: {}\n\
          {mission_id_line}{target_line}\n\
          Keep advice, questions, and next steps aligned with this mission unless the user explicitly pivots.\n\
@@ -665,7 +773,7 @@ fn frame_focus_mode(user_text: &str, focus: &PrimaryFocusContext) -> String {
          and doc_type (research|analysis|content|report|plan|other). \
          Do NOT claim a document is saved until put_document succeeds — that is what fills \
          Focus → Mission → Documents. Prefer plans/plan-artifact only when the user must Approve/Proceed.\n\n\
-         [Focus on Primary Mission: {} — {}] {}\n",
+         [Focus on mission: {} — {}] {}\n",
         focus.title,
         focus.goal,
         focus.title,
@@ -4346,16 +4454,34 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let focus_banner = focus_banner.clone();
         let focus_banner_label = focus_banner_label.clone();
         let focus_open_btn = focus_open_btn.clone();
+        let active_discuss = active_discuss.clone();
         move |selected: ChatIntent| {
             chat_pill.set_active(selected == ChatIntent::Chat);
             plan_pill.set_active(selected == ChatIntent::Plan);
             focus_pill.set_active(selected == ChatIntent::Focus);
             research_pill.set_active(selected == ChatIntent::Research);
             if selected == ChatIntent::Focus {
-                match fetch_primary_focus() {
+                let discuss = active_discuss.borrow().clone();
+                match resolve_focus_context(discuss.as_ref()) {
                     Some(focus) => {
-                        let label = match focus.target_title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                        let from_discuss = matches!(
+                            discuss.as_ref(),
+                            Some(
+                                DiscussTopic::Mission { .. }
+                                    | DiscussTopic::Decision { .. }
+                                    | DiscussTopic::Document { .. }
+                            )
+                        );
+                        let label = match focus
+                            .target_title
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                        {
                             Some(t) => format!("Focusing · {} · Next: {t}", focus.title),
+                            None if from_discuss => {
+                                format!("Focusing · {}", focus.title)
+                            }
                             None => format!(
                                 "Focusing · {} — advancing your Primary Mission",
                                 focus.title
@@ -5815,18 +5941,18 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                 }
                 outbound = frame_plan_mode(&outbound, discuss_topic.as_ref());
             } else if focus_mode {
-                match fetch_primary_focus() {
+                match resolve_focus_context(discuss_topic.as_ref()) {
                     Some(focus) => {
                         life_inject = Some(life_inject_for_focus(&text, &focus));
                         outbound = frame_focus_mode(&outbound, &focus);
-                        // Refresh banner in case primary appeared since pill select.
+                        // Refresh banner (discussed mission, not always Primary).
                         sync_mode_pills(ChatIntent::Focus);
                     }
                     None => {
                         sync_mode_pills(ChatIntent::Focus);
                         outbound = format!(
                             "[Sovereign AI Brain — Focus mode]\n\
-                             No Primary Mission is set yet. Gently invite the user to discover or \
+                             No Focus mission is set yet. Gently invite the user to discover or \
                              crown one on the Focus tab. Do not invent a mission for them.\n\n\
                              User message:\n\
                              {outbound}"
@@ -5834,6 +5960,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                     }
                 }
                 // Layer decision/document discuss framing when Discuss opened those topics.
+                // Mission Discuss is already represented via resolve_focus_context → frame_focus_mode.
                 if let Some(ref topic @ DiscussTopic::Decision { .. }) = discuss_topic {
                     outbound = frame_decision_discuss(&outbound, topic);
                 }
@@ -6224,6 +6351,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         on_attention_changed: chat_on_attention,
         open_topic_session: Rc::new(RefCell::new(None)),
         set_intent_focus: Rc::new(RefCell::new(None)),
+        resync_composer: Rc::new(RefCell::new(None)),
         on_open_focus: on_open_focus_slot.clone(),
     };
     handle.set_intent_focus_handler(Rc::new({
@@ -6232,6 +6360,13 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         move || {
             intent.set(ChatIntent::Focus);
             sync_mode_pills(ChatIntent::Focus);
+        }
+    }));
+    handle.set_resync_composer_handler(Rc::new({
+        let intent = intent.clone();
+        let sync_mode_pills = sync_mode_pills.clone();
+        move || {
+            sync_mode_pills(intent.get());
         }
     }));
 
@@ -6348,6 +6483,27 @@ mod tests {
         let plan = proposal_to_plan_value(&proposal);
         assert_eq!(plan["status"], "pending_review");
         assert_eq!(plan["title"], "Ship accept flow");
+    }
+
+    #[test]
+    fn resolve_focus_prefers_discuss_mission_over_primary_payload() {
+        // Without a bridgeable id, Focus still centres on the Discuss mission payload
+        // (not whatever Primary happens to be in life.db).
+        let topic = DiscussTopic::Mission {
+            statement: "Scale the business".to_owned(),
+            id: None,
+            title: Some("Centurion AI Limited".to_owned()),
+            target_id: Some("t1".to_owned()),
+            target_title: Some("Close first customer".to_owned()),
+            target_type: None,
+            target_description: None,
+            target_status: None,
+            sequence_number: None,
+        };
+        let ctx = resolve_focus_context(Some(&topic)).expect("discuss mission");
+        assert_eq!(ctx.title, "Centurion AI Limited");
+        assert_eq!(ctx.goal, "Scale the business");
+        assert_eq!(ctx.target_title.as_deref(), Some("Close first customer"));
     }
 
     #[test]
