@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -61,12 +61,21 @@ struct ActivityEvent {
 enum WorkerEvent {
     Approval(ApprovalRequest),
     Activity(ActivityEvent),
+    /// Focus context the worker resolved for this turn, so the UI can repaint
+    /// the Focus banner without a bridge call of its own.
+    FocusResolved(Option<PrimaryFocusContext>),
     Done(Result<ChatTurnResult, String>),
 }
 
 struct ChatTurnResult {
     text: String,
     session_id: String,
+}
+
+/// Why an event burst stopped — the turn finished, or the worker went away.
+enum TurnEnd {
+    Done(Result<ChatTurnResult, String>),
+    Disconnected,
 }
 
 struct ApprovalDecision {
@@ -790,6 +799,45 @@ fn life_inject_for_focus(user_text: &str, focus: &PrimaryFocusContext) -> Value 
         inject["current_view"]["target_id"] = Value::String(tid.clone());
     }
     inject
+}
+
+/// Focus-mode framing for one turn: resolve the mission, frame the outbound,
+/// then layer decision/document Discuss framing on top.
+///
+/// `resolve_focus_context` talks to the bridge, so this runs on the turn worker
+/// thread — the UI thread must never block on it during Send.
+fn build_focus_turn(
+    user_text: &str,
+    base_outbound: &str,
+    discuss: Option<&DiscussTopic>,
+) -> (String, Option<Value>, Option<PrimaryFocusContext>) {
+    let resolved = resolve_focus_context(discuss);
+    let mut life_inject: Option<Value> = None;
+    let mut outbound = match resolved.as_ref() {
+        Some(focus) => {
+            life_inject = Some(life_inject_for_focus(user_text, focus));
+            frame_focus_mode(base_outbound, focus)
+        }
+        None => format!(
+            "[Sovereign AI Brain — Focus mode]\n\
+             No Focus mission is set yet. Gently invite the user to discover or \
+             crown one on the Focus tab. Do not invent a mission for them.\n\n\
+             User message:\n\
+             {base_outbound}"
+        ),
+    };
+    // Layer decision/document discuss framing when Discuss opened those topics.
+    // Mission Discuss is already represented via resolve_focus_context → frame_focus_mode.
+    if let Some(topic @ DiscussTopic::Decision { .. }) = discuss {
+        outbound = frame_decision_discuss(&outbound, topic);
+    }
+    if let Some(topic @ DiscussTopic::Document { .. }) = discuss {
+        outbound = frame_document_discuss(&outbound, topic);
+        if life_inject.is_none() {
+            life_inject = life_inject_for_topic(user_text, topic);
+        }
+    }
+    (outbound, life_inject, resolved)
 }
 
 const COMPOSER_MIN_HEIGHT: i32 = 88;
@@ -2239,7 +2287,16 @@ fn format_user_display(user_text: &str, attachments: &[PendingAttachment]) -> St
 }
 
 /// Resolve CENTURION_HOME the same way the CLI honors ``active_profile``.
+///
+/// Cached for the process lifetime — the profile is fixed at launch (switching
+/// profiles restarts the app), and this runs on hot paths that would otherwise
+/// re-stat `active_profile` on every bridge call.
 pub fn resolve_centurion_home() -> String {
+    static CACHE: OnceLock<String> = OnceLock::new();
+    CACHE.get_or_init(resolve_centurion_home_uncached).clone()
+}
+
+fn resolve_centurion_home_uncached() -> String {
     let default_root = || -> PathBuf {
         std::env::var("HOME")
             .map(|home| PathBuf::from(home).join(".centurion"))
@@ -2292,7 +2349,17 @@ pub fn resolve_centurion_home() -> String {
 }
 
 /// Resolve the Centurion AI OS checkout used by the Python bridge.
+///
+/// Cached like `resolve_centurion_home` — the probe stats several candidate
+/// paths and is called for every bridge command we spawn.
 pub fn resolve_centurion_repo_root() -> Option<PathBuf> {
+    static CACHE: OnceLock<Option<PathBuf>> = OnceLock::new();
+    CACHE
+        .get_or_init(resolve_centurion_repo_root_uncached)
+        .clone()
+}
+
+fn resolve_centurion_repo_root_uncached() -> Option<PathBuf> {
     if let Ok(env_root) = std::env::var("CENTURION_AI_REPO") {
         let trimmed = env_root.trim();
         if !trimmed.is_empty() {
@@ -4540,15 +4607,54 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
 
+    // Paint the Focus banner from an already-resolved context. Split out of
+    // `sync_mode_pills` so the send path can reuse it with the context the
+    // worker thread resolved instead of resolving again on the UI thread.
+    let apply_focus_banner: Rc<dyn Fn(Option<PrimaryFocusContext>, bool)> = Rc::new({
+        let focus_banner = focus_banner.clone();
+        let focus_banner_label = focus_banner_label.clone();
+        let focus_open_btn = focus_open_btn.clone();
+        move |resolved: Option<PrimaryFocusContext>, from_discuss: bool| match resolved {
+            Some(focus) => {
+                let label = match focus
+                    .target_title
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(t) => format!("Focusing · {} · Next: {t}", focus.title),
+                    None if from_discuss => {
+                        format!("Focusing · {}", focus.title)
+                    }
+                    None => format!(
+                        "Focusing · {} — advancing your Primary Mission",
+                        focus.title
+                    ),
+                };
+                focus_banner_label.set_label(&label);
+                focus_open_btn.set_label("Open Focus");
+                focus_banner.set_visible(true);
+            }
+            None => {
+                focus_banner_label.set_label("No Primary Mission set yet — want to discover one?");
+                focus_open_btn.set_label("Discover mission");
+                focus_banner.set_visible(true);
+            }
+        }
+    });
+
+    // Generation guard so a stale async banner resolve cannot overwrite a newer one.
+    let focus_banner_gen = Rc::new(Cell::new(0u64));
+
     let sync_mode_pills: Rc<dyn Fn(ChatIntent)> = Rc::new({
         let chat_pill = chat_pill.clone();
         let plan_pill = plan_pill.clone();
         let focus_pill = focus_pill.clone();
         let research_pill = research_pill.clone();
         let focus_banner = focus_banner.clone();
-        let focus_banner_label = focus_banner_label.clone();
-        let focus_open_btn = focus_open_btn.clone();
         let active_discuss = active_discuss.clone();
+        let apply_focus_banner = apply_focus_banner.clone();
+        let focus_banner_gen = focus_banner_gen.clone();
         move |selected: ChatIntent| {
             chat_pill.set_active(selected == ChatIntent::Chat);
             plan_pill.set_active(selected == ChatIntent::Plan);
@@ -4556,43 +4662,34 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             research_pill.set_active(selected == ChatIntent::Research);
             if selected == ChatIntent::Focus {
                 let discuss = active_discuss.borrow().clone();
-                match resolve_focus_context(discuss.as_ref()) {
-                    Some(focus) => {
-                        let from_discuss = matches!(
-                            discuss.as_ref(),
-                            Some(
-                                DiscussTopic::Mission { .. }
-                                    | DiscussTopic::Decision { .. }
-                                    | DiscussTopic::Document { .. }
-                            )
-                        );
-                        let label = match focus
-                            .target_title
-                            .as_deref()
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                        {
-                            Some(t) => format!("Focusing · {} · Next: {t}", focus.title),
-                            None if from_discuss => {
-                                format!("Focusing · {}", focus.title)
-                            }
-                            None => format!(
-                                "Focusing · {} — advancing your Primary Mission",
-                                focus.title
-                            ),
-                        };
-                        focus_banner_label.set_label(&label);
-                        focus_open_btn.set_label("Open Focus");
-                        focus_banner.set_visible(true);
+                let from_discuss = matches!(
+                    discuss.as_ref(),
+                    Some(
+                        DiscussTopic::Mission { .. }
+                            | DiscussTopic::Decision { .. }
+                            | DiscussTopic::Document { .. }
+                    )
+                );
+                // Resolve off the UI thread — the bridge call behind
+                // `resolve_focus_context` used to freeze the pill toggle.
+                let generation = focus_banner_gen.get().wrapping_add(1);
+                focus_banner_gen.set(generation);
+                let (tx, rx) = mpsc::channel::<Option<PrimaryFocusContext>>();
+                thread::spawn(move || {
+                    let _ = tx.send(resolve_focus_context(discuss.as_ref()));
+                });
+                let apply_focus_banner = apply_focus_banner.clone();
+                let focus_banner_gen = focus_banner_gen.clone();
+                glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                    Ok(resolved) => {
+                        if focus_banner_gen.get() == generation {
+                            apply_focus_banner(resolved, from_discuss);
+                        }
+                        glib::ControlFlow::Break
                     }
-                    None => {
-                        focus_banner_label.set_label(
-                            "No Primary Mission set yet — want to discover one?",
-                        );
-                        focus_open_btn.set_label("Discover mission");
-                        focus_banner.set_visible(true);
-                    }
-                }
+                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                });
             } else {
                 focus_banner.set_visible(false);
             }
@@ -5896,16 +5993,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let follow_bottom = follow_bottom.clone();
             let assistant_name = assistant_name.clone();
             let title_label = title_label.clone();
-            let (tx, rx) = mpsc::channel::<Result<(String, Vec<ChatMessage>), String>>();
+            // Resolve the display name in the same worker as the resume so the UI
+            // continuation never blocks on soul_get.
+            let (tx, rx) = mpsc::channel::<Result<(String, Vec<ChatMessage>, String), String>>();
             thread::spawn(move || {
-                let _ = tx.send(resume_session(&target_id));
+                let resumed = resume_session(&target_id)
+                    .map(|(sid, history)| (sid, history, load_assistant_display_name()));
+                let _ = tx.send(resumed);
             });
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(Ok((sid, history))) => {
+                Ok(Ok((sid, history, name))) => {
                     save_session_id(&sid);
                     *session_id.borrow_mut() = Some(sid);
                     *messages.borrow_mut() = history;
-                    *assistant_name.borrow_mut() = load_assistant_display_name();
+                    *assistant_name.borrow_mut() = name;
                     title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
                     follow_bottom.set(true);
                     refresh_messages();
@@ -6023,6 +6124,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let refresh_queue_strip = refresh_queue_strip.clone();
         let reset_activity = reset_activity.clone();
         let sync_mode_pills = sync_mode_pills.clone();
+        let apply_focus_banner = apply_focus_banner.clone();
+        let focus_banner_gen = focus_banner_gen.clone();
         let submit_slot_for_self = submit_slot.clone();
         move || {
             let text = input.text();
@@ -6104,35 +6207,8 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                 }
                 outbound = frame_plan_mode(&outbound, discuss_topic.as_ref());
             } else if focus_mode {
-                match resolve_focus_context(discuss_topic.as_ref()) {
-                    Some(focus) => {
-                        life_inject = Some(life_inject_for_focus(&text, &focus));
-                        outbound = frame_focus_mode(&outbound, &focus);
-                        // Refresh banner (discussed mission, not always Primary).
-                        sync_mode_pills(ChatIntent::Focus);
-                    }
-                    None => {
-                        sync_mode_pills(ChatIntent::Focus);
-                        outbound = format!(
-                            "[Sovereign AI Brain — Focus mode]\n\
-                             No Focus mission is set yet. Gently invite the user to discover or \
-                             crown one on the Focus tab. Do not invent a mission for them.\n\n\
-                             User message:\n\
-                             {outbound}"
-                        );
-                    }
-                }
-                // Layer decision/document discuss framing when Discuss opened those topics.
-                // Mission Discuss is already represented via resolve_focus_context → frame_focus_mode.
-                if let Some(ref topic @ DiscussTopic::Decision { .. }) = discuss_topic {
-                    outbound = frame_decision_discuss(&outbound, topic);
-                }
-                if let Some(ref topic @ DiscussTopic::Document { .. }) = discuss_topic {
-                    outbound = frame_document_discuss(&outbound, topic);
-                    if life_inject.is_none() {
-                        life_inject = life_inject_for_topic(&text, topic);
-                    }
-                }
+                // Focus framing needs a bridge round-trip (resolve_focus_context),
+                // so it is deferred to the turn worker — see `build_focus_turn`.
             } else if research_mode {
                 if let Some(ref topic) = discuss_topic {
                     life_inject = life_inject_for_topic(&text, topic);
@@ -6177,7 +6253,27 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             if let Some(ref sid) = sid_for_worker {
                 *session_id.borrow_mut() = Some(sid.clone());
             }
+            // Focus resolution runs inside the worker; hand it what it needs.
+            let focus_text = text.clone();
+            let focus_discuss = discuss_topic.clone();
+            let focus_from_discuss = matches!(
+                discuss_topic.as_ref(),
+                Some(
+                    DiscussTopic::Mission { .. }
+                        | DiscussTopic::Decision { .. }
+                        | DiscussTopic::Document { .. }
+                )
+            );
             thread::spawn(move || {
+                let (outbound, life_inject) = if focus_mode {
+                    let (framed, inject, resolved) =
+                        build_focus_turn(&focus_text, &outbound, focus_discuss.as_ref());
+                    // Banner shows the discussed mission, not always Primary.
+                    let _ = event_tx.send(WorkerEvent::FocusResolved(resolved));
+                    (framed, inject)
+                } else {
+                    (outbound, life_inject)
+                };
                 let sid = match sid_for_worker {
                     Some(sid) => sid,
                     None => match ensure_session_id() {
@@ -6222,17 +6318,39 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let attachments = attachments.clone();
             let refresh_attachments = refresh_attachments.clone();
             let submit_slot_for_self = submit_slot_for_self.clone();
+            let apply_focus_banner_for_turn = apply_focus_banner.clone();
+            let focus_banner_gen_for_turn = focus_banner_gen.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
-                match event_rx.try_recv() {
-                    Ok(WorkerEvent::Approval(request)) => {
-                        show_approval(request);
-                        glib::ControlFlow::Continue
+                // Drain a burst per tick. A tool-heavy turn emits activity far
+                // faster than one event per 50ms, so a single try_recv per tick
+                // makes the trail trail the worker. Capped so GTK keeps a slice.
+                const MAX_EVENTS_PER_TICK: usize = 64;
+                let mut ended: Option<TurnEnd> = None;
+                for _ in 0..MAX_EVENTS_PER_TICK {
+                    match event_rx.try_recv() {
+                        Ok(WorkerEvent::Approval(request)) => show_approval(request),
+                        Ok(WorkerEvent::Activity(event)) => apply_activity(event),
+                        Ok(WorkerEvent::FocusResolved(resolved)) => {
+                            // Supersede any in-flight banner resolve from the pills.
+                            focus_banner_gen_for_turn
+                                .set(focus_banner_gen_for_turn.get().wrapping_add(1));
+                            apply_focus_banner_for_turn(resolved, focus_from_discuss);
+                        }
+                        Ok(WorkerEvent::Done(result)) => {
+                            ended = Some(TurnEnd::Done(result));
+                            break;
+                        }
+                        Err(mpsc::TryRecvError::Empty) => break,
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            ended = Some(TurnEnd::Disconnected);
+                            break;
+                        }
                     }
-                    Ok(WorkerEvent::Activity(event)) => {
-                        apply_activity(event);
-                        glib::ControlFlow::Continue
-                    }
-                    Ok(WorkerEvent::Done(result)) => {
+                }
+                match ended {
+                    // Channel empty or burst cap reached — keep ticking.
+                    None => glib::ControlFlow::Continue,
+                    Some(TurnEnd::Done(result)) => {
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
@@ -6366,8 +6484,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         }
                         glib::ControlFlow::Break
                     }
-                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                    Err(mpsc::TryRecvError::Disconnected) => {
+                    Some(TurnEnd::Disconnected) => {
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
@@ -6578,7 +6695,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             messages.borrow_mut().clear();
             refresh_messages();
 
-            let gen = {
+            let open_gen = {
                 let next = discuss_open_gen.get().wrapping_add(1);
                 discuss_open_gen.set(next);
                 next
@@ -6602,7 +6719,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let discuss_open_gen = discuss_open_gen.clone();
             glib::timeout_add_local(Duration::from_millis(16), move || match rx.try_recv() {
                 Ok(outcome) => {
-                    if discuss_open_gen.get() != gen {
+                    if discuss_open_gen.get() != open_gen {
                         return glib::ControlFlow::Break;
                     }
                     match outcome {

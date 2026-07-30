@@ -129,7 +129,7 @@ export function TargetSequence({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 180, damping: 22 }}
-            className="glass rounded-2xl p-4 sm:p-5"
+            className="surface rounded-2xl p-4 sm:p-5"
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <span

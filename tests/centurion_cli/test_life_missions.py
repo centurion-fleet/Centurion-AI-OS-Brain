@@ -235,6 +235,12 @@ def test_bridge_life_actions(life_home):
     assert r["ok"] is True
     assert r["stack"]["primary"]["id"] == mission_id
 
+    r = call("life_deck_snapshot", thought_limit=8, document_limit=3)
+    assert r["ok"] is True
+    assert r["stack"]["primary"]["id"] == mission_id
+    assert "thoughts" in r
+    assert "primary_documents" in r
+
     r = call("life_context_inject", message="ship MVP", mission_id=mission_id)
     assert r["ok"] is True
     assert "formatted_for_ai" in r

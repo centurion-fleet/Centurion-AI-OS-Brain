@@ -819,6 +819,40 @@ For now, sit here and meet your Centurion.";
     }
 
     fn refresh_link_addresses(container: &gtk::Box, parent: Option<&adw::ApplicationWindow>) {
+        let addresses = discover_link_addresses();
+        apply_link_addresses(container, parent, &addresses);
+    }
+
+    /// Render the static copy immediately, then fill the LAN row once interface
+    /// discovery (which shells out) finishes on a worker.
+    fn refresh_link_addresses_async(
+        container: &gtk::Box,
+        parent: Option<&adw::ApplicationWindow>,
+    ) {
+        apply_link_addresses(container, parent, &LinkAddresses::default());
+        let container = container.clone();
+        let parent = parent.cloned();
+        let (tx, rx) = std::sync::mpsc::channel::<LinkAddresses>();
+        std::thread::spawn(move || {
+            let _ = tx.send(discover_link_addresses());
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+            match rx.try_recv() {
+                Ok(addresses) => {
+                    apply_link_addresses(&container, parent.as_ref(), &addresses);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            }
+        });
+    }
+
+    fn apply_link_addresses(
+        container: &gtk::Box,
+        parent: Option<&adw::ApplicationWindow>,
+        addresses: &LinkAddresses,
+    ) {
         while let Some(child) = container.first_child() {
             container.remove(&child);
         }
@@ -854,7 +888,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
         container.append(&link);
 
-        let addresses = discover_link_addresses();
         if let Some(lan) = addresses.lan_ips.first() {
             container.append(
                 &gtk::Label::builder()
@@ -920,7 +953,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let link_addresses = gtk::Box::new(gtk::Orientation::Vertical, 8);
         link_addresses.set_margin_top(8);
-        refresh_link_addresses(&link_addresses, None);
+        refresh_link_addresses_async(&link_addresses, None);
         status_card.append(&link_addresses);
 
         status_card.append(&thinking_title);
@@ -1289,14 +1322,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let license_button = gtk::Button::with_label("Status");
         license_button.set_valign(gtk::Align::Center);
         license_row.add_suffix(&license_button);
-        let license_enabled = run_bridge_action("license_status", serde_json::json!({}))
-            .and_then(|p| {
-                p.pointer("/status/enabled")
-                    .or_else(|| p.get("enabled"))
-                    .and_then(|v| v.as_bool())
-            })
-            .unwrap_or(false);
-        license_row.set_visible(license_enabled);
+        // Entitlement is a bridge round-trip — stay hidden until the deferred
+        // Settings fill answers, so build_window never blocks on it.
+        license_row.set_visible(false);
         you_group.add(&license_row);
 
         let beneficiary_row = adw::ActionRow::builder()
@@ -1307,24 +1335,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let beneficiary_button = gtk::Button::with_label("Open");
         beneficiary_button.set_valign(gtk::Align::Center);
         beneficiary_row.add_suffix(&beneficiary_button);
-        let beneficiary_active = run_bridge_action("beneficiary_snapshot", serde_json::json!({}))
-            .map(|p| {
-                let s = p.get("snapshot").unwrap_or(&p);
-                let enabled = s
-                    .get("enabled")
-                    .or_else(|| s.get("program_active"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let has_family = s
-                    .get("family_beneficiary_first_name")
-                    .or_else(|| s.pointer("/family/first_name"))
-                    .and_then(|v| v.as_str())
-                    .map(|v| !v.trim().is_empty())
-                    .unwrap_or(false);
-                enabled || has_family
-            })
-            .unwrap_or(false);
-        beneficiary_row.set_visible(beneficiary_active);
+        beneficiary_row.set_visible(false);
         you_group.add(&beneficiary_row);
 
         settings.append(&you_group);
@@ -1623,16 +1634,37 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             });
         }
 
+        // One bundle so every Settings fill is a single worker pass.
+        let settings_rows = SettingsRows {
+            thinking_detail: thinking_detail.clone(),
+            thinking_row: thinking_settings_row.clone(),
+            backup_row: backup_thinking_row.clone(),
+            autonomy_row: autonomy_row.clone(),
+            soul_row: soul_row.clone(),
+            memory_horizon_row: memory_horizon_row.clone(),
+            oversight_row: oversight_row.clone(),
+            license_row: license_row.clone(),
+            beneficiary_row: beneficiary_row.clone(),
+        };
+
         let poll_list = device_list.clone();
         let poll_stack = stack.clone();
         let poll_settings_badge = refresh_settings_badge.clone();
         let poll_devices_fp = devices_fp.clone();
+        let poll_tick = Rc::new(Cell::new(0u32));
         glib::timeout_add_seconds_local(5, move || {
-            if poll_stack.visible_child_name().as_deref() == Some("settings") {
+            let on_settings = poll_stack.visible_child_name().as_deref() == Some("settings");
+            if on_settings {
                 refresh_devices_async(&poll_list, &poll_devices_fp);
             }
-            // Light poll for Settings (!) — probes run off the UI thread.
-            poll_settings_badge();
+            // The badge probe shells out twice — keep the 5s cadence only while
+            // Settings is on screen and drop to ~1/min elsewhere. Probes still
+            // run off the UI thread.
+            let tick = poll_tick.get().wrapping_add(1);
+            poll_tick.set(tick);
+            if on_settings || tick % 12 == 0 {
+                poll_settings_badge();
+            }
             glib::ControlFlow::Continue
         });
         let tab_refresh_list = device_list.clone();
@@ -1640,9 +1672,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let tab_home_badge = refresh_home_badge.clone();
         let tab_chat_badge = refresh_chat_badge.clone();
         let tab_home_handle = home_handle.clone();
+        let tab_settings_rows = settings_rows.clone();
         stack.connect_visible_child_name_notify(move |stack| {
             if stack.visible_child_name().as_deref() == Some("settings") {
                 refresh_devices_async(&tab_refresh_list, &tab_devices_fp);
+                // Settings rows only refresh while the tab is up — catch up now.
+                refresh_settings_rows_async(&tab_settings_rows, true);
             }
             let missions_visible = stack.visible_child_name().as_deref() == Some("missions");
             // Pause Mission Deck WebView + polls while Chat/Settings is active.
@@ -1690,212 +1725,31 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     status_detail.set_label(
                         "On the same Wi‑Fi, open Sovereign AI Remote and scan the pairing QR.",
                     );
-                    refresh_link_addresses(&link_addresses, Some(&window));
+                    refresh_link_addresses_async(&link_addresses, Some(&window));
                 }
                 Err(error) => {
                     status_title.set_label("Your Centurion needs attention");
                     status_detail.set_label(&error);
-                    refresh_link_addresses(&link_addresses, Some(&window));
+                    refresh_link_addresses_async(&link_addresses, Some(&window));
                 }
             }
         };
 
-        update_status();
+        // Starting the remote listener shells out — run it once the window is
+        // on screen so present() is never behind CLI/TCP work.
+        glib::idle_add_local_once(move || update_status());
         // First-run: teach what a Centurion is. Pairing QR is opt-in, not the product story.
-        if !brain_welcome_seen() && !any_iphones_linked() {
+        if !brain_welcome_seen() {
             let window = window.clone();
-            glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
-                show_brain_welcome_dialog(&window);
-            });
-        }
-        // Defer Settings row fills until after first paint so cold-start Chat
-        // is not blocked by provider/bridge probes.
-        {
-            let thinking_detail = thinking_detail.clone();
-            let thinking_settings_row = thinking_settings_row.clone();
-            let backup_thinking_row = backup_thinking_row.clone();
-            let autonomy_row = autonomy_row.clone();
-            let soul_row = soul_row.clone();
-            let memory_horizon_row = memory_horizon_row.clone();
-            let oversight_row = oversight_row.clone();
-            glib::idle_add_local_once(move || {
-                let thinking_detail = thinking_detail.clone();
-                let thinking_settings_row = thinking_settings_row.clone();
-                let backup_thinking_row = backup_thinking_row.clone();
-                let autonomy_row = autonomy_row.clone();
-                let soul_row = soul_row.clone();
-                let memory_horizon_row = memory_horizon_row.clone();
-                let oversight_row = oversight_row.clone();
-                let (tx, rx) = std::sync::mpsc::channel::<(
-                    Option<serde_json::Value>,
-                    Option<serde_json::Value>,
-                    Option<serde_json::Value>,
-                    Option<String>,
-                )>();
-                std::thread::spawn(move || {
-                    let soul = run_bridge_action("soul_get", serde_json::json!({}));
-                    let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
-                    let horizon =
-                        run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
-                    let thinking_line = run_provider_command(&["status", "--skip-probe"]).and_then(
-                        |response| {
-                            response.status.map(|status| {
-                                let model = status.model;
-                                if model.is_empty() {
-                                    status.provider
-                                } else {
-                                    format!("{} · {}", status.provider, model)
-                                }
-                            })
-                        },
-                    );
-                    let _ = tx.send((soul, oversight, horizon, thinking_line));
-                });
-                refresh_backup_thinking_services(&backup_thinking_row);
-                refresh_autonomy_row(&autonomy_row);
-                glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
-                    match rx.try_recv() {
-                        Ok((soul, oversight, horizon, thinking_line)) => {
-                            if let Some(line) = thinking_line {
-                                thinking_detail.set_label(&line);
-                                thinking_settings_row.set_subtitle(&line);
-                            }
-                            // Reuse the existing row appliers (they re-read via
-                            // bridge daemon — cheap once warm).
-                            let _ = (soul, oversight, horizon);
-                            refresh_soul_row(&soul_row);
-                            refresh_memory_horizon_row(&memory_horizon_row);
-                            refresh_oversight_row(&oversight_row);
-                            glib::ControlFlow::Break
-                        }
-                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                            refresh_thinking_status(&thinking_detail, &thinking_settings_row);
-                            refresh_soul_row(&soul_row);
-                            refresh_memory_horizon_row(&memory_horizon_row);
-                            refresh_oversight_row(&oversight_row);
-                            glib::ControlFlow::Break
-                        }
-                    }
-                });
-            });
-        }
-        let thinking_poll_detail = thinking_detail.clone();
-        let thinking_poll_row = thinking_settings_row.clone();
-        let backup_poll_row = backup_thinking_row.clone();
-        let autonomy_poll_row = autonomy_row.clone();
-        let soul_poll_row = soul_row.clone();
-        let memory_horizon_poll_row = memory_horizon_row.clone();
-        let oversight_poll_row = oversight_row.clone();
-        glib::timeout_add_seconds_local(30, move || {
-            let thinking_poll_detail = thinking_poll_detail.clone();
-            let thinking_poll_row = thinking_poll_row.clone();
-            let backup_poll_row = backup_poll_row.clone();
-            let autonomy_poll_row = autonomy_poll_row.clone();
-            let soul_poll_row = soul_poll_row.clone();
-            let memory_horizon_poll_row = memory_horizon_poll_row.clone();
-            let oversight_poll_row = oversight_poll_row.clone();
-            // Run bridge I/O on a worker so the GTK main loop stays responsive.
-            // (Daemon makes each call cheap; we still must not block UI on it.)
-            let (tx, rx) = std::sync::mpsc::channel::<(
-                Option<serde_json::Value>,
-                Option<serde_json::Value>,
-                Option<serde_json::Value>,
-                Option<String>,
-                Option<String>,
-            )>();
+            let (tx, rx) = std::sync::mpsc::channel::<bool>();
             std::thread::spawn(move || {
-                let soul = run_bridge_action("soul_get", serde_json::json!({}));
-                let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
-                let horizon =
-                    run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
-                let thinking_line = run_provider_command(&["status", "--skip-probe"]).and_then(
-                    |response| {
-                        let status = response.status?;
-                        let plain = match status.health.as_str() {
-                            "ok" => "Working normally".to_owned(),
-                            "degraded" => "May be slow".to_owned(),
-                            _ => "Needs attention".to_owned(),
-                        };
-                        let mut line = format!("{plain} — {}", status.health_message);
-                        if status.last_good_available && status.health != "ok" {
-                            line.push_str(" Last working setup is available.");
-                        }
-                        Some(line)
-                    },
-                );
-                let backup_line = run_support_command(&["backups"]).map(|response| {
-                    let backups = response
-                        .result
-                        .as_ref()
-                        .and_then(|value| value.get("backups"))
-                        .and_then(|value| value.as_array())
-                        .cloned()
-                        .unwrap_or_default();
-                    if backups.is_empty() {
-                        "No backup thinking services configured.".to_owned()
-                    } else {
-                        let labels: Vec<String> = backups
-                            .iter()
-                            .filter_map(|entry| {
-                                entry
-                                    .get("label")
-                                    .and_then(|label| label.as_str())
-                                    .map(str::to_owned)
-                            })
-                            .collect();
-                        if labels.is_empty() {
-                            format!("{} backup thinking service(s) configured.", backups.len())
-                        } else {
-                            labels.join(" · ")
-                        }
-                    }
-                });
-                let _ = tx.send((soul, oversight, horizon, thinking_line, backup_line));
+                let _ = tx.send(any_iphones_linked());
             });
-            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+            glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
                 match rx.try_recv() {
-                    Ok((soul, oversight, horizon, thinking_line, backup_line)) => {
-                        if let Some(line) = thinking_line {
-                            thinking_poll_detail.set_label(&line);
-                            thinking_poll_row.set_subtitle(&line);
-                        }
-                        if let Some(line) = backup_line {
-                            backup_poll_row.set_subtitle(&line);
-                        }
-                        if let Some(payload) = oversight.as_ref() {
-                            let level = payload
-                                .pointer("/oversight/autonomy_level")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("balanced");
-                            autonomy_poll_row.set_subtitle(autonomy_label(level));
-                            let cadence = payload
-                                .pointer("/oversight/report_cadence")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("when_needed");
-                            let ask = payload
-                                .pointer("/oversight/ask_before_initiative")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(true);
-                            let cadence_label = match cadence {
-                                "off" => "Off",
-                                "daily" => "Daily",
-                                "after_significant_actions" => "After significant actions",
-                                _ => "When needed",
-                            };
-                            oversight_poll_row.set_subtitle(&format!(
-                                "{cadence_label} · ask before initiative: {}",
-                                if ask { "on" } else { "off" }
-                            ));
-                        }
-                        if let Some(payload) = soul {
-                            apply_soul_row_subtitle(&soul_poll_row, &payload);
-                        }
-                        if let Some(payload) = horizon {
-                            apply_memory_horizon_row_subtitle(
-                                &memory_horizon_poll_row,
-                                &payload,
-                            );
+                    Ok(linked) => {
+                        if !linked {
+                            show_brain_welcome_dialog(&window);
                         }
                         glib::ControlFlow::Break
                     }
@@ -1903,8 +1757,27 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
                 }
             });
-            glib::ControlFlow::Continue
-        });
+        }
+        // Defer Settings row fills until after first paint so cold-start Chat
+        // is not blocked by provider/bridge probes.
+        {
+            let settings_rows = settings_rows.clone();
+            glib::idle_add_local_once(move || {
+                refresh_settings_rows_async(&settings_rows, false);
+            });
+        }
+        {
+            let poll_settings_rows = settings_rows.clone();
+            let poll_settings_stack = stack.clone();
+            glib::timeout_add_seconds_local(30, move || {
+                // Settings rows are only visible on the Settings tab — don't pay
+                // for provider/bridge probes while Chat or Focus is up.
+                if poll_settings_stack.visible_child_name().as_deref() == Some("settings") {
+                    refresh_settings_rows_async(&poll_settings_rows, true);
+                }
+                glib::ControlFlow::Continue
+            });
+        }
         restore_thinking_button.connect_clicked({
             let thinking_settings_row = thinking_settings_row.clone();
             let thinking_detail = thinking_detail.clone();
@@ -2096,7 +1969,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 refresh_gateway_ui(&gateway_row, &gateway_platform_list);
             }
         });
-        refresh_gateway_ui(&gateway_row, &gateway_platform_list);
+        refresh_gateway_ui_async(&gateway_row, &gateway_platform_list);
         fix_thinking_button.connect_clicked({
             let window = window.clone();
             let thinking_settings_row = thinking_settings_row.clone();
@@ -3484,11 +3357,161 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             row.set_subtitle("Could not read autonomy level.");
             return;
         };
+        apply_autonomy_row_subtitle(row, &payload);
+    }
+
+    fn apply_autonomy_row_subtitle(row: &adw::ActionRow, payload: &serde_json::Value) {
         let level = payload
             .pointer("/oversight/autonomy_level")
             .and_then(|v| v.as_str())
             .unwrap_or("balanced");
         row.set_subtitle(autonomy_label(level));
+    }
+
+    /// Every Settings row filled by the deferred / periodic bridge pass.
+    #[derive(Clone)]
+    struct SettingsRows {
+        thinking_detail: gtk::Label,
+        thinking_row: adw::ActionRow,
+        backup_row: adw::ActionRow,
+        autonomy_row: adw::ActionRow,
+        soul_row: adw::ActionRow,
+        memory_horizon_row: adw::ActionRow,
+        oversight_row: adw::ActionRow,
+        license_row: adw::ActionRow,
+        beneficiary_row: adw::ActionRow,
+    }
+
+    /// Worker-side payloads for `SettingsRows` — everything here is `Send`, so
+    /// the bridge / CLI round-trips happen off the GTK thread.
+    struct SettingsFill {
+        soul: Option<serde_json::Value>,
+        oversight: Option<serde_json::Value>,
+        horizon: Option<serde_json::Value>,
+        thinking_line: Option<String>,
+        backup_line: String,
+        license_visible: bool,
+        beneficiary_visible: bool,
+    }
+
+    /// `plain_health` picks the plain-language health phrasing used by the
+    /// background poll; the first fill shows provider · model instead.
+    fn collect_settings_fill(plain_health: bool) -> SettingsFill {
+        let soul = run_bridge_action("soul_get", serde_json::json!({}));
+        let oversight = run_bridge_action("oversight_get", serde_json::json!({}));
+        let horizon = run_bridge_action("memory_horizon_snapshot", serde_json::json!({}));
+        let thinking_line =
+            run_provider_command(&["status", "--skip-probe"]).and_then(|response| {
+                let status = response.status?;
+                if !plain_health {
+                    return Some(if status.model.is_empty() {
+                        status.provider
+                    } else {
+                        format!("{} · {}", status.provider, status.model)
+                    });
+                }
+                let plain = match status.health.as_str() {
+                    "ok" => "Working normally",
+                    "degraded" => "May be slow",
+                    _ => "Needs attention",
+                };
+                let mut line = format!("{plain} — {}", status.health_message);
+                if status.last_good_available && status.health != "ok" {
+                    line.push_str(" Last working setup is available.");
+                }
+                Some(line)
+            });
+        SettingsFill {
+            soul,
+            oversight,
+            horizon,
+            thinking_line,
+            backup_line: backup_thinking_subtitle(),
+            license_visible: license_entitlement_enabled(),
+            beneficiary_visible: beneficiary_program_active(),
+        }
+    }
+
+    fn apply_settings_fill(rows: &SettingsRows, fill: SettingsFill) {
+        if let Some(line) = fill.thinking_line {
+            rows.thinking_detail.set_label(&line);
+            rows.thinking_row.set_subtitle(&line);
+        }
+        rows.backup_row.set_subtitle(&fill.backup_line);
+        match fill.soul.as_ref() {
+            Some(payload) => apply_soul_row_subtitle(&rows.soul_row, payload),
+            None => rows
+                .soul_row
+                .set_subtitle("Could not read your Sovereign's Soul."),
+        }
+        match fill.horizon.as_ref() {
+            Some(payload) => apply_memory_horizon_row_subtitle(&rows.memory_horizon_row, payload),
+            None => rows
+                .memory_horizon_row
+                .set_subtitle("Could not read Memory Horizon."),
+        }
+        match fill.oversight.as_ref() {
+            Some(payload) => {
+                apply_autonomy_row_subtitle(&rows.autonomy_row, payload);
+                apply_oversight_row_subtitle(&rows.oversight_row, payload);
+            }
+            None => {
+                rows.autonomy_row.set_subtitle("Could not read autonomy level.");
+                rows.oversight_row
+                    .set_subtitle("Could not read reporting preferences.");
+            }
+        }
+        rows.license_row.set_visible(fill.license_visible);
+        rows.beneficiary_row.set_visible(fill.beneficiary_visible);
+    }
+
+    /// One worker pass for every Settings row — no bridge I/O on the UI thread.
+    fn refresh_settings_rows_async(rows: &SettingsRows, plain_health: bool) {
+        let rows = rows.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<SettingsFill>();
+        std::thread::spawn(move || {
+            let _ = tx.send(collect_settings_fill(plain_health));
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+            match rx.try_recv() {
+                Ok(fill) => {
+                    apply_settings_fill(&rows, fill);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            }
+        });
+    }
+
+    fn license_entitlement_enabled() -> bool {
+        run_bridge_action("license_status", serde_json::json!({}))
+            .and_then(|p| {
+                p.pointer("/status/enabled")
+                    .or_else(|| p.get("enabled"))
+                    .and_then(|v| v.as_bool())
+            })
+            .unwrap_or(false)
+    }
+
+    fn beneficiary_program_active() -> bool {
+        run_bridge_action("beneficiary_snapshot", serde_json::json!({}))
+            .map(|p| {
+                let s = p.get("snapshot").unwrap_or(&p);
+                let enabled = s
+                    .get("enabled")
+                    .or_else(|| s.get("program_active"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let has_family = s
+                    .get("family_beneficiary_first_name")
+                    .or_else(|| s.pointer("/family/first_name"))
+                    .and_then(|v| v.as_str())
+                    .map(|v| !v.trim().is_empty())
+                    .unwrap_or(false);
+                enabled || has_family
+            })
+            .unwrap_or(false)
     }
 
     fn refresh_soul_row(row: &adw::ActionRow) {
@@ -3836,6 +3859,10 @@ Being · Continuity\n\
             row.set_subtitle("Could not read reporting preferences.");
             return;
         };
+        apply_oversight_row_subtitle(row, &payload);
+    }
+
+    fn apply_oversight_row_subtitle(row: &adw::ActionRow, payload: &serde_json::Value) {
         let cadence = payload
             .pointer("/oversight/report_cadence")
             .and_then(|v| v.as_str())
@@ -4460,22 +4487,23 @@ Being · Continuity\n\
     }
 
     fn refresh_backup_thinking_services(row: &adw::ActionRow) {
+        row.set_subtitle(&backup_thinking_subtitle());
+    }
+
+    /// Worker-safe: reads the backup list and renders it as row subtitle text.
+    fn backup_thinking_subtitle() -> String {
         let Some(response) = run_support_command(&["backups"]) else {
-            row.set_subtitle("Could not read backup thinking services.");
-            return;
+            return "Could not read backup thinking services.".to_owned();
         };
-        let Some(result) = response.result else {
-            row.set_subtitle("No backup thinking services configured.");
-            return;
-        };
-        let backups = result
-            .get("backups")
+        let backups = response
+            .result
+            .as_ref()
+            .and_then(|value| value.get("backups"))
             .and_then(|value| value.as_array())
             .cloned()
             .unwrap_or_default();
         if backups.is_empty() {
-            row.set_subtitle("No backup thinking services configured.");
-            return;
+            return "No backup thinking services configured.".to_owned();
         }
         let labels: Vec<String> = backups
             .iter()
@@ -4487,11 +4515,9 @@ Being · Continuity\n\
             })
             .collect();
         if labels.is_empty() {
-            let subtitle = format!("{} backup thinking service(s) configured.", backups.len());
-            row.set_subtitle(&subtitle);
+            format!("{} backup thinking service(s) configured.", backups.len())
         } else {
-            let subtitle = labels.join(" · ");
-            row.set_subtitle(&subtitle);
+            labels.join(" · ")
         }
     }
 
@@ -4515,10 +4541,40 @@ Being · Continuity\n\
     }
 
     fn refresh_gateway_ui(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
+        let payload = run_bridge_action("gateway_status", serde_json::json!({}));
+        apply_gateway_ui(row, platform_list, payload);
+    }
+
+    /// Same as `refresh_gateway_ui`, with the bridge round-trip on a worker so
+    /// window build / present never waits on it.
+    fn refresh_gateway_ui_async(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
+        let row = row.clone();
+        let platform_list = platform_list.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<Option<serde_json::Value>>();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_bridge_action("gateway_status", serde_json::json!({})));
+        });
+        glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
+            match rx.try_recv() {
+                Ok(payload) => {
+                    apply_gateway_ui(&row, &platform_list, payload);
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            }
+        });
+    }
+
+    fn apply_gateway_ui(
+        row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+        payload: Option<serde_json::Value>,
+    ) {
         while let Some(child) = platform_list.first_child() {
             platform_list.remove(&child);
         }
-        let Some(payload) = run_bridge_action("gateway_status", serde_json::json!({})) else {
+        let Some(payload) = payload else {
             row.set_subtitle("Could not read gateway status.");
             return;
         };

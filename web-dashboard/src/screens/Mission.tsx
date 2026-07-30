@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
@@ -7,7 +7,7 @@ import { ProgressBar } from "../components/PrimaryCard";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
-import { missionProgress, type MissionPhase } from "../types/life";
+import { missionProgress, type Mission, type MissionPhase } from "../types/life";
 import { bridgeCall } from "../hooks/useBridge";
 
 const PHASE_ORDER: MissionPhase[] = [
@@ -27,9 +27,12 @@ function nextPhase(current: MissionPhase): MissionPhase | null {
 
 export function Mission() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const seed =
+    (location.state as { mission?: Mission } | null)?.mission ?? null;
   const deckVisible = useDeckVisible();
   const { mission, decisions, documents, thoughts, loading, error, refresh } =
-    useMissionDetail(id);
+    useMissionDetail(id, seed && seed.id === id ? seed : null);
   const { thoughts: live } = useSSE({ enabled: deckVisible });
   const [primaryBusy, setPrimaryBusy] = useState(false);
   const [phaseBusy, setPhaseBusy] = useState(false);
@@ -349,7 +352,7 @@ export function Mission() {
         </div>
 
         {logOpen && (
-          <div className="glass mb-3 space-y-3 rounded-2xl p-4">
+          <div className="surface mb-3 space-y-3 rounded-2xl p-4">
             <input
               value={logTitle}
               onChange={(e) => setLogTitle(e.target.value)}
@@ -381,7 +384,7 @@ export function Mission() {
           </div>
         )}
 
-        <div className="glass rounded-2xl divide-y divide-white/5 overflow-hidden">
+        <div className="surface rounded-2xl divide-y divide-white/5 overflow-hidden">
           {decisions.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
               No decisions logged yet.
@@ -433,7 +436,7 @@ export function Mission() {
         </div>
 
         {docOpen && (
-          <div className="glass mb-3 space-y-3 rounded-2xl p-4">
+          <div className="surface mb-3 space-y-3 rounded-2xl p-4">
             <input
               value={docTitle}
               onChange={(e) => setDocTitle(e.target.value)}
@@ -459,7 +462,7 @@ export function Mission() {
           </div>
         )}
 
-        <div className="glass overflow-hidden rounded-2xl divide-y divide-white/5">
+        <div className="surface overflow-hidden rounded-2xl divide-y divide-white/5">
           {documents.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
               Documents Centurion writes for this mission will land here.

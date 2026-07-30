@@ -73,7 +73,7 @@ export function Deck() {
 
   const openPrimary = useCallback(() => {
     if (!primary) return;
-    navigate(`/mission/${primary.id}`);
+    navigate(`/mission/${primary.id}`, { state: { mission: primary } });
   }, [navigate, primary]);
 
   const discussPrimary = useCallback(() => {
@@ -91,8 +91,11 @@ export function Deck() {
   }, [primary]);
 
   const openSupporting = useCallback(
-    (id: string) => navigate(`/mission/${id}`),
-    [navigate],
+    (id: string) => {
+      const m = supporting.find((x) => x.id === id);
+      navigate(`/mission/${id}`, m ? { state: { mission: m } } : undefined);
+    },
+    [navigate, supporting],
   );
 
   return (

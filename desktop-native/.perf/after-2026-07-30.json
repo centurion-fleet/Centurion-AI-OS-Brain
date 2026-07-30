@@ -1,0 +1,22 @@
+{
+  "host": "mac-dev (Titus Linux expected slower cold)",
+  "date": "2026-07-30",
+  "bridge": {
+    "warm_imports_ms": 36.2,
+    "sock_ready_ms": 37.7,
+    "first_accept_ping_ms": 45.0,
+    "accept_gap_after_sock_ms": 7.3,
+    "warm_rtt_p50_ms": {
+      "bridge_ping": 0.15,
+      "life_stack_get": 2.16,
+      "life_deck_snapshot": 2.62,
+      "soul_get": 1.82
+    }
+  },
+  "gtk_static_analysis_after": {
+    "pre_present_sync_bridge_calls": [],
+    "focus_tab_blocking_health": false,
+    "activity_drain_burst_cap": 64,
+    "settings_poll_gated_to_settings_tab": true
+  }
+}

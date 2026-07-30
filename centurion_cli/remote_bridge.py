@@ -129,6 +129,8 @@ def handle_request(
         return _handle_life_subjects_reorder(request, request_id)
     if action == "life_stack_get":
         return _handle_life_stack_get(request_id)
+    if action == "deck_snapshot" or action == "life_deck_snapshot":
+        return _handle_life_deck_snapshot(request, request_id)
     if action == "life_stack_set_primary":
         return _handle_life_stack_set_primary(request, request_id)
     if action == "life_stack_reorder":
@@ -2575,6 +2577,28 @@ def _handle_life_stack_get(request_id: str) -> dict[str, Any]:
         return _error_response(request_id, action="life_stack_get", exc=exc)
 
 
+def _handle_life_deck_snapshot(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import deck_snapshot
+
+        thought_limit = int(request.get("thought_limit") or 32)
+        document_limit = int(request.get("document_limit") or 5)
+        snap = deck_snapshot(
+            thought_limit=thought_limit,
+            document_limit=document_limit,
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_deck_snapshot",
+            **snap,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_deck_snapshot", exc=exc)
+
+
 def _handle_life_stack_set_primary(
     request: dict[str, Any], request_id: str
 ) -> dict[str, Any]:
@@ -3800,11 +3824,22 @@ def default_bridge_socket_path() -> str:
 
 
 def _warm_bridge_imports() -> None:
-    """Best-effort eager imports so the first chat is not the coldest path."""
+    """Best-effort eager imports so the first chat is not the coldest path.
+
+    Runs off the accept loop so Focus/life reads are not blocked on run_agent.
+    """
     try:
         from centurion_cli.config import load_config
 
         load_config()
+    except Exception:
+        pass
+    try:
+        import centurion_cli.life_missions  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import centurion_state  # noqa: F401
     except Exception:
         pass
     try:
@@ -3813,6 +3848,12 @@ def _warm_bridge_imports() -> None:
         pass
     try:
         from run_agent import AIAgent  # noqa: F401
+    except Exception:
+        pass
+    try:
+        from centurion_cli.life_missions import ensure_schema_once
+
+        ensure_schema_once()
     except Exception:
         pass
 
@@ -4009,8 +4050,14 @@ def serve_bridge(
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
-    _warm_bridge_imports()
+    # Accept immediately — do not block the listen loop on run_agent imports.
+    # Chat warms in the background; life_/soul_/session_ stay cold-fast.
     logger.info("Centurion bridge daemon listening on %s", path)
+    threading.Thread(
+        target=_warm_bridge_imports,
+        name="bridge-warm-imports",
+        daemon=True,
+    ).start()
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         try:

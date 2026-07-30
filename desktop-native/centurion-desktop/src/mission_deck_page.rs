@@ -12,8 +12,9 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::chat_page::DiscussTopic;
 use crate::home_page::{HomeHandle, HomeHooks};
@@ -66,35 +67,100 @@ fn deck_healthy() -> bool {
 
 const READY_CACHE_SECS: u64 = 30;
 
+fn unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Lock-free readiness signal shared with the UI thread.
+///
+/// `ensure_running` holds the supervisor mutex for as long as Node takes to
+/// warm (up to 8s). GTK reads this instead so showing the tab never waits on
+/// that lock — and never issues a health request of its own.
+#[derive(Default)]
+struct DeckReady {
+    /// Unix seconds of the last successful health check (0 = never).
+    at_secs: AtomicU64,
+    warming: AtomicBool,
+}
+
+impl DeckReady {
+    fn mark(&self) {
+        self.at_secs.store(unix_secs(), Ordering::Relaxed);
+    }
+
+    fn recent(&self) -> bool {
+        let at = self.at_secs.load(Ordering::Relaxed);
+        at != 0 && unix_secs().saturating_sub(at) < READY_CACHE_SECS
+    }
+
+    /// Claim the right to run a warm — false when one is already in flight.
+    fn begin_warm(&self) -> bool {
+        !self.warming.swap(true, Ordering::SeqCst)
+    }
+
+    fn end_warm(&self) {
+        self.warming.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Kick `ensure_running` onto a worker thread. `None` means there is nothing
+/// to wait for — either the deck directory is missing or a warm is already in
+/// flight.
+fn spawn_deck_warm(
+    supervisor: Option<Arc<Mutex<DeckSupervisor>>>,
+    ready: Arc<DeckReady>,
+) -> Option<mpsc::Receiver<Result<(), String>>> {
+    let supervisor = supervisor?;
+    if !ready.begin_warm() {
+        return None;
+    }
+    let (tx, rx) = mpsc::channel::<Result<(), String>>();
+    std::thread::spawn(move || {
+        let result = supervisor
+            .lock()
+            .map_err(|e| e.to_string())
+            .and_then(|mut s| s.ensure_running());
+        ready.end_warm();
+        let _ = tx.send(result);
+    });
+    Some(rx)
+}
+
 struct DeckSupervisor {
     child: Option<Child>,
     dir: PathBuf,
     last_ready: Option<Instant>,
+    ready: Arc<DeckReady>,
 }
 
 impl DeckSupervisor {
-    fn new(dir: PathBuf) -> Self {
+    fn new(dir: PathBuf, ready: Arc<DeckReady>) -> Self {
         Self {
             child: None,
             dir,
             last_ready: None,
+            ready,
         }
     }
 
     fn mark_ready(&mut self) {
         self.last_ready = Some(Instant::now());
+        self.ready.mark();
     }
 
-    /// True when health succeeded recently — skip spawn/wait on tab show.
+    /// True when health succeeded recently — timestamp only, no network I/O.
     fn ready_recently(&self) -> bool {
-        match self.last_ready {
-            Some(t) if t.elapsed() < Duration::from_secs(READY_CACHE_SECS) => deck_healthy(),
-            _ => false,
-        }
+        matches!(self.last_ready, Some(t) if t.elapsed() < Duration::from_secs(READY_CACHE_SECS))
     }
 
     /// Blocking spawn + readiness wait — call only from a background thread.
     fn ensure_running(&mut self) -> Result<(), String> {
+        if self.ready_recently() {
+            return Ok(());
+        }
         if deck_healthy() {
             self.mark_ready();
             return Ok(());
@@ -211,15 +277,16 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     status.set_margin_end(24);
     root.append(&status);
 
+    let deck_ready = Arc::new(DeckReady::default());
     let supervisor: Rc<RefCell<Option<Arc<Mutex<DeckSupervisor>>>>> = Rc::new(RefCell::new(
-        resolve_mission_deck_dir().map(|dir| Arc::new(Mutex::new(DeckSupervisor::new(dir)))),
+        resolve_mission_deck_dir()
+            .map(|dir| Arc::new(Mutex::new(DeckSupervisor::new(dir, deck_ready.clone())))),
     ));
 
     // Node can warm while Chat is active; WebView attaches only on first Focus show.
     let node_ready = Rc::new(Cell::new(false));
     let node_error: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
-    let supervisor_c = supervisor.clone();
     let node_ready_c = node_ready.clone();
     let node_error_c = node_error.clone();
     let status_c = status.clone();
@@ -227,52 +294,51 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
 
     // Pre-warm Node on a background thread as soon as the tab is built (window
     // show path) so Chat stays responsive and Focus often finds a ready deck.
-    let (tx, rx) = mpsc::channel::<Result<(), String>>();
-    {
-        let supervisor_bg = supervisor_c.borrow().clone();
-        std::thread::spawn(move || {
-            let result = match supervisor_bg {
-                Some(m) => m
-                    .lock()
-                    .map_err(|e| e.to_string())
-                    .and_then(|mut s| s.ensure_running()),
-                None => Err(
-                    "Mission Deck not found. Build web-dashboard (`npm run build`) and install, \
-                     or set CENTURION_MISSION_DECK_DIR."
-                        .into(),
-                ),
-            };
-            let _ = tx.send(result);
-        });
-    }
-    glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-        Ok(result) => {
-            match result {
-                Ok(()) => {
-                    node_ready_c.set(true);
-                    *node_error_c.borrow_mut() = None;
-                    // Do not attach WebView here — Chat cold path must not pay WebKit.
-                    // Keep status visible until first Focus open attaches the view.
-                    if suspended_c.get() {
-                        status_c.set_label("Mission Deck ready — open Focus when you need it.");
+    let prewarm = {
+        let supervisor_bg = supervisor.borrow().clone();
+        spawn_deck_warm(supervisor_bg, deck_ready.clone())
+    };
+    match prewarm {
+        Some(rx) => {
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(result) => {
+                    match result {
+                        Ok(()) => {
+                            node_ready_c.set(true);
+                            *node_error_c.borrow_mut() = None;
+                            // Do not attach WebView here — Chat cold path must not pay WebKit.
+                            // Keep status visible until first Focus open attaches the view.
+                            if suspended_c.get() {
+                                status_c
+                                    .set_label("Mission Deck ready — open Focus when you need it.");
+                            }
+                        }
+                        Err(err) => {
+                            node_ready_c.set(false);
+                            *node_error_c.borrow_mut() = Some(err.clone());
+                            status_c.set_visible(true);
+                            status_c.set_label(&err);
+                        }
                     }
+                    glib::ControlFlow::Break
                 }
-                Err(err) => {
-                    node_ready_c.set(false);
-                    *node_error_c.borrow_mut() = Some(err.clone());
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
                     status_c.set_visible(true);
-                    status_c.set_label(&err);
+                    status_c.set_label("Mission Deck failed to start.");
+                    glib::ControlFlow::Break
                 }
-            }
-            glib::ControlFlow::Break
+            });
         }
-        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-        Err(mpsc::TryRecvError::Disconnected) => {
+        None => {
+            let err = "Mission Deck not found. Build web-dashboard (`npm run build`) and install, \
+                       or set CENTURION_MISSION_DECK_DIR."
+                .to_string();
+            *node_error_c.borrow_mut() = Some(err.clone());
             status_c.set_visible(true);
-            status_c.set_label("Mission Deck failed to start.");
-            glib::ControlFlow::Break
+            status_c.set_label(&err);
         }
-    });
+    }
 
     let attach_if_needed: Rc<dyn Fn()> = {
         let root = root.clone();
@@ -315,24 +381,16 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
 
     let refresh: Rc<dyn Fn()> = {
         let supervisor = supervisor.clone();
+        let deck_ready = deck_ready.clone();
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         let attach_if_needed = attach_if_needed.clone();
         Rc::new(move || {
-            // Soft path: never block the UI thread on Node health waits.
-            if let Some(m) = supervisor.borrow().as_ref() {
-                let skip = m
-                    .lock()
-                    .map(|s| s.ready_recently())
-                    .unwrap_or(false);
-                if !skip {
-                    let m = m.clone();
-                    std::thread::spawn(move || {
-                        if let Ok(mut s) = m.lock() {
-                            let _ = s.ensure_running();
-                        }
-                    });
-                }
+            // Soft path: never block the UI thread on Node health waits — the
+            // readiness flag is atomic, and the warm runs on a worker.
+            if !deck_ready.recent() {
+                let supervisor_bg = supervisor.borrow().clone();
+                let _ = spawn_deck_warm(supervisor_bg, deck_ready.clone());
             }
             // Never hard-reload while suspended — that resets __centurionDeckVisible
             // to false and leaves the React deck stuck on "Opening your deck…".
@@ -352,6 +410,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         let supervisor = supervisor.clone();
+        let deck_ready = deck_ready.clone();
         let attach_if_needed = attach_if_needed.clone();
         let node_ready = node_ready.clone();
         let status = status.clone();
@@ -359,45 +418,59 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             let now_suspended = !visible;
             suspended.set(now_suspended);
             if visible {
-                if let Some(m) = supervisor.borrow().as_ref() {
-                    let skip = m
-                        .lock()
-                        .map(|s| s.ready_recently())
-                        .unwrap_or(false);
-                    if !skip {
-                        let m = m.clone();
-                        let node_ready = node_ready.clone();
-                        let status = status.clone();
-                        let attach_if_needed = attach_if_needed.clone();
-                        let (tx, rx) = mpsc::channel::<Result<(), String>>();
-                        std::thread::spawn(move || {
-                            let result = m
-                                .lock()
-                                .map_err(|e| e.to_string())
-                                .and_then(|mut s| s.ensure_running());
-                            let _ = tx.send(result);
-                        });
-                        glib::timeout_add_local(Duration::from_millis(40), move || {
-                            match rx.try_recv() {
-                                Ok(Ok(())) => {
-                                    node_ready.set(true);
-                                    attach_if_needed();
-                                    glib::ControlFlow::Break
-                                }
-                                Ok(Err(err)) => {
-                                    status.set_visible(true);
-                                    status.set_label(&err);
-                                    glib::ControlFlow::Break
-                                }
-                                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-                            }
-                        });
-                    } else {
-                        attach_if_needed();
-                    }
-                } else {
+                if deck_ready.recent() {
                     attach_if_needed();
+                } else {
+                    let supervisor_bg = supervisor.borrow().clone();
+                    match spawn_deck_warm(supervisor_bg, deck_ready.clone()) {
+                        Some(rx) => {
+                            let node_ready = node_ready.clone();
+                            let status = status.clone();
+                            let attach_if_needed = attach_if_needed.clone();
+                            glib::timeout_add_local(Duration::from_millis(40), move || {
+                                match rx.try_recv() {
+                                    Ok(Ok(())) => {
+                                        node_ready.set(true);
+                                        attach_if_needed();
+                                        glib::ControlFlow::Break
+                                    }
+                                    Ok(Err(err)) => {
+                                        status.set_visible(true);
+                                        status.set_label(&err);
+                                        glib::ControlFlow::Break
+                                    }
+                                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                                    Err(mpsc::TryRecvError::Disconnected) => {
+                                        glib::ControlFlow::Break
+                                    }
+                                }
+                            });
+                        }
+                        None => {
+                            // Either the deck directory is missing (status label
+                            // already carries the error) or a warm started
+                            // elsewhere owns the mutex — in that case watch the
+                            // atomic flag rather than waiting on the lock.
+                            attach_if_needed();
+                            if supervisor.borrow().is_some() {
+                                let deck_ready = deck_ready.clone();
+                                let node_ready = node_ready.clone();
+                                let attach_if_needed = attach_if_needed.clone();
+                                let deadline = Instant::now() + Duration::from_secs(15);
+                                glib::timeout_add_local(Duration::from_millis(200), move || {
+                                    if deck_ready.recent() {
+                                        node_ready.set(true);
+                                        attach_if_needed();
+                                        return glib::ControlFlow::Break;
+                                    }
+                                    if Instant::now() >= deadline {
+                                        return glib::ControlFlow::Break;
+                                    }
+                                    glib::ControlFlow::Continue
+                                });
+                            }
+                        }
+                    }
                 }
             }
             if let Some(wv) = webview_slot.borrow().as_ref() {

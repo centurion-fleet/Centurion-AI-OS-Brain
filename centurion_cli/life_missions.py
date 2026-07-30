@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -82,11 +83,34 @@ def _conn() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+_SCHEMA_READY = False
+_SCHEMA_READY_PATH: str | None = None
+_SCHEMA_READY_LOCK = threading.Lock()
+
+
+def ensure_schema_once() -> None:
+    """Warm-path: ensure schema at most once per process+db path."""
+    global _SCHEMA_READY, _SCHEMA_READY_PATH
+    path = str(life_db_path())
+    if _SCHEMA_READY and _SCHEMA_READY_PATH == path:
+        return
+    with _SCHEMA_READY_LOCK:
+        if _SCHEMA_READY and _SCHEMA_READY_PATH == path:
+            return
+        ensure_schema()
+        _SCHEMA_READY = True
+        _SCHEMA_READY_PATH = path
+
+
 def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
+    global _SCHEMA_READY, _SCHEMA_READY_PATH
+    path = str(life_db_path())
+    # Hot path: schema already ensured for this DB path — skip executescript.
+    if _SCHEMA_READY and _SCHEMA_READY_PATH == path and conn is not None:
+        return
     own = conn is None
     if own:
-        path = life_db_path()
-        conn = sqlite3.connect(str(path))
+        conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
     assert conn is not None
@@ -205,14 +229,20 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
         );
         """
     )
-    conn.execute(
-        "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('schema_version', ?)",
-        (str(_SCHEMA_VERSION),),
-    )
-    conn.execute(
-        "UPDATE life_meta SET value = ? WHERE key = 'schema_version'",
-        (str(_SCHEMA_VERSION),),
-    )
+    # Only write schema_version when it actually differs (reads must stay read-only).
+    row = conn.execute(
+        "SELECT value FROM life_meta WHERE key = 'schema_version'"
+    ).fetchone()
+    current = str(row["value"]) if row is not None else ""
+    if current != str(_SCHEMA_VERSION):
+        conn.execute(
+            "INSERT OR IGNORE INTO life_meta(key, value) VALUES ('schema_version', ?)",
+            (str(_SCHEMA_VERSION),),
+        )
+        conn.execute(
+            "UPDATE life_meta SET value = ? WHERE key = 'schema_version'",
+            (str(_SCHEMA_VERSION),),
+        )
     now = _utc_now()
     conn.execute(
         "INSERT OR IGNORE INTO life_mission_stack(id, primary_mission_id, updated_at) VALUES (1, NULL, ?)",
@@ -228,6 +258,8 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
             "VALUES (?, ?, ?, 0, ?, ?)",
             (_new_id(), "Uncategorised", "folder", now, now),
         )
+    _SCHEMA_READY = True
+    _SCHEMA_READY_PATH = path
     if own:
         conn.commit()
         conn.close()
@@ -796,6 +828,44 @@ def get_stack() -> dict[str, Any]:
             "dreams": dreams,
             "primary_mission_id": (primary or {}).get("id"),
         }
+
+
+def deck_snapshot(
+    *,
+    thought_limit: int = 32,
+    document_limit: int = 5,
+) -> dict[str, Any]:
+    """One round-trip hydration for Focus: stack + thoughts + primary doc teasers.
+
+    Document teasers omit ``body_md`` so the payload stays small for frame-1 paint.
+    """
+    stack = get_stack()
+    thoughts = list_thoughts(limit=max(1, min(int(thought_limit or 32), 80)))
+    primary = stack.get("primary") if isinstance(stack, dict) else None
+    primary_id = (
+        str((primary or {}).get("id") or "").strip() if isinstance(primary, dict) else ""
+    )
+    documents: list[dict[str, Any]] = []
+    if primary_id:
+        for doc in list_documents(mission_id=primary_id, limit=max(1, min(int(document_limit or 5), 20))):
+            documents.append(
+                {
+                    "id": doc.get("id"),
+                    "mission_id": doc.get("mission_id"),
+                    "title": doc.get("title"),
+                    "doc_type": doc.get("doc_type"),
+                    "summary": doc.get("summary"),
+                    "source": doc.get("source"),
+                    "updated_at": doc.get("updated_at"),
+                    "created_at": doc.get("created_at"),
+                }
+            )
+    return {
+        "stack": stack,
+        "thoughts": thoughts,
+        "primary_documents": documents,
+        "primary_document_count": len(documents),
+    }
 
 
 def set_primary(mission_id: str | None) -> dict[str, Any]:
