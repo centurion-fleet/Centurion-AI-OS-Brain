@@ -612,7 +612,7 @@ mod linux {
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
 keeps your data here, and stays on your mission.\n\n\
-Chat is the conversation. Missions is the command center: mission stack, plans, and decisions. \
+Chat is the conversation. Focus is the command center: mission stack, plans, and decisions. \
 Settings is how you shape Soul, memory, and thinking.\n\n\
 An iPhone remote is optional later — only when you want the Brain in your pocket. \
 For now, sit here and meet your Centurion.";
@@ -1094,7 +1094,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&backup_thinking_row);
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
-            .subtitle("Add peers and ping across machines (moved from Missions).")
+            .subtitle("Add peers and ping across machines (moved from Focus).")
             .icon_name("network-server-symbolic")
             .build();
         let fleet_peer_button = gtk::Button::with_label("Configure");
@@ -1103,7 +1103,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain — manage here, not on Missions.")
+            .subtitle("Agent plugins on this Brain — manage here, not on Focus.")
             .icon_name("application-x-addon-symbolic")
             .build();
         let plugins_button = gtk::Button::with_label("View");
@@ -1112,7 +1112,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
             .title("Scheduled & board")
-            .subtitle("Cron jobs and kanban glance — desk ops, not Missions pulse.")
+            .subtitle("Cron jobs and kanban glance — desk ops, not Focus pulse.")
             .icon_name("view-list-symbolic")
             .build();
         let ops_button = gtk::Button::with_label("View");
@@ -1121,7 +1121,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         brain_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
-            .subtitle("Local boards on this Brain — no portal tokens. Missions stay offline.")
+            .subtitle("Local boards on this Brain — no portal tokens. Focus stays offline.")
             .icon_name("system-users-symbolic")
             .build();
         let collab_connect_button = gtk::Button::with_label("New board");
@@ -1174,7 +1174,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let life_mission_row = adw::ActionRow::builder()
             .title("Life Mission")
-            .subtitle("What you're building toward — shown on Missions; edit here.")
+            .subtitle("What you're building toward — shown on Focus; edit here.")
             .icon_name("emblem-favorite-symbolic")
             .build();
         let life_mission_edit_button = gtk::Button::with_label("Edit");
@@ -1184,7 +1184,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let mission_stack_row = adw::ActionRow::builder()
             .title("Mission Stack")
-            .subtitle("Primary, supporting, dreams — open the Missions tab")
+            .subtitle("Primary, supporting, dreams — open the Focus tab")
             .icon_name("view-list-symbolic")
             .build();
         let mission_stack_button = gtk::Button::with_label("Open tab");
@@ -1257,8 +1257,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         you_group.add(&privacy_row);
 
         let pulse_pref_row = adw::ActionRow::builder()
-            .title("Missions attention")
-            .subtitle("Prefer opening Missions on decisions when something needs you")
+            .title("Focus attention")
+            .subtitle("Prefer opening Focus on decisions when something needs you")
             .icon_name("emblem-important-symbolic")
             .build();
         let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
@@ -1430,6 +1430,13 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             .hexpand(true)
             .build();
 
+        chat_handle.set_on_open_focus(Rc::new({
+            let stack = stack.clone();
+            move || {
+                stack.set_visible_child_name("missions");
+            }
+        }));
+
         let attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
             Rc::new(RefCell::new(Rc::new(|_: u32| {})));
         let (home, home_handle) = {
@@ -1451,7 +1458,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         };
 
         stack.add_titled(&chat, Some("chat"), "Chat");
-        stack.add_titled(&home, Some("missions"), "Missions");
+        stack.add_titled(&home, Some("missions"), "Focus");
         stack.add_titled(&settings_scroll, Some("settings"), "Settings");
         stack.set_visible_child_name("chat");
         chat.set_vexpand(true);
@@ -1461,7 +1468,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
 
         let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
             &stack,
-            &[("chat", "Chat"), ("missions", "Missions"), ("settings", "Settings")],
+            &[("chat", "Chat"), ("missions", "Focus"), ("settings", "Settings")],
         );
 
         let refresh_settings_attention_ui = {
@@ -4928,7 +4935,7 @@ Being · Continuity\n\
         let dialog = adw::AlertDialog::builder()
             .heading("Fleet peer")
             .body(
-                "Peers and ping live here (moved off Missions). Add another Centurion’s \
+                "Peers and ping live here (moved off Focus). Add another Centurion’s \
 LAN or public address and the shared fleet token.",
             )
             .extra_child(&form)
@@ -4992,7 +4999,7 @@ LAN or public address and the shared fleet token.",
                     .unwrap_or_default();
                 if cron.is_empty() && kanban.is_empty() {
                     "No upcoming jobs or board tasks right now.\n\n\
-Schedule work with cron or kanban; this glance stays in Settings, not Missions."
+Schedule work with cron or kanban; this glance stays in Settings, not Focus."
                         .to_owned()
                 } else {
                     if !cron.is_empty() {

@@ -33,7 +33,6 @@ export function Discovery() {
   const [primaryTitle, setPrimaryTitle] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdPrimaryId, setCreatedPrimaryId] = useState<string | null>(null);
 
   const selectedList = useMemo(
     () => candidates.filter((c) => selected.has(c.title)),
@@ -150,7 +149,6 @@ export function Discovery() {
 
       const missionId = missionRes.mission.id;
       await bridgeCall("life_stack_set_primary", { mission_id: missionId });
-      setCreatedPrimaryId(missionId);
       setStep("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -162,7 +160,7 @@ export function Discovery() {
   return (
     <div className="mx-auto flex min-h-screen max-w-xl flex-col px-4 pb-16 pt-8 sm:px-6">
       <Link to="/" className="mb-8 text-sm text-ink-dim hover:text-amber-soft">
-        ← Deck
+        ← Focus
       </Link>
 
       <AnimatePresence mode="wait">
@@ -274,12 +272,10 @@ export function Discovery() {
           {step === "done" && (
             <Ceremony
               eyebrow="Ready"
-              title="Your deck is alive"
-              body={`“${primaryTitle}” is now your primary mission. Supporting dreams are parked on the shelf.`}
-              cta="Open Mission Deck"
-              onCta={() =>
-                navigate(createdPrimaryId ? `/mission/${createdPrimaryId}` : "/")
-              }
+              title="Primary is set — go live it"
+              body={`“${primaryTitle}” is your north star. Supporting work and dreams stay close on Focus.`}
+              cta="Open Focus"
+              onCta={() => navigate("/")}
             />
           )}
         </motion.div>

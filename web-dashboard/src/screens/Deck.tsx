@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
 import { SupportingRow } from "../components/SupportingRow";
@@ -15,11 +16,24 @@ export function Deck() {
   const deckVisible = useDeckVisible();
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
   const { thoughts, connected } = useSSE({ enabled: deckVisible });
+  const autoDiscoveryDone = useRef(false);
 
   const primary = stack?.primary ?? null;
   const supporting = stack?.supporting ?? [];
   const dreams = stack?.dreams ?? [];
   const empty = !loading && !primary && supporting.length === 0;
+
+  // Guided first-run: empty board → Discovery once per session (don't fight Back).
+  useEffect(() => {
+    if (!empty || !deckVisible || autoDiscoveryDone.current) return;
+    if (sessionStorage.getItem("centurion_discovery_auto") === "1") {
+      autoDiscoveryDone.current = true;
+      return;
+    }
+    autoDiscoveryDone.current = true;
+    sessionStorage.setItem("centurion_discovery_auto", "1");
+    navigate("/discovery", { replace: true });
+  }, [empty, deckVisible, navigate]);
 
   const latestThought =
     thoughts.find((t) => !primary || !t.mission_id || t.mission_id === primary.id)
@@ -51,7 +65,7 @@ export function Deck() {
             Centurion
           </p>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            Mission Deck
+            Focus
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -77,7 +91,7 @@ export function Deck() {
         </div>
       ) : !deckVisible && !stack ? (
         <div className="glass-strong rounded-3xl px-6 py-20 text-center text-ink-dim">
-          Mission Deck is paused while another Brain tab is active.
+          Focus is paused while another Brain tab is active.
         </div>
       ) : empty ? (
         <motion.div

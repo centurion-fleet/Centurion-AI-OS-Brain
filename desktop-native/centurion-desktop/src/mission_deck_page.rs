@@ -410,6 +410,65 @@ fn attach_webview(
                 return;
             }
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                let kind = v
+                    .get("kind")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if kind == "decision" {
+                    let title = v
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Decision")
+                        .to_string();
+                    let id = v
+                        .get("id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let chosen = v
+                        .get("chosen")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let context = v
+                        .get("context")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let mission_id = v
+                        .get("mission_id")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string);
+                    let mission_title = v
+                        .get("mission_title")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string);
+                    let target_id = v
+                        .get("target_id")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string);
+                    let kickoff = v
+                        .get("kickoff")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Let's revisit this decision.")
+                        .to_string();
+                    let topic = DiscussTopic::Decision {
+                        id: if id.is_empty() {
+                            title.clone()
+                        } else {
+                            id
+                        },
+                        title,
+                        chosen,
+                        context,
+                        mission_id,
+                        mission_title,
+                        target_id,
+                    };
+                    (hooks.on_ask_about)(topic, kickoff);
+                    return;
+                }
                 let title = v
                     .get("title")
                     .and_then(|t| t.as_str())

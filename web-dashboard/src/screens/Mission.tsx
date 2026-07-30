@@ -17,6 +17,12 @@ export function Mission() {
     useMissionDetail(id);
   const { thoughts: live } = useSSE({ enabled: deckVisible });
   const [primaryBusy, setPrimaryBusy] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logTitle, setLogTitle] = useState("");
+  const [logChosen, setLogChosen] = useState("");
+  const [logContext, setLogContext] = useState("");
+  const [logBusy, setLogBusy] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -36,13 +42,70 @@ export function Mission() {
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <p className="text-ink-muted">{error || "Mission not found"}</p>
         <Link to="/" className="mt-4 inline-block text-amber-soft">
-          ← Back to Deck
+          ← Back to Focus
         </Link>
       </div>
     );
   }
 
   const progress = missionProgress(mission);
+  const missionId = mission.id;
+  const missionTitle = mission.title;
+
+  function discussDecision(d: {
+    id: string;
+    title: string;
+    chosen?: string;
+    context?: string;
+    target_id?: string | null;
+  }) {
+    const w = window as Window & {
+      centurionDiscuss?: (p: Record<string, unknown>) => void;
+    };
+    if (typeof w.centurionDiscuss !== "function") return;
+    w.centurionDiscuss({
+      kind: "decision",
+      id: d.id,
+      title: d.title,
+      chosen: d.chosen || "",
+      context: d.context || "",
+      mission_id: missionId,
+      mission_title: missionTitle,
+      target_id: d.target_id || undefined,
+      kickoff: `Let's revisit this decision: ${d.title}${
+        d.chosen ? ` (chose: ${d.chosen})` : ""
+      }`,
+    });
+  }
+
+  async function submitDecision() {
+    const title = logTitle.trim();
+    if (!title) {
+      setLogError("Title is required");
+      return;
+    }
+    setLogBusy(true);
+    setLogError(null);
+    try {
+      await bridgeCall("life_decision_log", {
+        decision: {
+          mission_id: missionId,
+          title,
+          chosen: logChosen.trim(),
+          context: logContext.trim(),
+        },
+      });
+      setLogTitle("");
+      setLogChosen("");
+      setLogContext("");
+      setLogOpen(false);
+      await refresh();
+    } catch (e) {
+      setLogError(e instanceof Error ? e.message : "Could not log decision");
+    } finally {
+      setLogBusy(false);
+    }
+  }
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl px-4 pb-20 pt-6 sm:px-6">
@@ -50,7 +113,7 @@ export function Mission() {
         to="/"
         className="mb-6 inline-flex text-sm text-ink-dim transition hover:text-amber-soft"
       >
-        ← Deck
+        ← Focus
       </Link>
 
       <motion.header
@@ -142,9 +205,52 @@ export function Mission() {
       <ActivityFeed thoughts={merged} title="Thought stream" />
 
       <section className="mt-8">
-        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
-          Decisions
-        </h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
+            Decisions
+          </h2>
+          <button
+            type="button"
+            onClick={() => setLogOpen((o) => !o)}
+            className="rounded-full border border-amber-glow/30 bg-amber-muted/50 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+          >
+            {logOpen ? "Cancel" : "Log a decision"}
+          </button>
+        </div>
+
+        {logOpen && (
+          <div className="glass mb-3 space-y-3 rounded-2xl p-4">
+            <input
+              value={logTitle}
+              onChange={(e) => setLogTitle(e.target.value)}
+              placeholder="Decision title"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-dim focus:border-amber-glow/40"
+            />
+            <input
+              value={logChosen}
+              onChange={(e) => setLogChosen(e.target.value)}
+              placeholder="What you chose (optional)"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-dim focus:border-amber-glow/40"
+            />
+            <textarea
+              value={logContext}
+              onChange={(e) => setLogContext(e.target.value)}
+              placeholder="Context (optional)"
+              rows={2}
+              className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-dim focus:border-amber-glow/40"
+            />
+            {logError && <p className="text-sm text-amber-soft">{logError}</p>}
+            <button
+              type="button"
+              disabled={logBusy}
+              onClick={() => void submitDecision()}
+              className="rounded-full bg-amber-gradient px-5 py-2 text-sm font-semibold text-canvas shadow-amber disabled:opacity-50"
+            >
+              {logBusy ? "Saving…" : "Save decision"}
+            </button>
+          </div>
+        )}
+
         <div className="glass rounded-2xl divide-y divide-white/5 overflow-hidden">
           {decisions.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
@@ -152,14 +258,30 @@ export function Mission() {
             </p>
           ) : (
             decisions.map((d) => (
-              <div key={d.id} className="px-4 py-3">
-                <p className="text-sm font-medium text-ink">{d.title}</p>
-                {d.chosen && (
-                  <p className="mt-1 text-xs text-amber-soft">Chose: {d.chosen}</p>
-                )}
-                {d.context && (
-                  <p className="mt-1 text-xs text-ink-dim">{d.context}</p>
-                )}
+              <div
+                key={d.id}
+                className="flex items-start gap-3 px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink">{d.title}</p>
+                  {d.chosen && (
+                    <p className="mt-1 text-xs text-amber-soft">
+                      Chose: {d.chosen}
+                    </p>
+                  )}
+                  {d.context && (
+                    <p className="mt-1 text-xs text-ink-dim">{d.context}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  title="Discuss in Chat"
+                  aria-label={`Discuss decision ${d.title}`}
+                  onClick={() => discussDecision(d)}
+                  className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                >
+                  💬
+                </button>
               </div>
             ))
           )}

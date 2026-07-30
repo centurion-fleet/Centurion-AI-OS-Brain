@@ -130,6 +130,15 @@ pub enum DiscussTopic {
         layer: String,
         detail: String,
     },
+    Decision {
+        id: String,
+        title: String,
+        chosen: String,
+        context: String,
+        mission_id: Option<String>,
+        mission_title: Option<String>,
+        target_id: Option<String>,
+    },
     Generic {
         title: String,
         kind: String,
@@ -163,6 +172,7 @@ impl DiscussTopic {
             }
             Self::Commitment { title, .. } => format!("Discussing commitment · {title}"),
             Self::Horizon { layer, .. } => format!("Discussing Memory Horizon · {layer}"),
+            Self::Decision { title, .. } => format!("Discussing decision · {title}"),
             Self::Generic { title, kind, .. } => {
                 if kind.is_empty() {
                     format!("Discussing · {title}")
@@ -210,6 +220,7 @@ impl DiscussTopic {
             }
             Self::Commitment { title, .. } => title.clone(),
             Self::Horizon { layer, .. } => format!("Memory Horizon · {layer}"),
+            Self::Decision { title, .. } => format!("Decision · {title}"),
             Self::Generic { title, .. } => title.clone(),
         };
         let trimmed = raw.trim();
@@ -258,6 +269,10 @@ pub struct ChatHandle {
     /// Find-or-create a conversation titled for the topic. Returns true when an
     /// existing transcript was resumed (skip dumping a fresh kickoff).
     open_topic_session: Rc<RefCell<Option<Rc<dyn Fn(String) -> bool>>>>,
+    /// Arm Chat composer Focus intent (sync mode pills + banner).
+    set_intent_focus: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    /// Jump to the Focus (Missions) attention tab.
+    on_open_focus: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
 }
 
 impl ChatHandle {
@@ -283,8 +298,15 @@ impl ChatHandle {
             .as_ref()
             .map(|open| open(title))
             .unwrap_or(false);
+        let arm_focus = matches!(
+            topic,
+            DiscussTopic::Mission { .. } | DiscussTopic::Decision { .. }
+        );
         *self.active_discuss.borrow_mut() = Some(topic);
         self.refresh_banner();
+        if arm_focus {
+            self.arm_focus_intent();
+        }
         if resumed {
             // Continuing the topic thread — don't paste kickoff into an old chat.
             self.input.clear();
@@ -337,6 +359,29 @@ impl ChatHandle {
 
     fn set_open_topic_session(&self, handler: Rc<dyn Fn(String) -> bool>) {
         *self.open_topic_session.borrow_mut() = Some(handler);
+    }
+
+    /// Select the Focus composer pill (mission-framed conversation).
+    pub fn arm_focus_intent(&self) {
+        if let Some(cb) = self.set_intent_focus.borrow().as_ref() {
+            cb();
+        }
+    }
+
+    fn set_intent_focus_handler(&self, handler: Rc<dyn Fn()>) {
+        *self.set_intent_focus.borrow_mut() = Some(handler);
+    }
+
+    /// Wire the Focus attention tab opener (Chat banner CTA).
+    pub fn set_on_open_focus(&self, handler: Rc<dyn Fn()>) {
+        *self.on_open_focus.borrow_mut() = Some(handler);
+    }
+
+    #[allow(dead_code)]
+    fn open_focus_tab(&self) {
+        if let Some(cb) = self.on_open_focus.borrow().as_ref() {
+            cb();
+        }
     }
 }
 
@@ -521,14 +566,28 @@ fn parse_primary_focus_value(primary: &Value) -> Option<PrimaryFocusContext> {
     let mut target_id = None;
     let mut target_title = None;
     if let Some(targets) = primary.get("targets").and_then(|v| v.as_array()) {
-        let current = targets.iter().find(|t| {
-            let status = t
-                .get("status")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_lowercase();
-            status != "done" && status != "complete" && status != "completed"
-        }).or_else(|| targets.first());
+        // Prefer explicitly marked focus_target, then first incomplete, then first.
+        let current = targets
+            .iter()
+            .find(|t| {
+                match t.get("focus_target") {
+                    Some(v) if v.as_bool() == Some(true) => true,
+                    Some(v) if v.as_i64().unwrap_or(0) != 0 => true,
+                    Some(v) if v.as_u64().unwrap_or(0) != 0 => true,
+                    _ => false,
+                }
+            })
+            .or_else(|| {
+                targets.iter().find(|t| {
+                    let status = t
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    status != "done" && status != "complete" && status != "completed"
+                })
+            })
+            .or_else(|| targets.first());
         if let Some(t) = current {
             target_id = t
                 .get("id")
@@ -540,6 +599,28 @@ fn parse_primary_focus_value(primary: &Value) -> Option<PrimaryFocusContext> {
                 .and_then(|v| v.as_str())
                 .map(|s| s.trim().to_owned())
                 .filter(|s| !s.is_empty());
+        }
+    }
+    // Stack state may expose focus_target_id without embedding focus_target on rows.
+    if target_id.is_none() {
+        if let Some(fid) = primary
+            .get("focus_target_id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+        {
+            if target_title.is_none() {
+                if let Some(targets) = primary.get("targets").and_then(|v| v.as_array()) {
+                    target_title = targets
+                        .iter()
+                        .find(|t| t.get("id").and_then(|v| v.as_str()) == Some(fid.as_str()))
+                        .and_then(|t| t.get("title").and_then(|v| v.as_str()))
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty());
+                }
+            }
+            target_id = Some(fid);
         }
     }
     Some(PrimaryFocusContext {
@@ -1342,8 +1423,47 @@ fn frame_discuss_outbound(user_text: &str, topic: &DiscussTopic) -> String {
         DiscussTopic::Mission { .. } => frame_mission_discuss(user_text, topic),
         DiscussTopic::Commitment { .. } => frame_commitment_discuss(user_text, topic),
         DiscussTopic::Horizon { .. } => frame_horizon_discuss(user_text, topic),
+        DiscussTopic::Decision { .. } => frame_decision_discuss(user_text, topic),
         DiscussTopic::Generic { .. } => frame_generic_discuss(user_text, topic),
     }
+}
+
+fn frame_decision_discuss(user_text: &str, topic: &DiscussTopic) -> String {
+    let DiscussTopic::Decision {
+        title,
+        chosen,
+        context,
+        mission_title,
+        ..
+    } = topic
+    else {
+        return user_text.to_owned();
+    };
+    let mission_line = mission_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|m| format!("Mission: {m}\n"))
+        .unwrap_or_default();
+    let chosen_line = if chosen.trim().is_empty() {
+        String::new()
+    } else {
+        format!("Chose: {}\n", chosen.trim())
+    };
+    let context_line = if context.trim().is_empty() {
+        String::new()
+    } else {
+        format!("Context: {}\n", context.trim())
+    };
+    format!(
+        "[Sovereign AI Brain — Discussing a logged decision]\n\
+         {mission_line}\
+         Decision: {title}\n\
+         {chosen_line}\
+         {context_line}\n\
+         Help the user revisit, refine, or act on this decision in service of their Primary Mission.\n\n\
+         {user_text}"
+    )
 }
 
 fn extract_plan_update_block(response: &str) -> Option<String> {
@@ -4076,24 +4196,36 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     queue_strip.append(&queue_items);
     bottom.append(&queue_strip);
 
-    // Focus nudge when Focus is active but no Primary Mission is set.
+    // Focus banner: active target + Open Focus CTA (+ pulse while sending).
     let focus_banner = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     focus_banner.set_margin_start(16);
     focus_banner.set_margin_end(16);
     focus_banner.set_margin_bottom(6);
     focus_banner.set_visible(false);
     focus_banner.add_css_class("centurion-chat-focus-banner");
+    let focus_pulse = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    focus_pulse.set_valign(gtk::Align::Center);
+    focus_pulse.set_size_request(10, 10);
+    focus_pulse.add_css_class("centurion-chat-focus-pulse");
+    focus_pulse.set_visible(false);
+    focus_pulse.set_tooltip_text(Some("Centurion is working on this Focus turn"));
+    focus_banner.append(&focus_pulse);
     focus_banner.append(
         &gtk::Image::from_icon_name("find-location-symbolic"),
     );
     let focus_banner_label = gtk::Label::builder()
-        .label("Set a Primary Mission in Mission Deck → Focus mode will centre everything around it.")
+        .label("No Primary Mission set yet — want to discover one?")
         .wrap(true)
         .xalign(0.0)
         .hexpand(true)
         .css_classes(["caption"])
         .build();
     focus_banner.append(&focus_banner_label);
+    let focus_open_btn = gtk::Button::with_label("Open Focus");
+    focus_open_btn.add_css_class("centurion-chat-focus-open");
+    focus_open_btn.set_valign(gtk::Align::Center);
+    focus_open_btn.set_tooltip_text(Some("Open the Focus tab (Mission Deck)"));
+    focus_banner.append(&focus_open_btn);
     bottom.append(&focus_banner);
 
     // Mode pills: Chat | Plan | Focus | Research
@@ -4128,6 +4260,16 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let research_pill =
         make_mode_pill("Research", "Evidence-backed research — loads research skills.");
 
+    let on_open_focus_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    {
+        let on_open_focus_slot = on_open_focus_slot.clone();
+        focus_open_btn.connect_clicked(move |_| {
+            if let Some(cb) = on_open_focus_slot.borrow().as_ref() {
+                cb();
+            }
+        });
+    }
+
     let sync_mode_pills: Rc<dyn Fn(ChatIntent)> = Rc::new({
         let chat_pill = chat_pill.clone();
         let plan_pill = plan_pill.clone();
@@ -4135,20 +4277,33 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let research_pill = research_pill.clone();
         let focus_banner = focus_banner.clone();
         let focus_banner_label = focus_banner_label.clone();
+        let focus_open_btn = focus_open_btn.clone();
         move |selected: ChatIntent| {
             chat_pill.set_active(selected == ChatIntent::Chat);
             plan_pill.set_active(selected == ChatIntent::Plan);
             focus_pill.set_active(selected == ChatIntent::Focus);
             research_pill.set_active(selected == ChatIntent::Research);
             if selected == ChatIntent::Focus {
-                let has_primary = fetch_primary_focus().is_some();
-                if has_primary {
-                    focus_banner.set_visible(false);
-                } else {
-                    focus_banner_label.set_label(
-                        "No Primary Mission set yet — want to discover one? Set one in Mission Deck → Focus centres everything around it.",
-                    );
-                    focus_banner.set_visible(true);
+                match fetch_primary_focus() {
+                    Some(focus) => {
+                        let label = match focus.target_title.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                            Some(t) => format!("Focusing · {} · Next: {t}", focus.title),
+                            None => format!(
+                                "Focusing · {} — advancing your Primary Mission",
+                                focus.title
+                            ),
+                        };
+                        focus_banner_label.set_label(&label);
+                        focus_open_btn.set_label("Open Focus");
+                        focus_banner.set_visible(true);
+                    }
+                    None => {
+                        focus_banner_label.set_label(
+                            "No Primary Mission set yet — want to discover one?",
+                        );
+                        focus_open_btn.set_label("Discover mission");
+                        focus_banner.set_visible(true);
+                    }
                 }
             } else {
                 focus_banner.set_visible(false);
@@ -4849,6 +5004,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let session_list = session_list.clone();
         let turn_cancel = turn_cancel.clone();
         let refresh_queue_strip = refresh_queue_strip.clone();
+        let focus_pulse = focus_pulse.clone();
+        let intent = intent.clone();
         move |sending: bool| {
             *is_sending.borrow_mut() = sending;
             send_button.set_visible(!sending);
@@ -4860,6 +5017,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 sending_spinner.stop();
                 *turn_cancel.borrow_mut() = None;
             }
+            // Amber pulse on Focus banner while Centurion is working in Focus mode.
+            focus_pulse.set_visible(sending && intent.get() == ChatIntent::Focus);
             // Keep composer editable while generating (Cursor-like); busy Send enqueues.
             new_chat_button.set_sensitive(!sending);
             session_list.set_sensitive(!sending);
@@ -5602,11 +5761,15 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         outbound = format!(
                             "[Sovereign AI Brain — Focus mode]\n\
                              No Primary Mission is set yet. Gently invite the user to discover or \
-                             crown one in Mission Deck. Do not invent a mission for them.\n\n\
+                             crown one on the Focus tab. Do not invent a mission for them.\n\n\
                              User message:\n\
                              {outbound}"
                         );
                     }
+                }
+                // Layer decision discuss framing when Discuss opened a logged decision.
+                if let Some(ref topic @ DiscussTopic::Decision { .. }) = discuss_topic {
+                    outbound = frame_decision_discuss(&outbound, topic);
                 }
             } else if research_mode {
                 if let Some(ref topic) = discuss_topic {
@@ -5988,7 +6151,17 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         attention: chat_attention,
         on_attention_changed: chat_on_attention,
         open_topic_session: Rc::new(RefCell::new(None)),
+        set_intent_focus: Rc::new(RefCell::new(None)),
+        on_open_focus: on_open_focus_slot.clone(),
     };
+    handle.set_intent_focus_handler(Rc::new({
+        let intent = intent.clone();
+        let sync_mode_pills = sync_mode_pills.clone();
+        move || {
+            intent.set(ChatIntent::Focus);
+            sync_mode_pills(ChatIntent::Focus);
+        }
+    }));
 
     // Discuss from Missions / Settings must open a topic-named conversation —
     // never continue whatever unrelated chat was already on screen (iPhone parity).

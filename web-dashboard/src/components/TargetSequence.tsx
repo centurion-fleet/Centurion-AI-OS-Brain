@@ -122,9 +122,11 @@ export function TargetSequence({
                   <button
                     type="button"
                     onClick={() => discussTarget(mission, t)}
-                    className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                    title="Discuss in Chat"
+                    aria-label={`Discuss ${t.title} in Chat`}
+                    className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
                   >
-                    Discuss
+                    💬
                   </button>
                 </motion.li>
               ))}
