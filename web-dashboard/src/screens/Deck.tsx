@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { m as motion, useReducedMotion } from "framer-motion";
 import { PrimaryCard } from "../components/PrimaryCard";
 import { DocumentSearch } from "../components/DocumentSearch";
 import { SupportingRow } from "../components/SupportingRow";
@@ -11,6 +11,7 @@ import { useMissionStack, usePrimaryDocuments } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { bridgeCall } from "../hooks/useBridge";
+import { prefetchMissionChunk } from "../prefetch";
 
 export function Deck() {
   const navigate = useNavigate();
@@ -167,6 +168,7 @@ export function Deck() {
               documentCount={primaryDocCount}
               onOpen={openPrimary}
               onDiscuss={discussPrimary}
+              onPrefetch={prefetchMissionChunk}
             />
           ) : (
             <div className="mt-10 text-ink-muted">
@@ -182,6 +184,7 @@ export function Deck() {
             missions={supporting}
             onOpen={openSupporting}
             onMakePrimary={(id) => void makePrimary(id)}
+            onPrefetch={prefetchMissionChunk}
           />
 
           <DreamList dreams={dreams} onPromote={promoteDream} />

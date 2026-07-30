@@ -1,6 +1,6 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { ProgressBar } from "../components/PrimaryCard";
@@ -308,7 +308,7 @@ export function Mission() {
                   }
                 })();
               }}
-              className="rounded-full border border-ink-dim/30 bg-glass px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-amber-glow/40 hover:text-amber-bright disabled:opacity-50"
+              className="surface rounded-full border border-ink-dim/30 px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-amber-glow/40 hover:text-amber-bright disabled:opacity-50"
             >
               {primaryBusy ? "Setting…" : "Set as Primary"}
             </button>

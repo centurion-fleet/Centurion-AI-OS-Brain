@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import type { MissionTarget, TargetStatus, TargetType } from "../types/life";
 import { TARGET_LABELS } from "../types/life";
 import { ProgressBar } from "./PrimaryCard";

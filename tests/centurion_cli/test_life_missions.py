@@ -27,7 +27,11 @@ def test_schema_seeds_uncategorised(life_home):
 
 def test_bootstrap_from_markdown(life_home):
     from centurion_cli import mission_sync
-    from centurion_cli.life_missions import get_stack, list_missions
+    from centurion_cli.life_missions import (
+        bootstrap_from_markdown_if_empty,
+        get_stack,
+        list_missions,
+    )
 
     mission_sync.write_mission(
         {
@@ -39,6 +43,9 @@ def test_bootstrap_from_markdown(life_home):
             "profile": {"whyThisMission": "Own your data"},
         }
     )
+    # Bootstrap is warm-path only — not every get_stack read.
+    result = bootstrap_from_markdown_if_empty()
+    assert result.get("imported") is True
     stack = get_stack()
     assert stack["primary"] is not None
     assert stack["primary"]["statement"] == "Ship the Brain offline"

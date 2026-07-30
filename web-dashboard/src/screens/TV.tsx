@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m as motion } from "framer-motion";
 import { useMissionStack } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
@@ -11,8 +11,8 @@ type Slide = "progress" | "wins" | "thoughts";
 
 const SLIDES: Slide[] = ["progress", "wins", "thoughts"];
 const INTERVAL_MS = 8000;
-/** Faster than Focus deck — TV is a live wall. */
-const STACK_POLL_MS = 5_000;
+/** Match Focus deck cadence — wins still refresh immediately via SSE thoughts. */
+const STACK_POLL_MS = 20_000;
 
 export function TV() {
   const deckVisible = useDeckVisible();

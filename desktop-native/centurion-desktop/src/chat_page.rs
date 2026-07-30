@@ -3805,6 +3805,35 @@ fn load_assistant_display_name() -> String {
     }
 }
 
+/// Load Soul display name off the GTK thread and apply when ready.
+fn refresh_assistant_name_async(
+    assistant_name: Rc<RefCell<String>>,
+    title: Option<gtk::Label>,
+    skip_if_discuss: Option<Rc<RefCell<Option<DiscussTopic>>>>,
+) {
+    let (tx, rx) = mpsc::channel::<String>();
+    thread::spawn(move || {
+        let _ = tx.send(load_assistant_display_name());
+    });
+    glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+        Ok(name) => {
+            *assistant_name.borrow_mut() = name.clone();
+            if let Some(ref title) = title {
+                let skip = skip_if_discuss
+                    .as_ref()
+                    .map(|d| d.borrow().is_some())
+                    .unwrap_or(false);
+                if !skip {
+                    title.set_label(&format!("Chat with {name}"));
+                }
+            }
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+    });
+}
+
 fn scroll_chat_to_latest(
     message_scroll: &gtk::ScrolledWindow,
     message_list: &gtk::ListBox,
@@ -4017,7 +4046,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     chat_column.set_vexpand(true);
     chat_column.set_hexpand(true);
 
-    let assistant_name = Rc::new(RefCell::new(load_assistant_display_name()));
+    // Never block window build on soul_get — paint "Centurion" then fill async.
+    let assistant_name = Rc::new(RefCell::new("Centurion".to_owned()));
 
     let top = gtk::Box::new(gtk::Orientation::Vertical, 4);
     top.set_margin_top(12);
@@ -4464,6 +4494,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     bottom.append(&error_row);
 
     let active_discuss: Rc<RefCell<Option<DiscussTopic>>> = Rc::new(RefCell::new(None));
+    // Soul name: fill after first paint — never during build_window.
+    refresh_assistant_name_async(
+        assistant_name.clone(),
+        Some(title.clone()),
+        Some(active_discuss.clone()),
+    );
     let context_bar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     context_bar.set_margin_start(16);
     context_bar.set_margin_end(16);
@@ -5543,27 +5579,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             set_sending(false);
             set_error(None);
             // Refresh name off the UI thread so New Chat never stalls on soul_get.
-            {
-                let assistant_name = assistant_name.clone();
-                let title_label = title_label.clone();
-                let active_discuss = active_discuss.clone();
-                let (tx, rx) = mpsc::channel::<String>();
-                thread::spawn(move || {
-                    let _ = tx.send(load_assistant_display_name());
-                });
-                glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                    Ok(name) => {
-                        *assistant_name.borrow_mut() = name;
-                        if active_discuss.borrow().is_none() {
-                            title_label
-                                .set_label(&format!("Chat with {}", assistant_name.borrow()));
-                        }
-                        glib::ControlFlow::Break
-                    }
-                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                    Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-                });
-            }
+            refresh_assistant_name_async(
+                assistant_name.clone(),
+                Some(title_label.clone()),
+                Some(active_discuss.clone()),
+            );
             title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
             messages.borrow_mut().clear();
             *active_discuss.borrow_mut() = None;
@@ -5714,7 +5734,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             let path = session_store_path();
                             let _ = std::fs::remove_file(&path);
                             follow_bottom.set(true);
-                            *assistant_name.borrow_mut() = load_assistant_display_name();
+                            refresh_assistant_name_async(assistant_name.clone(), None, None);
                             refresh_messages();
                         }
                         // After the list refreshes, open the newest remaining chat
@@ -5755,8 +5775,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                                         save_session_id(&sid);
                                                         *session_id.borrow_mut() = Some(sid);
                                                         *messages.borrow_mut() = history;
-                                                        *assistant_name.borrow_mut() =
-                                                            load_assistant_display_name();
+                                                        refresh_assistant_name_async(
+                                                            assistant_name.clone(),
+                                                            None,
+                                                            None,
+                                                        );
                                                         follow_bottom.set(true);
                                                         refresh_messages();
                                                         refresh_sessions();

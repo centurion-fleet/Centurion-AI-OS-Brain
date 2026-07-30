@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { memo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { m as motion, useReducedMotion } from "framer-motion";
 import type { LifeDocument, Mission } from "../types/life";
 import { missionProgress } from "../types/life";
 
@@ -42,6 +42,7 @@ interface PrimaryCardProps {
   documentCount?: number;
   onOpen: () => void;
   onDiscuss?: () => void;
+  onPrefetch?: () => void;
   /** When true, render as the Focus first-viewport hero (no nested card chrome). */
   hero?: boolean;
 }
@@ -53,6 +54,7 @@ export const PrimaryCard = memo(function PrimaryCard({
   documentCount,
   onOpen,
   onDiscuss,
+  onPrefetch,
   hero = false,
 }: PrimaryCardProps) {
   const progress = missionProgress(mission);
@@ -87,7 +89,12 @@ export const PrimaryCard = memo(function PrimaryCard({
           <span className="text-xs capitalize text-ink-dim">{mission.phase}</span>
         </div>
 
-        <button type="button" onClick={onOpen} className="w-full text-left">
+        <button
+          type="button"
+          onClick={onOpen}
+          onPointerDown={() => onPrefetch?.()}
+          className="w-full text-left"
+        >
           <h1 className="font-display text-4xl font-medium leading-[1.08] tracking-tight text-ink sm:text-5xl md:text-6xl">
             {mission.title || "Untitled mission"}
           </h1>
@@ -121,6 +128,7 @@ export const PrimaryCard = memo(function PrimaryCard({
           <button
             type="button"
             onClick={onOpen}
+            onPointerDown={() => onPrefetch?.()}
             className="rounded-full bg-amber-gradient px-5 py-2.5 text-sm font-semibold text-canvas shadow-amber-sm transition hover:brightness-110"
           >
             Open mission

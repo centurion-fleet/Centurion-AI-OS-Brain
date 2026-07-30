@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { LazyMotion, domAnimation } from "framer-motion";
 import { Deck } from "./screens/Deck";
 
 const Mission = lazy(() =>
@@ -20,16 +21,18 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<Deck />} />
-          <Route path="/mission/:id" element={<Mission />} />
-          <Route path="/tv" element={<TV />} />
-          <Route path="/discovery" element={<Discovery />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <LazyMotion features={domAnimation} strict>
+      <BrowserRouter>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Deck />} />
+            <Route path="/mission/:id" element={<Mission />} />
+            <Route path="/tv" element={<TV />} />
+            <Route path="/discovery" element={<Discovery />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </LazyMotion>
   );
 }

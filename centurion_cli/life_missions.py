@@ -89,7 +89,7 @@ _SCHEMA_READY_LOCK = threading.Lock()
 
 
 def ensure_schema_once() -> None:
-    """Warm-path: ensure schema at most once per process+db path."""
+    """Warm-path: ensure schema + one-shot markdown bootstrap per process+db path."""
     global _SCHEMA_READY, _SCHEMA_READY_PATH
     path = str(life_db_path())
     if _SCHEMA_READY and _SCHEMA_READY_PATH == path:
@@ -98,6 +98,11 @@ def ensure_schema_once() -> None:
         if _SCHEMA_READY and _SCHEMA_READY_PATH == path:
             return
         ensure_schema()
+        try:
+            # Daemon warm only — never call from hot read paths (get_stack / lists).
+            bootstrap_from_markdown_if_empty()
+        except Exception:
+            pass
         _SCHEMA_READY = True
         _SCHEMA_READY_PATH = path
 
@@ -487,7 +492,6 @@ def _validate_sequence(conn: sqlite3.Connection, mission_id: str) -> list[dict[s
 
 
 def list_subjects() -> list[dict[str, Any]]:
-    bootstrap_from_markdown_if_empty()
     with _conn() as conn:
         rows = conn.execute(
             "SELECT * FROM life_subjects ORDER BY sort_order, name"
@@ -496,7 +500,6 @@ def list_subjects() -> list[dict[str, Any]]:
 
 
 def put_subject(fields: dict[str, Any]) -> dict[str, Any]:
-    bootstrap_from_markdown_if_empty()
     now = _utc_now()
     sid = str(fields.get("id") or _new_id())
     name = str(fields.get("name") or "").strip()
@@ -552,7 +555,6 @@ def reorder_subjects(ordered_ids: list[str]) -> None:
 
 
 def list_dreams(*, include_promoted: bool = False) -> list[dict[str, Any]]:
-    bootstrap_from_markdown_if_empty()
     with _conn() as conn:
         if include_promoted:
             rows = conn.execute(
@@ -645,7 +647,6 @@ def _mission_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
 
 
 def list_missions() -> list[dict[str, Any]]:
-    bootstrap_from_markdown_if_empty()
     with _conn() as conn:
         rows = conn.execute(
             "SELECT * FROM life_missions ORDER BY stack_sort_order, created_at"
@@ -654,7 +655,6 @@ def list_missions() -> list[dict[str, Any]]:
 
 
 def get_mission(mission_id: str) -> dict[str, Any] | None:
-    bootstrap_from_markdown_if_empty()
     with _conn() as conn:
         row = conn.execute(
             "SELECT * FROM life_missions WHERE id = ?", (mission_id,)
@@ -665,7 +665,6 @@ def get_mission(mission_id: str) -> dict[str, Any] | None:
 
 
 def put_mission(fields: dict[str, Any]) -> dict[str, Any]:
-    bootstrap_from_markdown_if_empty()
     now = _utc_now()
     mid = str(fields.get("id") or _new_id())
     title = str(fields.get("title") or fields.get("statement") or "Mission").strip()
@@ -792,7 +791,6 @@ def put_mission(fields: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_stack() -> dict[str, Any]:
-    bootstrap_from_markdown_if_empty()
     with _conn() as conn:
         stack = conn.execute("SELECT * FROM life_mission_stack WHERE id = 1").fetchone()
         missions = [
@@ -2238,7 +2236,6 @@ def inject_context(
 
 def snapshot_extras(*, since: str | None = None) -> dict[str, Any]:
     """Bundle for swarm_snapshot / Home enrichment."""
-    bootstrap_from_markdown_if_empty()
     return {
         "subjects": list_subjects(),
         "mission_stack": get_stack(),
@@ -2251,7 +2248,6 @@ def snapshot_extras(*, since: str | None = None) -> dict[str, Any]:
 
 def legacy_mission_get() -> dict[str, Any]:
     """Shape compatible with existing mission_get consumers."""
-    bootstrap_from_markdown_if_empty()
     stack = get_stack()
     primary = stack.get("primary")
     if not primary:
@@ -2288,7 +2284,6 @@ def legacy_mission_get() -> dict[str, Any]:
 
 def legacy_mission_put(fields: dict[str, Any]) -> dict[str, Any]:
     """Accept classic mission_put payload into life.db + markdown."""
-    bootstrap_from_markdown_if_empty()
     stack = get_stack()
     primary = stack.get("primary")
     mid = str(

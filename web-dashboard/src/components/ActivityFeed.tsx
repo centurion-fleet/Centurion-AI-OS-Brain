@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m as motion, useReducedMotion } from "framer-motion";
 import type { Thought, ThoughtActivityType } from "../types/life";
 
 const MARKS: Record<ThoughtActivityType | "default", string> = {

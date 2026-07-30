@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m as motion } from "framer-motion";
 import { bridgeCall } from "../hooks/useBridge";
 
 type Step = "welcome" | "dump" | "prioritise" | "crown" | "done";

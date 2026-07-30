@@ -7,12 +7,14 @@ interface SupportingRowProps {
   missions: Mission[];
   onOpen: (id: string) => void;
   onMakePrimary?: (id: string) => void;
+  onPrefetch?: () => void;
 }
 
 export const SupportingRow = memo(function SupportingRow({
   missions,
   onOpen,
   onMakePrimary,
+  onPrefetch,
 }: SupportingRowProps) {
   if (!missions.length) return null;
 
@@ -32,6 +34,7 @@ export const SupportingRow = memo(function SupportingRow({
               <button
                 type="button"
                 onClick={() => onOpen(m.id)}
+                onPointerDown={() => onPrefetch?.()}
                 className="w-full text-left"
               >
                 <p className="line-clamp-2 font-display text-lg font-medium leading-snug text-ink">
