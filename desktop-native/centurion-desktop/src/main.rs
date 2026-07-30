@@ -1723,7 +1723,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     let thinking_line = run_provider_command(&["status", "--skip-probe"]).and_then(
                         |response| {
                             response.status.map(|status| {
-                                let model = status.model.unwrap_or_default();
+                                let model = status.model;
                                 if model.is_empty() {
                                     status.provider
                                 } else {
