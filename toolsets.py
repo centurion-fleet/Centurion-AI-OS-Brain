@@ -243,7 +243,8 @@ TOOLSETS = {
     "life": {
         "description": (
             "Life Missions on this Brain — Subjects, Mission Stack "
-            "(primary + supporting), Targets, Dreams, thoughts, decisions"
+            "(primary + supporting), Targets, Dreams, thoughts, decisions, "
+            "and mission documents (put_document)"
         ),
         "tools": [
             "life_missions",

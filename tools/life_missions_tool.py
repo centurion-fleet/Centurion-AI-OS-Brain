@@ -170,6 +170,12 @@ def life_missions_tool(
                 payload.setdefault("summary", summary)
             if statement and not payload.get("body_md") and not payload.get("body"):
                 payload.setdefault("body_md", statement)
+            # Fall back to Primary when the model forgets mission_id.
+            if not str(payload.get("mission_id") or "").strip():
+                stack = life.get_stack()
+                primary = stack.get("primary") or {}
+                if primary.get("id"):
+                    payload["mission_id"] = primary["id"]
             return _ok(document=life.put_document(payload))
         if action in ("snapshot",):
             return _ok(snapshot=life.snapshot_extras())

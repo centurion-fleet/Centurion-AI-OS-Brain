@@ -644,16 +644,27 @@ fn parse_primary_focus_value(primary: &Value) -> Option<PrimaryFocusContext> {
 
 fn frame_focus_mode(user_text: &str, focus: &PrimaryFocusContext) -> String {
     let target_line = match (&focus.target_title, &focus.target_id) {
-        (Some(t), _) => format!("Current target: {t}\n"),
+        (Some(t), Some(tid)) => format!("Current target: {t}\ntarget_id: {tid}\n"),
+        (Some(t), None) => format!("Current target: {t}\n"),
         _ => String::new(),
+    };
+    let mission_id_line = if focus.id.trim().is_empty() {
+        String::new()
+    } else {
+        format!("mission_id: {}\n", focus.id.trim())
     };
     format!(
         "[Sovereign AI Brain — Focus mode]\n\
          Centre every reply on the user's Primary Life Mission and current target.\n\
          Primary Mission: {}\n\
          Goal: {}\n\
-         {target_line}\n\
-         Keep advice, questions, and next steps aligned with this mission unless the user explicitly pivots.\n\n\
+         {mission_id_line}{target_line}\n\
+         Keep advice, questions, and next steps aligned with this mission unless the user explicitly pivots.\n\
+         When you finish a write-up (memo, research, analysis, report, content) for THIS mission, \
+         you MUST call life_missions action=put_document with mission_id above, title, body_md, \
+         and doc_type (research|analysis|content|report|plan|other). \
+         Do NOT claim a document is saved until put_document succeeds — that is what fills \
+         Focus → Mission → Documents. Prefer plans/plan-artifact only when the user must Approve/Proceed.\n\n\
          [Focus on Primary Mission: {} — {}] {}\n",
         focus.title,
         focus.goal,
@@ -1017,6 +1028,8 @@ fn frame_research_mode(user_text: &str, topic: Option<&DiscussTopic>) -> String 
          - Cite sources with URLs, paper IDs, or clear references. Separate facts from speculation.\n\
          - Summarize findings clearly; call out gaps and what would need deeper digging.\n\
          - Do not mutate project files, send messages, or take external actions unless the user explicitly asked.\n\
+         - When the user wants a durable research write-up on the mission, call life_missions put_document \
+(title, body_md, doc_type=research, mission_id from context) — do not claim it is saved until that succeeds.\n\
          - Research skill bodies may be loaded below this framing — follow them when they apply.\n\n\
          User message:\n\
          {body}"

@@ -1078,7 +1078,15 @@ def put_document(fields: dict[str, Any]) -> dict[str, Any]:
     now = _utc_now()
     mission_id = str(fields.get("mission_id") or "").strip()
     if not mission_id:
-        raise ValueError("mission_id required")
+        # Default to Primary so Focus write-ups land under a mission even if
+        # the model omits mission_id.
+        try:
+            primary = get_stack().get("primary") or {}
+            mission_id = str(primary.get("id") or "").strip()
+        except Exception:
+            mission_id = ""
+    if not mission_id:
+        raise ValueError("mission_id required (or set a Primary Mission first)")
     title = str(fields.get("title") or "").strip()
     if not title:
         raise ValueError("title required")
@@ -1097,6 +1105,7 @@ def put_document(fields: dict[str, Any]) -> dict[str, Any]:
     target_id = str(target_id).strip() if target_id else None
     plan_id = fields.get("plan_id")
     plan_id = str(plan_id).strip() if plan_id else None
+    announce = fields.get("announce", True)
     with _conn() as conn:
         existing = conn.execute(
             "SELECT id FROM life_documents WHERE id = ?", (did,)
@@ -1140,7 +1149,22 @@ def put_document(fields: dict[str, Any]) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM life_documents WHERE id = ?", (did,)).fetchone()
         out = _row_dict(row)
         assert out is not None
-        return out
+
+    # Pulse TV / Focus thought stream only after a real save.
+    if announce is not False:
+        try:
+            post_thought(
+                {
+                    "mission_id": mission_id,
+                    "target_id": target_id,
+                    "activity_type": "artifact",
+                    "summary": f"Saved document: {title}",
+                    "detail": summary or f"doc_type={doc_type}",
+                }
+            )
+        except Exception:
+            pass
+    return out
 
 
 def get_document(document_id: str) -> dict[str, Any] | None:

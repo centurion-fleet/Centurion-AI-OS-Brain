@@ -254,9 +254,11 @@ def test_put_list_document_resolve_inject(life_home):
         get_document,
         inject_context,
         list_documents,
+        list_thoughts,
         put_document,
         put_mission,
         resolve_context,
+        set_primary,
     )
 
     mission = put_mission(
@@ -267,6 +269,7 @@ def test_put_list_document_resolve_inject(life_home):
             "targets": [{"title": "Map accounts", "target_type": "essential"}],
         }
     )
+    set_primary(mission["id"])
     doc = put_document(
         {
             "mission_id": mission["id"],
@@ -283,6 +286,25 @@ def test_put_list_document_resolve_inject(life_home):
     listed = list_documents(mission_id=mission["id"])
     assert any(d["id"] == doc["id"] for d in listed)
 
+    # Real save pulses the thought stream (TV / Focus activity).
+    thoughts = list_thoughts(limit=10)
+    assert any(
+        "Q3 cashflow research" in (t.get("summary") or "")
+        and t.get("activity_type") == "artifact"
+        for t in thoughts
+    )
+
+    # Omitting mission_id falls back to Primary.
+    doc2 = put_document(
+        {
+            "title": "Primary default memo",
+            "body_md": "Landed on primary without mission_id.",
+            "doc_type": "content",
+            "announce": False,
+        }
+    )
+    assert doc2["mission_id"] == mission["id"]
+
     updated = put_document(
         {
             "id": doc["id"],
@@ -292,6 +314,7 @@ def test_put_list_document_resolve_inject(life_home):
             "summary": "Revised burn analysis",
             "body_md": "# Analysis\n\nCut burn by 15%.",
             "source": "agent",
+            "announce": False,
         }
     )
     assert updated["doc_type"] == "analysis"
