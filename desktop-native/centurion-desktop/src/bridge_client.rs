@@ -9,6 +9,7 @@ use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,6 +19,9 @@ use crate::chat_page::{
 };
 
 static DAEMON: OnceLock<Mutex<DaemonState>> = OnceLock::new();
+/// Recycle any pre-existing socket daemon once per Brain process so updates
+/// to ``centurion_cli`` are loaded (orphans kept serving old code).
+static RECYCLED_ORPHAN: AtomicBool = AtomicBool::new(false);
 
 struct DaemonState {
     child: Option<Child>,
@@ -87,6 +91,21 @@ fn spawn_daemon(socket_path: &Path) -> Result<Child, String> {
         .map_err(|e| format!("Could not start Centurion bridge daemon: {e}"))
 }
 
+fn stop_listener_on_socket(socket_path: &Path) {
+    // Best-effort: remove the sock so the next bind wins. If something is still
+    // connected we also try to shut it down by connecting and closing.
+    if socket_connectable(socket_path) {
+        if let Ok(stream) = UnixStream::connect(socket_path) {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        // Give an orphan a moment to exit after EOF; then force-remove the path.
+        thread::sleep(Duration::from_millis(150));
+    }
+    if socket_path.exists() {
+        let _ = std::fs::remove_file(socket_path);
+    }
+}
+
 /// Ensure the bridge daemon is running and accepting connections.
 pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
     let mut state = daemon_lock()
@@ -94,8 +113,35 @@ pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
         .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
     let path = state.socket_path.clone();
 
-    if socket_connectable(&path) {
+    // First call in this Brain process: drop any orphan daemon left from a
+    // previous run so we do not keep talking to pre-update centurion_cli.
+    let recycled = !RECYCLED_ORPHAN.swap(true, Ordering::SeqCst);
+    if recycled {
+        if let Some(mut child) = state.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        drop(state);
+        stop_listener_on_socket(&path);
+        // Also try pkill of bridge serve for this socket (best-effort, Linux).
+        let _ = Command::new("pkill")
+            .args(["-f", "centurion_cli.remote_bridge.*--serve"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        thread::sleep(Duration::from_millis(250));
+        stop_listener_on_socket(&path);
+        state = daemon_lock()
+            .lock()
+            .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+    }
+
+    // After a recycle pass, never adopt a leftover listener — spawn ours.
+    if !recycled && socket_connectable(&path) {
         return Ok(path);
+    }
+    if recycled && socket_connectable(&path) {
+        stop_listener_on_socket(&path);
     }
 
     if let Some(child) = state.child.as_mut() {

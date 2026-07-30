@@ -21,7 +21,8 @@ const PORT = Number(process.env.MISSION_DECK_PORT || 9120);
 const HOST = process.env.MISSION_DECK_HOST || "0.0.0.0";
 const DEV = process.argv.includes("--dev");
 const DIST = path.join(__dirname, "dist");
-const REPO_ROOT = path.resolve(__dirname, "..");
+/** Parent of this server.js — often ~/.local/share/centurion/mission-deck, NOT the git repo. */
+const DECK_DIR = __dirname;
 const SSE_MS = Math.max(
   1000,
   Number(process.env.CENTURION_DECK_SSE_MS || 8000) || 8000,
@@ -40,11 +41,31 @@ const MIME = {
   ".map": "application/json",
 };
 
-function findPython() {
+/** Git checkout that contains centurion_cli/ (Brain sets CENTURION_AI_REPO). */
+function centurionRepoRoot() {
+  const candidates = [
+    process.env.CENTURION_AI_REPO,
+    process.env.CENTURION_REPO,
+    // Dev: server.js lives in <repo>/web-dashboard
+    path.resolve(DECK_DIR, ".."),
+    path.join(os.homedir(), "Centurion-AI-OS"),
+    path.join(os.homedir(), "Centurion-AI-OS", "Centurion-AI-OS"),
+  ].filter(Boolean);
+  for (const c of candidates) {
+    const root = path.resolve(String(c));
+    if (fs.existsSync(path.join(root, "centurion_cli", "remote_bridge.py"))) {
+      return root;
+    }
+  }
+  return path.resolve(DECK_DIR, "..");
+}
+
+function findPython(repoRoot) {
   const candidates = [
     process.env.CENTURION_PYTHON,
-    path.join(REPO_ROOT, ".venv", "bin", "python"),
-    path.join(REPO_ROOT, "venv", "bin", "python"),
+    path.join(repoRoot, ".venv", "bin", "python"),
+    path.join(repoRoot, "venv", "bin", "python"),
+    path.join(os.homedir(), ".centurion", "Centurion-AI-OS", "venv", "bin", "python"),
     "python3",
     "python",
   ].filter(Boolean);
@@ -54,8 +75,6 @@ function findPython() {
   }
   return "python3";
 }
-
-const PYTHON = findPython();
 
 function bridgeSocketPath() {
   const override = (process.env.CENTURION_BRIDGE_SOCKET || "").trim();
@@ -67,14 +86,19 @@ function bridgeSocketPath() {
 
 /**
  * Prefer the Brain's warm Unix-socket daemon; fall back to one-shot spawn.
+ * Document import always spawns against the git checkout — orphaned warm
+ * daemons kept serving pre-update code and remapped faults to thinking-service
+ * recovery copy.
  * @param {Record<string, unknown>} request
  * @returns {Promise<Record<string, unknown>>}
  */
 function callBridge(request) {
   const action = String(request.action || "");
-  // Document import can walk Documents/Desktop — allow longer than chat probes.
   const timeoutMs =
     action === "life_documents_import_scan" ? 120_000 : 30_000;
+  if (action === "life_documents_import_scan") {
+    return callBridgeSpawn(request, timeoutMs);
+  }
   const sock = bridgeSocketPath();
   if (fs.existsSync(sock)) {
     return callBridgeSocket(sock, request, timeoutMs).catch(() =>
@@ -146,9 +170,19 @@ function callBridgeSocket(sockPath, request, timeoutMs = 30_000) {
 
 function callBridgeSpawn(request, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
-    const child = spawn(PYTHON, ["-m", "centurion_cli.remote_bridge"], {
-      cwd: REPO_ROOT,
-      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    const repoRoot = centurionRepoRoot();
+    const python = findPython(repoRoot);
+    const pythonPath = [repoRoot, process.env.PYTHONPATH]
+      .filter(Boolean)
+      .join(path.delimiter);
+    const child = spawn(python, ["-m", "centurion_cli.remote_bridge"], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: "1",
+        PYTHONPATH: pythonPath,
+        CENTURION_AI_REPO: repoRoot,
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -399,5 +433,7 @@ server.listen(PORT, HOST, () => {
   console.log(
     `Mission Deck ${DEV ? "(API-only --dev)" : ""} → http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`,
   );
-  console.log(`Bridge python: ${PYTHON} (cwd ${REPO_ROOT})`);
+  const repoRoot = centurionRepoRoot();
+  console.log(`Bridge python: ${findPython(repoRoot)} (repo ${repoRoot})`);
+  console.log(`Deck dir: ${DECK_DIR}`);
 });
