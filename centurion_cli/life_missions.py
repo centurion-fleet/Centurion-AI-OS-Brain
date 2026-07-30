@@ -1355,10 +1355,20 @@ def default_document_scan_roots() -> list[Path]:
     """Default filesystem roots to scan for legacy text documents."""
     roots: list[Path] = []
     home = Path.home()
-    for name in ("Documents", "Desktop"):
+    for name in ("Documents", "Desktop", "centurion"):
         candidate = home / name
         if candidate.is_dir():
             roots.append(candidate.resolve())
+    # Titus Brain historical workspace (Legio account).
+    for explicit in (
+        Path("/home/Legio/centurion"),
+        Path.home() / "centurion",
+    ):
+        try:
+            if explicit.is_dir():
+                roots.append(explicit.resolve())
+        except OSError:
+            pass
     cwd = _terminal_cwd_from_config()
     if cwd is not None:
         roots.append(cwd)

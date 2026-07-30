@@ -52,7 +52,7 @@ def register_cli(parent: argparse.ArgumentParser) -> None:
         "--path",
         action="append",
         default=[],
-        help="Extra directory to scan (repeatable). Default: Documents, Desktop, terminal.cwd",
+        help="Extra directory to scan (repeatable). Default: Documents, Desktop, ~/centurion, /home/Legio/centurion, terminal.cwd",
     )
     imp.add_argument(
         "--mission-id",

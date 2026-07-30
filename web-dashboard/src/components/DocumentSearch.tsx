@@ -173,8 +173,8 @@ export function DocumentSearch({
           <p className="mt-2 text-xs text-ink-dim">
             Search covers every mission’s current documents. Use{" "}
             <span className="text-ink-muted">Scan this machine</span> to pull in
-            older write-ups from Documents/Desktop, plans, and completed task
-            outcomes.
+            older write-ups from Documents/Desktop, ~/centurion,
+            /home/Legio/centurion, plans, and completed task outcomes.
           </p>
         )}
         {scanNote && (
