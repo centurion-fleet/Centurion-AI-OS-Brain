@@ -1238,6 +1238,62 @@ def _resolve_remote_tool_progress_mode(cfg: dict[str, Any] | None = None) -> str
     return "all"
 
 
+# Brain Chat wants to show real work product, not just tool-type labels.
+_REMOTE_STARTED_PREVIEW_CAP = 240
+_REMOTE_RESULT_BODY_CAP = 4000
+
+
+def _extract_tool_result_text(result: Any, tool_name: str | None = None) -> str:
+    """Pull the human-readable body out of a tool result for Chat activity."""
+    if result is None:
+        return ""
+    raw = result
+    if isinstance(raw, dict) and "text" in raw and "images" in raw:
+        # Multimodal wrapper — prefer the text summary.
+        raw = raw.get("text") or ""
+    if isinstance(raw, (dict, list)):
+        try:
+            raw = json.dumps(raw, ensure_ascii=False, default=str)
+        except Exception:
+            raw = str(raw)
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    # Terminal / many tools return JSON: {"output": "...", "exit_code": 0, ...}
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict):
+            for key in (
+                "output",
+                "stdout",
+                "stderr",
+                "content",
+                "result",
+                "text",
+                "message",
+                "body",
+                "data",
+            ):
+                val = parsed.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+                if isinstance(val, (dict, list)):
+                    try:
+                        return json.dumps(val, ensure_ascii=False, default=str).strip()
+                    except Exception:
+                        continue
+            # Fall through to compact JSON when no obvious body key.
+            try:
+                return json.dumps(parsed, ensure_ascii=False, default=str)
+            except Exception:
+                pass
+    _ = tool_name  # reserved for tool-specific shaping later
+    return text
+
+
 def _format_remote_tool_activity_line(
     tool_name: str,
     preview: str | None = None,
@@ -1261,7 +1317,7 @@ def _format_remote_tool_activity_line(
             args_str = json.dumps(args, ensure_ascii=False, default=str)
         except Exception:
             args_str = str(args)
-        cap = preview_len if preview_len > 0 else 0
+        cap = preview_len if preview_len > 0 else _REMOTE_STARTED_PREVIEW_CAP
         if cap > 0 and len(args_str) > cap:
             args_str = args_str[: cap - 3] + "..."
         keys = list(args.keys()) if isinstance(args, dict) else []
@@ -1269,7 +1325,7 @@ def _format_remote_tool_activity_line(
 
     text = (preview or "").strip()
     if text:
-        cap = preview_len if preview_len > 0 else 40
+        cap = preview_len if preview_len > 0 else _REMOTE_STARTED_PREVIEW_CAP
         if len(text) > cap:
             text = text[: cap - 3] + "..."
         return f'{emoji} {name}: "{text}"'
@@ -1284,6 +1340,10 @@ def _make_remote_activity_callbacks(
 
     Returns ``(tool_progress_callback, status_callback)``. When *mode* is
     ``off``, both callables are no-ops (still safe to attach).
+
+    Brain Chat shows *what* ran (commands + result bodies), not just tool types.
+    ``tool.completed`` therefore always emits the result body when mode is not
+    ``off`` — that is the stream content users read.
     """
     last_tool: list[str | None] = [None]
 
@@ -1292,7 +1352,7 @@ def _make_remote_activity_callbacks(
         tool_name: str | None = None,
         preview: str | None = None,
         args: dict | None = None,
-        **_kwargs: Any,
+        **kwargs: Any,
     ) -> None:
         if mode == "off" or not _remote_events_enabled():
             return
@@ -1310,21 +1370,26 @@ def _make_remote_activity_callbacks(
             )
             return
         if et == "tool.completed":
-            if mode != "verbose":
-                return
-            # Verbose completion: short done line only.
             name = (tool_name or "").strip()
             if not name:
                 return
-            line = _format_remote_tool_activity_line(name, preview, args, mode="all")
+            body = _extract_tool_result_text(kwargs.get("result"), name)
+            if not body:
+                body = (preview or "").strip()
+            if not body:
+                # Still announce completion so the feed shows work landed.
+                body = f"{name} finished"
+            if len(body) > _REMOTE_RESULT_BODY_CAP:
+                body = body[: _REMOTE_RESULT_BODY_CAP - 3] + "..."
             _emit_remote_event(
                 {
                     "centurion_event": "activity",
                     "kind": "tool",
                     "event": et,
                     "tool": name,
-                    "preview": (preview or "")[:200],
-                    "line": f"✓ {line}",
+                    "preview": body[:200],
+                    "line": body,
+                    "text": body,
                 }
             )
             return
@@ -1336,15 +1401,30 @@ def _make_remote_activity_callbacks(
         if mode == "new" and name == last_tool[0]:
             return
         last_tool[0] = name
-        line = _format_remote_tool_activity_line(name, preview, args, mode=mode)
+        # Prefer the command / primary arg as the visible "what I'm doing" line.
+        started_body = (preview or "").strip()
+        if not started_body and isinstance(args, dict):
+            for key in ("command", "cmd", "query", "path", "url", "goal", "prompt"):
+                val = args.get(key)
+                if isinstance(val, str) and val.strip():
+                    started_body = val.strip()
+                    break
+        if started_body and len(started_body) > _REMOTE_STARTED_PREVIEW_CAP:
+            started_body = started_body[: _REMOTE_STARTED_PREVIEW_CAP - 3] + "..."
+        line = (
+            started_body
+            if started_body
+            else _format_remote_tool_activity_line(name, preview, args, mode=mode)
+        )
         _emit_remote_event(
             {
                 "centurion_event": "activity",
                 "kind": "tool",
                 "event": et,
                 "tool": name,
-                "preview": (preview or "")[:200],
+                "preview": (started_body or preview or "")[:200],
                 "line": line,
+                "text": line,
             }
         )
 

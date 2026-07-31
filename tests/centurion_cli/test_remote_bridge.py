@@ -232,15 +232,34 @@ def test_make_remote_activity_callbacks_emit_tool_and_thinking(monkeypatch):
     tool_cb("tool.started", "read_file", "AGENTS.md", {"path": "AGENTS.md"})
     tool_cb("reasoning.available", "_thinking", "Considering the next step", None)
     status_cb("lifecycle", "Compressing context")
-    tool_cb("tool.completed", "read_file", "done", None)  # ignored in all mode
+    tool_cb(
+        "tool.completed",
+        "terminal",
+        None,
+        None,
+        result=json.dumps({"output": "hello from shell\nline 2", "exit_code": 0}),
+    )
 
     kinds = [e.get("kind") for e in emitted]
-    assert kinds == ["tool", "thinking", "status"]
+    assert kinds == ["tool", "thinking", "status", "tool"]
     assert emitted[0]["centurion_event"] == "activity"
     assert emitted[0]["tool"] == "read_file"
     assert "AGENTS.md" in emitted[0]["line"]
     assert emitted[1]["text"].startswith("Considering")
     assert emitted[2]["message"] == "Compressing context"
+    assert emitted[3]["tool"] == "terminal"
+    assert "hello from shell" in emitted[3]["line"]
+    assert "line 2" in emitted[3]["line"]
+
+
+def test_extract_tool_result_text_prefers_output_key():
+    from centurion_cli import remote_bridge as rb
+
+    body = rb._extract_tool_result_text(
+        json.dumps({"output": "real stdout", "exit_code": 0}),
+        "terminal",
+    )
+    assert body == "real stdout"
 
 
 def test_make_remote_activity_callbacks_off_is_silent(monkeypatch):

@@ -3359,38 +3359,48 @@ fn humanize_activity_title(tool: &str, line: &str) -> String {
 }
 
 fn build_tool_card(title: &str, detail: &str) -> gtk::Box {
-    let card = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 4);
     card.add_css_class("centurion-chat-tool-card");
-    let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    header.append(
-        &gtk::Image::from_icon_name("utilities-terminal-symbolic"),
-    );
-    let title_label = gtk::Label::builder()
-        .label(title)
-        .xalign(0.0)
-        .hexpand(true)
-        .css_classes(["centurion-chat-tool-card-title"])
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .build();
-    header.append(&title_label);
-    card.append(&header);
     let body_text = detail.trim();
+    // Content-first: show the real work product inline. Tool type is only a
+    // small caption — users should not have to expand to see terminal output.
+    let caption = title.trim();
+    if !caption.is_empty() {
+        let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        header.append(&gtk::Image::from_icon_name("utilities-terminal-symbolic"));
+        header.append(
+            &gtk::Label::builder()
+                .label(caption)
+                .xalign(0.0)
+                .hexpand(true)
+                .css_classes(["caption", "dim-label"])
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .build(),
+        );
+        card.append(&header);
+    }
     if !body_text.is_empty() && body_text != title {
-        let preview: String = body_text.chars().take(600).collect();
-        let expander = gtk::Expander::builder()
-            .label("Output")
-            .expanded(false)
-            .build();
+        // Cap live cards so huge dumps stay readable; archive keeps the same text.
+        let preview: String = body_text.chars().take(4000).collect();
         let body = gtk::Label::builder()
             .label(&preview)
             .wrap(true)
-            .wrap_mode(gtk::pango::WrapMode::Char)
+            .wrap_mode(gtk::pango::WrapMode::WordChar)
             .xalign(0.0)
             .selectable(true)
             .css_classes(["centurion-chat-tool-card-body"])
             .build();
-        expander.set_child(Some(&body));
-        card.append(&expander);
+        card.append(&body);
+    } else if !title.trim().is_empty() && body_text.is_empty() {
+        // Started with no body yet — still show the title as the main line.
+        card.append(
+            &gtk::Label::builder()
+                .label(title)
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["centurion-chat-tool-card-body"])
+                .build(),
+        );
     }
     card
 }
