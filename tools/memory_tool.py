@@ -295,6 +295,29 @@ class MemoryStore:
             return self.user_char_limit
         return self.memory_char_limit
 
+    def _eviction_candidates(self, target: str, n: int = 3) -> List[str]:
+        """Return the largest entries as consolidation candidates (index + size + preview).
+
+        Shown to the model when memory is over budget so it can consolidate in
+        one step instead of hitting a dead-end error and giving up — or worse,
+        cramming multiple facts into one entry to dodge the limit.
+        """
+        entries = self._entries_for(target)
+        if not entries:
+            return []
+        by_size = sorted(enumerate(entries), key=lambda ie: len(ie[1]), reverse=True)
+        out = []
+        for idx, entry in by_size[:n]:
+            preview = entry[:60] + ("..." if len(entry) > 60 else "")
+            out.append(f"[{idx}] ({len(entry):,} chars) {preview}")
+        return out
+
+    def _usage_percent(self, target: str) -> int:
+        limit = self._char_limit(target)
+        if limit <= 0:
+            return 0
+        return self._char_count(target) * 100 // limit
+
     def add(self, target: str, content: str) -> Dict[str, Any]:
         """Append a new entry. Returns error if it would exceed the char limit."""
         content = content.strip()
@@ -328,15 +351,19 @@ class MemoryStore:
 
             if new_total > limit:
                 current = self._char_count(target)
+                candidates = self._eviction_candidates(target)
                 return {
                     "success": False,
                     "error": (
-                        f"Memory at {current:,}/{limit:,} chars. "
+                        f"Memory at {current:,}/{limit:,} chars ({current * 100 // limit}% full). "
                         f"Adding this entry ({len(content)} chars) would exceed the limit. "
-                        f"Replace or remove existing entries first."
+                        f"Consolidate first — best eviction candidates: "
+                        f"{'; '.join(candidates) if candidates else 'none'}. "
+                        f"Replace or remove one, then retry."
                     ),
                     "current_entries": entries,
                     "usage": f"{current:,}/{limit:,}",
+                    "eviction_candidates": candidates,
                 }
 
             entries.append(content)
@@ -391,12 +418,16 @@ class MemoryStore:
             new_total = len(ENTRY_DELIMITER.join(test_entries))
 
             if new_total > limit:
+                candidates = self._eviction_candidates(target)
                 return {
                     "success": False,
                     "error": (
                         f"Replacement would put memory at {new_total:,}/{limit:,} chars. "
-                        f"Shorten the new content or remove other entries first."
+                        f"Shorten the new content or remove other entries first. "
+                        f"Best eviction candidates: "
+                        f"{'; '.join(candidates) if candidates else 'none'}."
                     ),
+                    "eviction_candidates": candidates,
                 }
 
             entries[idx] = new_content
@@ -469,6 +500,16 @@ class MemoryStore:
             "usage": f"{pct}% — {current:,}/{limit:,} chars",
             "entry_count": len(entries),
         }
+        # Proactive consolidation nudge — surface it BEFORE the store is full,
+        # with concrete candidates, so the agent consolidates by habit instead
+        # of hitting a dead-end overflow error mid-task (the failure mode that
+        # produced "crammed into single entries" across the fleet).
+        if pct >= 80:
+            candidates = self._eviction_candidates(target)
+            resp["warning"] = (
+                f"Memory at {pct}% — consolidate soon. "
+                f"Largest entries: {'; '.join(candidates) if candidates else 'none'}."
+            )
         if message:
             resp["message"] = message
         return resp

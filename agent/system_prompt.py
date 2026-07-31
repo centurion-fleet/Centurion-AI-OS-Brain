@@ -39,14 +39,15 @@ from agent.prompt_builder import (
     KANBAN_GUIDANCE,
     LIFE_MISSIONS_GUIDANCE,
     MEMORY_GUIDANCE,
-    PLANS_GUIDANCE,
-    VAULT_GUIDANCE,
     OPENAI_MODEL_EXECUTION_GUIDANCE,
+    PLANS_GUIDANCE,
     PLATFORM_HINTS,
     SESSION_SEARCH_GUIDANCE,
     SKILLS_GUIDANCE,
     TOOL_USE_ENFORCEMENT_GUIDANCE,
     TOOL_USE_ENFORCEMENT_MODELS,
+    VAULT_GUIDANCE,
+    VERIFICATION_FIRST_GUIDANCE,
 )
 
 
@@ -166,6 +167,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
 
     # Tool-aware behavioral guidance: only inject when the tools are loaded
     tool_guidance = []
+    # Verification-first reporting is UNCONDITIONAL — every model, every session.
+    # Unlike TOOL_USE_ENFORCEMENT_GUIDANCE (model-gated below), this one is never
+    # skipped: it is the antidote to false reporting / confident fabrication
+    # observed across fleet installs (agents claiming "Done. Flagged." with no
+    # channel, silent TODO notes that go nowhere, plausible-but-fake detail under
+    # long-session context fragmentation).
+    if agent.valid_tool_names:
+        tool_guidance.append(VERIFICATION_FIRST_GUIDANCE)
     if "memory" in agent.valid_tool_names:
         tool_guidance.append(MEMORY_GUIDANCE)
     if "vault" in agent.valid_tool_names:

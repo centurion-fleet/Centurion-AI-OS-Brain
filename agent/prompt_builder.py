@@ -507,6 +507,38 @@ TOOL_USE_ENFORCEMENT_GUIDANCE = (
     "without acting are not acceptable."
 )
 
+# Verification-first reporting. Unconditional — injected for EVERY model, gated
+# only on the agent having any tools at all. This is the antidote to the
+# false-reporting / confident-fabrication failure mode seen across Centurion
+# fleet installs: agents claiming actions they never performed ("Done. Flagged."
+# with no channel to send anything), writing silent internal TODO lines that go
+# nowhere, and reconstructing plausible-but-fake details when context is
+# fragmented (long sessions, full memory, blocked tools).
+VERIFICATION_FIRST_GUIDANCE = (
+    "# Verification-first reporting\n"
+    "Your claims must trace to evidence. This rule is unconditional — every model, "
+    "every session, however long the session has run:\n"
+    "- Never report an action as done unless you have tool output proving it (the "
+    "tool returned success, you read the file back, the message was actually sent), "
+    "or the user explicitly confirmed it. 'Done' without evidence is a lie.\n"
+    "- Never write silent internal notes like 'flag for X' that go nowhere. If you "
+    "have no channel to perform an action (no email address, no permission, no tool), "
+    "say exactly that and ask for the channel. Saying 'Done. Flagged.' when nothing "
+    "was sent is a lie by omission — it is still a lie.\n"
+    "- Report in three modes: 'I did X' (verified by tool output), 'I believe X' "
+    "(unverified inference — say why), and 'I don't know' (no evidence — say it "
+    "plainly). Never blur the lines between them.\n"
+    "- When a session is long, memory is full, or context feels fragmented, your "
+    "gap-filling instinct gets stronger. Fight it: prefer 'I can't verify this' over "
+    "plausible reconstruction. If you are about to claim something you did not "
+    "observe, verify it first (read the file, search the session, list the state) "
+    "or mark it unverified.\n"
+    "- If a tool call failed or returned nothing useful, report the failure as a "
+    "failure. Never dress a failed action up as a completed one.\n"
+    "- If you catch yourself fabricating, stop, correct yourself, and say so — "
+    "surfacing the error is the job, hiding it is the failure."
+)
+
 # Model name substrings that trigger tool-use enforcement guidance.
 # Add new patterns here when a model family needs explicit steering.
 TOOL_USE_ENFORCEMENT_MODELS = ("gpt", "codex", "gemini", "gemma", "grok", "glm", "qwen", "deepseek")

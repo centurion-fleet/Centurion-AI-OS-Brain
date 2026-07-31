@@ -1150,7 +1150,7 @@ class TestBuildSystemPrompt:
 class TestToolUseEnforcementConfig:
     """Tests for the agent.tool_use_enforcement config option."""
 
-    def _make_agent(self, model="openai/gpt-4.1", tool_use_enforcement="auto"):
+    def _make_agent(self, model="openai/gpt-4.1", tool_use_enforcement: "str | bool | list | None" = "auto"):
         """Create an agent with tools and a specific enforcement config."""
         with (
             patch(
@@ -1192,6 +1192,34 @@ class TestToolUseEnforcementConfig:
         agent = self._make_agent(model="anthropic/claude-sonnet-4", tool_use_enforcement="auto")
         prompt = agent._build_system_prompt()
         assert TOOL_USE_ENFORCEMENT_GUIDANCE not in prompt
+
+    def test_verification_guidance_unconditional_for_claude(self):
+        """Verification-first reporting is NOT model-gated — Claude gets it even
+        though tool-use enforcement is skipped for it. This closes the fleet
+        false-reporting gap (\"Done. Flagged.\" with no channel to send anything)."""
+        from agent.prompt_builder import VERIFICATION_FIRST_GUIDANCE
+        agent = self._make_agent(model="anthropic/claude-sonnet-4", tool_use_enforcement="auto")
+        prompt = agent._build_system_prompt()
+        assert VERIFICATION_FIRST_GUIDANCE in prompt
+
+    def test_verification_guidance_present_for_gpt(self):
+        from agent.prompt_builder import VERIFICATION_FIRST_GUIDANCE
+        agent = self._make_agent(model="openai/gpt-4.1", tool_use_enforcement="auto")
+        prompt = agent._build_system_prompt()
+        assert VERIFICATION_FIRST_GUIDANCE in prompt
+
+    def test_verification_guidance_present_when_enforcement_disabled(self):
+        """Even with tool_use_enforcement=false (explicit opt-out), the
+        verification-first rule still ships — it is independent of the
+        model-gated enforcement block."""
+        from agent.prompt_builder import (
+            TOOL_USE_ENFORCEMENT_GUIDANCE,
+            VERIFICATION_FIRST_GUIDANCE,
+        )
+        agent = self._make_agent(model="openai/gpt-4.1", tool_use_enforcement=False)
+        prompt = agent._build_system_prompt()
+        assert TOOL_USE_ENFORCEMENT_GUIDANCE not in prompt
+        assert VERIFICATION_FIRST_GUIDANCE in prompt
 
     def test_auto_injects_for_grok(self):
         """xAI Grok / xai-oauth models hit the same enforcement path as GPT."""
