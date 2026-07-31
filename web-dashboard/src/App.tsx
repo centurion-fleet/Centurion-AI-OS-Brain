@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { Deck } from "./screens/Deck";
+import { AttentionFollow } from "./components/AttentionFollow";
 
 const Mission = lazy(() =>
   import("./screens/Mission").then((m) => ({ default: m.Mission })),
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <LazyMotion features={domAnimation} strict>
       <BrowserRouter>
+        <AttentionFollow />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Deck />} />

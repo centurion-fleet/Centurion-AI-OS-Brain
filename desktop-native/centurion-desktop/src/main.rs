@@ -1906,33 +1906,15 @@ pairing stays available for early testing on the same Wi‑Fi.",
             let window = window.clone();
             let home_handle = home_handle.clone();
             move |_| {
-                let window = window.clone();
-                let home_handle = home_handle.clone();
-                crate::chat_page::run_bridge_action_async(
-                    "mission_get",
-                    serde_json::json!({}),
-                    move |payload| {
-                        let current = payload
-                            .and_then(|r| {
-                                if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                                    r.get("mission")
-                                        .and_then(|m| m.get("statement"))
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_owned())
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_default();
-                        crate::home_page::show_mission_edit_dialog(
-                            &window,
-                            &current,
-                            Rc::new({
-                                let home_handle = home_handle.clone();
-                                move || home_handle.refresh()
-                            }),
-                        );
-                    },
+                // Open immediately — load the current statement into the dialog
+                // async so Settings never waits on the bridge before present().
+                crate::home_page::show_mission_edit_dialog(
+                    &window,
+                    "",
+                    Rc::new({
+                        let home_handle = home_handle.clone();
+                        move || home_handle.refresh()
+                    }),
                 );
             }
         });

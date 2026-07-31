@@ -10,8 +10,10 @@ import { PulseIndicators } from "../components/PulseIndicators";
 import { useMissionStack, usePrimaryDocuments } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
+import { useOpenDecisions } from "../hooks/useOpenDecisions";
 import { bridgeCall } from "../hooks/useBridge";
 import { prefetchMissionChunk } from "../prefetch";
+import { AttentionBanner } from "../components/AttentionBanner";
 
 export function Deck() {
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ export function Deck() {
       void refresh();
     },
   });
+  const { open: openDecisions } = useOpenDecisions(deckVisible);
   const autoDiscoveryDone = useRef(false);
 
   const primary = stack?.primary ?? null;
@@ -133,6 +136,8 @@ export function Deck() {
           Couldn’t reach the Brain bridge: {error}
         </div>
       )}
+
+      <AttentionBanner decisions={openDecisions} />
 
       {loading && !stack ? (
         <div className="mt-16 animate-pulse-soft text-center text-ink-dim">

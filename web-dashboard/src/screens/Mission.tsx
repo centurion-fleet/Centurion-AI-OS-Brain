@@ -1,5 +1,5 @@
-import { Link, useLocation, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { m as motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -8,6 +8,7 @@ import { PhaseStrip } from "../components/PhaseStrip";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
+import { isOpenDecision } from "../hooks/useOpenDecisions";
 import {
   DOCUMENT_LIBRARY_MISSION_ID,
   missionProgress,
@@ -25,12 +26,18 @@ import {
 export function Mission() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const attentionId = searchParams.get("attention") || "";
   const seed =
     (location.state as { mission?: Mission } | null)?.mission ?? null;
+  const attentionTitle =
+    (location.state as { attentionTitle?: string } | null)?.attentionTitle ||
+    "";
   const deckVisible = useDeckVisible();
   const { mission, decisions, documents, thoughts, loading, error, refresh } =
     useMissionDetail(id, seed && seed.id === id ? seed : null);
   const { thoughts: live } = useSSE({ enabled: deckVisible });
+  const decisionsSectionRef = useRef<HTMLElement | null>(null);
   const [primaryBusy, setPrimaryBusy] = useState(false);
   const [phaseBusy, setPhaseBusy] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -61,6 +68,30 @@ export function Mission() {
       });
     }
   }, [loading, mission, documents.length]);
+
+  const orderedDecisions = useMemo(() => {
+    const open = decisions.filter(isOpenDecision);
+    const closed = decisions.filter((d) => !isOpenDecision(d));
+    if (!attentionId) return [...open, ...closed];
+    const spotlight = open.filter((d) => d.id === attentionId);
+    const restOpen = open.filter((d) => d.id !== attentionId);
+    return [...spotlight, ...restOpen, ...closed];
+  }, [decisions, attentionId]);
+
+  const attentionDecision =
+    orderedDecisions.find((d) => d.id === attentionId) ||
+    orderedDecisions.find(isOpenDecision) ||
+    null;
+
+  useEffect(() => {
+    if (loading || !mission || !attentionId) return;
+    const scroll = () => {
+      const row = document.getElementById(`decision-${attentionId}`);
+      const section = decisionsSectionRef.current;
+      (row || section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.requestAnimationFrame(scroll);
+  }, [loading, mission, attentionId, orderedDecisions.length]);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -278,6 +309,36 @@ export function Mission() {
         ← Focus
       </Link>
 
+      {attentionDecision && (
+        <div
+          className="mb-6 rounded-2xl border border-amber-glow/40 bg-amber-muted/50 px-4 py-3"
+          role="status"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
+            This is why Focus alerted you
+          </p>
+          <p className="mt-1 text-sm font-medium text-ink">
+            {attentionDecision.title || attentionTitle || "Needs your choice"}
+          </p>
+          {(attentionDecision.context || "").trim() ? (
+            <p className="mt-1 text-xs text-ink-dim">
+              {attentionDecision.context}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-3 rounded-full bg-amber-gradient px-4 py-1.5 text-xs font-semibold text-canvas shadow-amber"
+            onClick={() => {
+              document
+                .getElementById(`decision-${attentionDecision.id}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            Jump to decision
+          </button>
+        </div>
+      )}
+
       <motion.header
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -384,10 +445,15 @@ export function Mission() {
 
       <ActivityFeed thoughts={merged} title="Thought stream" />
 
-      <section className="mt-8">
+      <section className="mt-8 scroll-mt-6" ref={decisionsSectionRef} id="decisions">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
             Decisions
+            {orderedDecisions.some(isOpenDecision) ? (
+              <span className="ml-2 text-amber-soft">
+                · {orderedDecisions.filter(isOpenDecision).length} need you
+              </span>
+            ) : null}
           </h2>
           <button
             type="button"
@@ -432,38 +498,58 @@ export function Mission() {
         )}
 
         <div className="surface rounded-2xl divide-y divide-white/5 overflow-hidden">
-          {decisions.length === 0 ? (
+          {orderedDecisions.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
               No decisions logged yet.
             </p>
           ) : (
-            decisions.map((d) => (
-              <div
-                key={d.id}
-                className="flex items-start gap-3 px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-ink">{d.title}</p>
-                  {d.chosen && (
-                    <p className="mt-1 text-xs text-amber-soft">
-                      Chose: {d.chosen}
-                    </p>
-                  )}
-                  {d.context && (
-                    <p className="mt-1 text-xs text-ink-dim">{d.context}</p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  title="Discuss in Chat"
-                  aria-label={`Discuss decision ${d.title}`}
-                  onClick={() => discussDecision(d)}
-                  className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+            orderedDecisions.map((d) => {
+              const open = isOpenDecision(d);
+              const spotlight = attentionId === d.id || (open && !d.chosen);
+              return (
+                <div
+                  key={d.id}
+                  id={`decision-${d.id}`}
+                  className={
+                    attentionId === d.id
+                      ? "flex items-start gap-3 scroll-mt-8 border-l-2 border-amber-glow bg-amber-muted/35 px-4 py-3"
+                      : open
+                        ? "flex items-start gap-3 scroll-mt-8 bg-amber-muted/15 px-4 py-3"
+                        : "flex items-start gap-3 px-4 py-3"
+                  }
                 >
-                  💬
-                </button>
-              </div>
-            ))
+                  <div className="min-w-0 flex-1">
+                    {open ? (
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-soft">
+                        Needs your choice
+                      </p>
+                    ) : null}
+                    <p className="text-sm font-medium text-ink">{d.title}</p>
+                    {d.chosen && (
+                      <p className="mt-1 text-xs text-amber-soft">
+                        Chose: {d.chosen}
+                      </p>
+                    )}
+                    {d.context && (
+                      <p className="mt-1 text-xs text-ink-dim">{d.context}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    title="Discuss in Chat"
+                    aria-label={`Discuss decision ${d.title}`}
+                    onClick={() => discussDecision(d)}
+                    className={
+                      spotlight
+                        ? "shrink-0 rounded-full bg-amber-gradient px-2.5 py-1.5 text-sm font-semibold text-canvas shadow-amber"
+                        : "shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                    }
+                  >
+                    💬
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
       </section>

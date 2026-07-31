@@ -1349,7 +1349,11 @@ pub fn show_mission_edit_dialog(
         .hexpand(true)
         .vexpand(true)
         .build();
-    entry.buffer().set_text(current);
+    // Present first with whatever we already have (often empty). Fill from the
+    // bridge afterward so Settings Edit never blocks on Python/bridge warmup.
+    if !current.is_empty() {
+        entry.buffer().set_text(current);
+    }
     let scrolled = gtk::ScrolledWindow::builder()
         .child(&entry)
         .min_content_height(120)
@@ -1357,7 +1361,11 @@ pub fn show_mission_edit_dialog(
         .build();
     let dialog = adw::AlertDialog::builder()
         .heading("Life Mission")
-        .body("What are you building toward? Your Sovereign uses this to stay aligned.")
+        .body(if current.is_empty() {
+            "Loading your current mission…"
+        } else {
+            "What are you building toward? Your Sovereign uses this to stay aligned."
+        })
         .extra_child(&scrolled)
         .close_response("cancel")
         .default_response("save")
@@ -1365,6 +1373,37 @@ pub fn show_mission_edit_dialog(
     dialog.add_response("cancel", "Cancel");
     dialog.add_response("save", "Save");
     dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+    if current.is_empty() {
+        let entry_fill = entry.clone();
+        let dialog_fill = dialog.clone();
+        crate::chat_page::run_bridge_action_async(
+            "mission_get",
+            serde_json::json!({}),
+            move |payload| {
+                let statement = payload
+                    .and_then(|r| {
+                        if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                            r.get("mission")
+                                .and_then(|m| m.get("statement"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default();
+                // Only fill if the user hasn't started typing yet.
+                let (start, end) = entry_fill.buffer().bounds();
+                let existing = entry_fill.buffer().text(&start, &end, false);
+                if existing.trim().is_empty() && !statement.is_empty() {
+                    entry_fill.buffer().set_text(&statement);
+                }
+                dialog_fill.set_body(
+                    "What are you building toward? Your Sovereign uses this to stay aligned.",
+                );
+            },
+        );
+    }
     let parent_w = parent.clone().upcast::<gtk::Widget>();
     dialog.connect_response(None, move |_d, response| {
         if response != "save" {
