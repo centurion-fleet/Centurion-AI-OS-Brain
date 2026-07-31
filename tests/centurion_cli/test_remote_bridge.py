@@ -1,6 +1,95 @@
 import json
 
-from centurion_cli.remote_bridge import handle_request
+from centurion_cli.remote_bridge import (
+    _normalize_platform_runtime,
+    handle_request,
+)
+
+
+def test_normalize_platform_runtime_connected_from_state():
+    fields = _normalize_platform_runtime({"state": "connected"}, enabled=True)
+    assert fields["connected"] is True
+    assert fields["state"] == "connected"
+    assert fields["status"] == "connected"
+    assert fields["error_message"] is None
+
+
+def test_normalize_platform_runtime_retrying_with_error():
+    fields = _normalize_platform_runtime(
+        {
+            "state": "retrying",
+            "error_message": "Node bridge not running",
+            "error_code": "BRIDGE_DOWN",
+        },
+        enabled=True,
+    )
+    assert fields["connected"] is False
+    assert fields["state"] == "retrying"
+    assert fields["error_message"] == "Node bridge not running"
+    assert fields["error_code"] == "BRIDGE_DOWN"
+    assert "Node bridge not running" in fields["status"]
+
+
+def test_normalize_platform_runtime_legacy_connected_bool():
+    fields = _normalize_platform_runtime({"connected": True}, enabled=True)
+    assert fields["connected"] is True
+    assert fields["state"] == "connected"
+
+
+def test_handle_gateway_status_maps_runtime_state(monkeypatch):
+    from types import SimpleNamespace
+
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setattr(
+        "centurion_cli.gateway.get_gateway_runtime_snapshot",
+        lambda: SimpleNamespace(
+            running=True,
+            service_running=True,
+            service_installed=True,
+            manager="systemd",
+            gateway_pids=[42],
+        ),
+    )
+    monkeypatch.setattr(
+        "gateway.status.read_runtime_status",
+        lambda: {
+            "gateway_state": "running",
+            "platforms": {
+                "telegram": {"state": "connected", "updated_at": "2026-07-31T00:00:00Z"},
+                "whatsapp": {
+                    "state": "retrying",
+                    "error_message": "auth required",
+                },
+            },
+        },
+    )
+
+    class _Plat:
+        def __init__(self, enabled: bool):
+            self.enabled = enabled
+
+    class _FakeGatewayConfig:
+        # String keys are fine — getattr(platform, "value", str(platform))
+        # falls back to the string itself.
+        platforms = {
+            "telegram": _Plat(True),
+            "whatsapp": _Plat(True),
+        }
+
+    monkeypatch.setattr(
+        "gateway.config.load_gateway_config",
+        lambda: _FakeGatewayConfig(),
+    )
+
+    result = rb._handle_gateway_status("gw-status-1")
+    assert result["ok"] is True
+    by_name = {p["name"]: p for p in result["status"]["platforms"]}
+    assert by_name["telegram"]["connected"] is True
+    assert by_name["telegram"]["state"] == "connected"
+    assert by_name["whatsapp"]["connected"] is False
+    assert by_name["whatsapp"]["error_message"] == "auth required"
+    assert "auth required" in by_name["whatsapp"]["status"]
 
 
 def test_remote_bridge_rejects_empty_message():
@@ -260,6 +349,90 @@ def test_extract_tool_result_text_prefers_output_key():
         "terminal",
     )
     assert body == "real stdout"
+
+
+def test_normalize_platform_runtime_uses_state_connected():
+    from centurion_cli import remote_bridge as rb
+
+    fields = rb._normalize_platform_runtime(
+        {"state": "connected", "updated_at": "2026-01-01T00:00:00Z"},
+        enabled=True,
+    )
+    assert fields["connected"] is True
+    assert fields["state"] == "connected"
+    assert fields["status"] == "connected"
+    assert fields["error_message"] is None
+
+
+def test_normalize_platform_runtime_surfaces_retry_error():
+    from centurion_cli import remote_bridge as rb
+
+    fields = rb._normalize_platform_runtime(
+        {
+            "state": "retrying",
+            "error_message": "whatsapp bridge not running",
+            "error_code": "bridge_down",
+        },
+        enabled=True,
+    )
+    assert fields["connected"] is False
+    assert fields["state"] == "retrying"
+    assert "whatsapp bridge not running" in fields["status"]
+    assert fields["error_message"] == "whatsapp bridge not running"
+    assert fields["error_code"] == "bridge_down"
+
+
+def test_handle_gateway_status_reads_runtime_state(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+    from types import SimpleNamespace
+
+    class _Plat:
+        value = "telegram"
+
+    monkeypatch.setattr(
+        "centurion_cli.gateway.get_gateway_runtime_snapshot",
+        lambda: SimpleNamespace(
+            running=True,
+            service_running=True,
+            service_installed=True,
+            manager="systemd",
+            gateway_pids=[123],
+        ),
+    )
+    monkeypatch.setattr(
+        "gateway.status.read_runtime_status",
+        lambda: {
+            "gateway_state": "running",
+            "platforms": {
+                "telegram": {"state": "connected"},
+                "whatsapp": {
+                    "state": "retrying",
+                    "error_message": "bridge missing",
+                },
+            },
+        },
+    )
+
+    class _Cfg:
+        platforms = {
+            _Plat(): SimpleNamespace(enabled=True),
+        }
+
+    # Second platform via string key simulation — expand cfg
+    class _Wa:
+        value = "whatsapp"
+
+    _Cfg.platforms[_Wa()] = SimpleNamespace(enabled=True)
+
+    monkeypatch.setattr("gateway.config.load_gateway_config", lambda: _Cfg())
+
+    result = rb._handle_gateway_status("req-gw-1")
+    assert result["ok"] is True
+    by_name = {p["name"]: p for p in result["status"]["platforms"]}
+    assert by_name["telegram"]["connected"] is True
+    assert by_name["telegram"]["status"] == "connected"
+    assert by_name["whatsapp"]["connected"] is False
+    assert "bridge missing" in by_name["whatsapp"]["status"]
 
 
 def test_make_remote_activity_callbacks_off_is_silent(monkeypatch):

@@ -1970,71 +1970,59 @@ pairing stays available for early testing on the same Wi‑Fi.",
             move |_| show_beneficiary_dialog(&window)
         });
         gateway_start_btn.connect_clicked({
+            let window = window.clone();
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
+            let gateway_start_btn = gateway_start_btn.clone();
+            let gateway_stop_btn = gateway_stop_btn.clone();
+            let gateway_restart_btn = gateway_restart_btn.clone();
             move |_| {
-                let gateway_row = gateway_row.clone();
-                let gateway_platform_list = gateway_platform_list.clone();
-                crate::chat_page::run_bridge_async(
-                    || {
-                        let _ = crate::chat_page::run_bridge_action(
-                            "gateway_start",
-                            serde_json::json!({}),
-                        );
-                        crate::chat_page::run_bridge_action(
-                            "gateway_status",
-                            serde_json::json!({}),
-                        )
-                    },
-                    move |payload| {
-                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
-                    },
+                run_gateway_lifecycle_with_feedback(
+                    &window,
+                    &gateway_row,
+                    &gateway_platform_list,
+                    &gateway_start_btn,
+                    &gateway_stop_btn,
+                    &gateway_restart_btn,
+                    "start",
                 );
             }
         });
         gateway_stop_btn.connect_clicked({
+            let window = window.clone();
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
+            let gateway_start_btn = gateway_start_btn.clone();
+            let gateway_stop_btn = gateway_stop_btn.clone();
+            let gateway_restart_btn = gateway_restart_btn.clone();
             move |_| {
-                let gateway_row = gateway_row.clone();
-                let gateway_platform_list = gateway_platform_list.clone();
-                crate::chat_page::run_bridge_async(
-                    || {
-                        let _ = crate::chat_page::run_bridge_action(
-                            "gateway_stop",
-                            serde_json::json!({}),
-                        );
-                        crate::chat_page::run_bridge_action(
-                            "gateway_status",
-                            serde_json::json!({}),
-                        )
-                    },
-                    move |payload| {
-                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
-                    },
+                run_gateway_lifecycle_with_feedback(
+                    &window,
+                    &gateway_row,
+                    &gateway_platform_list,
+                    &gateway_start_btn,
+                    &gateway_stop_btn,
+                    &gateway_restart_btn,
+                    "stop",
                 );
             }
         });
         gateway_restart_btn.connect_clicked({
+            let window = window.clone();
             let gateway_row = gateway_row.clone();
             let gateway_platform_list = gateway_platform_list.clone();
+            let gateway_start_btn = gateway_start_btn.clone();
+            let gateway_stop_btn = gateway_stop_btn.clone();
+            let gateway_restart_btn = gateway_restart_btn.clone();
             move |_| {
-                let gateway_row = gateway_row.clone();
-                let gateway_platform_list = gateway_platform_list.clone();
-                crate::chat_page::run_bridge_async(
-                    || {
-                        let _ = crate::chat_page::run_bridge_action(
-                            "gateway_restart",
-                            serde_json::json!({}),
-                        );
-                        crate::chat_page::run_bridge_action(
-                            "gateway_status",
-                            serde_json::json!({}),
-                        )
-                    },
-                    move |payload| {
-                        apply_gateway_ui(&gateway_row, &gateway_platform_list, payload);
-                    },
+                run_gateway_lifecycle_with_feedback(
+                    &window,
+                    &gateway_row,
+                    &gateway_platform_list,
+                    &gateway_start_btn,
+                    &gateway_stop_btn,
+                    &gateway_restart_btn,
+                    "restart",
                 );
             }
         });
@@ -4741,6 +4729,268 @@ Being · Continuity\n\
         let _ = std::fs::write(path, if enabled { b"1\n" as &[u8] } else { b"0\n" });
     }
 
+    fn gateway_platform_subtitle(
+        configured: bool,
+        connected: bool,
+        state: &str,
+        status: &str,
+        error_message: &str,
+    ) -> String {
+        if !configured {
+            return "Not configured".to_owned();
+        }
+        let state_l = state.to_ascii_lowercase();
+        let primary = if connected || state_l == "connected" {
+            "Connected".to_owned()
+        } else if state_l == "connecting" {
+            "Connecting…".to_owned()
+        } else if state_l == "retrying" {
+            "Retrying…".to_owned()
+        } else if state_l == "fatal" {
+            "Failed".to_owned()
+        } else if !error_message.is_empty() {
+            "Not connected".to_owned()
+        } else if !status.is_empty()
+            && status != "enabled"
+            && status != "disabled"
+            && status != "not configured"
+        {
+            // Prefer runtime status text (may already include error).
+            return status.to_owned();
+        } else {
+            "Not connected".to_owned()
+        };
+        if !error_message.is_empty() && !connected {
+            format!("{primary} · {error_message}")
+        } else if !status.is_empty()
+            && status != primary
+            && status != "enabled"
+            && status != "disabled"
+            && !status.starts_with(&primary)
+        {
+            format!("{primary} · {status}")
+        } else {
+            primary
+        }
+    }
+
+    fn summarize_gateway_lifecycle(
+        operation: &str,
+        life: Option<&serde_json::Value>,
+        status: Option<&serde_json::Value>,
+    ) -> (String, String) {
+        let verb = match operation {
+            "start" => "start",
+            "stop" => "stop",
+            _ => "restart",
+        };
+        let life_ok = life
+            .and_then(|p| p.get("ok"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !life_ok {
+            let msg = life
+                .and_then(|p| p.get("message").or_else(|| p.get("error")))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not complete the gateway request.");
+            return (
+                format!("Gateway {verb} failed"),
+                msg.to_owned(),
+            );
+        }
+        let Some(status) = status else {
+            return (
+                format!("Gateway {verb}"),
+                "Request sent, but status could not be read yet.".to_owned(),
+            );
+        };
+        let running = status
+            .pointer("/status/running")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let mut parts = Vec::new();
+        parts.push(if running {
+            "Gateway is running".to_owned()
+        } else {
+            "Gateway is stopped".to_owned()
+        });
+        if let Some(platforms) = status
+            .pointer("/status/platforms")
+            .and_then(|v| v.as_array())
+        {
+            for key in ["telegram", "whatsapp", "api_server"] {
+                let Some(plat) = platforms.iter().find(|p| {
+                    p.get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|n| n.eq_ignore_ascii_case(key))
+                        .unwrap_or(false)
+                }) else {
+                    continue;
+                };
+                if !plat
+                    .get("enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                let label = match key {
+                    "telegram" => "Telegram",
+                    "whatsapp" => "WhatsApp",
+                    _ => "Remote Control",
+                };
+                let connected = plat
+                    .get("connected")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let state = plat
+                    .get("state")
+                    .or_else(|| plat.get("status"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let err = plat
+                    .get("error_message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if connected {
+                    parts.push(format!("{label} connected"));
+                } else if !err.is_empty() {
+                    parts.push(format!("{label}: {err}"));
+                } else if !state.is_empty() {
+                    parts.push(format!("{label} {state}"));
+                } else {
+                    parts.push(format!("{label} not connected"));
+                }
+            }
+        }
+        let heading = match operation {
+            "start" => "Gateway started",
+            "stop" => "Gateway stopped",
+            _ => "Gateway restarted",
+        };
+        (heading.to_owned(), parts.join("\n"))
+    }
+
+    fn run_gateway_lifecycle_with_feedback(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+        start_btn: &gtk::Button,
+        stop_btn: &gtk::Button,
+        restart_btn: &gtk::Button,
+        operation: &str,
+    ) {
+        let busy = match operation {
+            "start" => "Starting…",
+            "stop" => "Stopping…",
+            _ => "Restarting…",
+        };
+        row.set_subtitle(busy);
+        start_btn.set_sensitive(false);
+        stop_btn.set_sensitive(false);
+        restart_btn.set_sensitive(false);
+
+        let want_running = operation != "stop";
+        let op = operation.to_owned();
+        let action = format!("gateway_{op}");
+        let (tx, rx) = std::sync::mpsc::channel::<(
+            Option<serde_json::Value>,
+            Option<serde_json::Value>,
+        )>();
+        std::thread::spawn(move || {
+            let life = run_bridge_action(&action, serde_json::json!({}));
+            let mut last = run_bridge_action("gateway_status", serde_json::json!({}));
+            for _ in 0..25 {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let status = run_bridge_action("gateway_status", serde_json::json!({}));
+                if let Some(ref s) = status {
+                    last = Some(s.clone());
+                    let running = s
+                        .pointer("/status/running")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if running != want_running {
+                        continue;
+                    }
+                    if !want_running {
+                        break;
+                    }
+                    let still_connecting = s
+                        .pointer("/status/platforms")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter().any(|p| {
+                                let name = p
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                if !matches!(name.as_str(), "telegram" | "whatsapp" | "api_server")
+                                {
+                                    return false;
+                                }
+                                if !p
+                                    .get("enabled")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false)
+                                {
+                                    return false;
+                                }
+                                let state = p
+                                    .get("state")
+                                    .or_else(|| p.get("status"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_ascii_lowercase();
+                                state == "connecting"
+                            })
+                        })
+                        .unwrap_or(false);
+                    if !still_connecting {
+                        break;
+                    }
+                }
+            }
+            let _ = tx.send((life, last));
+        });
+
+        let parent = parent.clone();
+        let row = row.clone();
+        let platform_list = platform_list.clone();
+        let start_btn = start_btn.clone();
+        let stop_btn = stop_btn.clone();
+        let restart_btn = restart_btn.clone();
+        let op_for_ui = op.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok((life, status)) => {
+                    apply_gateway_ui(&row, &platform_list, status.clone());
+                    start_btn.set_sensitive(true);
+                    stop_btn.set_sensitive(true);
+                    restart_btn.set_sensitive(true);
+                    let (heading, body) =
+                        summarize_gateway_lifecycle(&op_for_ui, life.as_ref(), status.as_ref());
+                    let dialog = adw::AlertDialog::builder()
+                        .heading(&heading)
+                        .body(&body)
+                        .close_response("ok")
+                        .build();
+                    dialog.add_response("ok", "OK");
+                    dialog.present(Some(&parent));
+                    glib::ControlFlow::Break
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    start_btn.set_sensitive(true);
+                    stop_btn.set_sensitive(true);
+                    restart_btn.set_sensitive(true);
+                    row.set_subtitle("Gateway status unavailable.");
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    }
+
     fn refresh_gateway_ui(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
         let payload = run_bridge_action("gateway_status", serde_json::json!({}));
         apply_gateway_ui(row, platform_list, payload);
@@ -4823,7 +5073,7 @@ Being · Continuity\n\
         }
         for &key in SETTINGS_GATEWAY_PLATFORMS {
             let configured = by_name.contains_key(key);
-            let (enabled, connected, status) = match by_name.get(key) {
+            let (enabled, connected, state, status, error_message) = match by_name.get(key) {
                 Some(plat) => (
                     plat.get("enabled")
                         .and_then(|v| v.as_bool())
@@ -4831,12 +5081,26 @@ Being · Continuity\n\
                     plat.get("connected")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false),
+                    plat.get("state")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned(),
                     plat.get("status")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_owned(),
+                    plat.get("error_message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned(),
                 ),
-                None => (false, false, "not configured".to_owned()),
+                None => (
+                    false,
+                    false,
+                    String::new(),
+                    "not configured".to_owned(),
+                    String::new(),
+                ),
             };
             let title = match key {
                 "telegram" => "Telegram",
@@ -4846,20 +5110,12 @@ Being · Continuity\n\
             };
             let plat_row = adw::ActionRow::builder()
                 .title(title)
-                .subtitle(&format!(
-                    "{}{}",
-                    if connected {
-                        "Connected"
-                    } else if !configured {
-                        "Not configured"
-                    } else {
-                        "Not connected"
-                    },
-                    if status.is_empty() || status == "not configured" {
-                        String::new()
-                    } else {
-                        format!(" · {status}")
-                    }
+                .subtitle(&gateway_platform_subtitle(
+                    configured,
+                    connected,
+                    &state,
+                    &status,
+                    &error_message,
                 ))
                 .build();
             let toggle = gtk::Switch::builder()

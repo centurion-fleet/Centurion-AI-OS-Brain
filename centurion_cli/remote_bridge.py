@@ -1896,6 +1896,48 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         raw = str(result or "")
     return _sanitize_remote_reply(raw, display_name)
 
+def _normalize_platform_runtime(
+    runtime_info: Any,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    """Map gateway runtime platform payload → Settings-friendly fields.
+
+    Runtime status writes ``state`` (e.g. ``connected`` / ``connecting`` /
+    ``retrying`` / ``fatal``). Older readers looked for ``connected`` /
+    ``status`` and fell back to config ``enabled``, which made live Telegram
+    look like "Not connected · enabled".
+    """
+    info = runtime_info if isinstance(runtime_info, dict) else {}
+    state = info.get("state") or info.get("status")
+    if not state and info.get("connected"):
+        state = "connected"
+    connected = str(state or "").lower() == "connected"
+    error_message = (
+        info.get("error_message")
+        or info.get("error")
+        or ""
+    )
+    if isinstance(error_message, str):
+        error_message = error_message.strip()
+    else:
+        error_message = str(error_message or "").strip()
+    error_code = info.get("error_code") or ""
+    if error_code is not None:
+        error_code = str(error_code).strip()
+    status_text = str(state) if state else ("enabled" if enabled else "disabled")
+    if error_message and not connected:
+        status_text = f"{status_text} · {error_message}"
+    return {
+        "connected": connected,
+        "status": status_text,
+        "state": str(state) if state else status_text,
+        "error_message": error_message or None,
+        "error_code": error_code or None,
+        "updated_at": info.get("updated_at"),
+    }
+
+
 def _handle_gateway_status(request_id: str) -> dict[str, Any]:
     try:
         from centurion_cli.gateway import get_gateway_runtime_snapshot
@@ -1912,30 +1954,25 @@ def _handle_gateway_status(request_id: str) -> dict[str, Any]:
             for platform, pconfig in (gateway_config.platforms or {}).items():
                 name = getattr(platform, "value", str(platform))
                 runtime_info = platforms_runtime.get(name) or {}
+                enabled = bool(getattr(pconfig, "enabled", False))
+                fields = _normalize_platform_runtime(runtime_info, enabled=enabled)
                 platforms.append(
                     {
                         "name": name,
-                        "enabled": bool(getattr(pconfig, "enabled", False)),
-                        "connected": bool(
-                            runtime_info.get("connected")
-                            or runtime_info.get("status") == "connected"
-                        ),
-                        "status": runtime_info.get("status")
-                        or ("enabled" if getattr(pconfig, "enabled", False) else "disabled"),
+                        "enabled": enabled,
                         "label": name.replace("_", " ").title(),
+                        **fields,
                     }
                 )
         except Exception:
             for name, runtime_info in platforms_runtime.items():
-                if not isinstance(runtime_info, dict):
-                    runtime_info = {}
+                fields = _normalize_platform_runtime(runtime_info, enabled=True)
                 platforms.append(
                     {
                         "name": name,
                         "enabled": True,
-                        "connected": bool(runtime_info.get("connected")),
-                        "status": runtime_info.get("status") or "unknown",
-                        "label": name.replace("_", " ").title(),
+                        "label": str(name).replace("_", " ").title(),
+                        **fields,
                     }
                 )
 
@@ -1957,12 +1994,53 @@ def _handle_gateway_status(request_id: str) -> dict[str, Any]:
         return _error_response(request_id, action="gateway_status", exc=exc)
 
 
+def _write_settings_restart_notify() -> bool:
+    """Queue Telegram/WhatsApp "gateway back" notice for Settings restart/start.
+
+    Reuses the same ``.restart_notify.json`` marker that ``/restart`` writes so
+    the new gateway process sends the existing restart/home-channel online
+    messages.
+    """
+    try:
+        from centurion_constants import get_centurion_home
+        from gateway.config import Platform, load_gateway_config
+        from utils import atomic_json_write
+
+        gateway_config = load_gateway_config()
+        for plat in (Platform.TELEGRAM, Platform.WHATSAPP):
+            pconfig = (gateway_config.platforms or {}).get(plat)
+            if not pconfig or not getattr(pconfig, "enabled", False):
+                continue
+            home = getattr(pconfig, "home_channel", None)
+            if home is None or not getattr(home, "chat_id", None):
+                continue
+            notify_data: dict[str, Any] = {
+                "platform": plat.value,
+                "chat_id": str(home.chat_id),
+            }
+            thread_id = getattr(home, "thread_id", None)
+            if thread_id:
+                notify_data["thread_id"] = str(thread_id)
+            atomic_json_write(
+                get_centurion_home() / ".restart_notify.json",
+                notify_data,
+                indent=None,
+            )
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def _handle_gateway_lifecycle(request_id: str, operation: str) -> dict[str, Any]:
     try:
         import os
         from contextlib import redirect_stderr, redirect_stdout
 
         from centurion_cli import gateway as gateway_cli
+
+        if operation in {"restart", "start"}:
+            _write_settings_restart_notify()
 
         with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stdout(
             devnull
@@ -2017,11 +2095,22 @@ def _handle_gateway_platform_set(request: dict[str, Any], request_id: str) -> di
         enabled = bool(request.get("enabled"))
         restart = bool(request.get("restart", True))
         config = load_config()
-        block = config.get(platform)
+        platforms = config.get("platforms")
+        if not isinstance(platforms, dict):
+            platforms = {}
+            config["platforms"] = platforms
+        block = platforms.get(platform)
         if not isinstance(block, dict):
             block = {}
         block["enabled"] = enabled
-        config[platform] = block
+        platforms[platform] = block
+        # Mirror onto the top-level platform block when present — load_gateway_config
+        # also bridges telegram/whatsapp enabled from that path.
+        top = config.get(platform)
+        if isinstance(top, dict):
+            top = dict(top)
+            top["enabled"] = enabled
+            config[platform] = top
         save_config(config)
 
         restarted = False
