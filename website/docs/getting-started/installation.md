@@ -85,8 +85,8 @@ Where the installer puts things depends on whether you're installing as a normal
 | Installer | Code lives at | `centurion` binary | Data directory |
 |---|---|---|---|
 | pip install | Python site-packages | `~/.local/bin/centurion` (console_scripts) | `~/.centurion/` |
-| Per-user (git installer) | `~/.centurion/centurion-ai-os/` | `~/.local/bin/centurion` (symlink) | `~/.centurion/` |
-| Root-mode (`sudo curl … \| sudo bash`) | `/usr/local/lib/centurion-ai-os/` | `/usr/local/bin/centurion` | `/root/.centurion/` (or `$CENTURION_HOME`) |
+| Per-user (git installer) | `~/.centurion/Centurion-AI-OS/` | `~/.local/bin/centurion` (symlink) | `~/.centurion/` |
+| Root-mode (`sudo curl … \| sudo bash`) | `/usr/local/lib/Centurion-AI-OS/` | `/usr/local/bin/centurion` | `/root/.centurion/` (or `$CENTURION_HOME`) |
 
 The root-mode **FHS layout** (`/usr/local/lib/…`, `/usr/local/bin/centurion`) matches where other system-wide developer tools land on Linux. It's useful for shared-machine deployments where one system install should serve every user. Per-user config (auth, skills, sessions) still lives under each user's `~/.centurion/` or explicit `CENTURION_HOME`.
 
@@ -117,6 +117,55 @@ centurion setup --portal
 ```
 
 That logs you in, sets Nous as your provider, and turns on the Tool Gateway in one command.
+:::
+
+---
+
+## Sovereign AI Brain (Linux Desktop App)
+
+The one-line installer sets up the **CLI and gateway only**. The **Sovereign AI Brain** — the native GTK4 desktop window (Chat, Missions, Settings) — is a separate build that runs on Fedora-based personal hardware.
+
+### Fresh Install (never had the Brain)
+
+If the machine has never run Centurion, do all three steps:
+
+**1. Install the base Centurion** (creates the repo checkout under `~/.centurion/Centurion-AI-OS`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS/main/scripts/install.sh | bash
+source ~/.bashrc
+```
+
+**2. Install build dependencies (Fedora):**
+
+```bash
+sudo dnf install -y cargo rust gcc gcc-c++ pkgconf-pkg-config \
+  gtk4-devel libadwaita-devel webkitgtk6.0-devel vte291-gtk4-devel \
+  nodejs npm
+```
+
+**3. Build and install the Brain:**
+
+```bash
+bash ~/.centurion/Centurion-AI-OS/desktop-native/scripts/install-user.sh
+```
+
+The app then appears in the application menu as **Sovereign AI Brain** (or launch directly with `~/.local/bin/centurion-desktop`). The build also installs `centurion-remote` — the encrypted iPhone pairing service — and enables its user systemd unit.
+
+> **Why three steps?** The base installer deliberately skips the Rust toolchain and GTK build headers — the Brain is a native desktop app, not part of the CLI install. Running `force-brain-update.sh` before step 1 fails with "No such file or directory" because there's no checkout to reset yet.
+
+### Updating an Existing Brain
+
+`centurion update -y` (or Settings → **Check for updates**) updates the Python brain and pulls the latest code, but does **not** rebuild the GTK binary. After a release, rebuild the desktop app from the repo checkout:
+
+```bash
+bash ~/.centurion/Centurion-AI-OS/desktop-native/scripts/force-brain-update.sh
+```
+
+That forces the checkout to `origin/main` and rebuilds — the one-shot recovery for the case where the GUI update can't stash or pull.
+
+:::info Finding your checkout
+If the repo isn't at `~/.centurion/Centurion-AI-OS`, check `~/.centurion/desktop-build.json` → `repo_root` — that's the exact directory the app itself updates from. Run the scripts from there. (Root-mode installs place the repo at `/usr/local/lib/Centurion-AI-OS`.)
 :::
 
 ---
