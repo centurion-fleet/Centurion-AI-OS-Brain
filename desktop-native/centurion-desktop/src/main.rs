@@ -127,7 +127,7 @@ mod linux {
                     .unwrap_or("newer");
                 state.available = true;
                 state.detail = format!(
-                    "Sovereign AI Brain update available ({ver}) — open Check for update below"
+                    "Sovereign AI Brain update available ({ver}) — tap Update below"
                 );
             }
             "up_to_date" => {
@@ -878,7 +878,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         );
 
         let link = gtk::Button::with_label("Show pairing QR");
-        link.add_css_class("suggested-action");
+        // Outline by default — Updates (above Status) owns the solid primary CTA.
         link.set_margin_top(4);
         if let Some(parent) = parent {
             let parent = parent.clone();
@@ -960,7 +960,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         status_card.append(&thinking_detail);
 
         let restart = gtk::Button::with_label("Restart Centurion");
-        restart.add_css_class("suggested-action");
+        // Outline — desk restart is secondary to checking for Brain updates.
         restart.set_size_request(-1, 44);
         status_card.append(&restart);
 
@@ -1030,6 +1030,49 @@ pairing stays available for early testing on the same Wi‑Fi.",
         settings_attention_banner.add_css_class("centurion-attention-banner");
         settings_attention_banner.set_visible(false);
         settings.append(&settings_attention_banner);
+
+        // --- #1: Updates (primary CTA when a build is waiting) ---
+        let updates_group = adw::PreferencesGroup::builder()
+            .title("Updates")
+            .description("Keep this Brain current — check or install the latest version first")
+            .build();
+        let update_row = adw::ActionRow::builder()
+            .title(&format!(
+                "Sovereign AI Brain {}",
+                env!("CARGO_PKG_VERSION")
+            ))
+            .subtitle("Check for a newer build, or rebuild from the Centurion folder on this computer")
+            .icon_name("software-update-available-symbolic")
+            .build();
+        let update_attention_mark = gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .visible(false)
+            .valign(gtk::Align::Center)
+            .build();
+        update_row.add_suffix(&update_attention_mark);
+        let update_check_button = gtk::Button::with_label("Check");
+        // Outline until an update is available — then solid suggested-action.
+        style_update_cta_button(&update_check_button, false);
+        update_check_button.set_valign(gtk::Align::Center);
+        let rebuild_screen_button = gtk::Button::with_label("Rebuild");
+        rebuild_screen_button.set_tooltip_text(Some(
+            "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
+        ));
+        rebuild_screen_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&rebuild_screen_button);
+        update_row.add_suffix(&update_check_button);
+        updates_group.add(&update_row);
+        let pairing_settings_row = adw::ActionRow::builder()
+            .title("Remote pairing")
+            .subtitle(
+                "iPhone app coming soon — show the pairing QR anytime for early testing on the same Wi‑Fi. Approve under Connected Devices below.",
+            )
+            .icon_name("network-wireless-symbolic")
+            .activatable(true)
+            .build();
+        updates_group.add(&pairing_settings_row);
+        settings.append(&updates_group);
 
         // Each section is its own PreferencesGroup so headings stay attached to
         // their rows (a flat list made middle headers look empty).
@@ -1250,48 +1293,6 @@ pairing stays available for early testing on the same Wi‑Fi.",
         firecrawl_row.add_suffix(&firecrawl_button);
         research_group.add(&firecrawl_row);
         settings.append(&research_group);
-
-        // --- Less frequent: updates, desk ops, devices, account ---
-        let updates_group = adw::PreferencesGroup::builder()
-            .title("Updates & pairing")
-            .description("Brain version, updates, and early remote pairing")
-            .build();
-        let update_row = adw::ActionRow::builder()
-            .title(&format!(
-                "Sovereign AI Brain {}",
-                env!("CARGO_PKG_VERSION")
-            ))
-            .subtitle("Check for a newer build, or rebuild from the Centurion folder on this computer")
-            .icon_name("software-update-available-symbolic")
-            .build();
-        let update_attention_mark = gtk::Label::builder()
-            .label("(!)")
-            .css_classes(["centurion-attention-mark"])
-            .visible(false)
-            .valign(gtk::Align::Center)
-            .build();
-        update_row.add_suffix(&update_attention_mark);
-        let update_check_button = gtk::Button::with_label("Check");
-        update_check_button.add_css_class("suggested-action");
-        update_check_button.set_valign(gtk::Align::Center);
-        let rebuild_screen_button = gtk::Button::with_label("Rebuild");
-        rebuild_screen_button.set_tooltip_text(Some(
-            "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
-        ));
-        rebuild_screen_button.set_valign(gtk::Align::Center);
-        update_row.add_suffix(&rebuild_screen_button);
-        update_row.add_suffix(&update_check_button);
-        updates_group.add(&update_row);
-        let pairing_settings_row = adw::ActionRow::builder()
-            .title("Remote pairing")
-            .subtitle(
-                "iPhone app coming soon — show the pairing QR anytime for early testing on the same Wi‑Fi. Approve under Connected Devices below.",
-            )
-            .icon_name("network-wireless-symbolic")
-            .activatable(true)
-            .build();
-        updates_group.add(&pairing_settings_row);
-        settings.append(&updates_group);
 
         let desk_group = adw::PreferencesGroup::builder()
             .title("Desk ops")
@@ -1530,6 +1531,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
             let fix_thinking_row = fix_thinking_row.clone();
             let update_row = update_row.clone();
             let update_attention_mark = update_attention_mark.clone();
+            let update_check_button = update_check_button.clone();
             Rc::new(move |items: Vec<SettingsAttentionItem>| {
                 rebuild_settings_attention_banner(&banner, &items);
                 let thinking = items
@@ -1547,6 +1549,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
                     fix_thinking_row.remove_css_class("centurion-needs-attention");
                 }
                 update_attention_mark.set_visible(update);
+                style_update_cta_button(&update_check_button, update);
                 if update {
                     update_row.add_css_class("centurion-needs-attention");
                     if let Some((_, detail)) = load_update_attention() {
@@ -2213,6 +2216,23 @@ pairing stays available for early testing on the same Wi‑Fi.",
         header.pack_start(&minimize);
         header.pack_start(&maximize);
         header.pack_start(&fullscreen);
+    }
+
+    /// Outline "Check" until an update is waiting; solid "Update" when it is.
+    fn style_update_cta_button(button: &gtk::Button, update_available: bool) {
+        if update_available {
+            button.set_label("Update");
+            button.add_css_class("suggested-action");
+            button.set_tooltip_text(Some(
+                "A newer Sovereign AI Brain build is available — install it now.",
+            ));
+        } else {
+            button.set_label("Check");
+            button.remove_css_class("suggested-action");
+            button.set_tooltip_text(Some(
+                "Check for a newer Sovereign AI Brain build on this computer.",
+            ));
+        }
     }
 
     fn settings_needs_attention() -> bool {
