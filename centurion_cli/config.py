@@ -2422,9 +2422,9 @@ OPTIONAL_ENV_VARS = {
         "category": "tool",
     },
     "FIRECRAWL_API_KEY": {
-        "description": "Firecrawl API key for web search and scraping",
+        "description": "Firecrawl API key for web search and scraping — helpful if you do a lot of research with Centurion",
         "prompt": "Firecrawl API key",
-        "url": "https://firecrawl.dev/",
+        "url": "https://www.firecrawl.dev/",
         "tools": ["web_search", "web_extract"],
         "password": True,
         "category": "tool",

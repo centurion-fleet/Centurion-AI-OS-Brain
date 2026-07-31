@@ -161,7 +161,7 @@ class FirecrawlBrowserProvider(BrowserProvider):
                 {
                     "key": "FIRECRAWL_API_KEY",
                     "prompt": "Firecrawl API key",
-                    "url": "https://firecrawl.dev",
+                    "url": "https://www.firecrawl.dev/",
                 },
             ],
             "post_setup": "agent_browser",

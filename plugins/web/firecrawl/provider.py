@@ -767,7 +767,7 @@ class FirecrawlWebSearchProvider(WebSearchProvider):
                 {
                     "key": "FIRECRAWL_API_KEY",
                     "prompt": "Firecrawl API key (or leave blank for self-hosted)",
-                    "url": "https://docs.firecrawl.dev/introduction",
+                    "url": "https://www.firecrawl.dev/",
                 },
             ],
         }

@@ -868,8 +868,8 @@ For now, sit here and meet your Centurion.";
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "The Brain on this desk is the product. Pairing an iPhone is optional convenience \
-on the same Wi‑Fi — scan only when you want a thin remote.",
+                    "Sovereign AI Remote for iPhone is coming soon. The Brain on this desk is the product; \
+pairing stays available for early testing on the same Wi‑Fi.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -984,16 +984,9 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 .label("Connected Devices")
                 .css_classes(["title-2"])
                 .xalign(0.0)
+                .hexpand(true)
                 .build(),
         );
-        let devices_attention_mark = gtk::Label::builder()
-            .label("(!)")
-            .css_classes(["centurion-attention-mark"])
-            .visible(false)
-            .hexpand(true)
-            .xalign(0.0)
-            .build();
-        devices_heading.append(&devices_attention_mark);
         let refresh_devices_button = gtk::Button::from_icon_name("view-refresh-symbolic");
         refresh_devices_button.set_tooltip_text(Some("Refresh devices"));
         devices_heading.append(&refresh_devices_button);
@@ -1001,7 +994,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         devices_section.append(
             &gtk::Label::builder()
                 .label(
-                    "Link flow: show the pairing QR under Status above → scan in Sovereign AI Remote → approve the iPhone here. Review or revoke anytime.",
+                    "Sovereign AI Remote for iPhone is coming soon. Pairing QR and device approval stay available for early testing — nothing is wrong if no phone is linked yet.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -1038,6 +1031,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         settings_attention_banner.set_visible(false);
         settings.append(&settings_attention_banner);
 
+        // Each section is its own PreferencesGroup so headings stay attached to
+        // their rows (a flat list made middle headers look empty).
         settings.append(
             &gtk::Label::builder()
                 .label("Status")
@@ -1047,58 +1042,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 .build(),
         );
         settings.append(&status_card);
-        settings.append(&devices_section);
 
-        // Each section is its own PreferencesGroup. Earlier we appended section
-        // labels to the page *before* a single list, so Autonomy/Soul/Telegram
-        // visually sat under "Support Tools" and the middle headers looked empty.
-        let brain_group = adw::PreferencesGroup::builder()
-            .title("Brain")
-            .description("Sovereign AI Brain version, updates, and how your Centurion thinks")
+        // --- Everyday: thinking, you, mission, memory, privacy, focus ---
+        let thinking_group = adw::PreferencesGroup::builder()
+            .title("Thinking")
+            .description("How your Centurion thinks on this Brain")
             .build();
-        let pairing_settings_row = adw::ActionRow::builder()
-            .title("Remote pairing")
-            .subtitle(
-                "Show the pairing QR for Sovereign AI Remote (same Wi‑Fi). Approve the phone under Connected Devices above.",
-            )
-            .icon_name("network-wireless-symbolic")
-            .activatable(true)
-            .build();
-        brain_group.add(&pairing_settings_row);
-        brain_group.add(
-            &adw::ActionRow::builder()
-                .title("Version")
-                .subtitle(&format!(
-                    "Sovereign AI Brain {}",
-                    env!("CARGO_PKG_VERSION")
-                ))
-                .icon_name("dialog-information-symbolic")
-                .build(),
-        );
-        let update_row = adw::ActionRow::builder()
-            .title("Check for update")
-            .subtitle("Check whether a newer Sovereign AI Brain is available")
-            .icon_name("software-update-available-symbolic")
-            .build();
-        let update_attention_mark = gtk::Label::builder()
-            .label("(!)")
-            .css_classes(["centurion-attention-mark"])
-            .visible(false)
-            .valign(gtk::Align::Center)
-            .build();
-        update_row.add_suffix(&update_attention_mark);
-        let update_check_button = gtk::Button::with_label("Check");
-        update_check_button.add_css_class("suggested-action");
-        update_check_button.set_valign(gtk::Align::Center);
-        let rebuild_screen_button = gtk::Button::with_label("Rebuild Brain");
-        rebuild_screen_button.set_tooltip_text(Some(
-            "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
-        ));
-        rebuild_screen_button.set_valign(gtk::Align::Center);
-        update_row.add_suffix(&rebuild_screen_button);
-        update_row.add_suffix(&update_check_button);
-        brain_group.add(&update_row);
-
         let thinking_settings_row = adw::ActionRow::builder()
             .title("How your Centurion thinks")
             .subtitle("Checking thinking service…")
@@ -1122,56 +1071,143 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         change_thinking_button.set_valign(gtk::Align::Center);
         thinking_settings_row.add_suffix(&restore_thinking_button);
         thinking_settings_row.add_suffix(&change_thinking_button);
-        brain_group.add(&thinking_settings_row);
-
+        thinking_group.add(&thinking_settings_row);
         let backup_thinking_row = adw::ActionRow::builder()
             .title("Backup Thinking Services")
             .subtitle("No backup thinking services configured.")
             .icon_name("view-list-symbolic")
             .build();
-        brain_group.add(&backup_thinking_row);
-        let fleet_peer_row = adw::ActionRow::builder()
-            .title("Fleet peer")
-            .subtitle("Add peers and ping across machines (moved from Focus).")
-            .icon_name("network-server-symbolic")
+        thinking_group.add(&backup_thinking_row);
+        settings.append(&thinking_group);
+
+        let you_group = adw::PreferencesGroup::builder()
+            .title("You")
+            .description("Autonomy, story, and your Sovereign's personality")
             .build();
-        let fleet_peer_button = gtk::Button::with_label("Configure");
-        fleet_peer_button.set_valign(gtk::Align::Center);
-        fleet_peer_row.add_suffix(&fleet_peer_button);
-        brain_group.add(&fleet_peer_row);
-        let plugins_row = adw::ActionRow::builder()
-            .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain — manage here, not on Focus.")
-            .icon_name("application-x-addon-symbolic")
+        let autonomy_row = adw::ActionRow::builder()
+            .title("Autonomy Level")
+            .subtitle("Balanced (default) — follow with light interpretation")
+            .icon_name("preferences-desktop-symbolic")
             .build();
-        let plugins_button = gtk::Button::with_label("View");
-        plugins_button.set_valign(gtk::Align::Center);
-        plugins_row.add_suffix(&plugins_button);
-        brain_group.add(&plugins_row);
-        let ops_row = adw::ActionRow::builder()
-            .title("Scheduled & board")
-            .subtitle("Cron jobs and kanban glance — desk ops, not Focus pulse.")
+        let autonomy_button = gtk::Button::with_label("Adjust");
+        autonomy_button.set_valign(gtk::Align::Center);
+        autonomy_row.add_suffix(&autonomy_button);
+        you_group.add(&autonomy_row);
+        let about_you_row = adw::ActionRow::builder()
+            .title("About You")
+            .subtitle("Story, values, and challenges for your Sovereign")
+            .icon_name("user-info-symbolic")
+            .build();
+        let about_you_button = gtk::Button::with_label("Interview");
+        about_you_button.set_valign(gtk::Align::Center);
+        about_you_row.add_suffix(&about_you_button);
+        you_group.add(&about_you_row);
+        let soul_row = adw::ActionRow::builder()
+            .title("Your Sovereign's Soul")
+            .subtitle("Personality and rules for your Centurion")
+            .icon_name("emoji-people-symbolic")
+            .build();
+        let soul_shape_button = gtk::Button::with_label("Shape");
+        soul_shape_button.add_css_class("suggested-action");
+        soul_shape_button.set_valign(gtk::Align::Center);
+        let soul_button = gtk::Button::with_label("View / Edit");
+        soul_button.set_valign(gtk::Align::Center);
+        soul_row.add_suffix(&soul_shape_button);
+        soul_row.add_suffix(&soul_button);
+        you_group.add(&soul_row);
+        settings.append(&you_group);
+
+        let mission_group = adw::PreferencesGroup::builder()
+            .title("Focus & Mission")
+            .description("What you're building toward — edited here, shown on Focus")
+            .build();
+        let life_mission_row = adw::ActionRow::builder()
+            .title("Life Mission")
+            .subtitle("What you're building toward — shown on Focus; edit here.")
+            .icon_name("emblem-favorite-symbolic")
+            .build();
+        let life_mission_edit_button = gtk::Button::with_label("Edit");
+        life_mission_edit_button.set_valign(gtk::Align::Center);
+        life_mission_row.add_suffix(&life_mission_edit_button);
+        mission_group.add(&life_mission_row);
+        let mission_stack_row = adw::ActionRow::builder()
+            .title("Mission Stack")
+            .subtitle("Primary, supporting, dreams — open the Focus tab")
             .icon_name("view-list-symbolic")
             .build();
-        let ops_button = gtk::Button::with_label("View");
-        ops_button.set_valign(gtk::Align::Center);
-        ops_row.add_suffix(&ops_button);
-        brain_group.add(&ops_row);
-        let collab_connect_row = adw::ActionRow::builder()
-            .title("Collaborations")
-            .subtitle("Local boards on this Brain — no portal tokens. Focus stays offline.")
-            .icon_name("system-users-symbolic")
+        let mission_stack_button = gtk::Button::with_label("Open tab");
+        mission_stack_button.set_valign(gtk::Align::Center);
+        mission_stack_button.add_css_class("suggested-action");
+        mission_stack_row.add_suffix(&mission_stack_button);
+        mission_group.add(&mission_stack_row);
+        let mission_discover_row = adw::ActionRow::builder()
+            .title("Mission Discovery")
+            .subtitle("Ceremonial interview to set your Life Mission")
+            .icon_name("compass-symbolic")
             .build();
-        let collab_connect_button = gtk::Button::with_label("New board");
-        collab_connect_button.add_css_class("suggested-action");
-        collab_connect_button.set_valign(gtk::Align::Center);
-        collab_connect_row.add_suffix(&collab_connect_button);
-        brain_group.add(&collab_connect_row);
-        settings.append(&brain_group);
+        let mission_discover_button = gtk::Button::with_label("Begin");
+        mission_discover_button.add_css_class("suggested-action");
+        mission_discover_button.set_valign(gtk::Align::Center);
+        mission_discover_row.add_suffix(&mission_discover_button);
+        mission_group.add(&mission_discover_row);
+        settings.append(&mission_group);
 
+        let memory_group = adw::PreferencesGroup::builder()
+            .title("Memory")
+            .description("How your Centurion remembers across sessions")
+            .build();
+        let memory_horizon_row = adw::ActionRow::builder()
+            .title("Memory Horizon")
+            .subtitle("How your Centurion remembers — Hot Cache, Session Recall, Vault")
+            .icon_name("view-grid-symbolic")
+            .build();
+        let memory_horizon_button = gtk::Button::with_label("View");
+        memory_horizon_button.set_valign(gtk::Align::Center);
+        memory_horizon_row.add_suffix(&memory_horizon_button);
+        memory_group.add(&memory_horizon_row);
+        settings.append(&memory_group);
+
+        let privacy_group = adw::PreferencesGroup::builder()
+            .title("Privacy & Oversight")
+            .description("Reporting cadence, confirmation, and what stays on this computer")
+            .build();
+        let oversight_row = adw::ActionRow::builder()
+            .title("Reporting & Oversight")
+            .subtitle("Report cadence and confirmation preferences")
+            .icon_name("eye-open-negative-filled-symbolic")
+            .build();
+        let oversight_button = gtk::Button::with_label("Adjust");
+        oversight_button.set_valign(gtk::Align::Center);
+        oversight_row.add_suffix(&oversight_button);
+        privacy_group.add(&oversight_row);
+        let privacy_row = adw::ActionRow::builder()
+            .title("Privacy & Trust")
+            .subtitle("What stays on this computer, and how partnership works")
+            .icon_name("security-high-symbolic")
+            .activatable(true)
+            .build();
+        privacy_group.add(&privacy_row);
+        settings.append(&privacy_group);
+
+        let focus_attention_group = adw::PreferencesGroup::builder()
+            .title("Focus Attention")
+            .description("Where Centurion should take you when something needs you")
+            .build();
+        let pulse_pref_row = adw::ActionRow::builder()
+            .title("Prefer Focus on decisions")
+            .subtitle("Open Focus when something needs your attention")
+            .icon_name("emblem-important-symbolic")
+            .build();
+        let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
+        pulse_pref_switch.set_active(load_decision_first_pref());
+        pulse_pref_row.add_suffix(&pulse_pref_switch);
+        focus_attention_group.add(&pulse_pref_row);
+        settings.append(&focus_attention_group);
+
+        // --- Messaging & research ---
         let gateway_group = adw::PreferencesGroup::builder()
             .title("Messaging Gateway")
-            .description("Telegram and other platforms for this Brain")
+            .description("Telegram, Centurion Remote Control, and WhatsApp for this Brain")
             .build();
         let gateway_row = adw::ActionRow::builder()
             .title("Gateway")
@@ -1196,114 +1232,116 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         gateway_platform_list.set_margin_bottom(8);
         settings.append(&gateway_platform_list);
 
-        let you_group = adw::PreferencesGroup::builder()
-            .title("You & Oversight")
-            .description("Autonomy, personality, memory, and reporting")
+        let research_group = adw::PreferencesGroup::builder()
+            .title("Research tools")
+            .description("Optional keys that help Centurion search and scrape the web")
             .build();
-        let autonomy_row = adw::ActionRow::builder()
-            .title("Autonomy Level")
-            .subtitle("Balanced (default) — follow with light interpretation")
-            .icon_name("preferences-desktop-symbolic")
+        let firecrawl_row = adw::ActionRow::builder()
+            .title("Firecrawl")
+            .subtitle("Checking…")
+            .icon_name("system-search-symbolic")
             .build();
-        let autonomy_button = gtk::Button::with_label("Adjust");
-        autonomy_button.set_valign(gtk::Align::Center);
-        autonomy_row.add_suffix(&autonomy_button);
-        you_group.add(&autonomy_row);
+        let firecrawl_button = gtk::Button::with_label("Add key");
+        firecrawl_button.set_tooltip_text(Some(
+            "Save a Firecrawl API key on this brain for research-heavy web search and scraping.",
+        ));
+        firecrawl_button.add_css_class("suggested-action");
+        firecrawl_button.set_valign(gtk::Align::Center);
+        firecrawl_row.add_suffix(&firecrawl_button);
+        research_group.add(&firecrawl_row);
+        settings.append(&research_group);
 
-        let life_mission_row = adw::ActionRow::builder()
-            .title("Life Mission")
-            .subtitle("What you're building toward — shown on Focus; edit here.")
-            .icon_name("emblem-favorite-symbolic")
+        // --- Less frequent: updates, desk ops, devices, account ---
+        let updates_group = adw::PreferencesGroup::builder()
+            .title("Updates & pairing")
+            .description("Brain version, updates, and early remote pairing")
             .build();
-        let life_mission_edit_button = gtk::Button::with_label("Edit");
-        life_mission_edit_button.set_valign(gtk::Align::Center);
-        life_mission_row.add_suffix(&life_mission_edit_button);
-        you_group.add(&life_mission_row);
-
-        let mission_stack_row = adw::ActionRow::builder()
-            .title("Mission Stack")
-            .subtitle("Primary, supporting, dreams — open the Focus tab")
-            .icon_name("view-list-symbolic")
+        let update_row = adw::ActionRow::builder()
+            .title(&format!(
+                "Sovereign AI Brain {}",
+                env!("CARGO_PKG_VERSION")
+            ))
+            .subtitle("Check for a newer build, or rebuild from the Centurion folder on this computer")
+            .icon_name("software-update-available-symbolic")
             .build();
-        let mission_stack_button = gtk::Button::with_label("Open tab");
-        mission_stack_button.set_valign(gtk::Align::Center);
-        mission_stack_button.add_css_class("suggested-action");
-        mission_stack_row.add_suffix(&mission_stack_button);
-        you_group.add(&mission_stack_row);
-
-        let mission_discover_row = adw::ActionRow::builder()
-            .title("Mission Discovery")
-            .subtitle("Ceremonial interview to set your Life Mission")
-            .icon_name("compass-symbolic")
+        let update_attention_mark = gtk::Label::builder()
+            .label("(!)")
+            .css_classes(["centurion-attention-mark"])
+            .visible(false)
+            .valign(gtk::Align::Center)
             .build();
-        let mission_discover_button = gtk::Button::with_label("Begin");
-        mission_discover_button.add_css_class("suggested-action");
-        mission_discover_button.set_valign(gtk::Align::Center);
-        mission_discover_row.add_suffix(&mission_discover_button);
-        you_group.add(&mission_discover_row);
-
-        let about_you_row = adw::ActionRow::builder()
-            .title("About You")
-            .subtitle("Story, values, and challenges for your Sovereign")
-            .icon_name("user-info-symbolic")
-            .build();
-        let about_you_button = gtk::Button::with_label("Interview");
-        about_you_button.set_valign(gtk::Align::Center);
-        about_you_row.add_suffix(&about_you_button);
-        you_group.add(&about_you_row);
-
-        let soul_row = adw::ActionRow::builder()
-            .title("Your Sovereign's Soul")
-            .subtitle("Personality and rules for your Centurion")
-            .icon_name("emoji-people-symbolic")
-            .build();
-        let soul_shape_button = gtk::Button::with_label("Shape");
-        soul_shape_button.add_css_class("suggested-action");
-        soul_shape_button.set_valign(gtk::Align::Center);
-        let soul_button = gtk::Button::with_label("View / Edit");
-        soul_button.set_valign(gtk::Align::Center);
-        soul_row.add_suffix(&soul_shape_button);
-        soul_row.add_suffix(&soul_button);
-        you_group.add(&soul_row);
-
-        let memory_horizon_row = adw::ActionRow::builder()
-            .title("Memory Horizon")
-            .subtitle("How your Centurion remembers — Hot Cache, Session Recall, Vault")
-            .icon_name("view-grid-symbolic")
-            .build();
-        let memory_horizon_button = gtk::Button::with_label("View");
-        memory_horizon_button.set_valign(gtk::Align::Center);
-        memory_horizon_row.add_suffix(&memory_horizon_button);
-        you_group.add(&memory_horizon_row);
-
-        let oversight_row = adw::ActionRow::builder()
-            .title("Reporting & Oversight")
-            .subtitle("Report cadence and confirmation preferences")
-            .icon_name("eye-open-negative-filled-symbolic")
-            .build();
-        let oversight_button = gtk::Button::with_label("Adjust");
-        oversight_button.set_valign(gtk::Align::Center);
-        oversight_row.add_suffix(&oversight_button);
-        you_group.add(&oversight_row);
-
-        let privacy_row = adw::ActionRow::builder()
-            .title("Privacy & Trust")
-            .subtitle("What stays on this computer, and how partnership works")
-            .icon_name("security-high-symbolic")
+        update_row.add_suffix(&update_attention_mark);
+        let update_check_button = gtk::Button::with_label("Check");
+        update_check_button.add_css_class("suggested-action");
+        update_check_button.set_valign(gtk::Align::Center);
+        let rebuild_screen_button = gtk::Button::with_label("Rebuild");
+        rebuild_screen_button.set_tooltip_text(Some(
+            "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
+        ));
+        rebuild_screen_button.set_valign(gtk::Align::Center);
+        update_row.add_suffix(&rebuild_screen_button);
+        update_row.add_suffix(&update_check_button);
+        updates_group.add(&update_row);
+        let pairing_settings_row = adw::ActionRow::builder()
+            .title("Remote pairing")
+            .subtitle(
+                "iPhone app coming soon — show the pairing QR anytime for early testing on the same Wi‑Fi. Approve under Connected Devices below.",
+            )
+            .icon_name("network-wireless-symbolic")
             .activatable(true)
             .build();
-        you_group.add(&privacy_row);
+        updates_group.add(&pairing_settings_row);
+        settings.append(&updates_group);
 
-        let pulse_pref_row = adw::ActionRow::builder()
-            .title("Focus attention")
-            .subtitle("Prefer opening Focus on decisions when something needs you")
-            .icon_name("emblem-important-symbolic")
+        let desk_group = adw::PreferencesGroup::builder()
+            .title("Desk ops")
+            .description("Fleet, plugins, schedules, and local collaboration boards")
             .build();
-        let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
-        pulse_pref_switch.set_active(load_decision_first_pref());
-        pulse_pref_row.add_suffix(&pulse_pref_switch);
-        you_group.add(&pulse_pref_row);
+        let fleet_peer_row = adw::ActionRow::builder()
+            .title("Fleet peer")
+            .subtitle("Add peers and ping across machines (moved from Focus).")
+            .icon_name("network-server-symbolic")
+            .build();
+        let fleet_peer_button = gtk::Button::with_label("Configure");
+        fleet_peer_button.set_valign(gtk::Align::Center);
+        fleet_peer_row.add_suffix(&fleet_peer_button);
+        desk_group.add(&fleet_peer_row);
+        let plugins_row = adw::ActionRow::builder()
+            .title("Installed plugins")
+            .subtitle("Agent plugins on this Brain — manage here, not on Focus.")
+            .icon_name("application-x-addon-symbolic")
+            .build();
+        let plugins_button = gtk::Button::with_label("View");
+        plugins_button.set_valign(gtk::Align::Center);
+        plugins_row.add_suffix(&plugins_button);
+        desk_group.add(&plugins_row);
+        let ops_row = adw::ActionRow::builder()
+            .title("Scheduled & board")
+            .subtitle("Cron jobs and kanban glance — desk ops, not Focus pulse.")
+            .icon_name("view-list-symbolic")
+            .build();
+        let ops_button = gtk::Button::with_label("View");
+        ops_button.set_valign(gtk::Align::Center);
+        ops_row.add_suffix(&ops_button);
+        desk_group.add(&ops_row);
+        let collab_connect_row = adw::ActionRow::builder()
+            .title("Collaborations")
+            .subtitle("Local boards on this Brain — no portal tokens. Focus stays offline.")
+            .icon_name("system-users-symbolic")
+            .build();
+        let collab_connect_button = gtk::Button::with_label("New board");
+        collab_connect_button.add_css_class("suggested-action");
+        collab_connect_button.set_valign(gtk::Align::Center);
+        collab_connect_row.add_suffix(&collab_connect_button);
+        desk_group.add(&collab_connect_row);
+        settings.append(&desk_group);
 
+        settings.append(&devices_section);
+
+        let account_group = adw::PreferencesGroup::builder()
+            .title("Account")
+            .description("Skills, license, and family program")
+            .build();
         let skills_row = adw::ActionRow::builder()
             .title("Skills & tools")
             .subtitle("What this Brain can use (read-only)")
@@ -1312,8 +1350,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         let skills_button = gtk::Button::with_label("View");
         skills_button.set_valign(gtk::Align::Center);
         skills_row.add_suffix(&skills_button);
-        you_group.add(&skills_row);
-
+        account_group.add(&skills_row);
         let license_row = adw::ActionRow::builder()
             .title("License")
             .subtitle("Product entitlement for this Brain")
@@ -1325,8 +1362,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         // Entitlement is a bridge round-trip — stay hidden until the deferred
         // Settings fill answers, so build_window never blocks on it.
         license_row.set_visible(false);
-        you_group.add(&license_row);
-
+        account_group.add(&license_row);
         let beneficiary_row = adw::ActionRow::builder()
             .title("Family Beneficiary")
             .subtitle("Nominate family and track colleague referrals")
@@ -1336,9 +1372,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         beneficiary_button.set_valign(gtk::Align::Center);
         beneficiary_row.add_suffix(&beneficiary_button);
         beneficiary_row.set_visible(false);
-        you_group.add(&beneficiary_row);
-
-        settings.append(&you_group);
+        account_group.add(&beneficiary_row);
+        settings.append(&account_group);
 
         let transition_group = adw::PreferencesGroup::builder()
             .title("Transition")
@@ -1492,8 +1527,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let banner = settings_attention_banner.clone();
             let thinking_settings_row = thinking_settings_row.clone();
             let thinking_attention_mark = thinking_attention_mark.clone();
-            let devices_section = devices_section.clone();
-            let devices_attention_mark = devices_attention_mark.clone();
             let fix_thinking_row = fix_thinking_row.clone();
             let update_row = update_row.clone();
             let update_attention_mark = update_attention_mark.clone();
@@ -1502,9 +1535,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 let thinking = items
                     .iter()
                     .any(|i| matches!(i, SettingsAttentionItem::Thinking { .. }));
-                let remotes = items
-                    .iter()
-                    .any(|i| matches!(i, SettingsAttentionItem::RemotesOffline { .. }));
                 let update = items
                     .iter()
                     .any(|i| matches!(i, SettingsAttentionItem::UpdateAvailable { .. }));
@@ -1515,12 +1545,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 } else {
                     thinking_settings_row.remove_css_class("centurion-needs-attention");
                     fix_thinking_row.remove_css_class("centurion-needs-attention");
-                }
-                devices_attention_mark.set_visible(remotes);
-                if remotes {
-                    devices_section.add_css_class("centurion-needs-attention");
-                } else {
-                    devices_section.remove_css_class("centurion-needs-attention");
                 }
                 update_attention_mark.set_visible(update);
                 if update {
@@ -1645,6 +1669,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             oversight_row: oversight_row.clone(),
             license_row: license_row.clone(),
             beneficiary_row: beneficiary_row.clone(),
+            firecrawl_row: firecrawl_row.clone(),
+            firecrawl_button: firecrawl_button.clone(),
         };
 
         let poll_list = device_list.clone();
@@ -1804,6 +1830,14 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             let thinking_detail = thinking_detail.clone();
             let window = window.clone();
             move |_| show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail)
+        });
+        firecrawl_button.connect_clicked({
+            let window = window.clone();
+            let firecrawl_row = firecrawl_row.clone();
+            let firecrawl_button = firecrawl_button.clone();
+            move |_| {
+                show_firecrawl_key_dialog(&window, &firecrawl_row, &firecrawl_button);
+            }
         });
         let backup_manage_button = gtk::Button::with_label("Details");
         backup_manage_button.set_valign(gtk::Align::Center);
@@ -2218,20 +2252,19 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
     #[derive(Debug, Clone)]
     enum SettingsAttentionItem {
         Thinking { detail: String },
-        RemotesOffline { count: usize },
         UpdateAvailable { detail: String },
     }
 
     fn settings_attention_items() -> Vec<SettingsAttentionItem> {
-        // iPhone You tab "!": thinking unhealthy / unavailable, remotes
-        // previously linked but now offline, or a Brain update waiting.
+        // Settings tab "!": thinking unhealthy / unavailable, or a Brain update waiting.
+        // Remotes are not attention-worthy while the iPhone app is unreleased.
         // Use --skip-probe so the 5s tab-badge poll stays light; update
         // availability is cached from Check / background probe.
         let mut items = Vec::new();
         if let Some((_, detail)) = load_update_attention() {
             items.push(SettingsAttentionItem::UpdateAvailable { detail });
         }
-        let thinking_attention = match run_provider_command(&["status", "--skip-probe"]) {
+        match run_provider_command(&["status", "--skip-probe"]) {
             Some(response) => match response.status {
                 Some(status) => {
                     if status.health != "ok" {
@@ -2241,9 +2274,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                                 status.health
                             ),
                         });
-                        true
-                    } else {
-                        false
                     }
                 }
                 None => {
@@ -2251,36 +2281,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                         detail: "Thinking service status is unavailable — open Fix Thinking Service."
                             .to_owned(),
                     });
-                    true
                 }
             },
             None => {
                 items.push(SettingsAttentionItem::Thinking {
                     detail: "Thinking service status is unavailable — open Fix Thinking Service."
                         .to_owned(),
-                });
-                true
-            }
-        };
-        let _ = thinking_attention;
-
-        let centurion_remote = std::env::var("HOME")
-            .ok()
-            .map(|home| format!("{home}/.local/bin/centurion-remote"))
-            .filter(|path| std::path::Path::new(path).is_file())
-            .unwrap_or_else(|| "centurion-remote".to_owned());
-        let listing = Command::new(&centurion_remote)
-            .args(["devices", "--json"])
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| serde_json::from_slice::<DeviceListing>(&output.stdout).ok());
-        if let Some(listing) = listing {
-            if !listing.approved.is_empty()
-                && listing.approved.iter().all(|device| !device.connected)
-            {
-                items.push(SettingsAttentionItem::RemotesOffline {
-                    count: listing.approved.len(),
                 });
             }
         }
@@ -2315,11 +2321,6 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         for item in items {
             let text = match item {
                 SettingsAttentionItem::Thinking { detail } => format!("• {detail}"),
-                SettingsAttentionItem::RemotesOffline { count } => format!(
-                    "• Linked remote{s} offline ({count}) — check Connected Devices above",
-                    s = if *count == 1 { "" } else { "s" },
-                    count = count
-                ),
                 SettingsAttentionItem::UpdateAvailable { detail } => format!("• {detail}"),
             };
             banner.append(
@@ -3433,6 +3434,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         oversight_row: adw::ActionRow,
         license_row: adw::ActionRow,
         beneficiary_row: adw::ActionRow,
+        firecrawl_row: adw::ActionRow,
+        firecrawl_button: gtk::Button,
     }
 
     /// Worker-side payloads for `SettingsRows` — everything here is `Send`, so
@@ -3445,6 +3448,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         backup_line: String,
         license_visible: bool,
         beneficiary_visible: bool,
+        firecrawl_configured: bool,
+        firecrawl_line: String,
     }
 
     /// `plain_health` picks the plain-language health phrasing used by the
@@ -3543,6 +3548,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                         .unwrap_or(false);
                     enabled || has_family
                 };
+                let (firecrawl_configured, firecrawl_line) =
+                    firecrawl_status_from_value(snap.get("firecrawl"));
                 return SettingsFill {
                     soul,
                     oversight,
@@ -3551,6 +3558,8 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                     backup_line,
                     license_visible,
                     beneficiary_visible,
+                    firecrawl_configured,
+                    firecrawl_line,
                 };
             }
         }
@@ -3580,6 +3589,7 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
                 }
                 Some(line)
             });
+        let (firecrawl_configured, firecrawl_line) = firecrawl_status_from_bridge();
         SettingsFill {
             soul,
             oversight,
@@ -3588,7 +3598,30 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
             backup_line: backup_thinking_subtitle(),
             license_visible: license_entitlement_enabled(),
             beneficiary_visible: beneficiary_program_active(),
+            firecrawl_configured,
+            firecrawl_line,
         }
+    }
+
+    fn firecrawl_status_from_value(value: Option<&serde_json::Value>) -> (bool, String) {
+        let configured = value
+            .and_then(|v| v.get("configured"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let line = if configured {
+            "API key saved on this brain — ready for research scraping.".to_owned()
+        } else {
+            "Not set — get a key at https://www.firecrawl.dev/".to_owned()
+        };
+        (configured, line)
+    }
+
+    fn firecrawl_status_from_bridge() -> (bool, String) {
+        let payload = run_bridge_action(
+            "tool_env_get",
+            serde_json::json!({ "key": "FIRECRAWL_API_KEY" }),
+        );
+        firecrawl_status_from_value(payload.as_ref())
     }
 
     fn apply_settings_fill(rows: &SettingsRows, fill: SettingsFill) {
@@ -3622,6 +3655,12 @@ on the same Wi‑Fi — scan only when you want a thin remote.",
         }
         rows.license_row.set_visible(fill.license_visible);
         rows.beneficiary_row.set_visible(fill.beneficiary_visible);
+        rows.firecrawl_row.set_subtitle(&fill.firecrawl_line);
+        rows.firecrawl_button.set_label(if fill.firecrawl_configured {
+            "Update"
+        } else {
+            "Add key"
+        });
     }
 
     /// One worker pass for every Settings row — no bridge I/O on the UI thread.
@@ -4780,46 +4819,61 @@ Being · Continuity\n\
             if running { "Running" } else { "Stopped" },
             state
         ));
+        // Settings only surfaces the three messaging surfaces we want end users
+        // to manage here — Telegram, Centurion Remote Control (api_server), WhatsApp.
+        const SETTINGS_GATEWAY_PLATFORMS: &[&str] = &["telegram", "api_server", "whatsapp"];
         let platforms = payload
             .pointer("/status/platforms")
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        if platforms.is_empty() {
-            platform_list.append(
-                &adw::ActionRow::builder()
-                    .title("No messaging platforms configured")
-                    .subtitle("Use centurion setup or config.yaml to add Telegram/Discord/etc.")
-                    .build(),
-            );
-            return;
-        }
+        let mut by_name: std::collections::HashMap<String, serde_json::Value> =
+            std::collections::HashMap::new();
         for plat in platforms {
-            let name = plat
+            let key = plat
                 .get("name")
-                .or_else(|| plat.get("label"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("platform")
-                .to_owned();
-            let enabled = plat
-                .get("enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let connected = plat
-                .get("connected")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let status = plat
-                .get("status")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
-                .to_owned();
+                .to_ascii_lowercase();
+            if SETTINGS_GATEWAY_PLATFORMS.contains(&key.as_str()) {
+                by_name.insert(key, plat);
+            }
+        }
+        for &key in SETTINGS_GATEWAY_PLATFORMS {
+            let configured = by_name.contains_key(key);
+            let (enabled, connected, status) = match by_name.get(key) {
+                Some(plat) => (
+                    plat.get("enabled")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    plat.get("connected")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    plat.get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned(),
+                ),
+                None => (false, false, "not configured".to_owned()),
+            };
+            let title = match key {
+                "telegram" => "Telegram",
+                "api_server" => "Centurion Remote Control",
+                "whatsapp" => "WhatsApp",
+                _ => key,
+            };
             let plat_row = adw::ActionRow::builder()
-                .title(&name)
+                .title(title)
                 .subtitle(&format!(
                     "{}{}",
-                    if connected { "Connected" } else { "Not connected" },
-                    if status.is_empty() {
+                    if connected {
+                        "Connected"
+                    } else if !configured {
+                        "Not configured"
+                    } else {
+                        "Not connected"
+                    },
+                    if status.is_empty() || status == "not configured" {
                         String::new()
                     } else {
                         format!(" · {status}")
@@ -4830,24 +4884,27 @@ Being · Continuity\n\
                 .active(enabled)
                 .valign(gtk::Align::Center)
                 .build();
-            let platform_name = name.clone();
+            toggle.set_sensitive(configured);
+            let platform_name = key.to_owned();
             let list_for_cb = platform_list.clone();
             let status_row = row.clone();
-            toggle.connect_active_notify(move |sw| {
-                let _ = run_bridge_action(
-                    "gateway_platform_set",
-                    serde_json::json!({
-                        "platform": platform_name,
-                        "enabled": sw.is_active(),
-                        "restart": true,
-                    }),
-                );
-                let list_for_cb = list_for_cb.clone();
-                let status_row = status_row.clone();
-                glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
-                    refresh_gateway_ui(&status_row, &list_for_cb);
+            if configured {
+                toggle.connect_active_notify(move |sw| {
+                    let _ = run_bridge_action(
+                        "gateway_platform_set",
+                        serde_json::json!({
+                            "platform": platform_name,
+                            "enabled": sw.is_active(),
+                            "restart": true,
+                        }),
+                    );
+                    let list_for_cb = list_for_cb.clone();
+                    let status_row = status_row.clone();
+                    glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+                        refresh_gateway_ui(&status_row, &list_for_cb);
+                    });
                 });
-            });
+            }
             plat_row.add_suffix(&toggle);
             platform_list.append(&plat_row);
         }
@@ -5564,6 +5621,128 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         detail: &gtk::Label,
     ) {
         show_change_thinking_dialog_inner(parent, settings_row, detail, None);
+    }
+
+    const FIRECRAWL_KEY_URL: &str = "https://www.firecrawl.dev/";
+
+    fn show_firecrawl_key_dialog(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        button: &gtk::Button,
+    ) {
+        let dialog = adw::AlertDialog::builder()
+            .heading("Firecrawl API key")
+            .body(
+                "Paste your Firecrawl key to power research-heavy web search and scraping on this brain. \
+The key stays in ~/.centurion/.env on this machine only.",
+            )
+            .close_response("cancel")
+            .default_response("save")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("save", "Save");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+
+        let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        let note = gtk::Label::builder()
+            .label(
+                "Source your key at https://www.firecrawl.dev/ — sign in, open the dashboard, then API Keys.",
+            )
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build();
+        let link = gtk::LinkButton::with_label(FIRECRAWL_KEY_URL, "Open firecrawl.dev");
+        link.set_uri(FIRECRAWL_KEY_URL);
+        link.set_halign(gtk::Align::Start);
+        let key_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("fc-… Firecrawl API key")
+            .show_peek_icon(true)
+            .build();
+        extra.append(&note);
+        extra.append(&link);
+        extra.append(
+            &gtk::Label::builder()
+                .label("API key")
+                .xalign(0.0)
+                .build(),
+        );
+        extra.append(&key_entry);
+        dialog.set_extra_child(Some(&extra));
+        dialog.present(Some(parent));
+
+        let parent = parent.clone();
+        let row = row.clone();
+        let button = button.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response != "save" {
+                dialog.close();
+                return;
+            }
+            let key = key_entry.text().to_string();
+            dialog.close();
+            if key.trim().is_empty() {
+                let fail = adw::AlertDialog::builder()
+                    .heading("API key required")
+                    .body(
+                        "Paste your Firecrawl API key from https://www.firecrawl.dev/ \
+(Dashboard → API Keys), then try again.",
+                    )
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(&parent));
+                return;
+            }
+            let key = key.trim().to_owned();
+            let row = row.clone();
+            let button = button.clone();
+            let parent = parent.clone();
+            crate::chat_page::run_bridge_action_async(
+                "tool_env_set",
+                serde_json::json!({
+                    "key": "FIRECRAWL_API_KEY",
+                    "value": key,
+                }),
+                move |payload: Option<serde_json::Value>| {
+                    let ok = payload
+                        .as_ref()
+                        .and_then(|p| p.get("ok"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if ok {
+                        let configured = payload
+                            .as_ref()
+                            .and_then(|p| p.get("configured"))
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+                        row.set_subtitle(if configured {
+                            "API key saved on this brain — ready for research scraping."
+                        } else {
+                            "Not set — get a key at https://www.firecrawl.dev/"
+                        });
+                        button.set_label(if configured { "Update" } else { "Add key" });
+                        return;
+                    }
+                    let message = payload
+                        .as_ref()
+                        .and_then(|p| {
+                            p.get("message")
+                                .or_else(|| p.get("error"))
+                                .and_then(|v| v.as_str())
+                                .map(str::to_owned)
+                        })
+                        .unwrap_or_else(|| "Could not save Firecrawl API key.".to_owned());
+                    let fail = adw::AlertDialog::builder()
+                        .heading("Could not save key")
+                        .body(&message)
+                        .close_response("ok")
+                        .build();
+                    fail.add_response("ok", "OK");
+                    fail.present(Some(&parent));
+                },
+            );
+        });
     }
 
     fn show_change_thinking_dialog_inner(

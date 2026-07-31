@@ -77,6 +77,10 @@ def handle_request(
         }
     if action == "settings_snapshot":
         return _handle_settings_snapshot(request, request_id)
+    if action == "tool_env_get":
+        return _handle_tool_env_get(request, request_id)
+    if action == "tool_env_set":
+        return _handle_tool_env_set(request, request_id)
     if action == "support_bundle":
         return _handle_support_bundle(request_id)
     if action == "support_auto_fix":
@@ -511,6 +515,8 @@ def _handle_settings_snapshot(
             if family and "family_beneficiary_first_name" not in beneficiary:
                 beneficiary["family_beneficiary_first_name"] = family
 
+        firecrawl = _tool_env_status_payload("FIRECRAWL_API_KEY")
+
         return {
             "id": request_id,
             "ok": True,
@@ -524,10 +530,99 @@ def _handle_settings_snapshot(
             "enabled": license_enabled,
             "status": {"enabled": license_enabled},
             "beneficiary": beneficiary,
+            "firecrawl": firecrawl,
             "data_version": get_data_version(),
         }
     except Exception as exc:
         return _error_response(request_id, action="settings_snapshot", exc=exc)
+
+
+# Research / tool keys the Brain Settings UI may read or write.
+_TOOL_ENV_ALLOWLIST = frozenset({"FIRECRAWL_API_KEY"})
+_FIRECRAWL_KEY_URL = "https://www.firecrawl.dev/"
+
+
+def _tool_env_status_payload(key: str) -> dict[str, Any]:
+    """Status for a tool env key — never returns the raw secret."""
+    from centurion_cli.config import OPTIONAL_ENV_VARS, get_env_value
+
+    meta = OPTIONAL_ENV_VARS.get(key) if isinstance(OPTIONAL_ENV_VARS, dict) else None
+    meta = meta if isinstance(meta, dict) else {}
+    raw = get_env_value(key) or ""
+    configured = bool(str(raw).strip())
+    url = str(meta.get("url") or "").strip() or (
+        _FIRECRAWL_KEY_URL if key == "FIRECRAWL_API_KEY" else ""
+    )
+    description = str(meta.get("description") or "").strip()
+    prompt = str(meta.get("prompt") or key).strip()
+    return {
+        "key": key,
+        "configured": configured,
+        "url": url,
+        "description": description,
+        "prompt": prompt,
+    }
+
+
+def _handle_tool_env_get(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        key = str(request.get("key") or "").strip()
+        if key not in _TOOL_ENV_ALLOWLIST:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "tool_env_get",
+                "error": f"Unsupported tool env key: {key or '(empty)'}",
+                "message": f"Unsupported tool env key: {key or '(empty)'}",
+            }
+        payload = _tool_env_status_payload(key)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "tool_env_get",
+            **payload,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="tool_env_get", exc=exc)
+
+
+def _handle_tool_env_set(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.config import save_env_value
+
+        key = str(request.get("key") or "").strip()
+        if key not in _TOOL_ENV_ALLOWLIST:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "tool_env_set",
+                "error": f"Unsupported tool env key: {key or '(empty)'}",
+                "message": f"Unsupported tool env key: {key or '(empty)'}",
+            }
+        value = str(request.get("value") or request.get("api_key") or "")
+        value = value.strip()
+        if not value:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "tool_env_set",
+                "error": "API key is required",
+                "message": "API key is required",
+            }
+        save_env_value(key, value)
+        payload = _tool_env_status_payload(key)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "tool_env_set",
+            **payload,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="tool_env_set", exc=exc)
 
 
 def _handle_provider_options(request_id: str) -> dict[str, Any]:

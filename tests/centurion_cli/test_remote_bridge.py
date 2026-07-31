@@ -525,3 +525,62 @@ def test_settings_snapshot_aggregates_sections(monkeypatch):
     assert result["beneficiary"]["family_beneficiary_first_name"] == "Sam"
     assert result["beneficiary"]["enabled"] is True
     assert result["data_version"] == 7
+    assert "firecrawl" in result
+    assert result["firecrawl"]["key"] == "FIRECRAWL_API_KEY"
+    assert "url" in result["firecrawl"]
+    assert "firecrawl.dev" in (result["firecrawl"].get("url") or "")
+
+
+def test_tool_env_get_set_firecrawl(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+    from centurion_cli.remote_bridge import handle_request
+
+    saved: dict[str, str] = {}
+
+    def _fake_save(key: str, value: str):
+        saved[key] = value
+        import os
+
+        os.environ[key] = value
+
+    monkeypatch.setattr("centurion_cli.config.save_env_value", _fake_save)
+    monkeypatch.setattr(
+        "centurion_cli.config.get_env_value",
+        lambda key: saved.get(key) or None,
+    )
+
+    denied = handle_request(
+        {"id": "te1", "action": "tool_env_set", "key": "OPENAI_API_KEY", "value": "x"}
+    )
+    assert denied["ok"] is False
+
+    empty = handle_request(
+        {
+            "id": "te2",
+            "action": "tool_env_set",
+            "key": "FIRECRAWL_API_KEY",
+            "value": "  ",
+        }
+    )
+    assert empty["ok"] is False
+
+    ok = handle_request(
+        {
+            "id": "te3",
+            "action": "tool_env_set",
+            "key": "FIRECRAWL_API_KEY",
+            "value": "fc-test-key-123",
+        }
+    )
+    assert ok["ok"] is True
+    assert ok["configured"] is True
+    assert saved["FIRECRAWL_API_KEY"] == "fc-test-key-123"
+    assert "firecrawl.dev" in (ok.get("url") or "")
+
+    got = handle_request(
+        {"id": "te4", "action": "tool_env_get", "key": "FIRECRAWL_API_KEY"}
+    )
+    assert got["ok"] is True
+    assert got["configured"] is True
+    assert "value" not in got  # never echo secret
+    assert rb._TOOL_ENV_ALLOWLIST == frozenset({"FIRECRAWL_API_KEY"})
