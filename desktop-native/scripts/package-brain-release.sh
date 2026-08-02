@@ -74,6 +74,33 @@ DESKTOP_BIN="$(find_bin centurion-desktop)" \
 REMOTE_BIN="$(find_bin centurion-remote)" \
   || { echo "ERROR: centurion-remote not found. Run desktop-native/scripts/install-user.sh first." >&2; exit 1; }
 
+# --- Stale-binary guard: refuse to label a binary with a version it wasn't built as ---
+# The desktop bakes env!("CARGO_PKG_VERSION") into the ELF. VERSION must match the
+# Cargo workspace version AND the string embedded in the binary — otherwise we'd
+# ship a stale binary labeled as a new release.
+CARGO_VERSION="$(
+  awk '
+    /^\[workspace\.package\]/ { in_pkg=1; next }
+    /^\[/ { in_pkg=0 }
+    in_pkg && /^version[[:space:]]*=/ { gsub(/"/, "", $3); print $3; exit }
+  ' "${DESKTOP_NATIVE}/Cargo.toml" 2>/dev/null || true
+)"
+if [[ -n "${CARGO_VERSION}" && "${CARGO_VERSION}" != "${VERSION}" ]]; then
+  echo "ERROR: Cargo.toml workspace version (${CARGO_VERSION}) != release label (${VERSION})." >&2
+  echo "  Bump desktop-native/Cargo.toml [workspace.package] version to ${VERSION} and rebuild." >&2
+  exit 1
+fi
+if ! command -v strings >/dev/null 2>&1; then
+  echo "ERROR: 'strings' (binutils) required for the stale-binary check." >&2
+  exit 1
+fi
+if ! strings "${DESKTOP_BIN}" 2>/dev/null | grep -Fxq "${VERSION}"; then
+  echo "ERROR: ${DESKTOP_BIN} does not embed version ${VERSION} — stale build." >&2
+  echo "  Rebuild the desktop binary from this source tree (install-user.sh) before packaging." >&2
+  exit 1
+fi
+echo "  version guard: ${DESKTOP_BIN} embeds ${VERSION} ✓"
+
 echo "Packaging Smooth Transfer release ${VERSION} (${ARCH})"
 echo "  desktop: ${DESKTOP_BIN}"
 echo "  remote:  ${REMOTE_BIN}"

@@ -633,6 +633,41 @@ mod linux {
         mark_brain_welcome_seen();
     }
 
+    /// True when this Brain was installed from a Get Brain (Smooth Transfer)
+    /// archive. `customer-install.sh` stamps `install: smooth-transfer` and
+    /// `git_rev: smooth-transfer`; a real dev build (`install-user.sh`) writes
+    /// neither. On smooth-transfer installs there is no checkout to update or
+    /// rebuild from — updates arrive via the portal — so the in-app
+    /// Check/Rebuild controls are hidden.
+    fn is_smooth_transfer_install() -> bool {
+        let stamp = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("desktop-build.json");
+        let Ok(text) = std::fs::read_to_string(&stamp) else {
+            return false;
+        };
+        text.contains("\"install\": \"smooth-transfer\"")
+            || text.contains("\"git_rev\": \"smooth-transfer\"")
+    }
+
+    /// Installed version: prefer the install stamp (the truth for the running
+    /// Brain — e.g. a Get Brain archive stamped 5.2.116 whose binary was built
+    /// from a 5.2.115 source tree), falling back to the baked binary version
+    /// for dev builds with no stamp.
+    fn installed_version() -> String {
+        let stamp = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("desktop-build.json");
+        if let Ok(text) = std::fs::read_to_string(&stamp) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(ver) = json.get("version").and_then(|v| v.as_str()) {
+                    if !ver.is_empty() && ver != "unknown" {
+                        return ver.to_owned();
+                    }
+                }
+            }
+        }
+        env!("CARGO_PKG_VERSION").to_owned()
+    }
+
     /// After Get Brain install.sh: confirm data was kept; do not rewrite Soul/Mission.
     fn show_transfer_complete_dialog(parent: &adw::ApplicationWindow) {
         let body = "Your Soul, chats, and settings are still on this machine.\n\n\
@@ -704,7 +739,7 @@ For now, sit here and meet your Centurion.";
         );
         content.append(
             &gtk::Label::builder()
-                .label("Open Sovereign AI Remote on this Wi‑Fi → Scan this code")
+                .label("On your iPhone, open Sovereign AI Remote (same Wi‑Fi) → Scan this code")
                 .css_classes(["title-3"])
                 .wrap(true)
                 .justify(gtk::Justification::Center)
@@ -1076,16 +1111,26 @@ pairing stays available for early testing on the same Wi‑Fi.",
         settings.append(&settings_attention_banner);
 
         // --- #1: Updates (primary CTA when a build is waiting) ---
+        // Smooth Transfer (Get Brain) installs have no checkout to update or
+        // rebuild from — updates arrive via the portal. Keep the row (it shows
+        // the installed version) but drop the Check/Rebuild controls.
+        let smooth_transfer_install = is_smooth_transfer_install();
+        let installed_version = installed_version();
         let updates_group = adw::PreferencesGroup::builder()
             .title("Updates")
-            .description("Keep this Brain current — check or install the latest version first")
+            .description(if smooth_transfer_install {
+                "Installed from a Get Brain download — newer versions arrive through your portal"
+            } else {
+                "Keep this Brain current — check or install the latest version first"
+            })
             .build();
         let update_row = adw::ActionRow::builder()
-            .title(&format!(
-                "Sovereign AI Brain {}",
-                env!("CARGO_PKG_VERSION")
-            ))
-            .subtitle("Check for a newer build, or rebuild from the Centurion folder on this computer")
+            .title(&format!("Sovereign AI Brain {installed_version}"))
+            .subtitle(if smooth_transfer_install {
+                "Updates arrive through Account → Get Brain on the portal"
+            } else {
+                "Check for a newer build, or rebuild from the Centurion folder on this computer"
+            })
             .icon_name("software-update-available-symbolic")
             .build();
         let update_attention_mark = gtk::Label::builder()
@@ -1104,6 +1149,10 @@ pairing stays available for early testing on the same Wi‑Fi.",
             "Rebuild Sovereign AI Brain from the Centurion folder on this computer (does not need an iPhone).",
         ));
         rebuild_screen_button.set_valign(gtk::Align::Center);
+        if smooth_transfer_install {
+            update_check_button.set_visible(false);
+            rebuild_screen_button.set_visible(false);
+        }
         update_row.add_suffix(&rebuild_screen_button);
         update_row.add_suffix(&update_check_button);
         updates_group.add(&update_row);
@@ -1796,7 +1845,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
                 Ok(()) => {
                     status_title.set_label("Your Centurion is ready");
                     status_detail.set_label(
-                        "On the same Wi‑Fi, open Sovereign AI Remote and scan the pairing QR.",
+                        "This Brain works on its own. To pair an iPhone: open Sovereign AI Remote on the same Wi‑Fi and scan the pairing QR.",
                     );
                     refresh_link_addresses_async(&link_addresses, Some(&window));
                 }
@@ -2672,7 +2721,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
             list.append(
                 &adw::ActionRow::builder()
                     .title("No iPhones linked yet")
-                    .subtitle("Scan the pairing QR in Settings → Status with Sovereign AI Remote (same Wi‑Fi).")
+                    .subtitle("On your iPhone, scan the pairing QR in Settings → Status with Sovereign AI Remote (same Wi‑Fi).")
                     .icon_name("phone-symbolic")
                     .build(),
             );
@@ -2755,14 +2804,13 @@ pairing stays available for early testing on the same Wi‑Fi.",
     }
 
     fn run_update_check() -> Option<UpdateCheckPayload> {
+        let screen_version = installed_version();
         let output = prepare_centurion_cli()
-            .args([
-                "update",
-                "--check",
-                "--json",
-                "--screen-version",
-                env!("CARGO_PKG_VERSION"),
-            ])
+            .arg("update")
+            .arg("--check")
+            .arg("--json")
+            .arg("--screen-version")
+            .arg(&screen_version)
             .output()
             .ok()?;
         // Parse JSON even when exit status is non-zero (network / unavailable).
@@ -2918,7 +2966,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         }
         format!(
             "Sovereign AI Brain {}\n\n{body}\n",
-            env!("CARGO_PKG_VERSION")
+            installed_version()
         )
     }
 
@@ -6513,7 +6561,7 @@ The key stays in ~/.centurion/.env on this machine only.",
                 ("unknown".to_owned(), String::new())
             };
         AdrianChatContext {
-            app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            app_version: installed_version(),
             connection_state: connection_state.to_owned(),
             thinking_health,
             thinking_message,
