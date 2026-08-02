@@ -32,7 +32,7 @@ jobs:
 
       - name: Build centurion-desktop (release)
         working-directory: desktop-native
-        run: cargo build --release -p centurion-desktop --locked
+        run: cargo build --release -p centurion-desktop
 
       - name: Package Smooth Transfer archive
         run: desktop-native/scripts/package-brain-release.sh
