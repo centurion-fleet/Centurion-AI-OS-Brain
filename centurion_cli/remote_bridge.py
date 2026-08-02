@@ -2665,6 +2665,9 @@ def _handle_license_activate(request: dict[str, Any], request_id: str) -> dict[s
                 offline=bool(request.get("offline", False)),
             )
         else:
+            # Desktop historically sent tier=paid; treat as code-driven activation.
+            if tier in {"paid", "code", "auto"}:
+                tier = "code"
             result = activate_from_server(
                 tier=tier,
                 activation_code=request.get("activation_code") or request.get("code"),

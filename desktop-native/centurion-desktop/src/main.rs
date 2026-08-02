@@ -5318,19 +5318,22 @@ Being · Continuity\n\
             Some(p) => {
                 let enabled = p
                     .pointer("/status/enabled")
+                    .or_else(|| p.pointer("/license/enabled"))
                     .or_else(|| p.get("enabled"))
                     .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
+                    .unwrap_or(true);
                 if !enabled {
                     "License enforcement is off on this Brain (BYOK / contributor mode). No key required.".to_owned()
                 } else {
                     let state = p
                         .pointer("/status/state")
+                        .or_else(|| p.pointer("/license/state"))
                         .or_else(|| p.get("state"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown");
                     let plan = p
                         .pointer("/status/plan")
+                        .or_else(|| p.pointer("/license/tier"))
                         .or_else(|| p.get("plan"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
@@ -5340,12 +5343,24 @@ Being · Continuity\n\
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
                     let message = p
-                        .get("message")
+                        .pointer("/license/message")
+                        .or_else(|| p.get("message"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
+                    let paid = p
+                        .pointer("/license/balance_paid_gbp")
+                        .and_then(|v| v.as_f64());
+                    let target = p
+                        .pointer("/license/balance_target_gbp")
+                        .and_then(|v| v.as_f64());
                     let mut lines = vec![format!("Status: {state}")];
                     if !plan.is_empty() {
                         lines.push(format!("Plan: {plan}"));
+                    }
+                    if let (Some(pmt), Some(tgt)) = (paid, target) {
+                        if tgt > 0.0 {
+                            lines.push(format!("Rent-to-own: £{pmt:.0} of £{tgt:.0}"));
+                        }
                     }
                     if !expires.is_empty() {
                         lines.push(format!("Expires: {expires}"));
@@ -5457,7 +5472,8 @@ Being · Continuity\n\
                     let result = if is_activate {
                         run_bridge_action(
                             "license_activate",
-                            serde_json::json!({ "tier": "paid", "code": code }),
+                            // Code-driven: server returns real tier/state (not a synthetic "paid").
+                            serde_json::json!({ "tier": "code", "code": code }),
                         )
                     } else {
                         run_bridge_action(
