@@ -2626,18 +2626,52 @@ def _handle_license_status(request_id: str) -> dict[str, Any]:
             EnforcementMode.ALLOW,
             EnforcementMode.WARN,
         }
+
+        # Desktop Settings gate reads TOP-LEVEL enabled / status.enabled (not only
+        # the nested license object). Mirror the config flag so the License row
+        # and Activate / Redeem buttons show for enabled Brains.
+        enabled = False
+        try:
+            from centurion_cli.config import load_config
+
+            cfg = load_config() or {}
+            lic = cfg.get("license") if isinstance(cfg.get("license"), dict) else {}
+            if lic:
+                from utils import is_truthy_value
+
+                enabled = is_truthy_value(lic.get("enabled"), default=False)
+        except Exception:
+            enabled = False
+
+        state = ent.state
+        tier = ent.tier or ""
+        message = locked_user_message(decision) or decision.message or ""
+        expires_at = ""
+        if ent.trial_expires_at:
+            import datetime
+
+            expires_at = datetime.datetime.fromtimestamp(
+                ent.trial_expires_at, datetime.timezone.utc
+            ).isoformat()
+
         return {
             "id": request_id,
             "ok": True,
             "action": "license_status",
+            "enabled": enabled,
+            "status": {"enabled": enabled},
+            "state": state,
+            "plan": tier,
+            "expires_at": expires_at,
+            "message": message,
             "license": {
-                "state": ent.state,
+                "state": state,
                 "tier": ent.tier,
                 "license_id": ent.license_id,
                 "fingerprint": fingerprint_short(ent.machine_fingerprint),
                 "mode": decision.mode.value,
                 "agent_allowed": agent_allowed,
-                "message": locked_user_message(decision) or decision.message,
+                "message": message,
                 "balance_paid_gbp": paid,
                 "balance_target_gbp": target,
                 "balance_remaining_gbp": remaining,
