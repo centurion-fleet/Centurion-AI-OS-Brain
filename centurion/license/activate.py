@@ -27,6 +27,8 @@ from centurion.license.tokens import verify_attestation
 logger = logging.getLogger(__name__)
 
 DEFAULT_TRIAL_DAYS = 14
+# Cloudflare blocks Python-urllib's default UA (error 1010 → HTTP 403).
+_LICENSE_HTTP_UA = "CenturionBrain/5.2.117 (+https://www.1human1ai.com)"
 
 
 @dataclass
@@ -42,11 +44,34 @@ def _post_json(url: str, payload: Dict[str, Any], timeout: float = 20.0) -> Dict
     req = Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": _LICENSE_HTTP_UA,
+        },
         method="POST",
     )
-    with urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = ""
+        try:
+            raw = exc.read().decode("utf-8", errors="replace")
+            parsed = json.loads(raw) if raw.strip().startswith("{") else {}
+            if isinstance(parsed, dict) and parsed.get("error"):
+                detail = str(parsed["error"])
+            elif raw and "error code: 1010" in raw:
+                detail = (
+                    "Blocked by website firewall. Update Centurion AI OS "
+                    "(license client User-Agent) and retry."
+                )
+            elif raw:
+                detail = raw.strip()[:240]
+        except Exception:
+            detail = ""
+        msg = f"HTTP Error {exc.code}: {detail or exc.reason}"
+        raise URLError(msg) from exc
 
 
 def activate_trial(

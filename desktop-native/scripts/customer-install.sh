@@ -217,3 +217,32 @@ echo "  Python: ${PYTHON_BIN}"
 echo "  Repo:   ${AI_REPO}"
 echo "  Home:   ${CENTURION_HOME_DIR}"
 echo "  Log:    ${LOG_FILE}"
+
+# Ensure license activation can reach the customer portal (do not wipe other keys).
+CENTURION_HOME_DIR="${CENTURION_HOME_DIR}" python3 - <<'PY'
+import os
+import pathlib
+try:
+    import yaml
+except ImportError:
+    raise SystemExit(0)
+cfg_path = pathlib.Path(os.environ["CENTURION_HOME_DIR"]) / "config.yaml"
+data = {}
+if cfg_path.is_file():
+    try:
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        data = {}
+if not isinstance(data, dict):
+    data = {}
+lic = data.get("license") if isinstance(data.get("license"), dict) else {}
+lic = dict(lic)
+lic.setdefault("enabled", True)
+lic.setdefault("enforcement", False)
+lic.setdefault("server_url", "https://www.1human1ai.com/api/v1")
+lic.setdefault("portal_url", "https://www.1human1ai.com")
+data["license"] = lic
+cfg_path.parent.mkdir(parents=True, exist_ok=True)
+cfg_path.write_text(yaml.safe_dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+print(f"License portal configured in {cfg_path}")
+PY

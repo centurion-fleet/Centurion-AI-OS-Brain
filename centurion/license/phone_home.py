@@ -102,7 +102,12 @@ def _post_json(url: str, payload: Dict[str, Any], timeout: float = 15.0) -> Dict
     req = Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            # Cloudflare bans Python-urllib default UA (error 1010 → HTTP 403).
+            "User-Agent": "CenturionBrain/5.2.117 (+https://www.1human1ai.com)",
+        },
         method="POST",
     )
     with urlopen(req, timeout=timeout) as resp:
