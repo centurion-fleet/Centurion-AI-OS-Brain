@@ -3267,11 +3267,7 @@ fn run_chat_turn(
         if !event_name.is_empty() {
             continue;
         }
-        let looks_final = value.get("ok").is_some()
-            || value.get("text").is_some()
-            || value.get("reply").is_some()
-            || value.get("response").is_some()
-            || value.get("message").is_some();
+        let looks_final = is_desktop_chat_final(&value);
         if looks_final {
             final_response = Some(value);
             break;
@@ -3309,6 +3305,59 @@ fn run_chat_turn(
         None => Err("Centurion did not return a reply.".to_owned()),
     };
     let _ = event_tx.send(WorkerEvent::Done(result));
+}
+
+fn is_desktop_chat_final(value: &Value) -> bool {
+    if value.get("centurion_event").is_some() {
+        return false;
+    }
+    let action = value
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if action == "chat" {
+        return true;
+    }
+    let ok = value.get("ok").and_then(|v| v.as_bool()) == Some(true);
+    let has_text = ["text", "reply", "response"].iter().any(|key| {
+        value
+            .get(*key)
+            .and_then(|v| v.as_str())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+    });
+    ok && has_text && (action.is_empty() || action == "chat")
+}
+
+fn is_noisy_activity_line(line: &str) -> bool {
+    let sample = line.trim();
+    if sample.is_empty() {
+        return true;
+    }
+    let lower = sample.to_ascii_lowercase();
+    if lower.contains("typingsinstaller") || lower.contains("errno 5") {
+        return true;
+    }
+    if lower.contains("provider_status") && (sample.contains('{') || sample.contains('[')) {
+        return true;
+    }
+    let box_chars = sample
+        .chars()
+        .filter(|ch| ('\u{2500}'..='\u{257f}').contains(ch) || "┌┐└┘│─╭╮╯╰═║╔╗╚╝".contains(*ch))
+        .count();
+    if box_chars >= 3 {
+        return true;
+    }
+    if sample.matches("\u{1b}[").count() >= 2 {
+        return true;
+    }
+    // Oversized terminal dumps in the card UI.
+    if sample.len() > 1200 && (lower.contains("exit ") || sample.starts_with('$')) {
+        return true;
+    }
+    false
 }
 
 fn humanize_tool_name(tool: &str) -> String {
@@ -4380,7 +4429,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let programmatic_scroll = programmatic_scroll.clone();
         let activity_scroll_pending = activity_scroll_pending.clone();
         move |event: ActivityEvent| {
-            activity_card.set_visible(true);
             let mut needs_scroll = false;
             match event.kind.as_str() {
                 "thinking" => {
@@ -4389,9 +4437,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     } else {
                         event.text.clone()
                     };
-                    if text.trim().is_empty() {
+                    if text.trim().is_empty() || is_noisy_activity_line(&text) {
                         return;
                     }
+                    activity_card.set_visible(true);
                     thinking_label.set_label(&text);
                     thinking_expander.set_label(Some("Thinking"));
                     thinking_expander.set_visible(true);
@@ -4412,6 +4461,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     } else {
                         event.line.clone()
                     };
+                    if is_noisy_activity_line(&detail) {
+                        return;
+                    }
+                    // Cap oversized terminal bodies in the live card.
+                    let detail = if event.tool.to_ascii_lowercase().contains("terminal")
+                        && detail.len() > 400
+                    {
+                        format!("{}…", &detail[..397])
+                    } else {
+                        detail
+                    };
+                    activity_card.set_visible(true);
                     let archive_line = if detail.trim().is_empty() || detail == title {
                         title.clone()
                     } else {
@@ -4423,19 +4484,35 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     activity_title.set_label(&humanize_activity_title(&event.tool, &detail));
                     needs_scroll = true;
                 }
+                "status" => {
+                    let line = if event.line.is_empty() {
+                        event.text.clone()
+                    } else {
+                        event.line.clone()
+                    };
+                    if line.trim().is_empty() || is_noisy_activity_line(&line) {
+                        return;
+                    }
+                    // Lifecycle crumbs update the title only — no Status cards.
+                    activity_card.set_visible(true);
+                    let title = if line.len() > 80 {
+                        "Working…".to_owned()
+                    } else {
+                        line.trim().to_owned()
+                    };
+                    activity_title.set_label(&title);
+                }
                 _ => {
                     let line = if event.line.is_empty() {
                         event.text.clone()
                     } else {
                         event.line.clone()
                     };
-                    if line.trim().is_empty() {
+                    if line.trim().is_empty() || is_noisy_activity_line(&line) {
                         return;
                     }
-                    activity_tool_lines.borrow_mut().push(line.clone());
-                    activity_tools.append(&build_tool_card("Status", &line));
+                    activity_card.set_visible(true);
                     activity_title.set_label("Working…");
-                    needs_scroll = true;
                 }
             }
             if needs_scroll {

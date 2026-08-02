@@ -1,0 +1,20 @@
+[Unit]
+Description=Centurion encrypted remote service (TCP 9119)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=CENTURION_HOME=@CENTURION_HOME@
+Environment=CENTURION_PYTHON=@PYTHON@
+Environment=CENTURION_AI_REPO=@AI_REPO@
+Environment=PATH=@AI_REPO@/venv/bin:@AI_REPO@/.venv/bin:@BIN_DIR@:/usr/local/bin:/usr/bin:/bin
+ExecStart=@BIN_DIR@/centurion-remote serve --name "Sovereign AI Brain"
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

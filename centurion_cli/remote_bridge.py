@@ -1241,6 +1241,73 @@ def _resolve_remote_tool_progress_mode(cfg: dict[str, Any] | None = None) -> str
 # Brain Chat wants to show real work product, not just tool-type labels.
 _REMOTE_STARTED_PREVIEW_CAP = 240
 _REMOTE_RESULT_BODY_CAP = 4000
+_REMOTE_TERMINAL_RESULT_CAP = 280
+
+
+def _is_noisy_remote_status(text: str) -> bool:
+    """Drop gateway/status noise that should never appear as chat activity."""
+    sample = (text or "").strip()
+    if not sample:
+        return True
+    lower = sample.lower()
+    if "typingsinstaller" in lower or "errno 5" in lower:
+        return True
+    if "provider_status" in lower and ("{" in sample or "[" in sample):
+        return True
+    # Box-drawing / ANSI-heavy status dumps (TTY progress leaked into chat).
+    box = sum(1 for ch in sample if "\u2500" <= ch <= "\u257f" or ch in "┌┐└┘│─╭╮╯╰═║╔╗╚╝")
+    if box >= 3:
+        return True
+    if sample.count("\x1b[") >= 2:
+        return True
+    return False
+
+
+def _summarize_terminal_activity(
+    *,
+    tool_name: str,
+    body: str,
+    args: dict | None = None,
+) -> str:
+    """Prefer command + exit for terminal tools; never dump full stdout."""
+    name = (tool_name or "").strip().lower()
+    if name not in {"terminal", "run_terminal_cmd", "shell"}:
+        return body
+    command = ""
+    if isinstance(args, dict):
+        for key in ("command", "cmd"):
+            val = args.get(key)
+            if isinstance(val, str) and val.strip():
+                command = val.strip()
+                break
+    exit_code = None
+    parsed = None
+    raw = (body or "").strip()
+    if raw.startswith("{") or raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = None
+    if isinstance(parsed, dict):
+        if exit_code is None and "exit_code" in parsed:
+            exit_code = parsed.get("exit_code")
+        if not command:
+            for key in ("command", "cmd"):
+                val = parsed.get(key)
+                if isinstance(val, str) and val.strip():
+                    command = val.strip()
+                    break
+    if command and len(command) > 160:
+        command = command[:157] + "..."
+    if command and exit_code is not None:
+        return f"$ {command}\nexit {exit_code}"
+    if command:
+        return f"$ {command}"
+    if exit_code is not None:
+        return f"Terminal finished (exit {exit_code})"
+    if len(raw) > _REMOTE_TERMINAL_RESULT_CAP:
+        return raw[: _REMOTE_TERMINAL_RESULT_CAP - 3] + "..."
+    return raw or "Terminal finished"
 
 
 def _extract_tool_result_text(result: Any, tool_name: str | None = None) -> str:
@@ -1290,7 +1357,7 @@ def _extract_tool_result_text(result: Any, tool_name: str | None = None) -> str:
                 return json.dumps(parsed, ensure_ascii=False, default=str)
             except Exception:
                 pass
-    _ = tool_name  # reserved for tool-specific shaping later
+    _ = tool_name  # reserved for callers that summarize by tool
     return text
 
 
@@ -1346,6 +1413,7 @@ def _make_remote_activity_callbacks(
     ``off`` — that is the stream content users read.
     """
     last_tool: list[str | None] = [None]
+    last_tool_args: list[dict | None] = [None]
 
     def tool_progress_callback(
         event_type: str,
@@ -1359,7 +1427,7 @@ def _make_remote_activity_callbacks(
         et = (event_type or "").strip()
         if et in {"reasoning.available", "_thinking"}:
             text = (preview or tool_name or "").strip()
-            if not text:
+            if not text or _is_noisy_remote_status(text):
                 return
             _emit_remote_event(
                 {
@@ -1373,12 +1441,29 @@ def _make_remote_activity_callbacks(
             name = (tool_name or "").strip()
             if not name:
                 return
-            body = _extract_tool_result_text(kwargs.get("result"), name)
+            raw_result = kwargs.get("result")
+            # Prefer structured JSON for terminal summarize (command + exit).
+            summarize_body = ""
+            if isinstance(raw_result, (dict, list)):
+                try:
+                    summarize_body = json.dumps(raw_result, ensure_ascii=False, default=str)
+                except Exception:
+                    summarize_body = str(raw_result)
+            elif isinstance(raw_result, str) and raw_result.strip():
+                summarize_body = raw_result.strip()
+            body = _extract_tool_result_text(raw_result, name)
             if not body:
                 body = (preview or "").strip()
             if not body:
                 # Still announce completion so the feed shows work landed.
                 body = f"{name} finished"
+            body = _summarize_terminal_activity(
+                tool_name=name,
+                body=summarize_body or body,
+                args=last_tool_args[0] if name == (last_tool[0] or "") else args,
+            )
+            if _is_noisy_remote_status(body):
+                return
             if len(body) > _REMOTE_RESULT_BODY_CAP:
                 body = body[: _REMOTE_RESULT_BODY_CAP - 3] + "..."
             _emit_remote_event(
@@ -1401,6 +1486,7 @@ def _make_remote_activity_callbacks(
         if mode == "new" and name == last_tool[0]:
             return
         last_tool[0] = name
+        last_tool_args[0] = args if isinstance(args, dict) else None
         # Prefer the command / primary arg as the visible "what I'm doing" line.
         started_body = (preview or "").strip()
         if not started_body and isinstance(args, dict):
@@ -1416,6 +1502,10 @@ def _make_remote_activity_callbacks(
             if started_body
             else _format_remote_tool_activity_line(name, preview, args, mode=mode)
         )
+        if name.lower() in {"terminal", "run_terminal_cmd", "shell"} and started_body:
+            line = f"$ {started_body}"
+        if _is_noisy_remote_status(line):
+            return
         _emit_remote_event(
             {
                 "centurion_event": "activity",
@@ -1432,7 +1522,7 @@ def _make_remote_activity_callbacks(
         if mode == "off" or not _remote_events_enabled():
             return
         text = (message or "").strip()
-        if not text:
+        if not text or _is_noisy_remote_status(text):
             return
         _emit_remote_event(
             {
@@ -4335,6 +4425,8 @@ def _serve_parsed_socket_request(
                     }
         finally:
             _set_event_sink(None)
+            # Request-scoped only — never leave sticky events on for later serves.
+            os.environ.pop("CENTURION_REMOTE_EVENTS", None)
     else:
         try:
             if action == "chat":

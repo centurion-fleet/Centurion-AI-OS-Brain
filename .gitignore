@@ -83,3 +83,5 @@ models-dev-upstream/
 centurion_cli/tui_dist/*
 centurion_cli/scripts/
 docs/superpowers/*
+# Smooth Transfer package output
+desktop-native/dist/

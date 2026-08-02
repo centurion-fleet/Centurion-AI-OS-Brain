@@ -325,8 +325,14 @@ def test_make_remote_activity_callbacks_emit_tool_and_thinking(monkeypatch):
         "tool.completed",
         "terminal",
         None,
-        None,
-        result=json.dumps({"output": "hello from shell\nline 2", "exit_code": 0}),
+        {"command": "echo hi"},
+        result=json.dumps(
+            {
+                "command": "echo hi",
+                "output": "hello from shell\nline 2",
+                "exit_code": 0,
+            }
+        ),
     )
 
     kinds = [e.get("kind") for e in emitted]
@@ -337,8 +343,9 @@ def test_make_remote_activity_callbacks_emit_tool_and_thinking(monkeypatch):
     assert emitted[1]["text"].startswith("Considering")
     assert emitted[2]["message"] == "Compressing context"
     assert emitted[3]["tool"] == "terminal"
-    assert "hello from shell" in emitted[3]["line"]
-    assert "line 2" in emitted[3]["line"]
+    # Terminal activity is summarized (command + exit), not full stdout.
+    assert emitted[3]["line"] == "$ echo hi\nexit 0"
+    assert "hello from shell" not in emitted[3]["line"]
 
 
 def test_extract_tool_result_text_prefers_output_key():
@@ -349,6 +356,15 @@ def test_extract_tool_result_text_prefers_output_key():
         "terminal",
     )
     assert body == "real stdout"
+
+    summary = rb._summarize_terminal_activity(
+        tool_name="terminal",
+        body=json.dumps(
+            {"command": "uname", "output": "real stdout", "exit_code": 0},
+        ),
+        args={"command": "uname"},
+    )
+    assert summary == "$ uname\nexit 0"
 
 
 def test_normalize_platform_runtime_uses_state_connected():
@@ -776,3 +792,24 @@ def test_tool_env_get_set_firecrawl(monkeypatch):
     assert got["configured"] is True
     assert "value" not in got  # never echo secret
     assert rb._TOOL_ENV_ALLOWLIST == frozenset({"FIRECRAWL_API_KEY"})
+
+
+def test_remote_activity_filters_noisy_status_and_caps_terminal():
+    from centurion_cli import remote_bridge as rb
+
+    assert rb._is_noisy_remote_status("Errno 5")
+    assert rb._is_noisy_remote_status("typingsInstaller failed")
+    assert rb._is_noisy_remote_status("┌────┐\n│ xx │\n└────┘")
+    assert not rb._is_noisy_remote_status("Starting…")
+
+    body = json.dumps(
+        {"exit_code": 0, "command": "uname -a", "output": "x" * 5000},
+        ensure_ascii=False,
+    )
+    summary = rb._summarize_terminal_activity(
+        tool_name="terminal",
+        body=body,
+        args={"command": "uname -a"},
+    )
+    assert summary == "$ uname -a\nexit 0"
+    assert "xxxx" not in summary

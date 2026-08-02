@@ -301,44 +301,52 @@ impl PythonBridge {
                         }
                         let value: Value = serde_json::from_str(trimmed)
                             .map_err(BridgeError::InvalidResponse)?;
-                        if value.get("centurion_event").and_then(|v| v.as_str())
-                            == Some("approval_request")
-                        {
-                            if let Some(tx) = &event_tx {
-                                let event = BridgeApprovalEvent {
-                                    approval_id: value_string(&value, "approval_id")
-                                        .unwrap_or_default(),
-                                    session_key: value_string(&value, "session_key")
-                                        .unwrap_or_default(),
-                                    command: value_string(&value, "command").unwrap_or_default(),
-                                    description: value_string(&value, "description")
-                                        .unwrap_or_default(),
-                                    pattern_key: value_string(&value, "pattern_key")
-                                        .unwrap_or_default(),
-                                    choices: value
-                                        .get("choices")
-                                        .and_then(|item| item.as_array())
-                                        .map(|items| {
-                                            items
-                                                .iter()
-                                                .filter_map(|item| item.as_str().map(str::to_owned))
-                                                .collect()
-                                        })
-                                        .unwrap_or_else(|| {
-                                            vec![
-                                                "once".to_owned(),
-                                                "session".to_owned(),
-                                                "always".to_owned(),
-                                                "deny".to_owned(),
-                                            ]
-                                        }),
-                                };
-                                let _ = tx.send(event).await;
+                        // Never treat mid-turn activity NDJSON as the chat final.
+                        if value.get("centurion_event").is_some() {
+                            if value.get("centurion_event").and_then(|v| v.as_str())
+                                == Some("approval_request")
+                            {
+                                if let Some(tx) = &event_tx {
+                                    let event = BridgeApprovalEvent {
+                                        approval_id: value_string(&value, "approval_id")
+                                            .unwrap_or_default(),
+                                        session_key: value_string(&value, "session_key")
+                                            .unwrap_or_default(),
+                                        command: value_string(&value, "command")
+                                            .unwrap_or_default(),
+                                        description: value_string(&value, "description")
+                                            .unwrap_or_default(),
+                                        pattern_key: value_string(&value, "pattern_key")
+                                            .unwrap_or_default(),
+                                        choices: value
+                                            .get("choices")
+                                            .and_then(|item| item.as_array())
+                                            .map(|items| {
+                                                items
+                                                    .iter()
+                                                    .filter_map(|item| {
+                                                        item.as_str().map(str::to_owned)
+                                                    })
+                                                    .collect()
+                                            })
+                                            .unwrap_or_else(|| {
+                                                vec![
+                                                    "once".to_owned(),
+                                                    "session".to_owned(),
+                                                    "always".to_owned(),
+                                                    "deny".to_owned(),
+                                                ]
+                                            }),
+                                    };
+                                    let _ = tx.send(event).await;
+                                }
                             }
                             continue;
                         }
-                        final_response = Some(value);
-                        break;
+                        if is_bridge_chat_final(&value) {
+                            final_response = Some(value);
+                            break;
+                        }
                     }
                     status = &mut wait_fut => {
                         let _ = status.map_err(BridgeError::Wait)?;
@@ -358,8 +366,10 @@ impl PythonBridge {
                             if value.get("centurion_event").is_some() {
                                 continue;
                             }
-                            final_response = Some(value);
-                            break;
+                            if is_bridge_chat_final(&value) {
+                                final_response = Some(value);
+                                break;
+                            }
                         }
                     }
                     Ok(None) | Err(_) => break,
@@ -401,6 +411,33 @@ fn serialize_bridge_request_line(request: &BridgeRequest<'_>) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
+fn is_bridge_chat_final(value: &Value) -> bool {
+    if value.get("centurion_event").is_some() {
+        return false;
+    }
+    let action = value
+        .get("action")
+        .and_then(|item| item.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if action == "chat" {
+        return true;
+    }
+    // Explicit chat success with reply text (legacy shapes omit action).
+    let ok = value.get("ok").and_then(|item| item.as_bool()) == Some(true);
+    let has_text = ["text", "reply", "response"]
+        .iter()
+        .any(|key| {
+            value
+                .get(*key)
+                .and_then(|item| item.as_str())
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+        });
+    ok && has_text && (action.is_empty() || action == "chat")
+}
+
 fn parse_final_json(stdout: &str) -> Result<Value, BridgeError> {
     let mut last_err = None;
     for line in stdout.lines().rev() {
@@ -409,14 +446,20 @@ fn parse_final_json(stdout: &str) -> Result<Value, BridgeError> {
             continue;
         }
         match serde_json::from_str::<Value>(trimmed) {
-            Ok(value) if value.get("centurion_event").is_none() => return Ok(value),
+            Ok(value) if is_bridge_chat_final(&value) => return Ok(value),
             Ok(_) => continue,
             Err(error) => last_err = Some(error),
         }
     }
     // Whole-buffer fallback for legacy single-object responses.
     match serde_json::from_str(stdout.trim()) {
-        Ok(value) => Ok(value),
+        Ok(value) if is_bridge_chat_final(&value) => Ok(value),
+        Ok(_) => Err(BridgeError::InvalidResponse(serde_json::Error::io(
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "bridge stdout had JSON but no chat final",
+            ),
+        ))),
         Err(error) => Err(BridgeError::InvalidResponse(last_err.unwrap_or(error))),
     }
 }

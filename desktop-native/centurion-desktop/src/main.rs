@@ -608,6 +608,50 @@ mod linux {
         let _ = std::fs::write(path, b"1\n");
     }
 
+    fn smooth_transfer_pending_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("smooth_transfer_pending")
+    }
+
+    fn smooth_transfer_seen_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+            .join("smooth_transfer_seen")
+    }
+
+    fn smooth_transfer_pending() -> bool {
+        smooth_transfer_pending_path().is_file() && !smooth_transfer_seen_path().is_file()
+    }
+
+    fn mark_smooth_transfer_seen() {
+        let seen = smooth_transfer_seen_path();
+        if let Some(parent) = seen.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&seen, b"1\n");
+        let _ = std::fs::remove_file(smooth_transfer_pending_path());
+        // Avoid stacking the first-run Welcome ceremony after a Smooth Transfer.
+        mark_brain_welcome_seen();
+    }
+
+    /// After Get Brain install.sh: confirm data was kept; do not rewrite Soul/Mission.
+    fn show_transfer_complete_dialog(parent: &adw::ApplicationWindow) {
+        let body = "Your Soul, chats, and settings are still on this machine.\n\n\
+Open Chat to continue where you left off. Android, iOS, and macOS Brain apps \
+are coming soon — Linux is ready now.";
+        let dialog = adw::AlertDialog::builder()
+            .heading("Transfer complete")
+            .body(body)
+            .close_response("continue")
+            .default_response("continue")
+            .build();
+        dialog.add_response("continue", "Continue");
+        dialog.set_response_appearance("continue", adw::ResponseAppearance::Suggested);
+        dialog.connect_response(None, move |_d, _response| {
+            mark_smooth_transfer_seen();
+        });
+        dialog.present(Some(parent));
+    }
+
     /// First-run narrative: what a Centurion *is* (partner), not pairing theatre.
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
@@ -1767,8 +1811,14 @@ pairing stays available for early testing on the same Wi‑Fi.",
         // Starting the remote listener shells out — run it once the window is
         // on screen so present() is never behind CLI/TCP work.
         glib::idle_add_local_once(move || update_status());
-        // First-run: teach what a Centurion is. Pairing QR is opt-in, not the product story.
-        if !brain_welcome_seen() {
+        // Smooth Transfer (Get Brain install) or first-run welcome — never both.
+        if smooth_transfer_pending() {
+            let window = window.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
+                show_transfer_complete_dialog(&window);
+                glib::ControlFlow::Break
+            });
+        } else if !brain_welcome_seen() {
             let window = window.clone();
             let (tx, rx) = std::sync::mpsc::channel::<bool>();
             std::thread::spawn(move || {
