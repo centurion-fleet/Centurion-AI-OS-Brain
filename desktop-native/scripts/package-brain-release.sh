@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Staff-only: build a Smooth Transfer customer archive for Admin → Releases.
+# Ships Sovereign AI Brain (centurion-desktop) only — not centurion-remote.
+# No mission-deck bundle (avoids AppleDouble junk from Mac copies).
 # Run on a private Linux build host after binaries exist (install-user.sh or cargo).
 set -euo pipefail
 
@@ -23,10 +25,6 @@ resolve_version() {
     printf '%s\n' "${CENTURION_BRAIN_VERSION}"
     return
   fi
-  python3 - <<'PY' 2>/dev/null || true
-from pathlib import Path
-root = Path(__file__).resolve().parents[0] if False else None
-PY
   local ver
   ver="$(
     python3 -c "import pathlib; t=pathlib.Path('${ROOT}/centurion_cli/__init__.py').read_text();
@@ -71,13 +69,7 @@ find_bin() {
 
 DESKTOP_BIN="$(find_bin centurion-desktop)" \
   || { echo "ERROR: centurion-desktop not found. Run desktop-native/scripts/install-user.sh first." >&2; exit 1; }
-REMOTE_BIN="$(find_bin centurion-remote)" \
-  || { echo "ERROR: centurion-remote not found. Run desktop-native/scripts/install-user.sh first." >&2; exit 1; }
 
-# --- Stale-binary guard: refuse to label a binary with a version it wasn't built as ---
-# The desktop bakes env!("CARGO_PKG_VERSION") into the ELF. VERSION must match the
-# Cargo workspace version AND the string embedded in the binary — otherwise we'd
-# ship a stale binary labeled as a new release.
 CARGO_VERSION="$(
   awk '
     /^\[workspace\.package\]/ { in_pkg=1; next }
@@ -87,38 +79,43 @@ CARGO_VERSION="$(
 )"
 if [[ -n "${CARGO_VERSION}" && "${CARGO_VERSION}" != "${VERSION}" ]]; then
   echo "ERROR: Cargo.toml workspace version (${CARGO_VERSION}) != release label (${VERSION})." >&2
-  echo "  Bump desktop-native/Cargo.toml [workspace.package] version to ${VERSION} and rebuild." >&2
   exit 1
 fi
 if ! command -v strings >/dev/null 2>&1; then
   echo "ERROR: 'strings' (binutils) required for the stale-binary check." >&2
   exit 1
 fi
-if ! strings "${DESKTOP_BIN}" 2>/dev/null | grep -Fxq "${VERSION}"; then
+# Count matches — avoid pipefail+SIGPIPE from grep -q closing the pipe early.
+EMBED_HITS="$(strings "${DESKTOP_BIN}" 2>/dev/null | grep -F "${VERSION}" | wc -l | tr -d ' ')"
+if [[ "${EMBED_HITS}" -lt 1 ]]; then
   echo "ERROR: ${DESKTOP_BIN} does not embed version ${VERSION} — stale build." >&2
-  echo "  Rebuild the desktop binary from this source tree (install-user.sh) before packaging." >&2
   exit 1
 fi
 echo "  version guard: ${DESKTOP_BIN} embeds ${VERSION} ✓"
 
-echo "Packaging Smooth Transfer release ${VERSION} (${ARCH})"
+echo "Packaging Smooth Transfer release ${VERSION} (${ARCH}) — desktop only, no mission-deck"
 echo "  desktop: ${DESKTOP_BIN}"
-echo "  remote:  ${REMOTE_BIN}"
 
 rm -rf "${STAGE}"
-mkdir -p "${STAGE}/${ARCHIVE_NAME}/bin" \
-  "${STAGE}/${ARCHIVE_NAME}/icons" \
-  "${STAGE}/${ARCHIVE_NAME}/systemd"
+mkdir -p "${STAGE}/${ARCHIVE_NAME}/bin" "${STAGE}/${ARCHIVE_NAME}/icons"
 
 install -m 0755 "${DESKTOP_BIN}" "${STAGE}/${ARCHIVE_NAME}/bin/centurion-desktop"
-install -m 0755 "${REMOTE_BIN}" "${STAGE}/${ARCHIVE_NAME}/bin/centurion-remote"
 install -m 0755 "${SCRIPTS}/customer-install.sh" "${STAGE}/${ARCHIVE_NAME}/install.sh"
-install -m 0644 "${SCRIPTS}/customer-centurion-remote.service" \
-  "${STAGE}/${ARCHIVE_NAME}/systemd/centurion-remote.service"
-
 printf '%s\n' "${VERSION}" > "${STAGE}/${ARCHIVE_NAME}/VERSION"
 
-# Icons (keep archive lean — skip huge sizes if needed).
+# Double-click installer (opens a terminal so errors are visible).
+cat > "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Install Sovereign AI Brain
+Comment=Install Brain and keep your Centurion data
+Exec=bash -c 'cd "\$(dirname "\$(readlink -f "%k" 2>/dev/null || echo %k)")" && chmod +x ./install.sh && ./install.sh; echo; read -r -p "Press Enter to close… " _'
+Terminal=true
+Icon=com.centurion.desktop
+Categories=Utility;
+EOF
+chmod 0755 "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop"
+
 ICON_SRC="${DESKTOP_NATIVE}/resources/icons/hicolor"
 if [[ -d "${ICON_SRC}" ]]; then
   for size in 16 22 24 32 48 64 128 256; do
@@ -137,33 +134,35 @@ if [[ -d "${ICON_SRC}" ]]; then
   fi
 fi
 
-# Optional Mission Deck assets if already built and small enough.
-MISSION_SRC="${HOME}/.local/share/centurion/mission-deck"
-if [[ -d "${MISSION_SRC}/dist" ]]; then
-  mkdir -p "${STAGE}/${ARCHIVE_NAME}/mission-deck"
-  cp -R "${MISSION_SRC}/dist" "${STAGE}/${ARCHIVE_NAME}/mission-deck/" 2>/dev/null || true
-  [[ -f "${MISSION_SRC}/server.js" ]] && cp "${MISSION_SRC}/server.js" "${STAGE}/${ARCHIVE_NAME}/mission-deck/" || true
-  [[ -f "${MISSION_SRC}/package.json" ]] && cp "${MISSION_SRC}/package.json" "${STAGE}/${ARCHIVE_NAME}/mission-deck/" || true
-fi
-
 cat > "${STAGE}/${ARCHIVE_NAME}/README.txt" <<EOF
 Centurion AI OS Brain — Smooth Transfer (${VERSION})
 
 For existing Centurion users (your ~/.centurion data stays on this machine).
 
-1. Keep this folder after extracting the archive.
-2. Double-click install.sh, or run:  ./install.sh
-3. Open "Sovereign AI Brain" from your app menu.
-4. You should see Transfer complete — Soul, chats, and settings are kept.
+This archive contains Sovereign AI Brain (desktop) only.
 
-No git, cargo, or advisor terminal session is required.
+1. Extract this archive and keep the folder.
+2. Double-click "Install Brain", OR open a Terminal in this folder and run:
+     chmod +x install.sh
+     ./install.sh
+3. Quit any old Brain / "Sovereign AI Remote" windows.
+4. Open "Sovereign AI Brain" from your app menu (pin that — not Downloads).
+5. You should see Transfer complete — Soul, chats, and settings are kept.
+
+Do NOT only double-click bin/centurion-desktop — that skips install and leaves the old dock app.
 
 If install.sh says Centurion core was not found, contact your advisor.
-Updates: download the next Linux archive from Account → Get Brain, then run install.sh again.
+Updates: download the next Linux archive from Account → Get Brain, then run install again.
 EOF
 
+# Exclude AppleDouble / junk even if something slips into stage later.
 mkdir -p "${DIST}"
-tar -C "${STAGE}" -czf "${OUT_TGZ}" "${ARCHIVE_NAME}"
+tar -C "${STAGE}" \
+  --exclude='._*' \
+  --exclude='.DS_Store' \
+  --exclude='*/__MACOSX/*' \
+  -czf "${OUT_TGZ}" "${ARCHIVE_NAME}"
+
 (
   cd "${DIST}"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -173,12 +172,19 @@ tar -C "${STAGE}" -czf "${OUT_TGZ}" "${ARCHIVE_NAME}"
   fi
 )
 
+# Fail if archive still contains AppleDouble junk.
+if tar -tzf "${OUT_TGZ}" | grep -E '(^|/)\._|/__MACOSX/' >/dev/null 2>&1; then
+  echo "ERROR: archive still contains AppleDouble/__MACOSX junk." >&2
+  exit 1
+fi
+if tar -tzf "${OUT_TGZ}" | grep -E 'centurion-remote|mission-deck' >/dev/null 2>&1; then
+  echo "ERROR: archive must be desktop-only (no centurion-remote / mission-deck)." >&2
+  exit 1
+fi
+
 SIZE="$(wc -c < "${OUT_TGZ}" | tr -d ' ')"
 echo
 echo "Wrote: ${OUT_TGZ} (${SIZE} bytes)"
 [[ -f "${OUT_TGZ}.sha256" ]] && echo "SHA256: $(cat "${OUT_TGZ}.sha256")"
-if [[ "${SIZE}" -gt $((40 * 1000 * 1000)) ]]; then
-  echo "NOTE: archive is over ~40MB — use storage-path publish in Admin if upload limit applies."
-fi
 echo
 echo "Next: Admin → Releases → publish this tarball, then customers use Account → Get Brain → Linux."

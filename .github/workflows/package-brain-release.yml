@@ -1,0 +1,48 @@
+name: Package Brain Release
+
+# Build a clean desktop-only Get Brain tarball on Linux and upload it as an artifact.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop-native/scripts/package-brain-release.sh"
+      - "desktop-native/scripts/customer-install.sh"
+      - "desktop-native/Cargo.toml"
+      - "centurion_cli/__init__.py"
+      - ".github/workflows/package-brain-release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install native build dependencies
+        run: >-
+          dnf install -y
+          cargo rust gcc gcc-c++ binutils
+          pkgconf-pkg-config gtk4-devel libadwaita-devel vte291-gtk4-devel
+
+      - name: Build centurion-desktop (release)
+        working-directory: desktop-native
+        run: cargo build --release -p centurion-desktop --locked
+
+      - name: Package Smooth Transfer archive
+        run: desktop-native/scripts/package-brain-release.sh
+
+      - name: Upload archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: centurion-brain-linux-x86_64
+          path: |
+            desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz
+            desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
