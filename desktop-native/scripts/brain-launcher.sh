@@ -6,6 +6,10 @@ set -euo pipefail
 
 VERSION_FILE="/usr/share/centurion/brain/VERSION"
 DESKTOP_BIN="${CENTURION_DESKTOP_BIN:-/usr/bin/centurion-desktop}"
+# Full Fedora RPM ships Centurion core here (no separate terminal install).
+BUNDLED_ROOT="/usr/lib/centurion"
+BUNDLED_PYTHON="${BUNDLED_ROOT}/venv/bin/python"
+BUNDLED_REPO="${BUNDLED_ROOT}/Centurion-AI-OS"
 LOG_DIR="${HOME}/.centurion/logs"
 LOG_FILE="${LOG_DIR}/brain-launcher.log"
 
@@ -50,6 +54,12 @@ find_python_brain() {
       return
     fi
   fi
+  # Prefer the core bundled inside the full Fedora RPM (blank-machine install).
+  if [[ -x "${BUNDLED_PYTHON}" ]] \
+    && "${BUNDLED_PYTHON}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
+    printf '%s\n' "${BUNDLED_PYTHON}"
+    return
+  fi
   if command -v centurion >/dev/null 2>&1; then
     local shebang
     shebang="$(command -v centurion)"
@@ -90,6 +100,7 @@ find_ai_repo() {
   local candidate
   for candidate in \
     "${CENTURION_AI_REPO:-}" \
+    "${BUNDLED_REPO}" \
     "${HOME}/.centurion/Centurion-AI-OS" \
     "${HOME}/Centurion-AI-OS" \
     "${HOME}/src/Centurion-AI-OS"
@@ -177,6 +188,17 @@ mkdir -p "${LOG_DIR}" 2>/dev/null || true
 {
   echo "=== brain-launcher $(date -u +"%Y-%m-%dT%H:%M:%SZ") ==="
 } >> "${LOG_FILE}" 2>/dev/null || true
+
+# Drop leftover Smooth Transfer user .desktop so this system Brain is what
+# the menu/dash actually launches (otherwise an older ~/.local binary wins).
+if [[ -x /usr/libexec/centurion/cleanup-user-brain-launcher.sh ]]; then
+  /usr/libexec/centurion/cleanup-user-brain-launcher.sh >/dev/null 2>&1 || true
+elif [[ -f "${HOME}/.local/share/applications/com.centurion.desktop.desktop" ]]; then
+  rm -f "${HOME}/.local/share/applications/com.centurion.desktop.desktop" || true
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${HOME}/.local/share/applications" >/dev/null 2>&1 || true
+  fi
+fi
 
 [[ -x "${DESKTOP_BIN}" ]] || die_gui \
   "Sovereign AI Brain is not installed correctly (missing ${DESKTOP_BIN}). Reinstall from Get Brain."

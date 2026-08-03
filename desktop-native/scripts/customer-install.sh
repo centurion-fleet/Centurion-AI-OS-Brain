@@ -146,6 +146,29 @@ mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || true
 [[ -x "${ARCHIVE_ROOT}/bin/centurion-desktop" ]] \
   || die "Missing centurion-desktop in this archive. Re-download Get Brain for Linux."
 
+# If the Fedora RPM is already installed, do not write a user .desktop that
+# would shadow /usr/share/applications (XDG prefers ~/.local). Point the
+# customer at the system Brain instead and clean leftovers.
+if [[ -x /usr/bin/sovereign-ai-brain || -x /usr/bin/centurion-desktop ]]; then
+  if [[ -x /usr/libexec/centurion/cleanup-user-brain-launcher.sh ]]; then
+    /usr/libexec/centurion/cleanup-user-brain-launcher.sh >/dev/null 2>&1 || true
+  else
+    rm -f "${HOME}/.local/share/applications/com.centurion.desktop.desktop" || true
+    if command -v update-desktop-database >/dev/null 2>&1; then
+      update-desktop-database "${HOME}/.local/share/applications" >/dev/null 2>&1 || true
+    fi
+  fi
+  SYS_VER="unknown"
+  [[ -f /usr/share/centurion/brain/VERSION ]] \
+    && SYS_VER="$(tr -d '[:space:]' < /usr/share/centurion/brain/VERSION || true)"
+  ok_dialog "Sovereign AI Brain is already installed from Software (RPM ${SYS_VER}).
+
+Open it from Activities as \"Sovereign AI Brain\".
+You do not need this tarball install — it would create a second, older menu entry."
+  echo "System Brain already present (${SYS_VER}); skipped user-local install."
+  exit 0
+fi
+
 CENTURION_HOME_DIR="$(resolve_centurion_home)"
 mkdir -p "${CENTURION_HOME_DIR}"
 

@@ -96,8 +96,25 @@ mkdir -p \
 install -m 0755 "${DESKTOP_BIN}" "${STAGE}/usr/bin/centurion-desktop"
 install -m 0755 "${REMOTE_BIN}" "${STAGE}/usr/bin/centurion-remote"
 install -m 0755 "${SCRIPTS}/brain-launcher.sh" "${STAGE}/usr/bin/sovereign-ai-brain"
+mkdir -p "${STAGE}/usr/libexec/centurion"
+install -m 0755 "${SCRIPTS}/cleanup-user-brain-launcher.sh" \
+  "${STAGE}/usr/libexec/centurion/cleanup-user-brain-launcher.sh"
 printf '%s\n' "${VERSION}" > "${STAGE}/usr/share/centurion/brain/VERSION"
 chmod 0644 "${STAGE}/usr/share/centurion/brain/VERSION"
+
+# Full system: Centurion AI OS (Python) + Brain — blank-machine, no terminal.
+[[ -x "${SCRIPTS}/bundle-centurion-core.sh" ]] \
+  || { echo "ERROR: bundle-centurion-core.sh missing." >&2; exit 1; }
+"${SCRIPTS}/bundle-centurion-core.sh" "${STAGE}/usr/lib/centurion"
+cat > "${STAGE}/usr/bin/centurion" <<'EOF'
+#!/bin/bash
+# CLI entry for the full Fedora Brain RPM (bundled Centurion AI OS).
+export CENTURION_PYTHON="${CENTURION_PYTHON:-/usr/lib/centurion/venv/bin/python}"
+export CENTURION_AI_REPO="${CENTURION_AI_REPO:-/usr/lib/centurion/Centurion-AI-OS}"
+exec /usr/lib/centurion/venv/bin/centurion "$@"
+EOF
+chmod 0755 "${STAGE}/usr/bin/centurion"
+
 
 # Full hicolor set + pixmaps fallback — Software/dash/app grid all resolve
 # Icon=com.centurion.desktop from these paths after gtk-update-icon-cache.
@@ -165,15 +182,26 @@ EOF
 chmod 0644 "${STAGE}/usr/share/applications/com.centurion.desktop.desktop"
 
 cat > "${STAGE}/usr/share/doc/centurion-brain/README.txt" <<EOF
-Sovereign AI Brain ${VERSION} (Fedora RPM)
+Sovereign AI Brain ${VERSION} — full Centurion AI OS (Fedora RPM)
 
+This one package installs:
+  • Centurion AI OS (thinking / chat engine)
+  • Sovereign AI Brain (desktop app)
+
+Customer steps (no terminal):
 1. Double-click this .rpm (or open it with Software).
 2. Click Install and enter your password if asked.
 3. Open “Sovereign AI Brain” from Activities / Apps.
-4. Your existing Centurion data in ~/.centurion is kept.
+4. Enter your license code when asked.
 
-Chat and Thinking use the Centurion already on this computer.
-If Brain says Centurion core was not found, contact your advisor.
+Your data lives in ~/.centurion and is never wiped by this install.
+
+Notes for advisors:
+- “Potentially Unsafe / Provided by a third party” in Software is normal for
+  an unsigned sideloaded RPM — not malware.
+- Download size is larger than the old Brain-only RPM because the full AI
+  system is included.
+- Do not also run an old Smooth Transfer tar.gz after this RPM.
 EOF
 
 # Pack sources as a tarball for rpmbuild %setup-less install from buildroot copy.
@@ -186,7 +214,7 @@ cat > "${RPMBUILD}/SPECS/centurion-brain.spec" <<EOF
 Name:           centurion-brain
 Version:        ${RPM_VERSION}
 Release:        1%{?dist}
-Summary:        Sovereign AI Brain desktop for Centurion
+Summary:        Sovereign AI Brain + Centurion AI OS (full)
 License:        Proprietary
 URL:            https://www.1human1ai.com
 BuildArch:      ${ARCH}
@@ -198,13 +226,14 @@ Requires:       libadwaita
 Requires:       webkitgtk6.0
 Requires:       libsoup3
 Requires:       hicolor-icon-theme
+Requires:       python3
 
 %description
-Sovereign AI Brain — the Centurion desktop app for Fedora.
+Sovereign AI Brain + Centurion AI OS for Fedora (full install).
 
-Install via Software (double-click this package). Opens from your app menu
-as “Sovereign AI Brain”. Uses your existing Centurion install and never
-wipes ~/.centurion data.
+Double-click this package in Software to install everything needed for
+Chat and Thinking. Opens from your app menu as “Sovereign AI Brain”.
+Keeps existing ~/.centurion data if present; works on a blank machine.
 
 %prep
 %setup -c -n centurion-brain-%{version}
@@ -218,6 +247,11 @@ mkdir -p %{buildroot}
 cp -a ./. %{buildroot}/
 
 %post
+# Clear Smooth Transfer user .desktop files so XDG does not prefer an old
+# ~/.local/bin/centurion-desktop over this system RPM.
+if [[ -x %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh ]]; then
+  %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh >/dev/null 2>&1 || :
+fi
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database %{_datadir}/applications >/dev/null 2>&1 || :
 fi
@@ -244,6 +278,9 @@ fi
 %{_bindir}/centurion-desktop
 %{_bindir}/centurion-remote
 %{_bindir}/sovereign-ai-brain
+%{_bindir}/centurion
+%{_libexecdir}/centurion/cleanup-user-brain-launcher.sh
+/usr/lib/centurion
 %{_datadir}/applications/com.centurion.desktop.desktop
 %{_datadir}/metainfo/com.centurion.desktop.metainfo.xml
 %{_datadir}/centurion/brain/VERSION
@@ -254,7 +291,7 @@ fi
 
 %changelog
 * $(date -u +"%a %b %d %Y") Centurion AI OS <support@1human1ai.com> - ${RPM_VERSION}-1
-- Sovereign AI Brain ${RPM_VERSION} Smooth Transfer for Fedora
+- Full Centurion AI OS + Sovereign AI Brain ${RPM_VERSION} for Fedora
 EOF
 
 echo "Building RPM ${RPM_VERSION} (${ARCH})…"
@@ -293,4 +330,5 @@ echo "Wrote: ${OUT_RPM} (${SIZE} bytes)"
 [[ -f "${OUT_RPM}.sha256" ]] && echo "SHA256: $(cat "${OUT_RPM}.sha256")"
 echo
 echo "Customer path: double-click the .rpm → Software → Install → open Sovereign AI Brain."
+echo "This RPM includes the full Centurion AI OS (no separate terminal install)."
 echo "Publish this file from Admin → Releases (primary Get Brain artifact for Fedora)."

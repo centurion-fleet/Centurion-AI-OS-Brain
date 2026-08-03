@@ -6,11 +6,12 @@
   <metadata_license>MIT</metadata_license>
   <project_license>LicenseRef-proprietary</project_license>
   <name>Sovereign AI Brain</name>
-  <summary>Your private Sovereign AI Brain</summary>
+  <summary>Centurion AI OS + Sovereign AI Brain for your computer</summary>
   <description>
     <p>
-      Sovereign AI Brain is the Centurion desktop for your own computer. It keeps
-      your existing Centurion settings, Soul, and chats on disk.
+      Sovereign AI Brain installs the Centurion desktop and the Centurion AI OS
+      thinking engine together. Double-click the Fedora package in Software —
+      no terminal steps. Your settings and chats stay in ~/.centurion.
     </p>
   </description>
   <launchable type="desktop-id">com.centurion.desktop.desktop</launchable>
@@ -29,6 +30,7 @@
     <keyword>Brain</keyword>
   </keywords>
   <url type="homepage">https://www.1human1ai.com</url>
+  <pkgname>centurion-brain</pkgname>
   <provides>
     <binary>sovereign-ai-brain</binary>
     <binary>centurion-desktop</binary>
