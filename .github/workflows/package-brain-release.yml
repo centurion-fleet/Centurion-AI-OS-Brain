@@ -12,6 +12,8 @@ on:
       - "desktop-native/scripts/brain-launcher.sh"
       - "desktop-native/scripts/cleanup-user-brain-launcher.sh"
       - "desktop-native/scripts/bundle-centurion-core.sh"
+      - "desktop-native/scripts/stage-mission-deck.sh"
+      - "web-dashboard/**"
       - "desktop-native/centurion-install-brain/**"
       - "desktop-native/centurion-desktop/**"
       - "desktop-native/resources/**"
@@ -39,6 +41,7 @@ jobs:
           webkitgtk6.0-devel libsoup3-devel
           rpm-build rpmdevtools
           python3 python3-pip python3-devel
+          nodejs npm
 
       - name: Build Brain binaries (release)
         working-directory: desktop-native
@@ -47,6 +50,13 @@ jobs:
           -p centurion-desktop
           -p centurion-remote
           -p centurion-install-brain
+
+      - name: Build Mission Deck (Focus tab)
+        working-directory: web-dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          test -d dist
 
       - name: Package Smooth Transfer archive (.tar.gz)
         run: desktop-native/scripts/package-brain-release.sh

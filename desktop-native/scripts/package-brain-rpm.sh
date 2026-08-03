@@ -106,6 +106,8 @@ chmod 0644 "${STAGE}/usr/share/centurion/brain/VERSION"
 [[ -x "${SCRIPTS}/bundle-centurion-core.sh" ]] \
   || { echo "ERROR: bundle-centurion-core.sh missing." >&2; exit 1; }
 "${SCRIPTS}/bundle-centurion-core.sh" "${STAGE}/usr/lib/centurion"
+# Mission Deck (Focus tab) — built SPA + server.js for blank-machine installs.
+"${SCRIPTS}/stage-mission-deck.sh" "${STAGE}"
 cat > "${STAGE}/usr/bin/centurion" <<'EOF'
 #!/bin/bash
 # CLI entry for the full Fedora Brain RPM (bundled Centurion AI OS).
@@ -187,12 +189,13 @@ Sovereign AI Brain ${VERSION} — full Centurion AI OS (Fedora RPM)
 This one package installs:
   • Centurion AI OS (thinking / chat engine)
   • Sovereign AI Brain (desktop app)
+  • Focus / Mission Deck (start and manage missions)
 
 Customer steps (no terminal):
 1. Double-click this .rpm (or open it with Software).
 2. Click Install and enter your password if asked.
 3. Open “Sovereign AI Brain” from Activities / Apps.
-4. Enter your license code when asked.
+4. Open the Focus tab — first time, begin Discovery to create a mission.
 
 Your data lives in ~/.centurion and is never wiped by this install.
 
@@ -231,13 +234,14 @@ Requires:       webkitgtk6.0
 Requires:       libsoup3
 Requires:       hicolor-icon-theme
 Requires:       python3
+Requires:       nodejs
 
 %description
 Sovereign AI Brain + Centurion AI OS for Fedora (full install).
 
 Double-click this package in Software to install everything needed for
-Chat and Thinking. Opens from your app menu as “Sovereign AI Brain”.
-Keeps existing ~/.centurion data if present; works on a blank machine.
+Chat, Thinking, and Focus (missions). Opens from your app menu as
+“Sovereign AI Brain”. Keeps existing ~/.centurion data if present.
 
 %prep
 %setup -c -n centurion-brain-%{version}
@@ -285,6 +289,7 @@ fi
 %{_bindir}/centurion
 %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh
 /usr/lib/centurion
+/usr/share/centurion/mission-deck
 %{_datadir}/applications/com.centurion.desktop.desktop
 %{_datadir}/metainfo/com.centurion.desktop.metainfo.xml
 %{_datadir}/centurion/brain/VERSION
@@ -295,7 +300,7 @@ fi
 
 %changelog
 * $(date -u +"%a %b %d %Y") Centurion AI OS <support@1human1ai.com> - ${RPM_VERSION}-1
-- Full Centurion AI OS + Sovereign AI Brain ${RPM_VERSION} for Fedora
+- Full Centurion AI OS + Sovereign AI Brain ${RPM_VERSION} with Focus / Mission Deck
 EOF
 
 echo "Building RPM ${RPM_VERSION} (${ARCH})…"

@@ -218,4 +218,18 @@ export CENTURION_HOME="${CENTURION_HOME_DIR}"
 export CENTURION_PYTHON="${PYTHON_BIN}"
 export CENTURION_AI_REPO="${AI_REPO}"
 
+# Focus / Mission Deck (React) — full RPM ships this under /usr/share.
+if [[ -z "${CENTURION_MISSION_DECK_DIR:-}" ]]; then
+  for deck in \
+    /usr/share/centurion/mission-deck \
+    "${AI_REPO}/web-dashboard" \
+    "${HOME}/.local/share/centurion/mission-deck"
+  do
+    if [[ -f "${deck}/server.js" ]]; then
+      export CENTURION_MISSION_DECK_DIR="${deck}"
+      break
+    fi
+  done
+fi
+
 exec "${DESKTOP_BIN}" "$@"

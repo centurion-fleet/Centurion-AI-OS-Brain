@@ -33,6 +33,8 @@ tar -C "${ROOT}" \
   --exclude='docs' \
   --exclude='docker' \
   --exclude='tests' \
+  --exclude='web-dashboard/node_modules' \
+  --exclude='web-dashboard/dist' \
   --exclude='ios' \
   --exclude='android' \
   --exclude='desktop' \

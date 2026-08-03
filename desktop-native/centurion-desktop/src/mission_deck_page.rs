@@ -25,23 +25,40 @@ const DECK_URL: &str = "http://127.0.0.1:9120/";
 
 /// Resolve where `web-dashboard` (with `server.js` + `dist/`) lives.
 pub fn resolve_mission_deck_dir() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("CENTURION_MISSION_DECK_DIR") {
-        let path = PathBuf::from(p);
-        if path.join("server.js").is_file() {
-            return Some(path);
+    let candidates: Vec<PathBuf> = {
+        let mut list = Vec::new();
+        if let Ok(p) = std::env::var("CENTURION_MISSION_DECK_DIR") {
+            list.push(PathBuf::from(p));
         }
-    }
-
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        let installed = home.join(".local/share/centurion/mission-deck");
-        if installed.join("server.js").is_file() {
-            return Some(installed);
+        // Full Fedora RPM install path.
+        list.push(PathBuf::from("/usr/share/centurion/mission-deck"));
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            list.push(home.join(".local/share/centurion/mission-deck"));
         }
-    }
+        if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
+            list.push(PathBuf::from(repo).join("web-dashboard"));
+        }
+        list.push(PathBuf::from(
+            "/usr/lib/centurion/Centurion-AI-OS/web-dashboard",
+        ));
+        // Compile-time path: …/desktop-native/centurion-desktop → repo/web-dashboard
+        list.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web-dashboard"));
+        list
+    };
 
-    // Compile-time path: …/Centurion-AI-OS/desktop-native/centurion-desktop → repo/web-dashboard
-    let from_manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web-dashboard");
-    if let Ok(canon) = from_manifest.canonicalize() {
+    for path in candidates {
+        let Ok(canon) = path.canonicalize() else {
+            // Still accept non-canonical if server.js is present (env may point
+            // at a path that exists but canonicalize fails on some mounts).
+            if path.join("server.js").is_file() && path.join("dist").is_dir() {
+                return Some(path);
+            }
+            continue;
+        };
+        if canon.join("server.js").is_file() && canon.join("dist").is_dir() {
+            return Some(canon);
+        }
+        // Dev: allow server.js without dist (vite --dev), but Get Brain needs dist.
         if canon.join("server.js").is_file() {
             return Some(canon);
         }
@@ -331,8 +348,8 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             });
         }
         None => {
-            let err = "Mission Deck not found. Build web-dashboard (`npm run build`) and install, \
-                       or set CENTURION_MISSION_DECK_DIR."
+            let err = "Focus is not available on this install yet. Reinstall the latest \
+                       Sovereign AI Brain from Get Brain, or ask your advisor for an update."
                 .to_string();
             *node_error_c.borrow_mut() = Some(err.clone());
             status_c.set_visible(true);

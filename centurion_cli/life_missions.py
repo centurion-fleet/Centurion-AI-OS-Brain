@@ -908,6 +908,7 @@ def put_mission(fields: dict[str, Any]) -> dict[str, Any]:
                 (mid, now),
             )
         _export_primary_markdown(conn)
+        bump_data_version(conn)
         row = conn.execute("SELECT * FROM life_missions WHERE id = ?", (mid,)).fetchone()
         return _mission_dict(conn, row)
 
