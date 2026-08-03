@@ -72,6 +72,8 @@ if [[ -n "${PYTHON_BIN}" ]]; then
     bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"tools_skills_snapshot\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q 'self_built'"
   check "swarm_create_board via bridge" \
     bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"swarm_create_board\",\"name\":\"Smoke board\",\"objective\":\"smoke\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
+  check "swarm_snapshot via bridge" \
+    bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"swarm_snapshot\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
   check "skills.allow_public_hub default false" \
     bash -c "\"${PYTHON_BIN}\" -c 'from centurion_cli.config import DEFAULT_CONFIG; assert DEFAULT_CONFIG[\"skills\"].get(\"allow_public_hub\") is False'"
 else
@@ -84,7 +86,9 @@ echo "Manual UI checklist on Titus:"
 echo "  [ ] Thinking Service status readable; Change + Restore work"
 echo "  [ ] Backup Thinking Change: set Backup #1 with connector + key; Clear works"
 echo "  [ ] Skills & tools: self-built vs reference; Ask Centurion to create seeds Chat"
-echo "  [ ] Collaborations New board (+ optional mission id); Fleet peer empty-state copy"
+echo "  [ ] Collaborations New board (+ optional mission id); honest board-saved copy"
+echo "  [ ] Channels Remote: Pair / Show QR; Fleet peer empty-state copy"
+echo "  [ ] Chat mode teaching line under pills"
 echo "  [ ] Prefer Focus on decisions hidden; Scheduled/Plugins say View only"
 echo "  [ ] Autonomy / Soul / Memory Horizon / Oversight save + refresh"
 echo "  [ ] Health Check / Support Bundle / Look up Support Code"

@@ -5295,15 +5295,20 @@ Being · Continuity\n\
                 "whatsapp" => "WhatsApp",
                 _ => key,
             };
-            let plat_row = adw::ActionRow::builder()
-                .title(title)
-                .subtitle(&gateway_platform_subtitle(
+            let subtitle = if key == "api_server" && !configured {
+                "Not paired yet — tap Pair for the Remote QR (same Wi‑Fi).".to_owned()
+            } else {
+                gateway_platform_subtitle(
                     configured,
                     connected,
                     &state,
                     &status,
                     &error_message,
-                ))
+                )
+            };
+            let plat_row = adw::ActionRow::builder()
+                .title(title)
+                .subtitle(&subtitle)
                 .build();
 
             // Setup actions — customers must not need a terminal.
@@ -5345,6 +5350,24 @@ Being · Continuity\n\
                         &list_for_cb,
                         clear_session,
                     );
+                });
+                plat_row.add_suffix(&setup);
+            } else if key == "api_server" {
+                // Pairing lives under Updates → Remote pairing; surface the same
+                // QR here so the Channels row does not look dead next to Telegram/WhatsApp.
+                let setup = gtk::Button::with_label(if configured {
+                    "Show QR"
+                } else {
+                    "Pair"
+                });
+                setup.set_valign(gtk::Align::Center);
+                setup.add_css_class("suggested-action");
+                setup.set_tooltip_text(Some(
+                    "Open the Remote pairing QR (same Wi‑Fi). Approve under Connected Devices.",
+                ));
+                let parent_w = parent.clone();
+                setup.connect_clicked(move |_| {
+                    show_pairing_qr_window(&parent_w);
                 });
                 plat_row.add_suffix(&setup);
             }

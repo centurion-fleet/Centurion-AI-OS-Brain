@@ -4976,6 +4976,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     mode_row.append(&focus_pill);
     mode_row.append(&research_pill);
 
+    let mode_wrap = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    mode_wrap.set_halign(gtk::Align::Start);
+    mode_wrap.set_hexpand(true);
+    mode_wrap.append(&mode_row);
+    let mode_teach = gtk::Label::builder()
+        .label("Chat = talk · Plan = proposal this turn · Focus = Primary mission · Research = evidence")
+        .css_classes(["dim-label"])
+        .xalign(0.0)
+        .wrap(true)
+        .build();
+    mode_wrap.append(&mode_teach);
+
     let model_btn = gtk::MenuButton::builder()
         .label("Selecting model…")
         .css_classes(["centurion-chat-pill"])
@@ -5176,7 +5188,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let toolbar_spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     toolbar_spacer.set_hexpand(true);
 
-    toolbar.append(&mode_row);
+    toolbar.append(&mode_wrap);
     toolbar.append(&model_btn);
     toolbar.append(&toolbar_spacer);
     toolbar.append(&attach_button);

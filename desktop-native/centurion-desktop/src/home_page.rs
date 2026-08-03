@@ -1634,7 +1634,7 @@ pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dy
         .body(
             "Shared work boards on this Brain (and peers you can reach). \
 Cloud Mission Control stays off — no portal invite tokens.\n\n\
-After create, open the board from Home constellation / Focus swarm UI. \
+After create, the board is saved on this Brain for local / advisor use. \
 Add a Fleet peer in Settings to involve another Centurion.",
         )
         .extra_child(&box_)
@@ -1680,13 +1680,13 @@ Add a Fleet peer in Settings to involve another Centurion.",
                         .unwrap_or("")
                         .to_owned();
                     let note = if board_id.is_empty() {
-                        "Board created. Open it from Home constellation, or add a Fleet peer \
-in Settings to involve another Centurion."
+                        "Board saved on this Brain (local / advisor). Add a Fleet peer in \
+Settings to involve another Centurion."
                             .to_owned()
                     } else {
                         format!(
-                            "Board created ({board_id}). Open it from Home constellation, \
-or add a Fleet peer in Settings to involve another Centurion."
+                            "Board saved on this Brain ({board_id}). Add a Fleet peer in \
+Settings to involve another Centurion."
                         )
                     };
                     if let Ok(mut slot) = created_note_worker.lock() {
