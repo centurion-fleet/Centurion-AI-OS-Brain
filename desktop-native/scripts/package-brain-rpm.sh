@@ -142,6 +142,9 @@ EOF
 tar -C "${STAGE}" -czf "${RPMBUILD}/SOURCES/centurion-brain-${RPM_VERSION}.tar.gz" .
 
 cat > "${RPMBUILD}/SPECS/centurion-brain.spec" <<EOF
+%global debug_package %{nil}
+%global __os_install_post %{nil}
+
 Name:           centurion-brain
 Version:        ${RPM_VERSION}
 Release:        1%{?dist}
@@ -210,6 +213,8 @@ echo "Building RPM ${RPM_VERSION} (${ARCH})…"
 rpmbuild \
   --define "_topdir ${RPMBUILD}" \
   --define "_build_id_links none" \
+  --define "debug_package %{nil}" \
+  --nocheck \
   -bb "${RPMBUILD}/SPECS/centurion-brain.spec"
 
 mkdir -p "${DIST}"
