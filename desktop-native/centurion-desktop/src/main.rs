@@ -295,7 +295,12 @@ mod linux {
         let application = adw::Application::builder().application_id(APP_ID).build();
         let supervisor = Rc::new(RefCell::new(RemoteSupervisor::default()));
 
-        application.connect_startup(|_| load_brand_css());
+        application.connect_startup(|_| {
+            load_brand_css();
+            // Match .desktop Icon= / AppStream id so the dash and window
+            // chrome use the Brain mark (not the generic missing-icon cog).
+            gtk::Window::set_default_icon_name(Some(APP_ID));
+        });
         application.connect_activate(move |application| {
             build_window(application, supervisor.clone());
         });

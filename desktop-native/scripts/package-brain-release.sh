@@ -128,7 +128,7 @@ chmod 0755 "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop"
 
 ICON_SRC="${DESKTOP_NATIVE}/resources/icons/hicolor"
 if [[ -d "${ICON_SRC}" ]]; then
-  for size in 16 22 24 32 48 64 128 256; do
+  for size in 16 22 24 32 48 64 128 256 512; do
     src="${ICON_SRC}/${size}x${size}/apps/com.centurion.desktop.png"
     if [[ -f "${src}" ]]; then
       mkdir -p "${STAGE}/${ARCHIVE_NAME}/icons/${size}x${size}/apps"
@@ -136,12 +136,25 @@ if [[ -d "${ICON_SRC}" ]]; then
         "${STAGE}/${ARCHIVE_NAME}/icons/${size}x${size}/apps/com.centurion.desktop.png"
     fi
   done
-  scalable="${ICON_SRC}/scalable/apps/com.centurion.desktop.png"
-  if [[ -f "${scalable}" ]]; then
-    mkdir -p "${STAGE}/${ARCHIVE_NAME}/icons/scalable/apps"
-    install -m 0644 "${scalable}" \
-      "${STAGE}/${ARCHIVE_NAME}/icons/scalable/apps/com.centurion.desktop.png"
-  fi
+  for scalable in \
+    "${ICON_SRC}/scalable/apps/com.centurion.desktop.svg" \
+    "${ICON_SRC}/scalable/apps/com.centurion.desktop.png"
+  do
+    if [[ -f "${scalable}" ]]; then
+      mkdir -p "${STAGE}/${ARCHIVE_NAME}/icons/scalable/apps"
+      install -m 0644 "${scalable}" \
+        "${STAGE}/${ARCHIVE_NAME}/icons/scalable/apps/$(basename "${scalable}")"
+      break
+    fi
+  done
+fi
+
+# AppStream metadata for tar installs (user ~/.local/share/metainfo).
+if [[ -f "${DESKTOP_NATIVE}/resources/metainfo/com.centurion.desktop.metainfo.xml" ]]; then
+  mkdir -p "${STAGE}/${ARCHIVE_NAME}/metainfo"
+  install -m 0644 \
+    "${DESKTOP_NATIVE}/resources/metainfo/com.centurion.desktop.metainfo.xml" \
+    "${STAGE}/${ARCHIVE_NAME}/metainfo/com.centurion.desktop.metainfo.xml"
 fi
 
 cat > "${STAGE}/${ARCHIVE_NAME}/README.txt" <<EOF

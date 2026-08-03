@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata — required for GNOME Software / Fedora Software to show
+     the real Brain icon during install and in the installed-apps list. -->
+<component type="desktop-application">
+  <id>com.centurion.desktop</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Sovereign AI Brain</name>
+  <summary>Your private Sovereign AI Brain</summary>
+  <description>
+    <p>
+      Sovereign AI Brain is the Centurion desktop for your own computer. It keeps
+      your existing Centurion settings, Soul, and chats on disk.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.centurion.desktop.desktop</launchable>
+  <icon type="stock">com.centurion.desktop</icon>
+  <icon type="local" width="128" height="128">/usr/share/icons/hicolor/128x128/apps/com.centurion.desktop.png</icon>
+  <icon type="local" width="64" height="64">/usr/share/icons/hicolor/64x64/apps/com.centurion.desktop.png</icon>
+  <icon type="local" width="256" height="256">/usr/share/icons/hicolor/256x256/apps/com.centurion.desktop.png</icon>
+  <categories>
+    <category>Utility</category>
+    <category>Network</category>
+  </categories>
+  <keywords>
+    <keyword>AI</keyword>
+    <keyword>Centurion</keyword>
+    <keyword>Sovereign</keyword>
+    <keyword>Brain</keyword>
+  </keywords>
+  <url type="homepage">https://www.1human1ai.com</url>
+  <provides>
+    <binary>sovereign-ai-brain</binary>
+    <binary>centurion-desktop</binary>
+  </provides>
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+  <content_rating type="oars-1.1"/>
+</component>

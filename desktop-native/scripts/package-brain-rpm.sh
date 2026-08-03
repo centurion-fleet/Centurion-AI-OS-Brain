@@ -99,16 +99,53 @@ install -m 0755 "${SCRIPTS}/brain-launcher.sh" "${STAGE}/usr/bin/sovereign-ai-br
 printf '%s\n' "${VERSION}" > "${STAGE}/usr/share/centurion/brain/VERSION"
 chmod 0644 "${STAGE}/usr/share/centurion/brain/VERSION"
 
+# Full hicolor set + pixmaps fallback — Software/dash/app grid all resolve
+# Icon=com.centurion.desktop from these paths after gtk-update-icon-cache.
+ICON_COUNT=0
 if [[ -d "${ICON_SRC}" ]]; then
-  for size in 16 22 24 32 48 64 128 256; do
+  for size in 16 22 24 32 48 64 128 256 512; do
     src="${ICON_SRC}/${size}x${size}/apps/com.centurion.desktop.png"
     if [[ -f "${src}" ]]; then
       mkdir -p "${STAGE}/usr/share/icons/hicolor/${size}x${size}/apps"
       install -m 0644 "${src}" \
         "${STAGE}/usr/share/icons/hicolor/${size}x${size}/apps/com.centurion.desktop.png"
+      ICON_COUNT=$((ICON_COUNT + 1))
+    fi
+  done
+  # Prefer SVG for scalable; fall back to PNG if that is what we ship.
+  for scalable in \
+    "${ICON_SRC}/scalable/apps/com.centurion.desktop.svg" \
+    "${ICON_SRC}/scalable/apps/com.centurion.desktop.png"
+  do
+    if [[ -f "${scalable}" ]]; then
+      mkdir -p "${STAGE}/usr/share/icons/hicolor/scalable/apps"
+      install -m 0644 "${scalable}" \
+        "${STAGE}/usr/share/icons/hicolor/scalable/apps/$(basename "${scalable}")"
+      ICON_COUNT=$((ICON_COUNT + 1))
+      break
     fi
   done
 fi
+if [[ "${ICON_COUNT}" -lt 1 ]]; then
+  echo "ERROR: no Brain icons found under ${ICON_SRC}" >&2
+  exit 1
+fi
+
+# Legacy pixmaps path — some Software / menu backends still probe here.
+mkdir -p "${STAGE}/usr/share/pixmaps"
+PIXMAP_SRC="${ICON_SRC}/256x256/apps/com.centurion.desktop.png"
+[[ -f "${PIXMAP_SRC}" ]] || PIXMAP_SRC="${ICON_SRC}/128x128/apps/com.centurion.desktop.png"
+install -m 0644 "${PIXMAP_SRC}" "${STAGE}/usr/share/pixmaps/com.centurion.desktop.png"
+
+# AppStream — GNOME Software uses this for the install dialog icon + listing.
+METAINF_SRC="${DESKTOP_NATIVE}/resources/metainfo/com.centurion.desktop.metainfo.xml"
+[[ -f "${METAINF_SRC}" ]] || {
+  echo "ERROR: missing ${METAINF_SRC}" >&2
+  exit 1
+}
+mkdir -p "${STAGE}/usr/share/metainfo"
+install -m 0644 "${METAINF_SRC}" \
+  "${STAGE}/usr/share/metainfo/com.centurion.desktop.metainfo.xml"
 
 cat > "${STAGE}/usr/share/applications/com.centurion.desktop.desktop" <<'EOF'
 [Desktop Entry]
@@ -123,6 +160,7 @@ Categories=Utility;Network;
 Keywords=AI;Assistant;Centurion;Sovereign;Brain;Private;
 StartupNotify=true
 StartupWMClass=com.centurion.desktop
+X-GNOME-UsesNotifications=true
 EOF
 chmod 0644 "${STAGE}/usr/share/applications/com.centurion.desktop.desktop"
 
@@ -183,16 +221,23 @@ cp -a ./. %{buildroot}/
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database %{_datadir}/applications >/dev/null 2>&1 || :
 fi
+# -f force rebuild, -t ignore missing index.theme noise; required so dash /
+# Software pick up Icon=com.centurion.desktop instead of the generic cog.
+touch %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-  gtk-update-icon-cache -f %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+  gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+fi
+if command -v update-mime-database >/dev/null 2>&1; then
+  update-mime-database %{_datadir}/mime >/dev/null 2>&1 || :
 fi
 
 %postun
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database %{_datadir}/applications >/dev/null 2>&1 || :
 fi
+touch %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-  gtk-update-icon-cache -f %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+  gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
 fi
 
 %files
@@ -200,9 +245,12 @@ fi
 %{_bindir}/centurion-remote
 %{_bindir}/sovereign-ai-brain
 %{_datadir}/applications/com.centurion.desktop.desktop
+%{_datadir}/metainfo/com.centurion.desktop.metainfo.xml
 %{_datadir}/centurion/brain/VERSION
 %{_datadir}/doc/centurion-brain/README.txt
+%{_datadir}/pixmaps/com.centurion.desktop.png
 %{_datadir}/icons/hicolor/*/apps/com.centurion.desktop.png
+%{_datadir}/icons/hicolor/scalable/apps/com.centurion.desktop.*
 
 %changelog
 * $(date -u +"%a %b %d %Y") Centurion AI OS <support@1human1ai.com> - ${RPM_VERSION}-1

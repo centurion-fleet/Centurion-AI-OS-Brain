@@ -179,10 +179,10 @@ if [[ -d "${ARCHIVE_ROOT}/icons" ]]; then
     mkdir -p "$(dirname "${dest}")"
     install -m 0644 "${src}" "${dest}" \
       || die "Could not install icon: ${src}"
-  done < <(find "${ARCHIVE_ROOT}/icons" -type f -name 'com.centurion.desktop.png' -print0 2>/dev/null)
+  done < <(find "${ARCHIVE_ROOT}/icons" -type f \( -name 'com.centurion.desktop.png' -o -name 'com.centurion.desktop.svg' \) -print0 2>/dev/null)
 
   # Absolute path fallback — some docks ignore hicolor until logout/cache refresh.
-  for size in 256 128 64 48; do
+  for size in 512 256 128 64 48; do
     candidate="${ICON_DIR}/${size}x${size}/apps/com.centurion.desktop.png"
     if [[ -f "${candidate}" ]]; then
       ICON_ABS="${candidate}"
@@ -193,6 +193,14 @@ if [[ -d "${ARCHIVE_ROOT}/icons" ]]; then
     mkdir -p "${HOME}/.local/share/pixmaps"
     install -m 0644 "${ICON_ABS}" "${HOME}/.local/share/pixmaps/com.centurion.desktop.png" || true
   fi
+fi
+
+# User-local AppStream (helps Software / GNOME app grid after Smooth Transfer).
+METAINF_USER="${HOME}/.local/share/metainfo"
+if [[ -f "${ARCHIVE_ROOT}/metainfo/com.centurion.desktop.metainfo.xml" ]]; then
+  mkdir -p "${METAINF_USER}"
+  install -m 0644 "${ARCHIVE_ROOT}/metainfo/com.centurion.desktop.metainfo.xml" \
+    "${METAINF_USER}/com.centurion.desktop.metainfo.xml" || true
 fi
 
 MISSION_DECK_DST="${SHARE_DIR}/mission-deck"
