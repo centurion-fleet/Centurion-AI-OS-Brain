@@ -294,68 +294,23 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     status.set_margin_end(24);
     root.append(&status);
 
-    let deck_ready = Arc::new(DeckReady::default());
-    let supervisor: Rc<RefCell<Option<Arc<Mutex<DeckSupervisor>>>>> = Rc::new(RefCell::new(
-        resolve_mission_deck_dir()
-            .map(|dir| Arc::new(Mutex::new(DeckSupervisor::new(dir, deck_ready.clone())))),
-    ));
+    let retry = gtk::Button::with_label("Retry");
+    retry.add_css_class("suggested-action");
+    retry.set_halign(gtk::Align::Center);
+    retry.set_margin_bottom(24);
+    root.append(&retry);
 
-    // Node can warm while Chat is active; WebView attaches only on first Focus show.
+    let deck_ready = Arc::new(DeckReady::default());
+    let supervisor: Rc<RefCell<Option<Arc<Mutex<DeckSupervisor>>>>> =
+        Rc::new(RefCell::new(resolve_mission_deck_dir().map(|dir| {
+            Arc::new(Mutex::new(DeckSupervisor::new(dir, deck_ready.clone())))
+        })));
+
+    // Node warms on first Focus show or after the tab has sat idle for two seconds.
+    // WebView still attaches only on first Focus show.
     let node_ready = Rc::new(Cell::new(false));
     let node_error: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-
-    let node_ready_c = node_ready.clone();
-    let node_error_c = node_error.clone();
-    let status_c = status.clone();
-    let suspended_c = suspended.clone();
-
-    // Pre-warm Node on a background thread as soon as the tab is built (window
-    // show path) so Chat stays responsive and Focus often finds a ready deck.
-    let prewarm = {
-        let supervisor_bg = supervisor.borrow().clone();
-        spawn_deck_warm(supervisor_bg, deck_ready.clone())
-    };
-    match prewarm {
-        Some(rx) => {
-            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(result) => {
-                    match result {
-                        Ok(()) => {
-                            node_ready_c.set(true);
-                            *node_error_c.borrow_mut() = None;
-                            // Do not attach WebView here — Chat cold path must not pay WebKit.
-                            // Keep status visible until first Focus open attaches the view.
-                            if suspended_c.get() {
-                                status_c
-                                    .set_label("Mission Deck ready — open Focus when you need it.");
-                            }
-                        }
-                        Err(err) => {
-                            node_ready_c.set(false);
-                            *node_error_c.borrow_mut() = Some(err.clone());
-                            status_c.set_visible(true);
-                            status_c.set_label(&err);
-                        }
-                    }
-                    glib::ControlFlow::Break
-                }
-                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    status_c.set_visible(true);
-                    status_c.set_label("Mission Deck failed to start.");
-                    glib::ControlFlow::Break
-                }
-            });
-        }
-        None => {
-            let err = "Focus is not available on this install yet. Reinstall the latest \
-                       Sovereign AI Brain from Get Brain, or ask your advisor for an update."
-                .to_string();
-            *node_error_c.borrow_mut() = Some(err.clone());
-            status_c.set_visible(true);
-            status_c.set_label(&err);
-        }
-    }
+    let warm_started = Rc::new(Cell::new(false));
 
     let attach_if_needed: Rc<dyn Fn()> = {
         let root = root.clone();
@@ -365,19 +320,23 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
         let status = status.clone();
         let node_ready = node_ready.clone();
         let node_error = node_error.clone();
+        let retry = retry.clone();
         Rc::new(move || {
             if webview_slot.borrow().is_some() {
                 status.set_visible(false);
+                retry.set_visible(false);
                 return;
             }
             if let Some(err) = node_error.borrow().clone() {
                 status.set_visible(true);
                 status.set_label(&err);
+                retry.set_visible(true);
                 return;
             }
             if !node_ready.get() {
                 status.set_visible(true);
                 status.set_label("Opening Mission Deck…");
+                retry.set_visible(true);
                 return;
             }
             match attach_webview(&root, hooks.clone(), suspended.clone()) {
@@ -385,29 +344,122 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                     apply_deck_suspend(&wv, suspended.get());
                     *webview_slot.borrow_mut() = Some(wv);
                     status.set_visible(false);
+                    retry.set_visible(false);
                 }
                 None => {
                     status.set_visible(true);
                     status.set_label(
                         "WebKitGTK is required for Mission Deck. Install webkitgtk6.0 and rebuild.",
                     );
+                    retry.set_visible(true);
                 }
             }
         })
     };
 
-    let refresh: Rc<dyn Fn()> = {
+    let start_warm: Rc<dyn Fn()> = {
         let supervisor = supervisor.clone();
+        let deck_ready = deck_ready.clone();
+        let node_ready = node_ready.clone();
+        let node_error = node_error.clone();
+        let warm_started = warm_started.clone();
+        let status = status.clone();
+        let retry = retry.clone();
+        let suspended = suspended.clone();
+        let attach_if_needed = attach_if_needed.clone();
+        Rc::new(move || {
+            warm_started.set(true);
+            node_ready.set(false);
+            *node_error.borrow_mut() = None;
+            status.set_visible(true);
+            status.set_label("Opening Mission Deck…");
+            retry.set_visible(true);
+
+            let supervisor_bg = supervisor.borrow().clone();
+            let Some(rx) = spawn_deck_warm(supervisor_bg, deck_ready.clone()) else {
+                if supervisor.borrow().is_none() {
+                    let err = "Focus is not available on this install yet. Reinstall the latest \
+                               Sovereign AI Brain from Get Brain, or ask your advisor for an update."
+                        .to_string();
+                    *node_error.borrow_mut() = Some(err.clone());
+                    status.set_label(&err);
+                }
+                return;
+            };
+
+            let node_ready = node_ready.clone();
+            let node_error = node_error.clone();
+            let status = status.clone();
+            let retry = retry.clone();
+            let suspended = suspended.clone();
+            let attach_if_needed = attach_if_needed.clone();
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(result) => {
+                    match result {
+                        Ok(()) => {
+                            node_ready.set(true);
+                            *node_error.borrow_mut() = None;
+                            retry.set_visible(false);
+                            if suspended.get() {
+                                status
+                                    .set_label("Mission Deck ready — open Focus when you need it.");
+                            } else {
+                                attach_if_needed();
+                            }
+                        }
+                        Err(err) => {
+                            node_ready.set(false);
+                            *node_error.borrow_mut() = Some(err.clone());
+                            status.set_visible(true);
+                            status.set_label(&err);
+                            retry.set_visible(true);
+                        }
+                    }
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    let err = "Mission Deck failed to start.".to_string();
+                    node_ready.set(false);
+                    *node_error.borrow_mut() = Some(err.clone());
+                    status.set_visible(true);
+                    status.set_label(&err);
+                    retry.set_visible(true);
+                    glib::ControlFlow::Break
+                }
+            });
+        })
+    };
+
+    {
+        let start_warm = start_warm.clone();
+        retry.connect_clicked(move |_| start_warm());
+    }
+
+    {
+        let start_warm = start_warm.clone();
+        let warm_started = warm_started.clone();
+        glib::timeout_add_local(Duration::from_secs(2), move || {
+            if !warm_started.get() {
+                start_warm();
+            }
+            glib::ControlFlow::Break
+        });
+    }
+
+    let refresh: Rc<dyn Fn()> = {
         let deck_ready = deck_ready.clone();
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
         let attach_if_needed = attach_if_needed.clone();
+        let start_warm = start_warm.clone();
+        let warm_started = warm_started.clone();
         Rc::new(move || {
             // Soft path: never block the UI thread on Node health waits — the
-            // readiness flag is atomic, and the warm runs on a worker.
-            if !deck_ready.recent() {
-                let supervisor_bg = supervisor.borrow().clone();
-                let _ = spawn_deck_warm(supervisor_bg, deck_ready.clone());
+            // readiness flag is atomic, and the warm runs on a worker. Do not
+            // let an early refresh bypass the first-Focus/two-second deferral.
+            if warm_started.get() && !deck_ready.recent() {
+                start_warm();
             }
             // Never hard-reload while suspended — that resets __centurionDeckVisible
             // to false and leaves the React deck stuck on "Opening your deck…".
@@ -426,11 +478,9 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     let notify_tab_visible: Rc<dyn Fn(bool)> = {
         let webview_slot = webview_slot.clone();
         let suspended = suspended.clone();
-        let supervisor = supervisor.clone();
         let deck_ready = deck_ready.clone();
         let attach_if_needed = attach_if_needed.clone();
-        let node_ready = node_ready.clone();
-        let status = status.clone();
+        let start_warm = start_warm.clone();
         Rc::new(move |visible: bool| {
             let now_suspended = !visible;
             suspended.set(now_suspended);
@@ -438,56 +488,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                 if deck_ready.recent() {
                     attach_if_needed();
                 } else {
-                    let supervisor_bg = supervisor.borrow().clone();
-                    match spawn_deck_warm(supervisor_bg, deck_ready.clone()) {
-                        Some(rx) => {
-                            let node_ready = node_ready.clone();
-                            let status = status.clone();
-                            let attach_if_needed = attach_if_needed.clone();
-                            glib::timeout_add_local(Duration::from_millis(40), move || {
-                                match rx.try_recv() {
-                                    Ok(Ok(())) => {
-                                        node_ready.set(true);
-                                        attach_if_needed();
-                                        glib::ControlFlow::Break
-                                    }
-                                    Ok(Err(err)) => {
-                                        status.set_visible(true);
-                                        status.set_label(&err);
-                                        glib::ControlFlow::Break
-                                    }
-                                    Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                                    Err(mpsc::TryRecvError::Disconnected) => {
-                                        glib::ControlFlow::Break
-                                    }
-                                }
-                            });
-                        }
-                        None => {
-                            // Either the deck directory is missing (status label
-                            // already carries the error) or a warm started
-                            // elsewhere owns the mutex — in that case watch the
-                            // atomic flag rather than waiting on the lock.
-                            attach_if_needed();
-                            if supervisor.borrow().is_some() {
-                                let deck_ready = deck_ready.clone();
-                                let node_ready = node_ready.clone();
-                                let attach_if_needed = attach_if_needed.clone();
-                                let deadline = Instant::now() + Duration::from_secs(15);
-                                glib::timeout_add_local(Duration::from_millis(200), move || {
-                                    if deck_ready.recent() {
-                                        node_ready.set(true);
-                                        attach_if_needed();
-                                        return glib::ControlFlow::Break;
-                                    }
-                                    if Instant::now() >= deadline {
-                                        return glib::ControlFlow::Break;
-                                    }
-                                    glib::ControlFlow::Continue
-                                });
-                            }
-                        }
-                    }
+                    start_warm();
                 }
             }
             if let Some(wv) = webview_slot.borrow().as_ref() {

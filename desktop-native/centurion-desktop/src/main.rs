@@ -93,7 +93,7 @@ mod linux {
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     const APP_ID: &str = "com.centurion.desktop";
 
@@ -1947,22 +1947,42 @@ pairing stays available for early testing on the same Wi‑Fi.",
         restore_thinking_button.connect_clicked({
             let thinking_settings_row = thinking_settings_row.clone();
             let thinking_detail = thinking_detail.clone();
-            move |_| {
-                if let Some(response) = run_provider_command(&["restore"]) {
-                    let message = response
-                        .message
-                        .or_else(|| {
-                            response.result.and_then(|value| {
-                                value
-                                    .get("message")
-                                    .and_then(|m| m.as_str())
-                                    .map(str::to_owned)
+            move |button| {
+                button.set_sensitive(false);
+                thinking_settings_row.set_subtitle("Restoring last working setup…");
+                let button = button.clone();
+                let thinking_settings_row = thinking_settings_row.clone();
+                let thinking_detail = thinking_detail.clone();
+                crate::chat_page::run_bridge_async(
+                    || {
+                        let response = run_provider_command(&["restore"]);
+                        let status = run_provider_command(&["status", "--skip-probe"]);
+                        (response, status)
+                    },
+                    move |(response, status)| {
+                        button.set_sensitive(true);
+                        let Some(response) = response else {
+                            thinking_settings_row
+                                .set_subtitle("Could not restore the last working setup.");
+                            return;
+                        };
+                        let message = response
+                            .message
+                            .or_else(|| {
+                                response.result.and_then(|value| {
+                                    value
+                                        .get("message")
+                                        .and_then(|m| m.as_str())
+                                        .map(str::to_owned)
+                                })
                             })
-                        })
-                        .unwrap_or_else(|| "Restore finished.".to_owned());
-                    thinking_settings_row.set_subtitle(&message);
-                    refresh_thinking_status(&thinking_detail, &thinking_settings_row);
-                }
+                            .unwrap_or_else(|| "Restore finished.".to_owned());
+                        thinking_settings_row.set_subtitle(&message);
+                        if let Some(status) = status.and_then(|response| response.status) {
+                            apply_thinking_status(&thinking_detail, &thinking_settings_row, status);
+                        }
+                    },
+                );
             }
         });
         change_thinking_button.connect_clicked({
@@ -2180,7 +2200,26 @@ pairing stays available for early testing on the same Wi‑Fi.",
                 );
             }
         });
-        refresh_gateway_ui_async(&window, &gateway_row, &gateway_platform_list);
+        // Defer Channels fill until Settings is shown — Chat cold open must not
+        // pay for gateway_status while the user is still on Chat.
+        {
+            let window = window.clone();
+            let gateway_row = gateway_row.clone();
+            let gateway_platform_list = gateway_platform_list.clone();
+            let gateway_loaded = Rc::new(Cell::new(false));
+            stack.connect_visible_child_name_notify({
+                let gateway_loaded = gateway_loaded.clone();
+                move |stack| {
+                    if stack.visible_child_name().as_deref() != Some("settings") {
+                        return;
+                    }
+                    if gateway_loaded.replace(true) {
+                        return;
+                    }
+                    refresh_gateway_ui_async(&window, &gateway_row, &gateway_platform_list);
+                }
+            });
+        }
         fix_thinking_button.connect_clicked({
             let window = window.clone();
             let thinking_settings_row = thinking_settings_row.clone();
@@ -2406,31 +2445,58 @@ pairing stays available for early testing on the same Wi‑Fi.",
     fn settings_attention_items() -> Vec<SettingsAttentionItem> {
         // Settings tab "!": thinking unhealthy / unavailable, or a Brain update waiting.
         // Remotes are not attention-worthy while the iPhone app is unreleased.
-        // Use --skip-probe so the 5s tab-badge poll stays light; update
-        // availability is cached from Check / background probe.
+        // Prefer the daemon snapshot so the 5s tab-badge poll does not spawn
+        // a heavy provider CLI. Older daemons fall back to provider_status,
+        // then finally to the CLI.
         let mut items = Vec::new();
         if let Some((_, detail)) = load_update_attention() {
             items.push(SettingsAttentionItem::UpdateAvailable { detail });
         }
-        match run_provider_command(&["status", "--skip-probe"]) {
-            Some(response) => match response.status {
-                Some(status) => {
-                    if status.health != "ok" {
-                        items.push(SettingsAttentionItem::Thinking {
-                            detail: format!(
-                                "Thinking service is {} — open Fix Thinking Service or Change Thinking.",
-                                status.health
-                            ),
-                        });
-                    }
-                }
-                None => {
-                    items.push(SettingsAttentionItem::Thinking {
-                        detail: "Thinking service status is unavailable — open Fix Thinking Service."
-                            .to_owned(),
-                    });
-                }
-            },
+        let bridge_thinking = run_bridge_action(
+            "settings_snapshot",
+            serde_json::json!({ "skip_probe": true }),
+        )
+        .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
+        .and_then(|payload| payload.get("thinking").cloned())
+        .filter(|thinking| thinking.is_object() && thinking.get("health").is_some())
+        .or_else(|| {
+            run_bridge_action("provider_status", serde_json::json!({ "skip_probe": true }))
+                .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
+                .and_then(|payload| payload.get("status").cloned())
+                .filter(|status| status.is_object() && status.get("health").is_some())
+        });
+        let cli_status = if bridge_thinking.is_none() {
+            run_provider_command(&["status", "--skip-probe"]).and_then(|response| response.status)
+        } else {
+            None
+        };
+        let health = bridge_thinking
+            .as_ref()
+            .and_then(|thinking| thinking.get("health"))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned)
+            .or_else(|| cli_status.as_ref().map(|status| status.health.clone()));
+        let health_message = bridge_thinking
+            .as_ref()
+            .and_then(|thinking| thinking.get("health_message"))
+            .and_then(|value| value.as_str())
+            .filter(|message| !message.trim().is_empty())
+            .map(str::to_owned)
+            .or_else(|| {
+                cli_status
+                    .as_ref()
+                    .map(|status| status.health_message.clone())
+                    .filter(|message| !message.trim().is_empty())
+            });
+        match health.as_deref() {
+            Some("ok") => {}
+            Some(health) => {
+                let detail =
+                    health_message.unwrap_or_else(|| format!("Thinking service is {health}."));
+                items.push(SettingsAttentionItem::Thinking {
+                    detail: format!("{detail} Open Fix Thinking Service or Change Thinking."),
+                });
+            }
             None => {
                 items.push(SettingsAttentionItem::Thinking {
                     detail: "Thinking service status is unavailable — open Fix Thinking Service."
@@ -3604,9 +3670,38 @@ pairing stays available for early testing on the same Wi‑Fi.",
     fn collect_settings_fill(plain_health: bool) -> SettingsFill {
         // Prefer one bridge round-trip (no centurion CLI spawn). Fall back to
         // the legacy multi-call path when the daemon is older.
-        if let Some(snap) =
-            run_bridge_action("settings_snapshot", serde_json::json!({ "skip_probe": true }))
-        {
+        // TTL-cache the raw snapshot ~45s so Settings tab reopen stays snappy.
+        fn cached_settings_snapshot() -> Option<serde_json::Value> {
+            use std::sync::Mutex;
+            use std::time::{Duration, Instant};
+            struct Cache {
+                at: Instant,
+                value: serde_json::Value,
+            }
+            static CACHE: OnceLock<Mutex<Option<Cache>>> = OnceLock::new();
+            let lock = CACHE.get_or_init(|| Mutex::new(None));
+            if let Ok(guard) = lock.lock() {
+                if let Some(hit) = guard.as_ref() {
+                    if hit.at.elapsed() < Duration::from_secs(45) {
+                        return Some(hit.value.clone());
+                    }
+                }
+            }
+            let snap =
+                run_bridge_action("settings_snapshot", serde_json::json!({ "skip_probe": true }))?;
+            if snap.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                return Some(snap);
+            }
+            if let Ok(mut guard) = lock.lock() {
+                *guard = Some(Cache {
+                    at: Instant::now(),
+                    value: snap.clone(),
+                });
+            }
+            Some(snap)
+        }
+
+        if let Some(snap) = cached_settings_snapshot() {
             if snap.get("ok").and_then(|v| v.as_bool()) == Some(true) {
                 let thinking = snap.get("thinking").cloned().unwrap_or(serde_json::Value::Null);
                 let thinking_line = thinking.as_object().map(|t| {
@@ -4839,6 +4934,14 @@ Being · Continuity\n\
             settings_row.set_subtitle("Could not read thinking service status.");
             return;
         };
+        apply_thinking_status(detail, settings_row, status);
+    }
+
+    fn apply_thinking_status(
+        detail: &gtk::Label,
+        settings_row: &adw::ActionRow,
+        status: ProviderStatusPayload,
+    ) {
         let plain = match status.health.as_str() {
             "ok" => "Working normally".to_owned(),
             "degraded" => "May be slow".to_owned(),
@@ -5383,20 +5486,26 @@ Being · Continuity\n\
             let parent_w = parent.clone();
             if configured {
                 toggle.connect_active_notify(move |sw| {
-                    let _ = run_bridge_action(
-                        "gateway_platform_set",
-                        serde_json::json!({
-                            "platform": platform_name,
-                            "enabled": sw.is_active(),
-                            "restart": true,
-                        }),
-                    );
+                    let enabled = sw.is_active();
+                    // Optimistic UI — keep the switch where the user put it while we work.
+                    sw.set_sensitive(false);
+                    let platform_name = platform_name.clone();
                     let list_for_cb = list_for_cb.clone();
                     let status_row = status_row.clone();
                     let parent_w = parent_w.clone();
-                    glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
-                        refresh_gateway_ui(&parent_w, &status_row, &list_for_cb);
-                    });
+                    let sw = sw.clone();
+                    crate::chat_page::run_bridge_action_async(
+                        "gateway_platform_set",
+                        serde_json::json!({
+                            "platform": platform_name,
+                            "enabled": enabled,
+                            "restart": true,
+                        }),
+                        move |_payload: Option<serde_json::Value>| {
+                            sw.set_sensitive(true);
+                            refresh_gateway_ui_async(&parent_w, &status_row, &list_for_cb);
+                        },
+                    );
                 });
             }
             plat_row.add_suffix(&toggle);
@@ -5481,7 +5590,7 @@ The token stays in ~/.centurion/.env on this machine only.",
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
                     if ok {
-                        refresh_gateway_ui(&parent, &gateway_row, &platform_list);
+                        refresh_gateway_ui_async(&parent, &gateway_row, &platform_list);
                         let done = adw::AlertDialog::builder()
                             .heading("Telegram connected")
                             .body(
@@ -5732,23 +5841,28 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
                 // can mint a fresh QR instead of reusing a dead one.
                 clear_on_start.set(true);
                 pairing_started.set(true);
-                let payload = run_bridge_action(
+                let qr_status = qr_status.clone();
+                let regenerate_btn = regenerate_btn.clone();
+                crate::chat_page::run_bridge_action_async(
                     "whatsapp_pair_start",
                     serde_json::json!({ "clear_session": clear }),
+                    move |payload: Option<serde_json::Value>| {
+                        if let Some(p) = payload {
+                            if p.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                                let msg = p
+                                    .get("message")
+                                    .or_else(|| p.get("error"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Could not start WhatsApp pairing.");
+                                qr_status.set_label(msg);
+                            }
+                        } else {
+                            qr_status
+                                .set_label("Could not reach the local bridge to start pairing.");
+                        }
+                        regenerate_btn.set_sensitive(true);
+                    },
                 );
-                if let Some(p) = payload {
-                    if p.get("ok").and_then(|v| v.as_bool()) != Some(true) {
-                        let msg = p
-                            .get("message")
-                            .or_else(|| p.get("error"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("Could not start WhatsApp pairing.");
-                        qr_status.set_label(msg);
-                    }
-                } else {
-                    qr_status.set_label("Could not reach the local bridge to start pairing.");
-                }
-                regenerate_btn.set_sensitive(true);
             }
         });
 
@@ -5770,6 +5884,7 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
         });
 
         // Poll while the QR page is active (or until paired / closed).
+        // Bridge I/O stays off the GTK thread — only apply results on the UI loop.
         let status_c = qr_status.clone();
         let qr_holder_c = qr_holder.clone();
         let gateway_row_c = gateway_row.clone();
@@ -5782,9 +5897,15 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
         let last_qr_c = last_qr.clone();
         let poll_active_c = poll_active.clone();
         let tick_c = tick.clone();
+        let poll_in_flight = Rc::new(Cell::new(false));
+        let poll_in_flight_c = poll_in_flight.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(1200), move || {
             if !win_c.is_visible() {
-                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                crate::chat_page::run_bridge_action_async(
+                    "whatsapp_pair_cancel",
+                    serde_json::json!({}),
+                    |_| {},
+                );
                 return glib::ControlFlow::Break;
             }
             if !poll_active_c.get() {
@@ -5794,84 +5915,118 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
             if stack_c.visible_child_name().as_deref() == Some("done") {
                 return glib::ControlFlow::Continue;
             }
-            let payload = run_bridge_action("whatsapp_pair_status", serde_json::json!({}));
-            let Some(payload) = payload else {
-                return glib::ControlFlow::Continue;
-            };
-            let state = payload
-                .get("state")
-                .and_then(|v| v.as_str())
-                .unwrap_or("idle");
-            let message = payload
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if !message.is_empty() && stack_c.visible_child_name().as_deref() == Some("qr") {
-                status_c.set_label(message);
-            }
-            if payload
-                .get("paired")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-                || state == "paired"
-            {
-                while let Some(child) = qr_holder_c.first_child() {
-                    qr_holder_c.remove(&child);
-                }
-                let display = payload
-                    .get("display")
-                    .or_else(|| payload.get("identity"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("your WhatsApp account");
-                *linked_display_c.borrow_mut() = display.to_owned();
-                let jid = payload
-                    .get("identity")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let identity_line = if jid.is_empty() {
-                    format!(
-                        "Linked number: {display}\nMessages to this account now route into Centurion."
-                    )
-                } else {
-                    format!(
-                        "Linked identity: {display}\nWhatsApp JID: {jid}\n\
-Messages to this account now route into your Centurion conversation."
-                    )
-                };
-                done_identity_c.set_label(&identity_line);
-                refresh_gateway_ui(&parent_c, &gateway_row_c, &platform_list_c);
-                // Ensure the gateway is up so the channel is live.
-                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
-                stack_c.set_visible_child_name("done");
+            if poll_in_flight_c.get() {
                 return glib::ControlFlow::Continue;
             }
-            if let Some(b64) = payload.get("qr_png_base64").and_then(|v| v.as_str()) {
-                if *last_qr_c.borrow() != b64 {
-                    *last_qr_c.borrow_mut() = b64.to_owned();
-                    let png = glib::base64_decode(b64);
-                    if !png.is_empty() {
+            poll_in_flight_c.set(true);
+            let status_c = status_c.clone();
+            let qr_holder_c = qr_holder_c.clone();
+            let gateway_row_c = gateway_row_c.clone();
+            let platform_list_c = platform_list_c.clone();
+            let parent_c = parent_c.clone();
+            let stack_c = stack_c.clone();
+            let done_identity_c = done_identity_c.clone();
+            let linked_display_c = linked_display_c.clone();
+            let last_qr_c = last_qr_c.clone();
+            let poll_active_c = poll_active_c.clone();
+            let tick_c = tick_c.clone();
+            let poll_in_flight_c = poll_in_flight_c.clone();
+            crate::chat_page::run_bridge_action_async(
+                "whatsapp_pair_status",
+                serde_json::json!({}),
+                move |payload: Option<serde_json::Value>| {
+                    poll_in_flight_c.set(false);
+                    let Some(payload) = payload else {
+                        return;
+                    };
+                    let state = payload
+                        .get("state")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("idle");
+                    let message = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if !message.is_empty() && stack_c.visible_child_name().as_deref() == Some("qr") {
+                        status_c.set_label(message);
+                    }
+                    if payload
+                        .get("paired")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                        || state == "paired"
+                    {
                         while let Some(child) = qr_holder_c.first_child() {
                             qr_holder_c.remove(&child);
                         }
-                        qr_holder_c.append(&qr_image_from_png(&png, 300));
+                        let display = payload
+                            .get("display")
+                            .or_else(|| payload.get("identity"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("your WhatsApp account");
+                        *linked_display_c.borrow_mut() = display.to_owned();
+                        let jid = payload
+                            .get("identity")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let identity_line = if jid.is_empty() {
+                            format!(
+                                "Linked number: {display}\nMessages to this account now route into Centurion."
+                            )
+                        } else {
+                            format!(
+                                "Linked identity: {display}\nWhatsApp JID: {jid}\n\
+Messages to this account now route into your Centurion conversation."
+                            )
+                        };
+                        done_identity_c.set_label(&identity_line);
+                        status_c.set_label("Starting messaging gateway…");
+                        refresh_gateway_ui_async(&parent_c, &gateway_row_c, &platform_list_c);
+                        let status_c2 = status_c.clone();
+                        crate::chat_page::run_bridge_action_async(
+                            "gateway_start",
+                            serde_json::json!({}),
+                            move |_| {
+                                status_c2.set_label("WhatsApp linked.");
+                            },
+                        );
+                        stack_c.set_visible_child_name("done");
+                        return;
                     }
-                }
-            }
-            let n = tick_c.get().saturating_add(1);
-            tick_c.set(n);
-            if n > 0 && n % 50 == 0 && stack_c.visible_child_name().as_deref() == Some("qr") {
-                // ~60s hint — WhatsApp QR codes expire.
-                status_c.set_label(
-                    "Still waiting for a scan. If the QR looks expired, tap Regenerate QR.",
-                );
-            }
-            if n > 250 {
-                status_c.set_label(
-                    "Pairing timed out. Tap Regenerate QR to try again, or Close and return later.",
-                );
-                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
-                poll_active_c.set(false);
-            }
+                    if let Some(b64) = payload.get("qr_png_base64").and_then(|v| v.as_str()) {
+                        if *last_qr_c.borrow() != b64 {
+                            *last_qr_c.borrow_mut() = b64.to_owned();
+                            let png = glib::base64_decode(b64);
+                            if !png.is_empty() {
+                                while let Some(child) = qr_holder_c.first_child() {
+                                    qr_holder_c.remove(&child);
+                                }
+                                qr_holder_c.append(&qr_image_from_png(&png, 300));
+                            }
+                        }
+                    }
+                    let n = tick_c.get().saturating_add(1);
+                    tick_c.set(n);
+                    if n > 0 && n % 50 == 0 && stack_c.visible_child_name().as_deref() == Some("qr")
+                    {
+                        // ~60s hint — WhatsApp QR codes expire.
+                        status_c.set_label(
+                            "Still waiting for a scan. If the QR looks expired, tap Regenerate QR.",
+                        );
+                    }
+                    if n > 250 {
+                        status_c.set_label(
+                            "Pairing timed out. Tap Regenerate QR to try again, or Close and return later.",
+                        );
+                        crate::chat_page::run_bridge_action_async(
+                            "whatsapp_pair_cancel",
+                            serde_json::json!({}),
+                            |_| {},
+                        );
+                        poll_active_c.set(false);
+                    }
+                },
+            );
             glib::ControlFlow::Continue
         });
 
@@ -5879,7 +6034,11 @@ Messages to this account now route into your Centurion conversation."
             let parent = parent.clone();
             let linked_display = linked_display.clone();
             move |_| {
-                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
+                crate::chat_page::run_bridge_action_async(
+                    "gateway_start",
+                    serde_json::json!({}),
+                    |_| {},
+                );
                 let who = linked_display.borrow().clone();
                 let body = if who.is_empty() {
                     "Open WhatsApp on your phone and send yourself a short message \
@@ -5911,7 +6070,11 @@ Messages to this account now route into your Centurion conversation."
             let stack = stack.clone();
             move |_| {
                 if stack.visible_child_name().as_deref() != Some("done") {
-                    let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                    crate::chat_page::run_bridge_action_async(
+                        "whatsapp_pair_cancel",
+                        serde_json::json!({}),
+                        |_| {},
+                    );
                 }
                 win.close();
             }
@@ -5920,7 +6083,11 @@ Messages to this account now route into your Centurion conversation."
             let stack = stack.clone();
             move |_| {
                 if stack.visible_child_name().as_deref() != Some("done") {
-                    let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                    crate::chat_page::run_bridge_action_async(
+                        "whatsapp_pair_cancel",
+                        serde_json::json!({}),
+                        |_| {},
+                    );
                 }
                 glib::Propagation::Proceed
             }
@@ -6667,7 +6834,39 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         row: &adw::ActionRow,
         initial_error: Option<String>,
     ) {
-        let connectors_raw = run_provider_command(&["catalog"]);
+        let loading = adw::AlertDialog::builder()
+            .heading("Backup Thinking")
+            .body("Loading services…")
+            .close_response("cancel")
+            .build();
+        loading.add_response("cancel", "Cancel");
+        let cancelled = Rc::new(Cell::new(false));
+        loading.connect_response(None, {
+            let cancelled = cancelled.clone();
+            move |_, _| cancelled.set(true)
+        });
+        loading.present(Some(parent));
+
+        let parent = parent.clone();
+        let row = row.clone();
+        crate::chat_page::run_bridge_async(
+            || run_provider_command(&["catalog"]),
+            move |connectors_raw| {
+                if cancelled.get() {
+                    return;
+                }
+                loading.close();
+                show_backup_thinking_dialog_loaded(&parent, &row, initial_error, connectors_raw);
+            },
+        );
+    }
+
+    fn show_backup_thinking_dialog_loaded(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        initial_error: Option<String>,
+        connectors_raw: Option<ProviderCliResponse>,
+    ) {
         let connectors: Vec<ThinkingConnectorOption> = connectors_raw
             .and_then(|response| response.catalog)
             .and_then(|catalog| {
@@ -6790,7 +6989,11 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
             move |dropdown| update_hint(dropdown.selected())
         });
 
-        let current_subtitle = backup_thinking_subtitle();
+        let current_subtitle = row
+            .subtitle()
+            .filter(|subtitle| !subtitle.trim().is_empty())
+            .map(|subtitle| subtitle.to_string())
+            .unwrap_or_else(|| "Not configured".to_owned());
         let dialog = adw::AlertDialog::builder()
             .heading("Backup Thinking")
             .body(&format!(
@@ -6833,7 +7036,7 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 return;
             }
 
-            let reopen_with_error = {
+            let reopen_with_error: Rc<dyn Fn(String)> = Rc::new({
                 let parent = parent.clone();
                 let row = row.clone();
                 move |message: String| {
@@ -6841,29 +7044,33 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                         show_backup_thinking_dialog_inner(&parent, &row, Some(message));
                     });
                 }
-            };
+            });
 
             let slot = (slot_drop.selected() as u32) + 1;
             let slot_str = slot.to_string();
 
             if response == "clear" {
-                match run_provider_command(&["remove-backup", "--slot", &slot_str]) {
-                    Some(clear_response) if clear_response.ok => {
-                        refresh_backup_thinking_services(&row);
-                        dialog.close();
-                    }
-                    Some(clear_response) => {
-                        let message = clear_response
+                dialog.close();
+                row.set_subtitle("Clearing backup thinking service…");
+                let row = row.clone();
+                let reopen_with_error = reopen_with_error.clone();
+                crate::chat_page::run_bridge_async(
+                    move || match run_provider_command(&[
+                        "remove-backup",
+                        "--slot",
+                        slot_str.as_str(),
+                    ]) {
+                        Some(clear_response) if clear_response.ok => Ok(backup_thinking_subtitle()),
+                        Some(clear_response) => Err(clear_response
                             .message
-                            .unwrap_or_else(|| "Could not clear backup slot.".to_owned());
-                        dialog.close();
-                        reopen_with_error(message);
-                    }
-                    None => {
-                        dialog.close();
-                        reopen_with_error("Could not clear backup slot.".to_owned());
-                    }
-                }
+                            .unwrap_or_else(|| "Could not clear backup slot.".to_owned())),
+                        None => Err("Could not clear backup slot.".to_owned()),
+                    },
+                    move |result: Result<String, String>| match result {
+                        Ok(subtitle) => row.set_subtitle(&subtitle),
+                        Err(message) => reopen_with_error(message),
+                    },
+                );
                 return;
             }
 
@@ -6884,62 +7091,68 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 reopen_with_error("Access code is required for this thinking service.".to_owned());
                 return;
             }
-            if !access_code.trim().is_empty() {
-                match run_provider_save_key(&connector.id, access_code.trim()) {
-                    Some(save_response) if save_response.ok => {}
-                    Some(save_response) => {
-                        let message = save_response
-                            .message
-                            .unwrap_or_else(|| "Could not save access code.".to_owned());
-                        dialog.close();
-                        reopen_with_error(message);
-                        return;
-                    }
-                    None => {
-                        dialog.close();
-                        reopen_with_error("Could not save access code.".to_owned());
-                        return;
-                    }
-                }
-            }
-
-            let apply_args = [
-                "apply-connector",
-                connector.id.as_str(),
-                "--as-backup",
-                "--slot",
-                slot_str.as_str(),
-            ];
-            if let Some(apply_response) = run_provider_command(&apply_args) {
-                let message = apply_response
-                    .message
-                    .or_else(|| {
-                        apply_response.result.and_then(|value| {
-                            value
-                                .get("message")
-                                .and_then(|m| m.as_str())
-                                .map(str::to_owned)
-                        })
-                    })
-                    .unwrap_or_else(|| {
-                        if apply_response.ok {
-                            format!("Backup #{slot} updated.")
-                        } else {
-                            "Could not set backup thinking service.".to_owned()
+            let connector_id = connector.id.clone();
+            let access_code = access_code.trim().to_owned();
+            dialog.close();
+            row.set_subtitle("Setting backup thinking service…");
+            let row = row.clone();
+            crate::chat_page::run_bridge_async(
+                move || {
+                    if !access_code.is_empty() {
+                        match run_provider_save_key(&connector_id, &access_code) {
+                            Some(save_response) if save_response.ok => {}
+                            Some(save_response) => {
+                                return Err(save_response
+                                    .message
+                                    .unwrap_or_else(|| "Could not save access code.".to_owned()));
+                            }
+                            None => return Err("Could not save access code.".to_owned()),
                         }
-                    });
-                if apply_response.ok {
-                    row.set_subtitle(&message);
-                    refresh_backup_thinking_services(&row);
-                    dialog.close();
-                } else {
-                    dialog.close();
-                    reopen_with_error(message);
-                }
-            } else {
-                dialog.close();
-                reopen_with_error("Could not set backup thinking service.".to_owned());
-            }
+                    }
+                    let apply_args = [
+                        "apply-connector",
+                        connector_id.as_str(),
+                        "--as-backup",
+                        "--slot",
+                        slot_str.as_str(),
+                    ];
+                    let Some(apply_response) = run_provider_command(&apply_args) else {
+                        return Err("Could not set backup thinking service.".to_owned());
+                    };
+                    let ok = apply_response.ok;
+                    let message = apply_response
+                        .message
+                        .or_else(|| {
+                            apply_response.result.and_then(|value| {
+                                value
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .map(str::to_owned)
+                            })
+                        })
+                        .unwrap_or_else(|| {
+                            if ok {
+                                format!("Backup #{slot} updated.")
+                            } else {
+                                "Could not set backup thinking service.".to_owned()
+                            }
+                        });
+                    if !ok {
+                        return Err(message);
+                    }
+                    Ok((message, backup_thinking_subtitle()))
+                },
+                move |result: Result<(String, String), String>| match result {
+                    Ok((message, subtitle)) => {
+                        row.set_subtitle(if subtitle.is_empty() {
+                            &message
+                        } else {
+                            &subtitle
+                        });
+                    }
+                    Err(message) => reopen_with_error(message),
+                },
+            );
         });
     }
 
@@ -7079,7 +7292,47 @@ The key stays in ~/.centurion/.env on this machine only.",
         detail: &gtk::Label,
         initial_error: Option<String>,
     ) {
-        let connectors_raw = run_provider_command(&["catalog"]);
+        let loading = adw::AlertDialog::builder()
+            .heading("Change thinking service")
+            .body("Loading services…")
+            .close_response("cancel")
+            .build();
+        loading.add_response("cancel", "Cancel");
+        let cancelled = Rc::new(Cell::new(false));
+        loading.connect_response(None, {
+            let cancelled = cancelled.clone();
+            move |_, _| cancelled.set(true)
+        });
+        loading.present(Some(parent));
+
+        let parent = parent.clone();
+        let settings_row = settings_row.clone();
+        let detail = detail.clone();
+        crate::chat_page::run_bridge_async(
+            || run_provider_command(&["catalog"]),
+            move |connectors_raw| {
+                if cancelled.get() {
+                    return;
+                }
+                loading.close();
+                show_change_thinking_dialog_loaded(
+                    &parent,
+                    &settings_row,
+                    &detail,
+                    initial_error,
+                    connectors_raw,
+                );
+            },
+        );
+    }
+
+    fn show_change_thinking_dialog_loaded(
+        parent: &adw::ApplicationWindow,
+        settings_row: &adw::ActionRow,
+        detail: &gtk::Label,
+        initial_error: Option<String>,
+        connectors_raw: Option<ProviderCliResponse>,
+    ) {
         let active_connector_id = connectors_raw
             .as_ref()
             .and_then(|response| response.catalog.as_ref())
@@ -7249,7 +7502,7 @@ The key stays in ~/.centurion/.env on this machine only.",
             }
             // AlertDialog closes after a response — on failure, reopen
             // with the error so the owner can correct the access code without hunting Settings.
-            let reopen_with_error = {
+            let reopen_with_error: Rc<dyn Fn(String)> = Rc::new({
                 let parent = parent.clone();
                 let settings_row = settings_row.clone();
                 let detail = detail.clone();
@@ -7263,7 +7516,7 @@ The key stays in ~/.centurion/.env on this machine only.",
                         );
                     });
                 }
-            };
+            });
 
             let selected = service_drop.selected() as usize;
             let Some(connector) = connectors.get(selected) else {
@@ -7277,56 +7530,67 @@ The key stays in ~/.centurion/.env on this machine only.",
                 reopen_with_error("Access code is required for this thinking service.".to_owned());
                 return;
             }
-            if !access_code.trim().is_empty() {
-                match run_provider_save_key(&connector.id, access_code.trim()) {
-                    Some(save_response) if save_response.ok => {}
-                    Some(save_response) => {
-                        let message = save_response
-                            .message
-                            .unwrap_or_else(|| "Could not save access code.".to_owned());
-                        dialog.close();
-                        reopen_with_error(message);
-                        return;
-                    }
-                    None => {
-                        dialog.close();
-                        reopen_with_error("Could not save access code.".to_owned());
-                        return;
-                    }
-                }
-            }
-            if let Some(apply_response) =
-                run_provider_command(&["apply-connector", &connector.id, "--json"])
-            {
-                let message = apply_response
-                    .message
-                    .or_else(|| {
-                        apply_response.result.and_then(|value| {
-                            value
-                                .get("message")
-                                .and_then(|m| m.as_str())
-                                .map(str::to_owned)
-                        })
-                    })
-                    .unwrap_or_else(|| {
-                        if apply_response.ok {
-                            "Thinking service updated.".to_owned()
-                        } else {
-                            "Could not apply thinking service change.".to_owned()
+            let connector_id = connector.id.clone();
+            let access_code = access_code.trim().to_owned();
+            dialog.close();
+            settings_row.set_subtitle("Applying thinking service…");
+            let settings_row = settings_row.clone();
+            let detail = detail.clone();
+            crate::chat_page::run_bridge_async(
+                move || {
+                    if !access_code.is_empty() {
+                        match run_provider_save_key(&connector_id, &access_code) {
+                            Some(save_response) if save_response.ok => {}
+                            Some(save_response) => {
+                                return Err(save_response
+                                    .message
+                                    .unwrap_or_else(|| "Could not save access code.".to_owned()));
+                            }
+                            None => return Err("Could not save access code.".to_owned()),
                         }
-                    });
-                if apply_response.ok {
-                    settings_row.set_subtitle(&message);
-                    refresh_thinking_status(&detail, &settings_row);
-                    dialog.close();
-                } else {
-                    dialog.close();
-                    reopen_with_error(message);
-                }
-            } else {
-                dialog.close();
-                reopen_with_error("Could not apply thinking service change.".to_owned());
-            }
+                    }
+                    let Some(apply_response) =
+                        run_provider_command(&["apply-connector", connector_id.as_str(), "--json"])
+                    else {
+                        return Err("Could not apply thinking service change.".to_owned());
+                    };
+                    let ok = apply_response.ok;
+                    let message = apply_response
+                        .message
+                        .or_else(|| {
+                            apply_response.result.and_then(|value| {
+                                value
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .map(str::to_owned)
+                            })
+                        })
+                        .unwrap_or_else(|| {
+                            if ok {
+                                "Thinking service updated.".to_owned()
+                            } else {
+                                "Could not apply thinking service change.".to_owned()
+                            }
+                        });
+                    if !ok {
+                        return Err(message);
+                    }
+                    let status = run_provider_command(&["status", "--skip-probe"])
+                        .and_then(|response| response.status);
+                    Ok((message, status))
+                },
+                move |result: Result<(String, Option<ProviderStatusPayload>), String>| match result
+                {
+                    Ok((_message, Some(status))) => {
+                        apply_thinking_status(&detail, &settings_row, status);
+                    }
+                    Ok((message, None)) => {
+                        settings_row.set_subtitle(&message);
+                        detail.set_label(&message);
+                    }
+                    Err(message) => reopen_with_error(message),
+                },
+            );
         });
     }
 

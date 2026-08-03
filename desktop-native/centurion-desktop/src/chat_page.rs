@@ -15,9 +15,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, OnceLock};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChatRole {
@@ -502,6 +502,34 @@ struct PrimaryFocusContext {
     target_title: Option<String>,
 }
 
+struct CachedPrimaryFocus {
+    at: Instant,
+    focus: PrimaryFocusContext,
+}
+
+fn primary_focus_cache() -> &'static Mutex<Option<CachedPrimaryFocus>> {
+    static CACHE: OnceLock<Mutex<Option<CachedPrimaryFocus>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn store_cached_primary_focus(focus: PrimaryFocusContext) {
+    if let Ok(mut guard) = primary_focus_cache().lock() {
+        *guard = Some(CachedPrimaryFocus {
+            at: Instant::now(),
+            focus,
+        });
+    }
+}
+
+fn take_cached_primary_focus() -> Option<PrimaryFocusContext> {
+    let guard = primary_focus_cache().lock().ok()?;
+    let hit = guard.as_ref()?;
+    if hit.at.elapsed() > Duration::from_secs(45) {
+        return None;
+    }
+    Some(hit.focus.clone())
+}
+
 /// Load Primary Mission (+ current target) for Focus mode via the bridge.
 fn fetch_primary_focus() -> Option<PrimaryFocusContext> {
     let resp = run_bridge_action("life_stack_get", serde_json::json!({}))?;
@@ -811,7 +839,17 @@ fn build_focus_turn(
     base_outbound: &str,
     discuss: Option<&DiscussTopic>,
 ) -> (String, Option<Value>, Option<PrimaryFocusContext>) {
-    let resolved = resolve_focus_context(discuss);
+    // Prefer a fresh banner-resolved Primary Focus (45s) so Focus sends do not
+    // re-hit the bridge when Discuss is idle.
+    let resolved = match discuss {
+        Some(_) => resolve_focus_context(discuss),
+        None => take_cached_primary_focus().or_else(|| resolve_focus_context(None)),
+    };
+    if let Some(focus) = resolved.as_ref() {
+        if discuss.is_none() {
+            store_cached_primary_focus(focus.clone());
+        }
+    }
     let mut life_inject: Option<Value> = None;
     let mut outbound = match resolved.as_ref() {
         Some(focus) => {
@@ -2056,7 +2094,13 @@ fn run_provider_cli_json(args: &[&str]) -> Option<Value> {
 }
 
 fn provider_status_label() -> String {
-    let Some(response) = run_provider_cli_json(&["status", "--skip-probe"]) else {
+    let response = run_bridge_action("provider_status", serde_json::json!({}))
+        .filter(|response| {
+            response.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && response.get("status").is_some()
+        })
+        .or_else(|| run_provider_cli_json(&["status", "--skip-probe"]));
+    let Some(response) = response else {
         return "Model…".to_owned();
     };
     let Some(status) = response.get("status") else {
@@ -2086,7 +2130,17 @@ fn provider_status_label() -> String {
 }
 
 fn provider_catalog_connectors() -> Vec<(String, String, bool)> {
-    let Some(response) = run_provider_cli_json(&["catalog"]) else {
+    let response = run_bridge_action("remote_model_catalog", serde_json::json!({}))
+        .filter(|response| {
+            response.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && response
+                    .get("catalog")
+                    .and_then(|c| c.get("text_models"))
+                    .and_then(|v| v.as_array())
+                    .is_some()
+        })
+        .or_else(|| run_provider_cli_json(&["catalog"]));
+    let Some(response) = response else {
         return Vec::new();
     };
     let Some(rows) = response
@@ -2115,6 +2169,22 @@ fn provider_catalog_connectors() -> Vec<(String, String, bool)> {
 }
 
 fn apply_provider_connector(connector_id: &str) -> Result<(), String> {
+    if let Some(response) = run_bridge_action(
+        "remote_model_apply",
+        serde_json::json!({ "connector_id": connector_id }),
+    ) {
+        if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            return Ok(());
+        }
+        if response.get("code").and_then(|v| v.as_str()) != Some("UNSUPPORTED_ACTION") {
+            return Err(response
+                .get("message")
+                .or_else(|| response.get("error"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Could not switch model.")
+                .to_owned());
+        }
+    }
     let response = run_provider_cli_json(&["apply-connector", connector_id])
         .ok_or_else(|| "Could not reach the provider CLI.".to_owned())?;
     if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
@@ -4310,6 +4380,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     thinking_expander.set_child(Some(&thinking_label));
     thinking_expander.set_visible(false);
     activity_card.append(&thinking_expander);
+    let activity_more_label = gtk::Label::builder()
+        .label("")
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .visible(false)
+        .build();
+    activity_card.append(&activity_more_label);
     let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
     activity_card.append(&activity_tools);
 
@@ -4401,6 +4478,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_title = activity_title.clone();
         let thinking_expander = thinking_expander.clone();
         let thinking_label = thinking_label.clone();
+        let activity_more_label = activity_more_label.clone();
         let clear_activity_box = clear_activity_box.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
@@ -4412,6 +4490,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             thinking_expander.set_label(Some("Thinking"));
             thinking_expander.set_visible(false);
             thinking_expander.set_expanded(true);
+            activity_more_label.set_label("");
+            activity_more_label.set_visible(false);
             activity_title.set_label("Working…");
             activity_tool_count.set(0);
             activity_has_thinking.set(false);
@@ -4446,6 +4526,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_title = activity_title.clone();
         let thinking_expander = thinking_expander.clone();
         let thinking_label = thinking_label.clone();
+        let activity_more_label = activity_more_label.clone();
         let activity_tools = activity_tools.clone();
         let activity_tool_count = activity_tool_count.clone();
         let activity_has_thinking = activity_has_thinking.clone();
@@ -4506,8 +4587,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         format!("{title}\n{detail}")
                     };
                     activity_tool_lines.borrow_mut().push(archive_line);
+                    const MAX_LIVE_TOOL_CARDS: usize = 8;
+                    let previous_count = activity_tool_count.get();
+                    if previous_count >= MAX_LIVE_TOOL_CARDS {
+                        if let Some(oldest) = activity_tools.first_child() {
+                            activity_tools.remove(&oldest);
+                        }
+                        let hidden = previous_count + 1 - MAX_LIVE_TOOL_CARDS;
+                        activity_more_label.set_label(&format!("+{hidden} more"));
+                        activity_more_label.set_visible(true);
+                    }
                     activity_tools.append(&build_tool_card(&title, &detail));
-                    activity_tool_count.set(activity_tool_count.get().saturating_add(1));
+                    activity_tool_count.set(previous_count.saturating_add(1));
                     activity_title.set_label(&humanize_activity_title(&event.tool, &detail));
                     needs_scroll = true;
                 }
@@ -4872,6 +4963,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let focus_open_btn = focus_open_btn.clone();
         move |resolved: Option<PrimaryFocusContext>, from_discuss: bool| match resolved {
             Some(focus) => {
+                if !from_discuss {
+                    store_cached_primary_focus(focus.clone());
+                }
                 let label = match focus
                     .target_title
                     .as_deref()
@@ -6138,9 +6232,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let (tx, rx) =
             mpsc::channel::<Result<Option<(String, Vec<ChatMessage>)>, String>>();
         thread::spawn(move || {
+            let listed = list_sessions();
             if let Some(sid) = load_session_id() {
                 let history = load_history(&sid);
-                let listed = list_sessions();
                 if listed.iter().any(|s| s.id == sid) || !history.is_empty() {
                     let _ = tx.send(Ok(Some((sid, history))));
                     return;
@@ -6149,7 +6243,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 let path = session_store_path();
                 let _ = std::fs::remove_file(&path);
             }
-            if let Some(next) = list_sessions().into_iter().next() {
+            if let Some(next) = listed.into_iter().next() {
                 match resume_session(&next.id) {
                     Ok(pair) => {
                         let _ = tx.send(Ok(Some(pair)));

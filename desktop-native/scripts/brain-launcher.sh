@@ -5,6 +5,7 @@
 set -euo pipefail
 
 VERSION_FILE="/usr/share/centurion/brain/VERSION"
+BRAIN_VERSION_FILE="/usr/share/centurion/BRAIN_VERSION"
 DESKTOP_BIN="${CENTURION_DESKTOP_BIN:-/usr/bin/centurion-desktop}"
 # Full Fedora RPM ships Centurion core here (no separate terminal install).
 BUNDLED_ROOT="/usr/lib/centurion"
@@ -45,6 +46,53 @@ resolve_centurion_home() {
     fi
   fi
   printf '%s\n' "${root}"
+}
+
+resolve_brain_version() {
+  local version=""
+  if [[ -f "${BRAIN_VERSION_FILE}" ]]; then
+    version="$(tr -d '[:space:]' < "${BRAIN_VERSION_FILE}" || true)"
+  elif command -v rpm >/dev/null 2>&1; then
+    version="$(rpm -q --qf '%{VERSION}' centurion-brain 2>/dev/null || true)"
+  fi
+  if [[ -n "${version}" ]]; then
+    printf '%s\n' "${version}"
+  else
+    printf '%s\n' "unknown"
+  fi
+}
+
+cached_python_brain() {
+  local cache_file="$1"
+  local brain_version="$2"
+  [[ -f "${cache_file}" ]] || return 1
+
+  local cached_version=""
+  local cached_path=""
+  {
+    IFS= read -r cached_version || return 1
+    IFS= read -r cached_path || return 1
+  } < "${cache_file}"
+  [[ "${cached_version}" == "${brain_version}" ]] || return 1
+  if [[ -n "${CENTURION_PYTHON:-}" && "${cached_path}" != "${CENTURION_PYTHON}" ]]; then
+    return 1
+  fi
+  [[ -n "${cached_path}" && -x "${cached_path}" ]] || return 1
+  "${cached_path}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1 || return 1
+  printf '%s\n' "${cached_path}"
+}
+
+cache_python_brain() {
+  local cache_file="$1"
+  local brain_version="$2"
+  local python_path="$3"
+  local cache_dir
+  cache_dir="$(dirname "${cache_file}")"
+  mkdir -p "${cache_dir}"
+  local tmp="${cache_file}.tmp.$$"
+  printf '%s\n%s\n' "${brain_version}" "${python_path}" > "${tmp}"
+  chmod 0600 "${tmp}" || true
+  mv -f "${tmp}" "${cache_file}"
 }
 
 find_python_brain() {
@@ -127,7 +175,7 @@ find_ai_repo() {
 
 seed_license_config() {
   local home_dir="$1"
-  CENTURION_HOME_DIR="${home_dir}" python3 - <<'PY' 2>/dev/null || true
+  CENTURION_HOME_DIR="${home_dir}" python3 - <<'PY' 2>/dev/null
 import os
 import pathlib
 import secrets
@@ -223,6 +271,7 @@ PY
 stamp_smooth_transfer() {
   local home_dir="$1"
   local repo="$2"
+  local brain_version="$3"
   local version="unknown"
   if [[ -f "${VERSION_FILE}" ]]; then
     version="$(tr -d '[:space:]' < "${VERSION_FILE}" || true)"
@@ -246,7 +295,21 @@ stamp_smooth_transfer() {
 }
 EOF
   chmod 0644 "${stamp}" || true
-  seed_license_config "${home_dir}"
+  local run_dir="${home_dir}/run"
+  local seed_stamp="${run_dir}/brain-seed.stamp"
+  local seeded_version=""
+  if [[ -f "${seed_stamp}" ]]; then
+    seeded_version="$(tr -d '\r\n' < "${seed_stamp}" || true)"
+  fi
+  if [[ "${seeded_version}" != "${brain_version}" ]]; then
+    mkdir -p "${run_dir}"
+    if seed_license_config "${home_dir}"; then
+      local tmp="${seed_stamp}.tmp.$$"
+      printf '%s\n' "${brain_version}" > "${tmp}"
+      chmod 0600 "${tmp}" || true
+      mv -f "${tmp}" "${seed_stamp}"
+    fi
+  fi
 }
 
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
@@ -270,14 +333,19 @@ fi
 
 CENTURION_HOME_DIR="$(resolve_centurion_home)"
 mkdir -p "${CENTURION_HOME_DIR}"
+BRAIN_VERSION="$(resolve_brain_version)"
+PYTHON_CACHE="${CENTURION_HOME_DIR}/run/brain-python.path"
 
-PYTHON_BIN="$(find_python_brain)" || die_gui \
-  "Centurion core was not found on this computer. Contact your advisor — Brain keeps your existing Centurion data and needs that install to think and chat."
+if ! PYTHON_BIN="$(cached_python_brain "${PYTHON_CACHE}" "${BRAIN_VERSION}")"; then
+  PYTHON_BIN="$(find_python_brain)" || die_gui \
+    "Centurion core was not found on this computer. Contact your advisor — Brain keeps your existing Centurion data and needs that install to think and chat."
+  cache_python_brain "${PYTHON_CACHE}" "${BRAIN_VERSION}" "${PYTHON_BIN}"
+fi
 
 AI_REPO="$(find_ai_repo "${PYTHON_BIN}")" || die_gui \
   "Centurion core was not found on this computer. Contact your advisor — Brain keeps your existing Centurion data and needs that install to think and chat."
 
-stamp_smooth_transfer "${CENTURION_HOME_DIR}" "${AI_REPO}"
+stamp_smooth_transfer "${CENTURION_HOME_DIR}" "${AI_REPO}" "${BRAIN_VERSION}"
 
 export CENTURION_HOME="${CENTURION_HOME_DIR}"
 export CENTURION_PYTHON="${PYTHON_BIN}"
