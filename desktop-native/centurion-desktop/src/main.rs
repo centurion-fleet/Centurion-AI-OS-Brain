@@ -7040,6 +7040,8 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 let parent = parent.clone();
                 let row = row.clone();
                 move |message: String| {
+                    let parent = parent.clone();
+                    let row = row.clone();
                     glib::idle_add_local_once(move || {
                         show_backup_thinking_dialog_inner(&parent, &row, Some(message));
                     });
@@ -7507,6 +7509,9 @@ The key stays in ~/.centurion/.env on this machine only.",
                 let settings_row = settings_row.clone();
                 let detail = detail.clone();
                 move |message: String| {
+                    let parent = parent.clone();
+                    let settings_row = settings_row.clone();
+                    let detail = detail.clone();
                     glib::idle_add_local_once(move || {
                         show_change_thinking_dialog_inner(
                             &parent,
