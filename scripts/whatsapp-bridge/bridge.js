@@ -344,6 +344,18 @@ async function startSocket() {
         console.log('\n📱 Scan this QR code with WhatsApp on your phone:\n');
         qrcode.generate(qr, { small: true });
         console.log('\nWaiting for scan...\n');
+        // Brain Settings polls this file (no terminal) for the same QR payload.
+        try {
+          writeFileSync(
+            path.join(SESSION_DIR, 'qr.json'),
+            JSON.stringify({
+              qr,
+              updated_at: new Date().toISOString(),
+            }),
+          );
+        } catch (err) {
+          console.error('Could not write qr.json for Brain Settings:', err?.message || err);
+        }
       }
 
       if (connection === 'connecting') {
@@ -394,6 +406,12 @@ async function startSocket() {
         connectionState = 'connected';
         releaseStartLock();
         console.log('✅ WhatsApp connected!');
+        try {
+          const qrPath = path.join(SESSION_DIR, 'qr.json');
+          if (existsSync(qrPath)) unlinkSync(qrPath);
+        } catch (_) {
+          /* ignore */
+        }
         if (PAIR_ONLY) {
           console.log('✅ Pairing complete. Credentials saved.');
           // Give Baileys a moment to flush creds, then exit cleanly

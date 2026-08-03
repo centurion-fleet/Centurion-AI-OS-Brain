@@ -791,7 +791,101 @@ def test_tool_env_get_set_firecrawl(monkeypatch):
     assert got["ok"] is True
     assert got["configured"] is True
     assert "value" not in got  # never echo secret
-    assert rb._TOOL_ENV_ALLOWLIST == frozenset({"FIRECRAWL_API_KEY"})
+    assert "FIRECRAWL_API_KEY" in rb._TOOL_ENV_ALLOWLIST
+    assert "TELEGRAM_BOT_TOKEN" in rb._TOOL_ENV_ALLOWLIST
+
+
+def test_telegram_configure_saves_token_and_enables_platform(monkeypatch, tmp_path):
+    from centurion_cli.remote_bridge import handle_request
+
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    saved: dict[str, str] = {}
+    config: dict = {"gateway": {"platforms": {}}}
+
+    def _fake_save_env(key: str, value: str):
+        saved[key] = value
+        import os
+
+        os.environ[key] = value
+
+    monkeypatch.setattr("centurion_cli.config.save_env_value", _fake_save_env)
+    monkeypatch.setattr("centurion_cli.config.load_config", lambda: config)
+    monkeypatch.setattr(
+        "centurion_cli.config.save_config",
+        lambda cfg: config.update(cfg) if isinstance(cfg, dict) else None,
+    )
+    monkeypatch.setattr(
+        "centurion_cli.remote_bridge._handle_gateway_lifecycle",
+        lambda *_a, **_k: {"ok": True},
+    )
+    monkeypatch.setattr(
+        "centurion_cli.remote_bridge._handle_gateway_status",
+        lambda request_id: {
+            "id": request_id,
+            "ok": True,
+            "action": "gateway_status",
+            "status": {"running": False, "platforms": []},
+        },
+    )
+
+    empty = handle_request(
+        {"id": "tg0", "action": "telegram_configure", "token": "  ", "restart": False}
+    )
+    assert empty["ok"] is False
+
+    ok = handle_request(
+        {
+            "id": "tg1",
+            "action": "telegram_configure",
+            "token": "123456:AA-test-token",
+            "restart": True,
+        }
+    )
+    assert ok["ok"] is True
+    assert ok["configured"] is True
+    assert saved["TELEGRAM_BOT_TOKEN"] == "123456:AA-test-token"
+    assert config["gateway"]["platforms"]["telegram"]["enabled"] is True
+
+
+def test_whatsapp_pair_status_reads_qr_and_paired(monkeypatch, tmp_path):
+    from centurion_cli.remote_bridge import handle_request
+
+    home = tmp_path / ".centurion"
+    session = home / "whatsapp" / "session"
+    session.mkdir(parents=True)
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    monkeypatch.setattr(
+        "centurion_cli.config.save_env_value",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr("centurion_cli.config.load_config", lambda: {"gateway": {}})
+    monkeypatch.setattr("centurion_cli.config.save_config", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "centurion_cli.remote_bridge._qr_png_base64_from_payload",
+        lambda qr: "AAAA",
+    )
+
+    waiting = handle_request({"id": "wa0", "action": "whatsapp_pair_status"})
+    assert waiting["ok"] is True
+    assert waiting["paired"] is False
+
+    (session / "qr.json").write_text(
+        '{"qr":"whatsapp-qr-payload","updated_at":"2026-01-01T00:00:00Z"}',
+        encoding="utf-8",
+    )
+    with_qr = handle_request({"id": "wa1", "action": "whatsapp_pair_status"})
+    assert with_qr["ok"] is True
+    assert with_qr["paired"] is False
+    assert with_qr["qr_png_base64"] == "AAAA"
+    assert with_qr["state"] == "waiting_qr"
+
+    (session / "creds.json").write_text('{"me":{}}', encoding="utf-8")
+    paired = handle_request({"id": "wa2", "action": "whatsapp_pair_status"})
+    assert paired["ok"] is True
+    assert paired["paired"] is True
+    assert paired["state"] == "paired"
 
 
 def test_remote_activity_filters_noisy_status_and_caps_terminal():

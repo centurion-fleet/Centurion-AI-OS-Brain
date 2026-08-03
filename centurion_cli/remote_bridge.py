@@ -217,6 +217,14 @@ def handle_request(
         return _handle_gateway_lifecycle(request_id, "restart")
     if action == "gateway_platform_set":
         return _handle_gateway_platform_set(request, request_id)
+    if action == "telegram_configure":
+        return _handle_telegram_configure(request, request_id)
+    if action == "whatsapp_pair_start":
+        return _handle_whatsapp_pair_start(request, request_id)
+    if action == "whatsapp_pair_status":
+        return _handle_whatsapp_pair_status(request_id)
+    if action == "whatsapp_pair_cancel":
+        return _handle_whatsapp_pair_cancel(request_id)
     if action == "session_list":
         return _handle_session_list(request, request_id)
     if action == "session_new":
@@ -547,7 +555,7 @@ def _handle_settings_snapshot(
 
 
 # Research / tool keys the Brain Settings UI may read or write.
-_TOOL_ENV_ALLOWLIST = frozenset({"FIRECRAWL_API_KEY"})
+_TOOL_ENV_ALLOWLIST = frozenset({"FIRECRAWL_API_KEY", "TELEGRAM_BOT_TOKEN"})
 _FIRECRAWL_KEY_URL = "https://www.firecrawl.dev/"
 
 
@@ -2223,6 +2231,314 @@ def _handle_gateway_platform_set(request: dict[str, Any], request_id: str) -> di
         return status
     except Exception as exc:
         return _error_response(request_id, action="gateway_platform_set", exc=exc)
+
+
+def _whatsapp_session_dir() -> "Path":
+    from pathlib import Path
+
+    from centurion_constants import get_centurion_home
+
+    return Path(get_centurion_home()) / "whatsapp" / "session"
+
+
+def _whatsapp_pair_pid_path() -> "Path":
+    from pathlib import Path
+
+    from centurion_constants import get_centurion_home
+
+    return Path(get_centurion_home()) / "whatsapp" / "pair.pid"
+
+
+def _resolve_whatsapp_bridge_dir() -> "Path | None":
+    import os
+    from pathlib import Path
+
+    candidates = []
+    env = (os.getenv("CENTURION_WHATSAPP_BRIDGE_DIR") or "").strip()
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path("/usr/share/centurion/whatsapp-bridge"))
+    repo = (os.getenv("CENTURION_AI_REPO") or "").strip()
+    if repo:
+        candidates.append(Path(repo) / "scripts" / "whatsapp-bridge")
+    # Checkout-relative fallback from this file: …/centurion_cli → repo
+    candidates.append(Path(__file__).resolve().parents[1] / "scripts" / "whatsapp-bridge")
+    for path in candidates:
+        if (path / "bridge.js").is_file():
+            return path
+    return None
+
+
+def _qr_png_base64_from_payload(qr: str) -> str | None:
+    """Encode Baileys QR string as PNG base64 (no Pillow required)."""
+    try:
+        import base64
+        import io
+
+        import qrcode
+        from qrcode.image.pure import PyPNGImage
+
+        img = qrcode.make(qr, image_factory=PyPNGImage)
+        buf = io.BytesIO()
+        img.save(buf)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
+def _handle_telegram_configure(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.config import load_config, save_config, save_env_value
+
+        token = str(request.get("token") or request.get("value") or "").strip()
+        if not token:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "telegram_configure",
+                "error": "Bot token is required.",
+                "message": "Paste the bot token from BotFather, then try again.",
+            }
+        save_env_value("TELEGRAM_BOT_TOKEN", token)
+        import os
+
+        os.environ["TELEGRAM_BOT_TOKEN"] = token
+
+        config = load_config()
+        # Seed both gateway.platforms and top-level platforms for loaders.
+        for root_key in ("gateway", None):
+            root = config if root_key is None else config.setdefault("gateway", {})
+            if not isinstance(root, dict):
+                continue
+            platforms = root.setdefault("platforms", {})
+            if not isinstance(platforms, dict):
+                platforms = {}
+                root["platforms"] = platforms
+            block = platforms.get("telegram") if isinstance(platforms.get("telegram"), dict) else {}
+            block = dict(block)
+            block["enabled"] = True
+            platforms["telegram"] = block
+        save_config(config)
+
+        restarted = False
+        if bool(request.get("restart", True)):
+            life = _handle_gateway_lifecycle(request_id, "restart")
+            restarted = bool(life.get("ok"))
+        status = _handle_gateway_status(request_id)
+        status["action"] = "telegram_configure"
+        status["configured"] = True
+        status["restarted"] = restarted
+        status["message"] = "Telegram bot token saved on this brain."
+        return status
+    except Exception as exc:
+        return _error_response(request_id, action="telegram_configure", exc=exc)
+
+
+def _handle_whatsapp_pair_start(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        import os
+        import signal
+        import subprocess
+        from pathlib import Path
+
+        from centurion_cli.config import save_env_value
+
+        bridge_dir = _resolve_whatsapp_bridge_dir()
+        if bridge_dir is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "whatsapp_pair_start",
+                "error": "WhatsApp bridge not installed.",
+                "message": (
+                    "WhatsApp bridge is missing. Reinstall Sovereign AI Brain "
+                    "from Get Brain, then try Pair again."
+                ),
+            }
+        session_dir = _whatsapp_session_dir()
+        session_dir.mkdir(parents=True, exist_ok=True)
+        pid_path = _whatsapp_pair_pid_path()
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Stop any previous pair process.
+        if pid_path.is_file():
+            try:
+                old = int(pid_path.read_text(encoding="utf-8").strip())
+                os.kill(old, signal.SIGTERM)
+            except Exception:
+                pass
+            try:
+                pid_path.unlink()
+            except Exception:
+                pass
+
+        if bool(request.get("clear_session")):
+            import shutil
+
+            shutil.rmtree(session_dir, ignore_errors=True)
+            session_dir.mkdir(parents=True, exist_ok=True)
+
+        qr_path = session_dir / "qr.json"
+        try:
+            qr_path.unlink()
+        except Exception:
+            pass
+
+        # Do not enable gateway WhatsApp until pairing succeeds.
+        save_env_value("WHATSAPP_ENABLED", "false")
+
+        log_path = session_dir.parent / "pair.log"
+        log_fh = open(log_path, "ab", buffering=0)
+        proc = subprocess.Popen(
+            [
+                "node",
+                str(bridge_dir / "bridge.js"),
+                "--pair-only",
+                "--session",
+                str(session_dir),
+            ],
+            cwd=str(bridge_dir),
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        pid_path.write_text(str(proc.pid), encoding="utf-8")
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "whatsapp_pair_start",
+            "pairing": True,
+            "pid": proc.pid,
+            "session_dir": str(session_dir),
+            "message": "Waiting for WhatsApp QR… Open WhatsApp → Linked devices → Link a device.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="whatsapp_pair_start", exc=exc)
+
+
+def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
+    try:
+        import json
+        import os
+        import signal
+        from pathlib import Path
+
+        from centurion_cli.config import load_config, save_config, save_env_value
+
+        session_dir = _whatsapp_session_dir()
+        creds = session_dir / "creds.json"
+        qr_path = session_dir / "qr.json"
+        pid_path = _whatsapp_pair_pid_path()
+
+        if creds.is_file():
+            save_env_value("WHATSAPP_ENABLED", "true")
+            os.environ["WHATSAPP_ENABLED"] = "true"
+            config = load_config()
+            gw = config.setdefault("gateway", {})
+            if isinstance(gw, dict):
+                platforms = gw.setdefault("platforms", {})
+                if isinstance(platforms, dict):
+                    block = platforms.get("whatsapp") if isinstance(platforms.get("whatsapp"), dict) else {}
+                    block = dict(block)
+                    block["enabled"] = True
+                    platforms["whatsapp"] = block
+                    save_config(config)
+            # Pair process should have exited; clean pid.
+            if pid_path.is_file():
+                try:
+                    pid_path.unlink()
+                except Exception:
+                    pass
+            try:
+                qr_path.unlink()
+            except Exception:
+                pass
+            return {
+                "id": request_id,
+                "ok": True,
+                "action": "whatsapp_pair_status",
+                "state": "paired",
+                "paired": True,
+                "message": "WhatsApp linked. You can Start the gateway.",
+            }
+
+        qr_png = None
+        qr_text = None
+        if qr_path.is_file():
+            try:
+                data = json.loads(qr_path.read_text(encoding="utf-8"))
+                qr_text = str(data.get("qr") or "").strip() or None
+                if qr_text:
+                    qr_png = _qr_png_base64_from_payload(qr_text)
+            except Exception:
+                pass
+
+        alive = False
+        if pid_path.is_file():
+            try:
+                pid = int(pid_path.read_text(encoding="utf-8").strip())
+                os.kill(pid, 0)
+                alive = True
+            except Exception:
+                alive = False
+
+        if qr_png:
+            state = "waiting_qr"
+            message = "Scan this QR with WhatsApp on your phone."
+        elif alive:
+            state = "waiting_qr"
+            message = "Preparing QR…"
+        else:
+            state = "idle"
+            message = "WhatsApp is not paired yet. Tap Pair to start."
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "whatsapp_pair_status",
+            "state": state,
+            "paired": False,
+            "qr": qr_text,
+            "qr_png_base64": qr_png,
+            "message": message,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="whatsapp_pair_status", exc=exc)
+
+
+def _handle_whatsapp_pair_cancel(request_id: str) -> dict[str, Any]:
+    try:
+        import os
+        import signal
+
+        pid_path = _whatsapp_pair_pid_path()
+        if pid_path.is_file():
+            try:
+                pid = int(pid_path.read_text(encoding="utf-8").strip())
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+            try:
+                pid_path.unlink()
+            except Exception:
+                pass
+        qr_path = _whatsapp_session_dir() / "qr.json"
+        try:
+            qr_path.unlink()
+        except Exception:
+            pass
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "whatsapp_pair_cancel",
+            "message": "WhatsApp pairing cancelled.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="whatsapp_pair_cancel", exc=exc)
 
 
 def _handle_session_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:

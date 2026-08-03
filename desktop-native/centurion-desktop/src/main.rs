@@ -2160,7 +2160,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
                 );
             }
         });
-        refresh_gateway_ui_async(&gateway_row, &gateway_platform_list);
+        refresh_gateway_ui_async(&window, &gateway_row, &gateway_platform_list);
         fix_thinking_button.connect_clicked({
             let window = window.clone();
             let thinking_settings_row = thinking_settings_row.clone();
@@ -5121,7 +5121,7 @@ Being · Continuity\n\
         glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
             match rx.try_recv() {
                 Ok((life, status)) => {
-                    apply_gateway_ui(&row, &platform_list, status.clone());
+                    apply_gateway_ui(&parent, &row, &platform_list, status.clone());
                     start_btn.set_sensitive(true);
                     stop_btn.set_sensitive(true);
                     restart_btn.set_sensitive(true);
@@ -5148,14 +5148,23 @@ Being · Continuity\n\
         });
     }
 
-    fn refresh_gateway_ui(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
+    fn refresh_gateway_ui(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+    ) {
         let payload = run_bridge_action("gateway_status", serde_json::json!({}));
-        apply_gateway_ui(row, platform_list, payload);
+        apply_gateway_ui(parent, row, platform_list, payload);
     }
 
     /// Same as `refresh_gateway_ui`, with the bridge round-trip on a worker so
     /// window build / present never waits on it.
-    fn refresh_gateway_ui_async(row: &adw::ActionRow, platform_list: &gtk::ListBox) {
+    fn refresh_gateway_ui_async(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+    ) {
+        let parent = parent.clone();
         let row = row.clone();
         let platform_list = platform_list.clone();
         let (tx, rx) = std::sync::mpsc::channel::<Option<serde_json::Value>>();
@@ -5165,7 +5174,7 @@ Being · Continuity\n\
         glib::timeout_add_local(std::time::Duration::from_millis(40), move || {
             match rx.try_recv() {
                 Ok(payload) => {
-                    apply_gateway_ui(&row, &platform_list, payload);
+                    apply_gateway_ui(&parent, &row, &platform_list, payload);
                     glib::ControlFlow::Break
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
@@ -5175,6 +5184,7 @@ Being · Continuity\n\
     }
 
     fn apply_gateway_ui(
+        parent: &adw::ApplicationWindow,
         row: &adw::ActionRow,
         platform_list: &gtk::ListBox,
         payload: Option<serde_json::Value>,
@@ -5275,6 +5285,46 @@ Being · Continuity\n\
                     &error_message,
                 ))
                 .build();
+
+            // Setup actions — customers must not need a terminal.
+            if key == "telegram" {
+                let setup = gtk::Button::with_label(if configured {
+                    "Update token"
+                } else {
+                    "Add token"
+                });
+                setup.set_valign(gtk::Align::Center);
+                setup.add_css_class("suggested-action");
+                let parent_w = parent.clone();
+                let status_row = row.clone();
+                let list_for_cb = platform_list.clone();
+                setup.connect_clicked(move |_| {
+                    show_telegram_token_dialog(&parent_w, &status_row, &list_for_cb);
+                });
+                plat_row.add_suffix(&setup);
+            } else if key == "whatsapp" {
+                let paired = configured
+                    && (connected
+                        || status.to_ascii_lowercase().contains("connected")
+                        || status.to_ascii_lowercase().contains("ready"));
+                let setup = gtk::Button::with_label(if paired { "Re-pair" } else { "Pair" });
+                setup.set_valign(gtk::Align::Center);
+                setup.add_css_class("suggested-action");
+                let parent_w = parent.clone();
+                let status_row = row.clone();
+                let list_for_cb = platform_list.clone();
+                let clear_session = paired;
+                setup.connect_clicked(move |_| {
+                    show_whatsapp_pair_window(
+                        &parent_w,
+                        &status_row,
+                        &list_for_cb,
+                        clear_session,
+                    );
+                });
+                plat_row.add_suffix(&setup);
+            }
+
             let toggle = gtk::Switch::builder()
                 .active(enabled)
                 .valign(gtk::Align::Center)
@@ -5283,6 +5333,7 @@ Being · Continuity\n\
             let platform_name = key.to_owned();
             let list_for_cb = platform_list.clone();
             let status_row = row.clone();
+            let parent_w = parent.clone();
             if configured {
                 toggle.connect_active_notify(move |sw| {
                     let _ = run_bridge_action(
@@ -5295,14 +5346,248 @@ Being · Continuity\n\
                     );
                     let list_for_cb = list_for_cb.clone();
                     let status_row = status_row.clone();
+                    let parent_w = parent_w.clone();
                     glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
-                        refresh_gateway_ui(&status_row, &list_for_cb);
+                        refresh_gateway_ui(&parent_w, &status_row, &list_for_cb);
                     });
                 });
             }
             plat_row.add_suffix(&toggle);
             platform_list.append(&plat_row);
         }
+    }
+
+    fn show_telegram_token_dialog(
+        parent: &adw::ApplicationWindow,
+        gateway_row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+    ) {
+        let dialog = adw::AlertDialog::builder()
+            .heading("Telegram bot token")
+            .body(
+                "Create a bot with @BotFather in Telegram, copy the token, and paste it here. \
+The token stays in ~/.centurion/.env on this machine only.",
+            )
+            .close_response("cancel")
+            .default_response("save")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("save", "Save");
+        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+
+        let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        let note = gtk::Label::builder()
+            .label("In Telegram: open @BotFather → /newbot → copy the token.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build();
+        let key_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("123456:ABC-DEF…")
+            .show_peek_icon(true)
+            .build();
+        extra.append(&note);
+        extra.append(
+            &gtk::Label::builder()
+                .label("Bot token")
+                .xalign(0.0)
+                .build(),
+        );
+        extra.append(&key_entry);
+        dialog.set_extra_child(Some(&extra));
+        dialog.present(Some(parent));
+
+        let parent = parent.clone();
+        let gateway_row = gateway_row.clone();
+        let platform_list = platform_list.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response != "save" {
+                dialog.close();
+                return;
+            }
+            let token = key_entry.text().to_string();
+            dialog.close();
+            if token.trim().is_empty() {
+                let fail = adw::AlertDialog::builder()
+                    .heading("Token required")
+                    .body("Paste the bot token from @BotFather, then try again.")
+                    .close_response("ok")
+                    .build();
+                fail.add_response("ok", "OK");
+                fail.present(Some(&parent));
+                return;
+            }
+            let token = token.trim().to_owned();
+            let parent = parent.clone();
+            let gateway_row = gateway_row.clone();
+            let platform_list = platform_list.clone();
+            crate::chat_page::run_bridge_action_async(
+                "telegram_configure",
+                serde_json::json!({
+                    "token": token,
+                    "restart": true,
+                }),
+                move |payload: Option<serde_json::Value>| {
+                    let ok = payload
+                        .as_ref()
+                        .and_then(|p| p.get("ok"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if ok {
+                        refresh_gateway_ui(&parent, &gateway_row, &platform_list);
+                        let done = adw::AlertDialog::builder()
+                            .heading("Telegram connected")
+                            .body(
+                                "Bot token saved. Start the gateway if it is stopped, then message your bot.",
+                            )
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent));
+                        return;
+                    }
+                    let message = payload
+                        .as_ref()
+                        .and_then(|p| {
+                            p.get("message")
+                                .or_else(|| p.get("error"))
+                                .and_then(|v| v.as_str())
+                                .map(str::to_owned)
+                        })
+                        .unwrap_or_else(|| "Could not save Telegram bot token.".to_owned());
+                    let fail = adw::AlertDialog::builder()
+                        .heading("Could not save token")
+                        .body(&message)
+                        .close_response("ok")
+                        .build();
+                    fail.add_response("ok", "OK");
+                    fail.present(Some(&parent));
+                },
+            );
+        });
+    }
+
+    fn show_whatsapp_pair_window(
+        parent: &adw::ApplicationWindow,
+        gateway_row: &adw::ActionRow,
+        platform_list: &gtk::ListBox,
+        clear_session: bool,
+    ) {
+        let win = adw::Window::builder()
+            .transient_for(parent)
+            .modal(true)
+            .default_width(420)
+            .default_height(520)
+            .title("Link WhatsApp")
+            .build();
+        let header = adw::HeaderBar::new();
+        let close_btn = gtk::Button::with_label("Close");
+        header.pack_start(&close_btn);
+        let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        root.set_margin_top(16);
+        root.set_margin_bottom(16);
+        root.set_margin_start(24);
+        root.set_margin_end(24);
+        let status = gtk::Label::builder()
+            .label("Preparing QR… Open WhatsApp → Linked devices → Link a device.")
+            .wrap(true)
+            .xalign(0.0)
+            .build();
+        let qr_holder = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        qr_holder.set_halign(gtk::Align::Center);
+        root.append(&status);
+        root.append(&qr_holder);
+        let toolbar = adw::ToolbarView::new();
+        toolbar.add_top_bar(&header);
+        toolbar.set_content(Some(&root));
+        win.set_content(Some(&toolbar));
+
+        let _ = run_bridge_action(
+            "whatsapp_pair_start",
+            serde_json::json!({ "clear_session": clear_session }),
+        );
+
+        let status_c = status.clone();
+        let qr_holder_c = qr_holder.clone();
+        let gateway_row_c = gateway_row.clone();
+        let platform_list_c = platform_list.clone();
+        let parent_c = parent.clone();
+        let win_c = win.clone();
+        let tick = Rc::new(Cell::new(0u32));
+        let tick_c = tick.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(1200), move || {
+            if !win_c.is_visible() {
+                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                return glib::ControlFlow::Break;
+            }
+            let payload = run_bridge_action("whatsapp_pair_status", serde_json::json!({}));
+            let Some(payload) = payload else {
+                return glib::ControlFlow::Continue;
+            };
+            let state = payload
+                .get("state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("idle");
+            let message = payload
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if !message.is_empty() {
+                status_c.set_label(message);
+            }
+            if payload
+                .get("paired")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+                || state == "paired"
+            {
+                while let Some(child) = qr_holder_c.first_child() {
+                    qr_holder_c.remove(&child);
+                }
+                status_c.set_label("WhatsApp linked. You can Start the gateway.");
+                refresh_gateway_ui(&parent_c, &gateway_row_c, &platform_list_c);
+                let done = adw::AlertDialog::builder()
+                    .heading("WhatsApp linked")
+                    .body("Pairing complete. Start the Messaging Gateway if it is stopped.")
+                    .close_response("ok")
+                    .build();
+                done.add_response("ok", "OK");
+                done.present(Some(&parent_c));
+                win_c.close();
+                return glib::ControlFlow::Break;
+            }
+            if let Some(b64) = payload.get("qr_png_base64").and_then(|v| v.as_str()) {
+                let png = glib::base64_decode(b64);
+                if !png.is_empty() {
+                    while let Some(child) = qr_holder_c.first_child() {
+                        qr_holder_c.remove(&child);
+                    }
+                    qr_holder_c.append(&qr_image_from_png(&png, 320));
+                }
+            }
+            let n = tick_c.get().saturating_add(1);
+            tick_c.set(n);
+            // Stop polling after ~5 minutes.
+            if n > 250 {
+                status_c.set_label("Pairing timed out. Close and tap Pair again.");
+                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                return glib::ControlFlow::Break;
+            }
+            glib::ControlFlow::Continue
+        });
+
+        close_btn.connect_clicked({
+            let win = win.clone();
+            move |_| {
+                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                win.close();
+            }
+        });
+        win.connect_close_request(|_| {
+            let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+            glib::Propagation::Proceed
+        });
+        win.present();
     }
 
     fn show_support_auto_fix_dialog(parent: &adw::ApplicationWindow) {
