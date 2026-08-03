@@ -1440,6 +1440,12 @@ DEFAULT_CONFIG = {
         # External hub installs (trusted/community sources) are always
         # scanned regardless of this setting.
         "guard_agent_created": False,
+        # Public/community Skills Hub installs. Brain product default is
+        # false (zero trust for hub skills): search/inspect for inspiration
+        # is fine; installing hub skills as trusted is blocked. Create a
+        # fresh local skill via skill_manage instead. Set true to allow
+        # `centurion skills install` / `/skills install` from public hubs.
+        "allow_public_hub": False,
     },
 
     # Curator — background skill maintenance.

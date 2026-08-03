@@ -10,7 +10,7 @@ use libadwaita as adw;
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -1617,18 +1617,25 @@ fn show_collab_detail_dialog(
 }
 
 pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
-    // Portal Mission Control (ctk_proj tokens) is frozen. Local boards only.
+    // Portal Mission Control (ctk_proj tokens) is frozen. Local boards + fleet peers only.
     let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
     let board_title = gtk::Entry::builder()
-        .placeholder_text("Board title")
+        .placeholder_text("Board name")
+        .hexpand(true)
+        .build();
+    let mission_entry = gtk::Entry::builder()
+        .placeholder_text("Optional mission id (link to a Life Mission)")
         .hexpand(true)
         .build();
     box_.append(&board_title);
+    box_.append(&mission_entry);
     let dialog = adw::AlertDialog::builder()
-        .heading("Local collaboration board")
+        .heading("New collaboration board")
         .body(
-            "Create a local board on this Brain. Portal Mission Control tokens \
-             are not used — Life Missions stay offline in life.db.",
+            "Shared work boards on this Brain (and peers you can reach). \
+Cloud Mission Control stays off — no portal invite tokens.\n\n\
+After create, open the board from Home constellation / Focus swarm UI. \
+Add a Fleet peer in Settings to involve another Centurion.",
         )
         .extra_child(&box_)
         .close_response("cancel")
@@ -1643,31 +1650,77 @@ pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dy
             return;
         }
         let board_v = board_title.text().trim().to_owned();
+        let mission_v = mission_entry.text().trim().to_owned();
         let refresh = refresh.clone();
         let parent_w = parent_w.clone();
-        run_async_result(parent_w, refresh, move || {
-            let payload = run_bridge_action(
-                "swarm_create_board",
-                serde_json::json!({
+        let created_note = Arc::new(Mutex::new(None::<String>));
+        let created_note_worker = Arc::clone(&created_note);
+        run_async_then(
+            parent_w.clone(),
+            refresh,
+            move || {
+                let mut req = serde_json::json!({
                     "name": if board_v.is_empty() {
                         "Desk collaboration".to_owned()
                     } else {
-                        board_v
+                        board_v.clone()
                     },
                     "objective": "Desk collaboration board",
-                }),
-            )
-            .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
-            if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                Ok(())
-            } else {
-                Err(payload
-                    .get("message")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Could not create local board.")
-                    .to_owned())
-            }
-        });
+                });
+                if !mission_v.is_empty() {
+                    req["mission_id"] = serde_json::json!(mission_v);
+                }
+                let payload = run_bridge_action("swarm_create_board", req)
+                    .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
+                if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    let board_id = payload
+                        .get("board_id")
+                        .or_else(|| payload.get("id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    let note = if board_id.is_empty() {
+                        "Board created. Open it from Home constellation, or add a Fleet peer \
+in Settings to involve another Centurion."
+                            .to_owned()
+                    } else {
+                        format!(
+                            "Board created ({board_id}). Open it from Home constellation, \
+or add a Fleet peer in Settings to involve another Centurion."
+                        )
+                    };
+                    if let Ok(mut slot) = created_note_worker.lock() {
+                        *slot = Some(note);
+                    }
+                    Ok(())
+                } else {
+                    Err(payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Could not create local board.")
+                        .to_owned())
+                }
+            },
+            Rc::new({
+                let created_note = Arc::clone(&created_note);
+                let parent_w = parent_w.clone();
+                move || {
+                    let note = created_note
+                        .lock()
+                        .ok()
+                        .and_then(|mut slot| slot.take());
+                    if let Some(note) = note {
+                        let done = adw::AlertDialog::builder()
+                            .heading("Board created")
+                            .body(&note)
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent_w));
+                    }
+                }
+            }),
+        );
     });
     dialog.present(Some(parent));
 }

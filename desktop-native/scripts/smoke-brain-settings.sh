@@ -54,6 +54,10 @@ check "support --json health" \
   bash -c "\"${CENTURION_BIN}\" support --json health | grep -q '\"ok\"'"
 check "support --json backups" \
   bash -c "\"${CENTURION_BIN}\" support --json backups | grep -q '\"ok\"'"
+check "provider apply-connector --as-backup help" \
+  bash -c "\"${CENTURION_BIN}\" provider apply-connector --help 2>&1 | grep -q 'as-backup'"
+check "provider remove-backup help" \
+  bash -c "\"${CENTURION_BIN}\" provider remove-backup --help 2>&1 | grep -q 'slot'"
 
 if [[ -n "${PYTHON_BIN}" ]]; then
   check "remote_bridge import" \
@@ -64,6 +68,12 @@ if [[ -n "${PYTHON_BIN}" ]]; then
     bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"soul_get\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
   check "memory_horizon_snapshot via bridge" \
     bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"memory_horizon_snapshot\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
+  check "tools_skills_snapshot via bridge" \
+    bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"tools_skills_snapshot\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q 'self_built'"
+  check "swarm_create_board via bridge" \
+    bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"swarm_create_board\",\"name\":\"Smoke board\",\"objective\":\"smoke\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
+  check "skills.allow_public_hub default false" \
+    bash -c "\"${PYTHON_BIN}\" -c 'from centurion_cli.config import DEFAULT_CONFIG; assert DEFAULT_CONFIG[\"skills\"].get(\"allow_public_hub\") is False'"
 else
   echo "SKIP: python bridge checks (no interpreter)"
 fi
@@ -72,8 +82,10 @@ echo
 echo "Result: ${pass} passed, ${fail} failed"
 echo "Manual UI checklist on Titus:"
 echo "  [ ] Thinking Service status readable; Change + Restore work"
-echo "  [ ] Backup Thinking Details opens"
-echo "  [ ] Set up how Centurion thinks opens Change dialog"
+echo "  [ ] Backup Thinking Change: set Backup #1 with connector + key; Clear works"
+echo "  [ ] Skills & tools: self-built vs reference; Ask Centurion to create seeds Chat"
+echo "  [ ] Collaborations New board (+ optional mission id); Fleet peer empty-state copy"
+echo "  [ ] Prefer Focus on decisions hidden; Scheduled/Plugins say View only"
 echo "  [ ] Autonomy / Soul / Memory Horizon / Oversight save + refresh"
 echo "  [ ] Health Check / Support Bundle / Look up Support Code"
 echo "  [ ] Chat tab: bubbles (not terminal); send gets a reply"

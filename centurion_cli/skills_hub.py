@@ -411,6 +411,24 @@ def do_browse(page: int = 1, page_size: int = 20, source: str = "all",
     c.print("[dim]Tip: 'centurion skills search <query>' searches deeper across all registries[/]\n")
 
 
+def public_hub_installs_allowed() -> bool:
+    """Return whether public/community Skills Hub installs are allowed.
+
+    Reads ``skills.allow_public_hub`` from config (default False for Brain).
+    Search and inspect remain available when False — only install is blocked.
+    """
+    try:
+        from centurion_cli.config import load_config
+
+        cfg = load_config()
+        skills_cfg = cfg.get("skills") if isinstance(cfg, dict) else None
+        if isinstance(skills_cfg, dict) and "allow_public_hub" in skills_cfg:
+            return bool(skills_cfg.get("allow_public_hub"))
+    except Exception:
+        pass
+    return False
+
+
 def do_install(identifier: str, category: str = "", force: bool = False,
                console: Optional[Console] = None, skip_confirm: bool = False,
                invalidate_cache: bool = True,
@@ -431,6 +449,17 @@ def do_install(identifier: str, category: str = "", force: bool = False,
     from tools.skills_guard import scan_skill, should_allow_install, format_scan_report
 
     c = console or _console
+    if not public_hub_installs_allowed():
+        c.print(
+            "[bold yellow]Public Skills Hub installs are disabled on this Brain.[/]\n"
+            "Policy: only trust skills this Centurion builds locally.\n"
+            "Search/inspect for inspiration is fine — then ask Centurion to "
+            "create a fresh skill with [bold]skill_manage[/] "
+            "(do not install community hub skills as trusted).\n"
+            "Advisors can set [bold]skills.allow_public_hub: true[/] in "
+            "config.yaml if hub installs must be re-enabled.\n"
+        )
+        return
     ensure_hub_dirs()
 
     # Resolve which source adapter handles this identifier

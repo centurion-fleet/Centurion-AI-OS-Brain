@@ -46,12 +46,14 @@ def provider_command(args: argparse.Namespace) -> None:
         code = _cmd_save_key(args)
     elif sub == "apply-connector":
         code = _cmd_apply_connector(args)
+    elif sub == "remove-backup":
+        code = _cmd_remove_backup(args)
     elif sub == "restore":
         code = _cmd_restore(args)
     else:
         print(
             "usage: centurion provider "
-            "<status|options|catalog|validate|set|save-key|apply-connector|restore>",
+            "<status|options|catalog|validate|set|save-key|apply-connector|remove-backup|restore>",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -111,7 +113,30 @@ def _cmd_save_key(args: argparse.Namespace) -> int:
 
 
 def _cmd_apply_connector(args: argparse.Namespace) -> int:
-    result = apply_remote_switch(args.connector_id, probe=not args.skip_probe)
+    as_backup = bool(getattr(args, "as_backup", False))
+    if as_backup:
+        from centurion_cli.provider_control import apply_remote_backup
+
+        slot = int(getattr(args, "slot", 1) or 1)
+        result = apply_remote_backup(
+            args.connector_id,
+            slot=slot,
+            probe=not args.skip_probe,
+        )
+    else:
+        result = apply_remote_switch(args.connector_id, probe=not args.skip_probe)
+    payload = {"ok": result.ok, "result": result.to_dict()}
+    if not result.ok:
+        payload["message"] = result.message
+        payload["code"] = result.code
+    return _emit(payload, as_json=args.json)
+
+
+def _cmd_remove_backup(args: argparse.Namespace) -> int:
+    from centurion_cli.provider_control import remove_remote_backup
+
+    slot = int(getattr(args, "slot", 1) or 1)
+    result = remove_remote_backup(slot=slot)
     payload = {"ok": result.ok, "result": result.to_dict()}
     if not result.ok:
         payload["message"] = result.message
@@ -192,11 +217,34 @@ def register_subparser(subparsers) -> None:
 
     apply_connector_parser = provider_sub.add_parser(
         "apply-connector",
-        help="Apply a curated remote catalog connector",
+        help="Apply a curated remote catalog connector (primary or backup)",
     )
     apply_connector_parser.add_argument("connector_id")
     apply_connector_parser.add_argument("--skip-probe", action="store_true")
+    apply_connector_parser.add_argument(
+        "--as-backup",
+        action="store_true",
+        help="Write to Backup Thinking (fallback_providers) instead of primary",
+    )
+    apply_connector_parser.add_argument(
+        "--slot",
+        type=int,
+        default=1,
+        help="Backup slot number when --as-backup is set (default 1)",
+    )
     apply_connector_parser.set_defaults(func=provider_command)
+
+    remove_backup_parser = provider_sub.add_parser(
+        "remove-backup",
+        help="Clear a Backup Thinking slot from the failover chain",
+    )
+    remove_backup_parser.add_argument(
+        "--slot",
+        type=int,
+        default=1,
+        help="Backup slot number to clear (default 1)",
+    )
+    remove_backup_parser.set_defaults(func=provider_command)
 
     restore_parser = provider_sub.add_parser(
         "restore",

@@ -1370,6 +1370,8 @@ pairing stays available for early testing on the same Wi‑Fi.",
         pulse_pref_switch.set_active(load_decision_first_pref());
         pulse_pref_row.add_suffix(&pulse_pref_switch);
         focus_attention_group.add(&pulse_pref_row);
+        // Orphaned vs Mission Deck routing — hide from customer Settings.
+        focus_attention_group.set_visible(false);
         settings.append(&focus_attention_group);
 
         // --- Messaging & research ---
@@ -1427,7 +1429,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
             .build();
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
-            .subtitle("Add peers and ping across machines (moved from Focus).")
+            .subtitle("Reach another Centurion on your network (shared FLEET_AUTH_TOKEN).")
             .icon_name("network-server-symbolic")
             .build();
         let fleet_peer_button = gtk::Button::with_label("Configure");
@@ -1436,7 +1438,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         desk_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
-            .subtitle("Agent plugins on this Brain — manage here, not on Focus.")
+            .subtitle("View only — agent plugins already on this Brain.")
             .icon_name("application-x-addon-symbolic")
             .build();
         let plugins_button = gtk::Button::with_label("View");
@@ -1445,7 +1447,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         desk_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
             .title("Scheduled & board")
-            .subtitle("Cron jobs and kanban glance — desk ops, not Focus pulse.")
+            .subtitle("View only — next cron jobs and board glance.")
             .icon_name("view-list-symbolic")
             .build();
         let ops_button = gtk::Button::with_label("View");
@@ -1454,7 +1456,9 @@ pairing stays available for early testing on the same Wi‑Fi.",
         desk_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
-            .subtitle("Local boards on this Brain — no portal tokens. Focus stays offline.")
+            .subtitle(
+                "Shared work boards on this Brain (and peers you can reach). Cloud Mission Control stays off.",
+            )
             .icon_name("system-users-symbolic")
             .build();
         let collab_connect_button = gtk::Button::with_label("New board");
@@ -1472,10 +1476,10 @@ pairing stays available for early testing on the same Wi‑Fi.",
             .build();
         let skills_row = adw::ActionRow::builder()
             .title("Skills & tools")
-            .subtitle("What this Brain can use (read-only)")
+            .subtitle("Self-built trusted · hub is inspiration only")
             .icon_name("applications-engineering-symbolic")
             .build();
-        let skills_button = gtk::Button::with_label("View");
+        let skills_button = gtk::Button::with_label("Open");
         skills_button.set_valign(gtk::Align::Center);
         skills_row.add_suffix(&skills_button);
         account_group.add(&skills_row);
@@ -1975,7 +1979,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
                 show_firecrawl_key_dialog(&window, &firecrawl_row, &firecrawl_button);
             }
         });
-        let backup_manage_button = gtk::Button::with_label("Details");
+        let backup_manage_button = gtk::Button::with_label("Change");
         backup_manage_button.set_valign(gtk::Align::Center);
         backup_thinking_row.add_suffix(&backup_manage_button);
         backup_manage_button.connect_clicked({
@@ -2095,7 +2099,21 @@ pairing stays available for early testing on the same Wi‑Fi.",
         });
         skills_button.connect_clicked({
             let window = window.clone();
-            move |_| show_skills_tools_dialog(&window)
+            let stack = stack.clone();
+            let chat_handle = chat_handle.clone();
+            move |_| {
+                show_skills_tools_dialog(
+                    &window,
+                    Rc::new({
+                        let stack = stack.clone();
+                        let chat_handle = chat_handle.clone();
+                        move |title: String, detail: String| {
+                            stack.set_visible_child_name("chat");
+                            chat_handle.seed_discuss(&title, &detail);
+                        }
+                    }),
+                )
+            }
         });
         license_button.connect_clicked({
             let window = window.clone();
@@ -5919,61 +5937,121 @@ Messages to this account now route into your Centurion conversation."
     }
 
 
-    fn show_skills_tools_dialog(parent: &adw::ApplicationWindow) {
+    fn show_skills_tools_dialog(
+        parent: &adw::ApplicationWindow,
+        open_chat: Rc<dyn Fn(String, String)>,
+    ) {
         let payload = run_bridge_action("tools_skills_snapshot", serde_json::json!({}));
-        let body = match payload {
+        let (body, hub_blocked) = match payload {
             Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                 let tools = p
                     .get("toolsets")
                     .and_then(|v| v.as_array())
                     .cloned()
                     .unwrap_or_default();
-                let skills = p
-                    .get("skills")
+                let self_built = p
+                    .get("self_built")
                     .and_then(|v| v.as_array())
                     .cloned()
                     .unwrap_or_default();
+                let bundled = p
+                    .get("bundled")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let hub_ref = p
+                    .get("hub_reference")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let allow_hub = p
+                    .pointer("/policy/allow_public_hub")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let mut lines = vec![
-                    "Enabled for this Brain (read-only). Changes take effect next session unless you use CLI --now.".to_owned(),
+                    if allow_hub {
+                        "Policy: public hub installs are allowed on this Brain. Prefer creating local skills when you can."
+                            .to_owned()
+                    } else {
+                        "Policy: only trust skills this Brain built. Public hub installs are blocked — search for inspiration, then ask Centurion to create a fresh local skill."
+                            .to_owned()
+                    },
                     String::new(),
-                    "Toolsets:".to_owned(),
+                    "Self-built (trusted):".to_owned(),
                 ];
-                if tools.is_empty() {
-                    lines.push("• (none listed)".to_owned());
+                if self_built.is_empty() {
+                    lines.push("• (none yet — ask Centurion to create one)".to_owned());
                 } else {
-                    for t in tools.iter().take(40) {
-                        let name = t.as_str().unwrap_or("?");
-                        lines.push(format!("• {name}"));
-                    }
-                }
-                lines.push(String::new());
-                lines.push("Skills:".to_owned());
-                if skills.is_empty() {
-                    lines.push("• (none listed — bundled skills load as needed)".to_owned());
-                } else {
-                    for s in skills.iter().take(40) {
+                    for s in self_built.iter().take(24) {
                         let name = s
-                            .as_str()
-                            .or_else(|| s.get("name").and_then(|v| v.as_str()))
+                            .get("name")
+                            .and_then(|v| v.as_str())
                             .unwrap_or("?");
                         lines.push(format!("• {name}"));
                     }
                 }
-                lines.join("\n")
+                lines.push(String::new());
+                lines.push("Reference only (do not trust — ask Centurion to rewrite locally):".to_owned());
+                let mut ref_count = 0usize;
+                for s in bundled.iter().chain(hub_ref.iter()).take(24) {
+                    let name = s
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
+                    let bucket = s
+                        .get("bucket")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("reference");
+                    lines.push(format!("• {name} ({bucket})"));
+                    ref_count += 1;
+                }
+                if ref_count == 0 {
+                    lines.push("• (none listed — bundled skills may still load as needed)".to_owned());
+                }
+                lines.push(String::new());
+                lines.push("Toolsets:".to_owned());
+                if tools.is_empty() {
+                    lines.push("• (none listed)".to_owned());
+                } else {
+                    for t in tools.iter().take(24) {
+                        let name = t.as_str().unwrap_or("?");
+                        lines.push(format!("• {name}"));
+                    }
+                }
+                (lines.join("\n"), !allow_hub)
             }
-            Some(p) => p
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Could not list skills/tools.")
-                .to_owned(),
-            None => "Could not reach the bridge.".to_owned(),
+            Some(p) => (
+                p.get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Could not list skills/tools.")
+                    .to_owned(),
+                true,
+            ),
+            None => ("Could not reach the bridge.".to_owned(), true),
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Skills & tools")
             .body(&body)
             .close_response("close")
+            .default_response("create")
             .build();
         dialog.add_response("close", "Close");
+        dialog.add_response("create", "Ask Centurion to create a skill…");
+        dialog.set_response_appearance("create", adw::ResponseAppearance::Suggested);
+        let _ = hub_blocked;
+        let open_chat = open_chat.clone();
+        dialog.connect_response(None, move |_d, response| {
+            if response != "create" {
+                return;
+            }
+            let title = "Create a local skill".to_owned();
+            let detail = "Please create a fresh local skill for this Brain using skill_manage \
+(action='create'). Do not install community/public hub skills. I may describe inspiration \
+from elsewhere, but only save a skill this Centurion writes on this machine.\n\n\
+What capability should the skill cover?\n\n"
+                .to_owned();
+            open_chat(title, detail);
+        });
         dialog.present(Some(parent));
     }
 
@@ -6265,7 +6343,10 @@ Messages to this account now route into your Centurion conversation."
                 if peers.is_empty() {
                     peers_box.append(
                         &gtk::Label::builder()
-                            .label("No peers yet — add one below.")
+                            .label(
+                                "No peers yet. Add another Centurion’s reachable address \
+(LAN or public) and the same FLEET_AUTH_TOKEN both sides use.",
+                            )
                             .wrap(true)
                             .xalign(0.0)
                             .css_classes(["dim-label"])
@@ -6371,8 +6452,9 @@ Messages to this account now route into your Centurion conversation."
         let dialog = adw::AlertDialog::builder()
             .heading("Fleet peer")
             .body(
-                "Peers and ping live here (moved off Focus). Add another Centurion’s \
-LAN or public address and the shared fleet token.",
+                "Cross-machine collaboration uses a reachable fleet peer — not portal tokens. \
+Both Brains need the same FLEET_AUTH_TOKEN and an address you can reach \
+(http://host:8642). Ping after saving to confirm.",
             )
             .extra_child(&form)
             .close_response("cancel")
@@ -6554,58 +6636,288 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
     }
 
     fn show_backup_thinking_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
-        let body = match run_support_command(&["backups"]) {
-            Some(response) => {
-                let backups = response
-                    .result
-                    .as_ref()
-                    .and_then(|result| result.get("backups"))
+        show_backup_thinking_dialog_inner(parent, row, None);
+    }
+
+    fn show_backup_thinking_dialog_inner(
+        parent: &adw::ApplicationWindow,
+        row: &adw::ActionRow,
+        initial_error: Option<String>,
+    ) {
+        let connectors_raw = run_provider_command(&["catalog"]);
+        let connectors: Vec<ThinkingConnectorOption> = connectors_raw
+            .and_then(|response| response.catalog)
+            .and_then(|catalog| {
+                catalog
+                    .get("text_models")
                     .and_then(|value| value.as_array())
                     .cloned()
-                    .unwrap_or_default();
-                if backups.is_empty() {
-                    "No backup thinking services are configured yet.\n\n\
-                     Backups come from your fallback thinking chain in Centurion config. \
-                     Set a primary service under How your Centurion thinks → Change, then ask your \
-                     advisor to add fallbacks if you want automatic failover."
-                        .to_owned()
-                } else {
-                    let mut lines = vec![
-                        "These services stand by if your primary thinking service is unavailable:"
-                            .to_owned(),
-                        String::new(),
-                    ];
-                    for entry in &backups {
-                        let label = entry
-                            .get("label")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("Backup");
-                        let provider = entry
-                            .get("provider")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("?");
-                        let model = entry.get("model").and_then(|v| v.as_str()).unwrap_or("?");
-                        lines.push(format!("• {label} ({provider} / {model})"));
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| {
+                let id = entry.get("id")?.as_str()?.to_owned();
+                let display_name = entry
+                    .get("display_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(id.as_str())
+                    .to_owned();
+                let needs_key = entry
+                    .get("needs_key")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let best_for = entry
+                    .get("best_for")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned();
+                Some(ThinkingConnectorOption {
+                    id,
+                    display_name,
+                    needs_key,
+                    best_for,
+                })
+            })
+            .collect();
+
+        if connectors.is_empty() {
+            let dialog = adw::AlertDialog::builder()
+                .heading("Backup Thinking")
+                .body(
+                    "Could not load the curated thinking-service catalog. Is Centurion AI OS installed?",
+                )
+                .close_response("ok")
+                .build();
+            dialog.add_response("ok", "OK");
+            dialog.present(Some(parent));
+            return;
+        }
+
+        let labels: Vec<&str> = connectors
+            .iter()
+            .map(|connector| connector.display_name.as_str())
+            .collect();
+        let service_drop = gtk::DropDown::from_strings(&labels);
+        let mut initial = 0_u32;
+        for (index, connector) in connectors.iter().enumerate() {
+            if !connector.needs_key {
+                initial = index as u32;
+                break;
+            }
+        }
+        service_drop.set_selected(initial);
+
+        let slot_drop = gtk::DropDown::from_strings(&["Backup #1", "Backup #2"]);
+        slot_drop.set_selected(0);
+
+        let hint = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["dim-label"])
+            .build();
+        let key_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("Access code from your thinking-service account")
+            .show_peek_icon(true)
+            .build();
+        let key_label = gtk::Label::builder()
+            .label("Access code")
+            .xalign(0.0)
+            .build();
+
+        let update_hint = {
+            let hint = hint.clone();
+            let key_entry = key_entry.clone();
+            let connectors = connectors.clone();
+            Rc::new(move |selected: u32| {
+                let Some(connector) = connectors.get(selected as usize) else {
+                    return;
+                };
+                if connector.needs_key {
+                    key_entry.set_placeholder_text(Some(
+                        "Access code from your thinking-service account",
+                    ));
+                    if connector.best_for.is_empty() {
+                        hint.set_label(
+                            "This backup needs an access code saved on this brain.",
+                        );
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — paste the access code below (saved only on this brain).",
+                            connector.best_for
+                        ));
                     }
-                    lines.join("\n")
+                } else {
+                    key_entry.set_placeholder_text(Some(
+                        "Optional — paste a new access code to update",
+                    ));
+                    if connector.best_for.is_empty() {
+                        hint.set_label("Access code already saved on this brain.");
+                    } else {
+                        hint.set_label(&format!(
+                            "{} — access code already on this brain.",
+                            connector.best_for
+                        ));
+                    }
+                }
+            })
+        };
+        update_hint(initial);
+        service_drop.connect_selected_notify({
+            let update_hint = Rc::clone(&update_hint);
+            move |dropdown| update_hint(dropdown.selected())
+        });
+
+        let current_subtitle = backup_thinking_subtitle();
+        let dialog = adw::AlertDialog::builder()
+            .heading("Backup Thinking")
+            .body(&format!(
+                "If your primary thinking service goes offline, Chat keeps working on a backup \
+so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
+            ))
+            .close_response("cancel")
+            .default_response("apply")
+            .build();
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("clear", "Clear slot");
+        dialog.add_response("apply", "Set backup");
+        dialog.set_response_appearance("apply", adw::ResponseAppearance::Suggested);
+        dialog.set_response_appearance("clear", adw::ResponseAppearance::Destructive);
+
+        let extra = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let error_label = gtk::Label::builder()
+            .label(initial_error.as_deref().unwrap_or(""))
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["error"])
+            .visible(initial_error.is_some())
+            .build();
+        extra.append(&gtk::Label::builder().label("Slot").xalign(0.0).build());
+        extra.append(&slot_drop);
+        extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
+        extra.append(&service_drop);
+        extra.append(&hint);
+        extra.append(&key_label);
+        extra.append(&key_entry);
+        extra.append(&error_label);
+        dialog.set_extra_child(Some(&extra));
+        dialog.present(Some(parent));
+
+        let row = row.clone();
+        let parent = parent.clone();
+        dialog.connect_response(None, move |dialog, response| {
+            if response == "cancel" {
+                dialog.close();
+                return;
+            }
+
+            let reopen_with_error = {
+                let parent = parent.clone();
+                let row = row.clone();
+                move |message: String| {
+                    glib::idle_add_local_once(move || {
+                        show_backup_thinking_dialog_inner(&parent, &row, Some(message));
+                    });
+                }
+            };
+
+            let slot = (slot_drop.selected() as u32) + 1;
+            let slot_str = slot.to_string();
+
+            if response == "clear" {
+                match run_provider_command(&["remove-backup", "--slot", &slot_str]) {
+                    Some(clear_response) if clear_response.ok => {
+                        refresh_backup_thinking_services(&row);
+                        dialog.close();
+                    }
+                    Some(clear_response) => {
+                        let message = clear_response
+                            .message
+                            .unwrap_or_else(|| "Could not clear backup slot.".to_owned());
+                        dialog.close();
+                        reopen_with_error(message);
+                    }
+                    None => {
+                        dialog.close();
+                        reopen_with_error("Could not clear backup slot.".to_owned());
+                    }
+                }
+                return;
+            }
+
+            if response != "apply" {
+                dialog.close();
+                return;
+            }
+
+            let selected = service_drop.selected() as usize;
+            let Some(connector) = connectors.get(selected) else {
+                dialog.close();
+                reopen_with_error("Pick a thinking service.".to_owned());
+                return;
+            };
+            let access_code = key_entry.text().to_string();
+            if connector.needs_key && access_code.trim().is_empty() {
+                dialog.close();
+                reopen_with_error("Access code is required for this thinking service.".to_owned());
+                return;
+            }
+            if !access_code.trim().is_empty() {
+                match run_provider_save_key(&connector.id, access_code.trim()) {
+                    Some(save_response) if save_response.ok => {}
+                    Some(save_response) => {
+                        let message = save_response
+                            .message
+                            .unwrap_or_else(|| "Could not save access code.".to_owned());
+                        dialog.close();
+                        reopen_with_error(message);
+                        return;
+                    }
+                    None => {
+                        dialog.close();
+                        reopen_with_error("Could not save access code.".to_owned());
+                        return;
+                    }
                 }
             }
-            None => "Could not read backup thinking services. Is Centurion AI OS installed?"
-                .to_owned(),
-        };
-        let dialog = adw::AlertDialog::builder()
-            .heading("Backup Thinking Services")
-            .body(&body)
-            .close_response("close")
-            .build();
-        dialog.add_response("close", "Close");
-        dialog.set_default_response(Some("close"));
-        let row = row.clone();
-        dialog.connect_response(None, move |dialog, _| {
-            refresh_backup_thinking_services(&row);
-            dialog.close();
+
+            let apply_args = [
+                "apply-connector",
+                connector.id.as_str(),
+                "--as-backup",
+                "--slot",
+                slot_str.as_str(),
+            ];
+            if let Some(apply_response) = run_provider_command(&apply_args) {
+                let message = apply_response
+                    .message
+                    .or_else(|| {
+                        apply_response.result.and_then(|value| {
+                            value
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .map(str::to_owned)
+                        })
+                    })
+                    .unwrap_or_else(|| {
+                        if apply_response.ok {
+                            format!("Backup #{slot} updated.")
+                        } else {
+                            "Could not set backup thinking service.".to_owned()
+                        }
+                    });
+                if apply_response.ok {
+                    row.set_subtitle(&message);
+                    refresh_backup_thinking_services(&row);
+                    dialog.close();
+                } else {
+                    dialog.close();
+                    reopen_with_error(message);
+                }
+            } else {
+                dialog.close();
+                reopen_with_error("Could not set backup thinking service.".to_owned());
+            }
         });
-        dialog.present(Some(parent));
     }
 
     fn show_change_thinking_dialog(

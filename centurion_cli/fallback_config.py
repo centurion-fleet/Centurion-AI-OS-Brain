@@ -70,3 +70,73 @@ def get_fallback_chain(config: dict[str, Any] | None) -> list[dict[str, Any]]:
             chain.append(entry)
 
     return chain
+
+
+def set_fallback_chain(config: dict[str, Any], chain: list[dict[str, Any]]) -> None:
+    """Persist ``fallback_providers`` and drop the legacy ``fallback_model`` key.
+
+    Mutates ``config`` in place. Caller is responsible for ``save_config``.
+    """
+    cleaned: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for entry in _iter_fallback_entries(chain):
+        identity = _entry_identity(entry)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        cleaned.append(dict(entry))
+    config["fallback_providers"] = cleaned
+    config.pop("fallback_model", None)
+
+
+def upsert_fallback_entry(
+    config: dict[str, Any],
+    entry: dict[str, Any],
+    *,
+    slot: int | None = None,
+) -> list[dict[str, Any]]:
+    """Insert or replace a fallback entry.
+
+    ``slot`` is 1-based (Backup #1 / #2). When ``None``, append if not already
+    present. Returns the updated chain (also written into ``config``).
+    """
+    chain = get_fallback_chain(config)
+    normalized_list = _iter_fallback_entries([entry])
+    if not normalized_list:
+        raise ValueError("Fallback entry requires provider and model.")
+    new_entry = dict(normalized_list[0])
+    new_id = _entry_identity(new_entry)
+
+    if slot is not None:
+        if slot < 1:
+            raise ValueError("Backup slot must be 1 or greater.")
+        index = slot - 1
+        # Drop any existing duplicate of this route first.
+        chain = [e for e in chain if _entry_identity(e) != new_id]
+        if index >= len(chain):
+            chain.append(new_entry)
+        else:
+            chain[index] = new_entry
+    else:
+        for existing in chain:
+            if _entry_identity(existing) == new_id:
+                set_fallback_chain(config, chain)
+                return get_fallback_chain(config)
+        chain.append(new_entry)
+
+    set_fallback_chain(config, chain)
+    return get_fallback_chain(config)
+
+
+def remove_fallback_slot(config: dict[str, Any], slot: int) -> list[dict[str, Any]]:
+    """Remove the 1-based backup slot from the chain. Returns the updated chain."""
+    if slot < 1:
+        raise ValueError("Backup slot must be 1 or greater.")
+    chain = get_fallback_chain(config)
+    index = slot - 1
+    if index >= len(chain):
+        set_fallback_chain(config, chain)
+        return chain
+    del chain[index]
+    set_fallback_chain(config, chain)
+    return get_fallback_chain(config)

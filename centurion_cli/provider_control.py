@@ -932,6 +932,151 @@ def save_remote_api_key(connector_id: str, key: str) -> dict[str, Any]:
     }
 
 
+def _primary_identity(config: dict[str, Any]) -> tuple[str, str, str]:
+    model_cfg = config.get("model") if isinstance(config.get("model"), dict) else {}
+    provider = str(model_cfg.get("provider") or "").strip().lower()
+    model = str(model_cfg.get("default") or model_cfg.get("model") or "").strip().lower()
+    base = str(model_cfg.get("base_url") or "").strip().rstrip("/").lower()
+    return provider, model, base
+
+
+def apply_remote_backup(
+    connector_id: str,
+    *,
+    slot: int = 1,
+    probe: bool = False,
+) -> ApplyResult:
+    """Apply a curated connector as Backup Thinking slot #N (1-based).
+
+    Writes ``fallback_providers`` only — does not change the primary model or
+    last-known-good snapshot. Optional probe verifies the connector responds.
+    """
+    from centurion_cli.config import load_config, save_config
+    from centurion_cli.fallback_config import get_fallback_chain, upsert_fallback_entry
+    from centurion_cli.remote_model_catalog import get_connector, is_openrouter_blocked
+
+    connector = get_connector(connector_id)
+    if connector is None:
+        return ApplyResult(
+            ok=False,
+            message="Unknown thinking service.",
+            code=LLM_CONFIG_INVALID,
+        )
+    if connector.category != "text":
+        return ApplyResult(
+            ok=False,
+            message="Backup Thinking only accepts text thinking services.",
+            code=LLM_CONFIG_INVALID,
+        )
+    if is_openrouter_blocked(connector.provider):
+        from centurion_cli.openrouter_retired import retired_provider_message
+
+        return ApplyResult(
+            ok=False,
+            message=retired_provider_message(remote=True),
+            code=LLM_CONFIG_INVALID,
+        )
+    if slot < 1 or slot > 8:
+        return ApplyResult(
+            ok=False,
+            message="Backup slot must be between 1 and 8.",
+            code=LLM_CONFIG_INVALID,
+        )
+
+    entry: dict[str, Any] = {
+        "provider": connector.provider,
+        "model": connector.model,
+    }
+    if connector.base_url:
+        entry["base_url"] = connector.base_url
+
+    cfg = load_config()
+    primary = _primary_identity(cfg)
+    candidate = (
+        connector.provider.strip().lower(),
+        connector.model.strip().lower(),
+        (connector.base_url or "").strip().rstrip("/").lower(),
+    )
+    if primary[0] and primary[1] and primary[0] == candidate[0] and primary[1] == candidate[1]:
+        return ApplyResult(
+            ok=False,
+            message=(
+                f"{connector.display_name} is already your primary Thinking service. "
+                "Pick a different connector for Backup Thinking."
+            ),
+            code=LLM_CONFIG_INVALID,
+            provider=connector.provider,
+            model=connector.model,
+        )
+
+    if probe:
+        ok, message, _latency = probe_provider(
+            provider=connector.provider,
+            model=connector.model,
+            base_url=connector.base_url or None,
+        )
+        if not ok:
+            return ApplyResult(
+                ok=False,
+                message=message or "Backup Thinking probe failed.",
+                code=LLM_UNAVAILABLE,
+                provider=connector.provider,
+                model=connector.model,
+            )
+
+    try:
+        chain = upsert_fallback_entry(cfg, entry, slot=slot)
+    except ValueError as exc:
+        return ApplyResult(
+            ok=False,
+            message=str(exc),
+            code=LLM_CONFIG_INVALID,
+            provider=connector.provider,
+            model=connector.model,
+        )
+    save_config(cfg)
+    return ApplyResult(
+        ok=True,
+        provider=connector.provider,
+        model=connector.model,
+        message=(
+            f"Backup #{slot} set to {connector.display_name}. "
+            f"Failover chain has {len(chain)} "
+            f"{'entry' if len(chain) == 1 else 'entries'}."
+        ),
+    )
+
+
+def remove_remote_backup(*, slot: int = 1) -> ApplyResult:
+    """Clear Backup Thinking slot #N (1-based) from ``fallback_providers``."""
+    from centurion_cli.config import load_config, save_config
+    from centurion_cli.fallback_config import get_fallback_chain, remove_fallback_slot
+
+    if slot < 1 or slot > 8:
+        return ApplyResult(
+            ok=False,
+            message="Backup slot must be between 1 and 8.",
+            code=LLM_CONFIG_INVALID,
+        )
+    cfg = load_config()
+    before = get_fallback_chain(cfg)
+    if slot > len(before):
+        return ApplyResult(
+            ok=True,
+            message=f"Backup #{slot} was already empty.",
+        )
+    removed = before[slot - 1]
+    chain = remove_fallback_slot(cfg, slot)
+    save_config(cfg)
+    label = f"{removed.get('model')} via {removed.get('provider')}"
+    return ApplyResult(
+        ok=True,
+        provider=str(removed.get("provider") or ""),
+        model=str(removed.get("model") or ""),
+        message=f"Removed Backup #{slot} ({label}). Chain now has {len(chain)} entries.",
+    )
+
+
 def get_routing_mode() -> str:
     from centurion_cli.config import load_config
 

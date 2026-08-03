@@ -4532,25 +4532,62 @@ def _handle_plugin_list(request_id: str) -> dict[str, Any]:
 
 
 def _handle_tools_skills_snapshot(request_id: str) -> dict[str, Any]:
-    """Read-only toolsets + skill names for Brain Settings."""
+    """Read-only toolsets + skill provenance buckets for Brain Settings."""
     try:
         from centurion_cli.config import load_config
         from centurion_cli.tools_config import _get_platform_tools
 
         cfg = load_config()
         toolsets = sorted(_get_platform_tools(cfg, "remote") or _get_platform_tools(cfg, "cli") or [])
+        skills_cfg = cfg.get("skills") if isinstance(cfg, dict) else {}
+        if not isinstance(skills_cfg, dict):
+            skills_cfg = {}
+        allow_public_hub = bool(skills_cfg.get("allow_public_hub", False))
+        guard_agent_created = bool(skills_cfg.get("guard_agent_created", False))
+
         skills: list[str] = []
+        self_built: list[dict[str, Any]] = []
+        bundled: list[dict[str, Any]] = []
+        hub_reference: list[dict[str, Any]] = []
         try:
             from pathlib import Path
 
             from centurion_constants import get_centurion_home
+            from tools.skill_usage import (
+                _read_bundled_manifest_names,
+                _read_hub_installed_names,
+                is_agent_created,
+            )
 
+            bundled_names = _read_bundled_manifest_names()
+            hub_names = _read_hub_installed_names()
             skills_root = get_centurion_home() / "skills"
+            seen: set[str] = set()
             if skills_root.is_dir():
                 for path in sorted(skills_root.rglob("SKILL.md")):
+                    # Skip hub/archive internals.
+                    parts = set(path.parts)
+                    if ".hub" in parts or ".archive" in parts or ".curator_backups" in parts:
+                        continue
                     name = path.parent.name
-                    if name and name not in skills:
-                        skills.append(name)
+                    if not name or name in seen:
+                        continue
+                    seen.add(name)
+                    skills.append(name)
+                    entry = {"name": name, "path": str(path.parent)}
+                    if name in hub_names:
+                        entry["bucket"] = "hub_reference"
+                        entry["trusted"] = False
+                        hub_reference.append(entry)
+                    elif name in bundled_names:
+                        entry["bucket"] = "bundled"
+                        entry["trusted"] = False
+                        bundled.append(entry)
+                    else:
+                        entry["bucket"] = "self_built"
+                        entry["trusted"] = True
+                        entry["agent_created"] = bool(is_agent_created(name))
+                        self_built.append(entry)
         except Exception:
             logger.debug("tools_skills_snapshot: skill scan failed", exc_info=True)
         return {
@@ -4559,7 +4596,18 @@ def _handle_tools_skills_snapshot(request_id: str) -> dict[str, Any]:
             "action": "tools_skills_snapshot",
             "toolsets": toolsets,
             "skills": skills,
-            "message": "Manage via centurion tools / skills (next session unless --now).",
+            "self_built": self_built,
+            "bundled": bundled,
+            "hub_reference": hub_reference,
+            "policy": {
+                "allow_public_hub": allow_public_hub,
+                "guard_agent_created": guard_agent_created,
+                "trust_model": "self_built_only",
+            },
+            "message": (
+                "Only self-built skills are trusted. Hub/bundled are reference only — "
+                "ask Centurion to create a local skill when you need a capability."
+            ),
         }
     except Exception as exc:
         return _error_response(request_id, action="tools_skills_snapshot", exc=exc)

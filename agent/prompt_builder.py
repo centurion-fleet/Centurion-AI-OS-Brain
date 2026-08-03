@@ -391,7 +391,10 @@ SKILLS_GUIDANCE = (
     "skill with skill_manage so you can reuse it next time.\n"
     "When using a skill and finding it outdated, incomplete, or wrong, "
     "patch it immediately with skill_manage(action='patch') — don't wait to be asked. "
-    "Skills that aren't maintained become liabilities."
+    "Skills that aren't maintained become liabilities.\n"
+    "Prefer creating a fresh local skill with skill_manage(action='create') over "
+    "installing community/public hub skills. Hub content may inspire wording, but "
+    "only skills this Brain builds locally are trusted."
 )
 
 LIFE_MISSIONS_GUIDANCE = (

@@ -21,7 +21,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Dict, List, Optional
 
-from centurion_cli.fallback_config import get_fallback_chain
+from centurion_cli.fallback_config import get_fallback_chain, set_fallback_chain
 
 
 # ---------------------------------------------------------------------------
@@ -41,10 +41,7 @@ def _read_chain(config: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _write_chain(config: Dict[str, Any], chain: List[Dict[str, Any]]) -> None:
     """Persist the chain to ``fallback_providers`` and clear legacy key."""
-    config["fallback_providers"] = chain
-    # Drop the legacy single-dict key on write so there's only one source of truth.
-    if "fallback_model" in config:
-        config.pop("fallback_model", None)
+    set_fallback_chain(config, chain)
 
 
 def _format_entry(entry: Dict[str, Any]) -> str:
