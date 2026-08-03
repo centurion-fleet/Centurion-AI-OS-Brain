@@ -210,6 +210,10 @@ tar -C "${STAGE}" -czf "${RPMBUILD}/SOURCES/centurion-brain-${RPM_VERSION}.tar.g
 cat > "${RPMBUILD}/SPECS/centurion-brain.spec" <<EOF
 %global debug_package %{nil}
 %global __os_install_post %{nil}
+# Bundled tree includes scripts/docs that mention container paths (e.g.
+# /command/with-contenv). Do not auto-scan those into Fedora Requires.
+AutoReq:        no
+AutoProv:       no
 
 Name:           centurion-brain
 Version:        ${RPM_VERSION}

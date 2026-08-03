@@ -29,14 +29,17 @@ tar -C "${ROOT}" \
   --exclude='desktop-native/dist' \
   --exclude='desktop-native/ci-artifact' \
   --exclude='ui-tui/node_modules' \
-  --exclude='website/node_modules' \
-  --exclude='website/build' \
+  --exclude='website' \
+  --exclude='docs' \
+  --exclude='docker' \
+  --exclude='tests' \
+  --exclude='ios' \
+  --exclude='android' \
+  --exclude='desktop' \
   --exclude='build' \
   --exclude='.pytest_cache' \
   --exclude='.mypy_cache' \
   --exclude='__pycache__' \
-  --exclude='ios' \
-  --exclude='android' \
   --exclude='desktop/src-tauri/target' \
   --exclude='*.pyc' \
   -cf - . | tar -C "${REPO_DST}" -xf -
