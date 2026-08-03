@@ -49,11 +49,14 @@ tar -C "${ROOT}" \
 echo "Creating venv at ${VENV_DST}…"
 python3 -m venv "${VENV_DST}"
 "${VENV_DST}/bin/pip" install --upgrade pip wheel setuptools
-# Core deps only (pyproject dependencies) — optional extras stay lazy.
-"${VENV_DST}/bin/pip" install --no-cache-dir "${REPO_DST}"
+# Core + Brain-critical extras. System venv is root-owned after RPM install,
+# so lazy pip install at runtime fails for customers — preinstall here.
+"${VENV_DST}/bin/pip" install --no-cache-dir \
+  "${REPO_DST}[anthropic,edge-tts,firecrawl]"
 
 echo "Verifying bundled import…"
-"${VENV_DST}/bin/python" -c "import centurion_cli.remote_bridge; import run_agent"
+"${VENV_DST}/bin/python" -c \
+  "import centurion_cli.remote_bridge; import run_agent; import anthropic"
 
 # Relocate shebangs from the staging path to the final system path.
 echo "Rewriting venv shebangs → ${FINAL_VENV}/bin/python"

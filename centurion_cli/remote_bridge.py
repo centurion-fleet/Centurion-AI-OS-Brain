@@ -288,6 +288,15 @@ def _handle_chat(
             "retryable": False,
         }
 
+    # Settings may have written ~/.centurion/.env after this bridge warmed —
+    # reload so Claude/OpenAI keys apply without restarting Brain.
+    try:
+        from centurion_cli.env_loader import load_centurion_dotenv
+
+        load_centurion_dotenv()
+    except Exception:
+        pass
+
     # Product license gate — same rules as CLI/gateway (session boundary).
     try:
         from centurion.license.enforcement import (

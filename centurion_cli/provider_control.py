@@ -290,6 +290,8 @@ def probe_provider(
             if key:
                 headers[header_name] = str(key)
                 headers.pop("Authorization", None)
+            # Anthropic Messages API requires this header (doctor / catalog probes set it).
+            headers.setdefault("anthropic-version", "2023-06-01")
             resp = httpx.post(url, headers=headers, json=body, timeout=timeout)
         else:
             url = f"{effective_base}/chat/completions"
