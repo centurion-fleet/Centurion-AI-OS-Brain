@@ -299,7 +299,7 @@ mod linux {
             load_brand_css();
             // Match .desktop Icon= / AppStream id so the dash and window
             // chrome use the Brain mark (not the generic missing-icon cog).
-            gtk::Window::set_default_icon_name(Some(APP_ID));
+            gtk::Window::set_default_icon_name(APP_ID);
         });
         application.connect_activate(move |application| {
             build_window(application, supervisor.clone());
