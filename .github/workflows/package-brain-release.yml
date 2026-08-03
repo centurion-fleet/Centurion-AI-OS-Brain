@@ -11,6 +11,8 @@ on:
       - "desktop-native/scripts/customer-install.sh"
       - "desktop-native/scripts/brain-launcher.sh"
       - "desktop-native/centurion-install-brain/**"
+      - "desktop-native/centurion-desktop/**"
+      - "desktop-native/resources/**"
       - "desktop-native/Cargo.toml"
       - "centurion_cli/__init__.py"
       - ".github/workflows/package-brain-release.yml"
