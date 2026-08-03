@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Staff-only: build a Smooth Transfer customer archive for Admin → Releases.
-# Ships Sovereign AI Brain (centurion-desktop) only — not centurion-remote.
-# No mission-deck bundle (avoids AppleDouble junk from Mac copies).
+# Ships Sovereign AI Brain (centurion-desktop) plus the optional iPhone pairing
+# helper (centurion-remote). No mission-deck bundle (avoids AppleDouble junk).
 # Run on a private Linux build host after binaries exist (install-user.sh or cargo).
 set -euo pipefail
 
@@ -69,6 +69,10 @@ find_bin() {
 
 DESKTOP_BIN="$(find_bin centurion-desktop)" \
   || { echo "ERROR: centurion-desktop not found. Run desktop-native/scripts/install-user.sh first." >&2; exit 1; }
+REMOTE_BIN="$(find_bin centurion-remote)" \
+  || { echo "ERROR: centurion-remote not found. Build with: cargo build --release -p centurion-remote" >&2; exit 1; }
+INSTALLER_BIN="$(find_bin centurion-install-brain)" \
+  || { echo "ERROR: centurion-install-brain not found. Build with: cargo build --release -p centurion-install-brain" >&2; exit 1; }
 
 CARGO_VERSION="$(
   awk '
@@ -93,25 +97,31 @@ if [[ "${EMBED_HITS}" -lt 1 ]]; then
 fi
 echo "  version guard: ${DESKTOP_BIN} embeds ${VERSION} ✓"
 
-echo "Packaging Smooth Transfer release ${VERSION} (${ARCH}) — desktop only, no mission-deck"
-echo "  desktop: ${DESKTOP_BIN}"
+echo "Packaging Smooth Transfer release ${VERSION} (${ARCH}) — desktop + remote helper, no mission-deck"
+echo "  desktop:   ${DESKTOP_BIN}"
+echo "  remote:    ${REMOTE_BIN}"
+echo "  installer: ${INSTALLER_BIN}"
 
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}/${ARCHIVE_NAME}/bin" "${STAGE}/${ARCHIVE_NAME}/icons"
 
 install -m 0755 "${DESKTOP_BIN}" "${STAGE}/${ARCHIVE_NAME}/bin/centurion-desktop"
+install -m 0755 "${REMOTE_BIN}" "${STAGE}/${ARCHIVE_NAME}/bin/centurion-remote"
 install -m 0755 "${SCRIPTS}/customer-install.sh" "${STAGE}/${ARCHIVE_NAME}/install.sh"
+# Real ELF at archive root — .desktop files open as text in modern GNOME/Nautilus.
+install -m 0755 "${INSTALLER_BIN}" "${STAGE}/${ARCHIVE_NAME}/Install-Brain"
 printf '%s\n' "${VERSION}" > "${STAGE}/${ARCHIVE_NAME}/VERSION"
 
-# Double-click installer (opens a terminal so errors are visible).
-cat > "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop" <<EOF
+# Optional for DEs that still honor Allow Launching (often opens as text on GNOME).
+# Prefer the GUI binary Install-Brain.
+cat > "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=Install Sovereign AI Brain
-Comment=Install Brain and keep your Centurion data
-Exec=bash -c 'cd "\$(dirname "\$(readlink -f "%k" 2>/dev/null || echo %k)")" && chmod +x ./install.sh && ./install.sh; echo; read -r -p "Press Enter to close… " _'
-Terminal=true
-Icon=com.centurion.desktop
+Comment=If this opens as text, double-click Install-Brain instead
+Exec=bash -c 'HERE="$(dirname "$(readlink -f "%k" 2>/dev/null || echo %k)")"; cd "$HERE" && ./Install-Brain'
+Terminal=false
+Icon=application-x-executable
 Categories=Utility;
 EOF
 chmod 0755 "${STAGE}/${ARCHIVE_NAME}/Install Brain.desktop"
@@ -137,22 +147,20 @@ fi
 cat > "${STAGE}/${ARCHIVE_NAME}/README.txt" <<EOF
 Centurion AI OS Brain — Smooth Transfer (${VERSION})
 
-For existing Centurion users (your ~/.centurion data stays on this machine).
+For existing Centurion users on Fedora (your ~/.centurion data stays).
 
-This archive contains Sovereign AI Brain (desktop) only.
+1. Extract this archive and open the folder.
+2. Double-click Install-Brain.
+   If asked Run / Execute / “Trust and Launch”, choose that.
+3. Wait for the install window to finish (no Terminal needed).
+4. Open “Sovereign AI Brain” from Applications (pin that — not Downloads).
 
-1. Extract this archive and keep the folder.
-2. Double-click "Install Brain", OR open a Terminal in this folder and run:
-     chmod +x install.sh
-     ./install.sh
-3. Quit any old Brain / "Sovereign AI Remote" windows.
-4. Open "Sovereign AI Brain" from your app menu (pin that — not Downloads).
-5. You should see Transfer complete — Soul, chats, and settings are kept.
+Do NOT open bin/centurion-desktop from Downloads — that skips install.
 
-Do NOT only double-click bin/centurion-desktop — that skips install and leaves the old dock app.
+If double-click does nothing, right-click Install-Brain → Run as Program.
+Advanced: ./Install-Brain   or   ./install.sh
 
-If install.sh says Centurion core was not found, contact your advisor.
-Updates: download the next Linux archive from Account → Get Brain, then run install again.
+If install says Centurion core was not found, contact your advisor.
 EOF
 
 # Exclude AppleDouble / junk even if something slips into stage later.
@@ -177,8 +185,20 @@ if tar -tzf "${OUT_TGZ}" | grep -E '(^|/)\._|/__MACOSX/' >/dev/null 2>&1; then
   echo "ERROR: archive still contains AppleDouble/__MACOSX junk." >&2
   exit 1
 fi
-if tar -tzf "${OUT_TGZ}" | grep -E 'centurion-remote|mission-deck' >/dev/null 2>&1; then
-  echo "ERROR: archive must be desktop-only (no centurion-remote / mission-deck)." >&2
+if tar -tzf "${OUT_TGZ}" | grep -E 'mission-deck' >/dev/null 2>&1; then
+  echo "ERROR: archive must not include mission-deck." >&2
+  exit 1
+fi
+if ! tar -tzf "${OUT_TGZ}" | grep -E 'bin/centurion-desktop$' >/dev/null 2>&1; then
+  echo "ERROR: archive missing bin/centurion-desktop." >&2
+  exit 1
+fi
+if ! tar -tzf "${OUT_TGZ}" | grep -E 'bin/centurion-remote$' >/dev/null 2>&1; then
+  echo "ERROR: archive missing bin/centurion-remote." >&2
+  exit 1
+fi
+if ! tar -tzf "${OUT_TGZ}" | grep -E '/Install-Brain$' >/dev/null 2>&1; then
+  echo "ERROR: archive missing Install-Brain launcher." >&2
   exit 1
 fi
 
@@ -187,4 +207,6 @@ echo
 echo "Wrote: ${OUT_TGZ} (${SIZE} bytes)"
 [[ -f "${OUT_TGZ}.sha256" ]] && echo "SHA256: $(cat "${OUT_TGZ}.sha256")"
 echo
-echo "Next: Admin → Releases → publish this tarball, then customers use Account → Get Brain → Linux."
+echo "Next: prefer Admin → Releases → publish the .rpm from package-brain-rpm.sh"
+echo "  (Fedora Software path). Keep the .tar.gz as staff/fallback only."
+echo "Customers: Account → Get Brain → Download for Fedora."

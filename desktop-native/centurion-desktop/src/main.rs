@@ -257,11 +257,12 @@ mod linux {
                 }
             }
 
-            let centurion_remote = std::env::var("HOME")
-                .ok()
-                .map(|home| format!("{home}/.local/bin/centurion-remote"))
-                .filter(|path| std::path::Path::new(path).is_file())
-                .unwrap_or_else(|| "centurion-remote".to_owned());
+            // iPhone pairing helper — optional. Brain Chat / Thinking use the
+            // Python bridge + `centurion` CLI, not this binary. Get Brain used
+            // to omit it; never fail the whole desk with ENOENT (os error 2).
+            let Some(centurion_remote) = centurion_remote_bin() else {
+                return Ok(());
+            };
 
             let child = Command::new(&centurion_remote)
                 .arg("serve")
@@ -273,7 +274,9 @@ mod linux {
                     crate::chat_page::resolve_centurion_home(),
                 )
                 .spawn()
-                .map_err(|error| format!("Could not start your Centurion: {error}"))?;
+                .map_err(|error| {
+                    format!("Could not start the iPhone pairing helper: {error}")
+                })?;
             self.child = Some(child);
             Ok(())
         }
@@ -332,9 +335,10 @@ mod linux {
 
     /// True when at least one iPhone is approved or waiting for approval.
     fn any_iphones_linked() -> bool {
-        let output = Command::new(centurion_remote_bin())
-            .args(["devices", "--json"])
-            .output();
+        let Some(bin) = centurion_remote_bin() else {
+            return false;
+        };
+        let output = Command::new(bin).args(["devices", "--json"]).output();
         let listing = output
             .ok()
             .filter(|output| output.status.success())
@@ -460,12 +464,28 @@ mod linux {
         row
     }
 
-    fn centurion_remote_bin() -> String {
-        std::env::var("HOME")
-            .ok()
-            .map(|home| format!("{home}/.local/bin/centurion-remote"))
-            .filter(|path| PathBuf::from(path).is_file())
-            .unwrap_or_else(|| "centurion-remote".to_owned())
+    /// Path to the optional iPhone pairing helper. `None` when not installed —
+    /// common for early Get Brain desktop-only packages. Never invent a bare
+    /// `"centurion-remote"` name that fails spawn with ENOENT.
+    fn centurion_remote_bin() -> Option<String> {
+        if let Ok(home) = std::env::var("HOME") {
+            let path = format!("{home}/.local/bin/centurion-remote");
+            if PathBuf::from(&path).is_file() {
+                return Some(path);
+            }
+        }
+        which_on_path("centurion-remote").map(|p| p.to_string_lossy().into_owned())
+    }
+
+    fn which_on_path(name: &str) -> Option<PathBuf> {
+        let path = std::env::var_os("PATH")?;
+        for dir in std::env::split_paths(&path) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        None
     }
 
     #[derive(Debug, Clone)]
@@ -489,8 +509,11 @@ mod linux {
         // Unbox QR always embeds the LAN address so the phone pairs on Wi‑Fi
         // without depending on a tunnel hostname.
         let host = resolve_lan_pairing_host();
+        let bin = centurion_remote_bin().ok_or_else(|| {
+            "iPhone pairing helper is not installed yet. Re-run Install Brain from your Get Brain download, then try again.".to_owned()
+        })?;
 
-        let output = Command::new(centurion_remote_bin())
+        let output = Command::new(bin)
             .args(["remote-pair", "--host", &host, "--json", "--include-qr"])
             .output()
             .map_err(|error| format!("Could not run centurion-remote: {error}"))?;
@@ -532,9 +555,10 @@ mod linux {
         if id.is_empty() {
             return;
         }
-        let _ = Command::new(centurion_remote_bin())
-            .args(["remote-revoke", id])
-            .output();
+        let Some(bin) = centurion_remote_bin() else {
+            return;
+        };
+        let _ = Command::new(bin).args(["remote-revoke", id]).output();
     }
 
     fn qr_image_from_png(png: &[u8], pixel_size: i32) -> gtk::Image {
@@ -1038,7 +1062,10 @@ pairing stays available for early testing on the same Wi‑Fi.",
         status_card.append(&thinking_title);
         status_card.append(&thinking_detail);
 
-        let restart = gtk::Button::with_label("Restart Centurion");
+        let restart = gtk::Button::with_label("Restart desk link");
+        restart.set_tooltip_text(Some(
+            "Restarts the optional iPhone pairing helper. Chat and Thinking do not need this.",
+        ));
         // Outline — desk restart is secondary to checking for Brain updates.
         restart.set_size_request(-1, 44);
         status_card.append(&restart);
@@ -2231,10 +2258,17 @@ pairing stays available for early testing on the same Wi‑Fi.",
                 let result = supervisor.borrow_mut().restart();
                 match result {
                     Ok(()) => {
-                        status_title.set_label("Your Centurion is ready");
-                        status_detail.set_label(
-                            "The private desk connection has restarted. Use Link iPhone under Settings if you need a fresh pairing QR.",
-                        );
+                        if centurion_remote_bin().is_none() {
+                            status_title.set_label("Your Centurion is ready");
+                            status_detail.set_label(
+                                "Chat uses your Centurion on this computer. The iPhone pairing helper is not installed yet — that does not block Chat.",
+                            );
+                        } else {
+                            status_title.set_label("Your Centurion is ready");
+                            status_detail.set_label(
+                                "The private desk connection has restarted. Use Link iPhone under Settings if you need a fresh pairing QR.",
+                            );
+                        }
                         refresh_link_addresses(&link_addresses, Some(&window));
                     }
                     Err(error) => {

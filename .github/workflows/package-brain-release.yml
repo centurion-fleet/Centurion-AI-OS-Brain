@@ -1,13 +1,16 @@
 name: Package Brain Release
 
-# Build a clean desktop-only Get Brain tarball on Linux and upload it as an artifact.
+# Build Get Brain artifacts on Fedora: .rpm (primary) + .tar.gz (fallback).
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "desktop-native/scripts/package-brain-release.sh"
+      - "desktop-native/scripts/package-brain-rpm.sh"
       - "desktop-native/scripts/customer-install.sh"
+      - "desktop-native/scripts/brain-launcher.sh"
+      - "desktop-native/centurion-install-brain/**"
       - "desktop-native/Cargo.toml"
       - "centurion_cli/__init__.py"
       - ".github/workflows/package-brain-release.yml"
@@ -30,19 +33,29 @@ jobs:
           cargo rust gcc gcc-c++ binutils
           pkgconf-pkg-config gtk4-devel libadwaita-devel vte291-gtk4-devel
           webkitgtk6.0-devel libsoup3-devel
+          rpm-build rpmdevtools
 
-      - name: Build centurion-desktop (release)
+      - name: Build Brain binaries (release)
         working-directory: desktop-native
-        run: cargo build --release -p centurion-desktop
+        run: >-
+          cargo build --release
+          -p centurion-desktop
+          -p centurion-remote
+          -p centurion-install-brain
 
-      - name: Package Smooth Transfer archive
+      - name: Package Smooth Transfer archive (.tar.gz)
         run: desktop-native/scripts/package-brain-release.sh
 
-      - name: Upload archive
+      - name: Package Fedora installer (.rpm)
+        run: desktop-native/scripts/package-brain-rpm.sh
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: centurion-brain-linux-x86_64
           path: |
+            desktop-native/dist/centurion-brain-*.rpm
+            desktop-native/dist/centurion-brain-*.rpm.sha256
             desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz
             desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz.sha256
           if-no-files-found: error

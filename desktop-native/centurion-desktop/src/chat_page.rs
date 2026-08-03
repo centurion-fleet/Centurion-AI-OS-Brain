@@ -2432,11 +2432,21 @@ pub fn resolve_bridge_python() -> String {
     if let Ok(home) = std::env::var("HOME") {
         let home = PathBuf::from(home);
         candidates.push(home.join(".centurion/Centurion-AI-OS/venv/bin/python"));
+        candidates.push(home.join(".centurion/Centurion-AI-OS/.venv/bin/python"));
         candidates.push(home.join(".centurion/venv/bin/python"));
         candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/.venv/bin/python"));
         candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/venv/bin/python"));
         candidates.push(home.join("Centurion-AI-OS/.venv/bin/python"));
         candidates.push(home.join("Centurion-AI-OS/venv/bin/python"));
+        candidates.push(home.join("src/Centurion-AI-OS/.venv/bin/python"));
+        candidates.push(home.join("src/Centurion-AI-OS/venv/bin/python"));
+    }
+    // Match customer-install.sh: follow a PATH `centurion` shim to its venv.
+    if let Some(centurion) = which_on_path("centurion") {
+        if let Some(bin_dir) = centurion.parent() {
+            candidates.push(bin_dir.join("python"));
+            candidates.push(bin_dir.join("python3"));
+        }
     }
 
     for path in candidates {
@@ -2472,12 +2482,18 @@ pub fn resolve_centurion_cli() -> String {
     if let Ok(home) = std::env::var("HOME") {
         let home = PathBuf::from(home);
         candidates.push(home.join(".centurion/Centurion-AI-OS/venv/bin/centurion"));
+        candidates.push(home.join(".centurion/Centurion-AI-OS/.venv/bin/centurion"));
         candidates.push(home.join(".centurion/venv/bin/centurion"));
         candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/.venv/bin/centurion"));
         candidates.push(home.join("Centurion-AI-OS/Centurion-AI-OS/venv/bin/centurion"));
         candidates.push(home.join("Centurion-AI-OS/.venv/bin/centurion"));
         candidates.push(home.join("Centurion-AI-OS/venv/bin/centurion"));
+        candidates.push(home.join("src/Centurion-AI-OS/.venv/bin/centurion"));
+        candidates.push(home.join("src/Centurion-AI-OS/venv/bin/centurion"));
         candidates.push(home.join(".local/bin/centurion"));
+    }
+    if let Some(path) = which_on_path("centurion") {
+        candidates.push(path);
     }
 
     for path in candidates {
@@ -2486,6 +2502,17 @@ pub fn resolve_centurion_cli() -> String {
         }
     }
     "centurion".to_owned()
+}
+
+fn which_on_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn session_store_path() -> PathBuf {
