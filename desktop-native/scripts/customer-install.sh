@@ -152,13 +152,14 @@ mkdir -p "${BIN_DIR}" "${APP_DIR}" "${ICON_DIR}" "${SHARE_DIR}"
 install -m 0755 "${ARCHIVE_ROOT}/bin/centurion-desktop" "${BIN_DIR}/centurion-desktop"
 
 if [[ -d "${ARCHIVE_ROOT}/icons" ]]; then
-  # shellcheck disable=SC2044
-  for src in $(find "${ARCHIVE_ROOT}/icons" -type f -name 'com.centurion.desktop.png' 2>/dev/null); do
+  # NUL-delimited read: ARCHIVE_ROOT may contain spaces (browser re-downloads
+  # create "name (2)" folders) — a plain $(find ...) loop word-splits and dies.
+  while IFS= read -r -d '' src; do
     rel="${src#${ARCHIVE_ROOT}/icons/}"
     dest="${ICON_DIR}/${rel}"
     mkdir -p "$(dirname "${dest}")"
     install -m 0644 "${src}" "${dest}"
-  done
+  done < <(find "${ARCHIVE_ROOT}/icons" -type f -name 'com.centurion.desktop.png' -print0 2>/dev/null)
 fi
 
 MISSION_DECK_DST="${SHARE_DIR}/mission-deck"
