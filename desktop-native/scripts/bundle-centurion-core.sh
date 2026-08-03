@@ -51,12 +51,17 @@ python3 -m venv "${VENV_DST}"
 "${VENV_DST}/bin/pip" install --upgrade pip wheel setuptools
 # Core + Brain-critical extras. System venv is root-owned after RPM install,
 # so lazy pip install at runtime fails for customers — preinstall here.
+# Messaging: Telegram + WhatsApp only (no Discord/Slack). Remote uses api_server.
 "${VENV_DST}/bin/pip" install --no-cache-dir \
-  "${REPO_DST}[anthropic,edge-tts,firecrawl]"
+  "${REPO_DST}[anthropic,edge-tts,firecrawl]" \
+  "python-telegram-bot[webhooks]==22.6" \
+  "aiohttp==3.13.4" \
+  "brotlicffi==1.2.0.1" \
+  "qrcode==7.4.2"
 
 echo "Verifying bundled import…"
 "${VENV_DST}/bin/python" -c \
-  "import centurion_cli.remote_bridge; import run_agent; import anthropic"
+  "import centurion_cli.remote_bridge; import run_agent; import anthropic; import telegram; import aiohttp; import qrcode"
 
 # Relocate shebangs from the staging path to the final system path.
 echo "Rewriting venv shebangs → ${FINAL_VENV}/bin/python"

@@ -108,6 +108,8 @@ chmod 0644 "${STAGE}/usr/share/centurion/brain/VERSION"
 "${SCRIPTS}/bundle-centurion-core.sh" "${STAGE}/usr/lib/centurion"
 # Mission Deck (Focus tab) — built SPA + server.js for blank-machine installs.
 "${SCRIPTS}/stage-mission-deck.sh" "${STAGE}"
+# WhatsApp Baileys bridge (Node) — Telegram/Remote need no separate Node app.
+"${SCRIPTS}/stage-whatsapp-bridge.sh" "${STAGE}"
 cat > "${STAGE}/usr/bin/centurion" <<'EOF'
 #!/bin/bash
 # CLI entry for the full Fedora Brain RPM (bundled Centurion AI OS).
@@ -190,12 +192,14 @@ This one package installs:
   • Centurion AI OS (thinking / chat engine)
   • Sovereign AI Brain (desktop app)
   • Focus / Mission Deck (start and manage missions)
+  • Gateway surfaces: Telegram, WhatsApp, and Centurion Remote only
 
 Customer steps (no terminal):
 1. Double-click this .rpm (or open it with Software).
 2. Click Install and enter your password if asked.
 3. Open “Sovereign AI Brain” from Activities / Apps.
 4. Open the Focus tab — first time, begin Discovery to create a mission.
+5. Optional: Settings → Gateway for Telegram / WhatsApp / Remote.
 
 Your data lives in ~/.centurion and is never wiped by this install.
 
@@ -290,6 +294,7 @@ fi
 %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh
 /usr/lib/centurion
 /usr/share/centurion/mission-deck
+/usr/share/centurion/whatsapp-bridge
 %{_datadir}/applications/com.centurion.desktop.desktop
 %{_datadir}/metainfo/com.centurion.desktop.metainfo.xml
 %{_datadir}/centurion/brain/VERSION
@@ -300,7 +305,7 @@ fi
 
 %changelog
 * $(date -u +"%a %b %d %Y") Centurion AI OS <support@1human1ai.com> - ${RPM_VERSION}-1
-- Full Centurion AI OS + Sovereign AI Brain ${RPM_VERSION} with Focus / Mission Deck
+- Full Centurion AI OS + Brain ${RPM_VERSION}: Focus, Telegram/WhatsApp/Remote
 EOF
 
 echo "Building RPM ${RPM_VERSION} (${ARCH})…"

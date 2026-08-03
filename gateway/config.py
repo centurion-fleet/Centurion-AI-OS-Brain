@@ -1137,11 +1137,35 @@ def load_gateway_config() -> GatewayConfig:
 
     # Override with environment variables
     _apply_env_overrides(config)
-    
+
+    # Brain full RPM: only Telegram, WhatsApp, and Remote (api_server).
+    # Set by sovereign-ai-brain launcher — Discord/Slack/etc. stay off.
+    _restrict_gateway_platforms(config)
+
     # --- Validate loaded values ---
     _validate_gateway_config(config)
 
     return config
+
+
+def _restrict_gateway_platforms(config: "GatewayConfig") -> None:
+    """Drop platforms not in CENTURION_GATEWAY_ALLOWED_PLATFORMS (comma list).
+
+    When unset, all platforms remain (CLI / fleet / contributor installs).
+    """
+    raw = (os.getenv("CENTURION_GATEWAY_ALLOWED_PLATFORMS") or "").strip()
+    if not raw:
+        return
+    allowed = {part.strip().lower() for part in raw.split(",") if part.strip()}
+    if not allowed:
+        return
+    drop = [plat for plat in list(config.platforms) if plat.value not in allowed]
+    for plat in drop:
+        del config.platforms[plat]
+        logger.info(
+            "Gateway platform %s disabled (not in CENTURION_GATEWAY_ALLOWED_PLATFORMS)",
+            plat.value,
+        )
 
 
 def _validate_gateway_config(config: "GatewayConfig") -> None:

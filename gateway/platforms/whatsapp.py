@@ -247,13 +247,28 @@ class WhatsAppAdapter(BasePlatformAdapter):
     # Default bridge location relative to the centurion-os install
     _DEFAULT_BRIDGE_DIR = Path(__file__).resolve().parents[2] / "scripts" / "whatsapp-bridge"
 
+    @classmethod
+    def _resolve_default_bridge_dir(cls) -> Path:
+        """Prefer system RPM path, then env, then checkout-relative scripts/."""
+        env = (os.getenv("CENTURION_WHATSAPP_BRIDGE_DIR") or "").strip()
+        candidates = []
+        if env:
+            candidates.append(Path(env))
+        candidates.append(Path("/usr/share/centurion/whatsapp-bridge"))
+        candidates.append(cls._DEFAULT_BRIDGE_DIR)
+        for path in candidates:
+            if (path / "bridge.js").is_file():
+                return path
+        return cls._DEFAULT_BRIDGE_DIR
+
     def __init__(self, config: PlatformConfig):
         super().__init__(config, Platform.WHATSAPP)
         self._bridge_process: Optional[subprocess.Popen] = None
         self._bridge_port: int = config.extra.get("bridge_port", 3000)
+        default_bridge = self._resolve_default_bridge_dir() / "bridge.js"
         self._bridge_script: Optional[str] = config.extra.get(
             "bridge_script",
-            str(self._DEFAULT_BRIDGE_DIR / "bridge.js"),
+            str(default_bridge),
         )
         self._session_path: Path = Path(config.extra.get(
             "session_path",

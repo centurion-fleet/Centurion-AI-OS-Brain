@@ -130,11 +130,15 @@ seed_license_config() {
   CENTURION_HOME_DIR="${home_dir}" python3 - <<'PY' 2>/dev/null || true
 import os
 import pathlib
+import secrets
 try:
     import yaml
 except ImportError:
     raise SystemExit(0)
-cfg_path = pathlib.Path(os.environ["CENTURION_HOME_DIR"]) / "config.yaml"
+
+home = pathlib.Path(os.environ["CENTURION_HOME_DIR"])
+cfg_path = home / "config.yaml"
+env_path = home / ".env"
 data = {}
 if cfg_path.is_file():
     try:
@@ -143,15 +147,76 @@ if cfg_path.is_file():
         data = {}
 if not isinstance(data, dict):
     data = {}
+
+# License: portal wiring ready, enforcement OFF for customers for now.
 lic = data.get("license") if isinstance(data.get("license"), dict) else {}
 lic = dict(lic)
 lic.setdefault("enabled", True)
-lic.setdefault("enforcement", False)
+lic["enforcement"] = False  # keep codes off until advisor turns them on
 lic.setdefault("server_url", "https://www.1human1ai.com/api/v1")
 lic.setdefault("portal_url", "https://www.1human1ai.com")
 data["license"] = lic
+
+# Gateway: only Telegram, WhatsApp, Remote (api_server) stubs.
+gw = data.get("gateway") if isinstance(data.get("gateway"), dict) else {}
+gw = dict(gw)
+platforms = gw.get("platforms") if isinstance(gw.get("platforms"), dict) else {}
+platforms = dict(platforms)
+for name, defaults in (
+    ("telegram", {"enabled": False}),
+    ("whatsapp", {"enabled": False}),
+    ("api_server", {"enabled": True}),
+):
+    block = platforms.get(name) if isinstance(platforms.get(name), dict) else {}
+    block = dict(block)
+    for k, v in defaults.items():
+        block.setdefault(k, v)
+    if name == "whatsapp":
+        extra = block.get("extra") if isinstance(block.get("extra"), dict) else {}
+        extra = dict(extra)
+        extra.setdefault(
+            "bridge_script",
+            "/usr/share/centurion/whatsapp-bridge/bridge.js",
+        )
+        block["extra"] = extra
+    if name == "api_server":
+        extra = block.get("extra") if isinstance(block.get("extra"), dict) else {}
+        extra = dict(extra)
+        extra.setdefault("host", "127.0.0.1")
+        extra.setdefault("port", 18789)
+        block["extra"] = extra
+    platforms[name] = block
+gw["platforms"] = platforms
+data["gateway"] = gw
+
 cfg_path.parent.mkdir(parents=True, exist_ok=True)
 cfg_path.write_text(yaml.safe_dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+
+# Ensure Remote (api_server) has a local key in .env when missing.
+def _env_has(key: str) -> bool:
+    if not env_path.is_file():
+        return False
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith(f"{key}="):
+                return True
+    except Exception:
+        return False
+    return False
+
+lines_to_add = []
+if not _env_has("API_SERVER_ENABLED"):
+    lines_to_add.append("API_SERVER_ENABLED=true")
+if not _env_has("API_SERVER_KEY"):
+    lines_to_add.append(f"API_SERVER_KEY={secrets.token_urlsafe(32)}")
+if lines_to_add:
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = ""
+    if env_path.is_file():
+        existing = env_path.read_text(encoding="utf-8")
+        if existing and not existing.endswith("\n"):
+            existing += "\n"
+    env_path.write_text(existing + "\n".join(lines_to_add) + "\n", encoding="utf-8")
 PY
 }
 
@@ -230,6 +295,12 @@ if [[ -z "${CENTURION_MISSION_DECK_DIR:-}" ]]; then
       break
     fi
   done
+fi
+
+# Customer Brain: only Telegram, WhatsApp, and Remote Control gateway surfaces.
+export CENTURION_GATEWAY_ALLOWED_PLATFORMS="${CENTURION_GATEWAY_ALLOWED_PLATFORMS:-telegram,whatsapp,api_server}"
+if [[ -z "${CENTURION_WHATSAPP_BRIDGE_DIR:-}" && -f /usr/share/centurion/whatsapp-bridge/bridge.js ]]; then
+  export CENTURION_WHATSAPP_BRIDGE_DIR="/usr/share/centurion/whatsapp-bridge"
 fi
 
 exec "${DESKTOP_BIN}" "$@"
