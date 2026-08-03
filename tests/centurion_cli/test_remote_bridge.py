@@ -881,11 +881,31 @@ def test_whatsapp_pair_status_reads_qr_and_paired(monkeypatch, tmp_path):
     assert with_qr["qr_png_base64"] == "AAAA"
     assert with_qr["state"] == "waiting_qr"
 
-    (session / "creds.json").write_text('{"me":{}}', encoding="utf-8")
+    (session / "creds.json").write_text(
+        '{"me":{"id":"61448888987:12@s.whatsapp.net"}}',
+        encoding="utf-8",
+    )
     paired = handle_request({"id": "wa2", "action": "whatsapp_pair_status"})
     assert paired["ok"] is True
     assert paired["paired"] is True
     assert paired["state"] == "paired"
+    assert paired["phone"] == "61448888987"
+    assert "61448888987" in paired["display"]
+    assert "s.whatsapp.net" in paired["identity"]
+
+
+def test_whatsapp_identity_from_creds(tmp_path):
+    from centurion_cli.remote_bridge import _whatsapp_identity_from_creds
+
+    creds = tmp_path / "creds.json"
+    creds.write_text(
+        '{"me":{"id":"15551234567:3@s.whatsapp.net"}}',
+        encoding="utf-8",
+    )
+    ident = _whatsapp_identity_from_creds(creds)
+    assert ident["phone"] == "15551234567"
+    assert ident["display"] == "+15551234567"
+    assert ident["jid"] == "15551234567:3@s.whatsapp.net"
 
 
 def test_remote_activity_filters_noisy_status_and_caps_terminal():

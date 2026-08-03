@@ -1374,8 +1374,10 @@ pairing stays available for early testing on the same Wi‑Fi.",
 
         // --- Messaging & research ---
         let gateway_group = adw::PreferencesGroup::builder()
-            .title("Messaging Gateway")
-            .description("Telegram, Centurion Remote Control, and WhatsApp for this Brain")
+            .title("Channels")
+            .description(
+                "Connect Telegram, Centurion Remote, and WhatsApp so your Centurion meets you where you already chat.",
+            )
             .build();
         let gateway_row = adw::ActionRow::builder()
             .title("Gateway")
@@ -5307,7 +5309,11 @@ Being · Continuity\n\
                     && (connected
                         || status.to_ascii_lowercase().contains("connected")
                         || status.to_ascii_lowercase().contains("ready"));
-                let setup = gtk::Button::with_label(if paired { "Re-pair" } else { "Pair" });
+                let setup = gtk::Button::with_label(if paired {
+                    "Reconnect"
+                } else {
+                    "Connect"
+                });
                 setup.set_valign(gtk::Align::Center);
                 setup.add_css_class("suggested-action");
                 let parent_w = parent.clone();
@@ -5315,7 +5321,7 @@ Being · Continuity\n\
                 let list_for_cb = platform_list.clone();
                 let clear_session = paired;
                 setup.connect_clicked(move |_| {
-                    show_whatsapp_pair_window(
+                    show_whatsapp_connect_wizard(
                         &parent_w,
                         &status_row,
                         &list_for_cb,
@@ -5467,7 +5473,7 @@ The token stays in ~/.centurion/.env on this machine only.",
         });
     }
 
-    fn show_whatsapp_pair_window(
+    fn show_whatsapp_connect_wizard(
         parent: &adw::ApplicationWindow,
         gateway_row: &adw::ActionRow,
         platform_list: &gtk::ListBox,
@@ -5476,49 +5482,276 @@ The token stays in ~/.centurion/.env on this machine only.",
         let win = adw::Window::builder()
             .transient_for(parent)
             .modal(true)
-            .default_width(420)
-            .default_height(520)
-            .title("Link WhatsApp")
+            .default_width(520)
+            .default_height(640)
+            .title("Connect WhatsApp")
             .build();
         let header = adw::HeaderBar::new();
         let close_btn = gtk::Button::with_label("Close");
         header.pack_start(&close_btn);
-        let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
-        root.set_margin_top(16);
-        root.set_margin_bottom(16);
-        root.set_margin_start(24);
-        root.set_margin_end(24);
-        let status = gtk::Label::builder()
-            .label("Preparing QR… Open WhatsApp → Linked devices → Link a device.")
+
+        let stack = gtk::Stack::builder()
+            .transition_type(gtk::StackTransitionType::SlideLeftRight)
+            .vhomogeneous(false)
+            .build();
+
+        // --- Intro: why WhatsApp + how linking works ---
+        let intro = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        intro.set_margin_top(20);
+        intro.set_margin_bottom(20);
+        intro.set_margin_start(28);
+        intro.set_margin_end(28);
+        intro.append(
+            &gtk::Label::builder()
+                .label("Why WhatsApp is a great channel")
+                .css_classes(["title-2"])
+                .xalign(0.0)
+                .wrap(true)
+                .build(),
+        );
+        intro.append(
+            &gtk::Label::builder()
+                .label(
+                    "WhatsApp is the most personal, always-on messaging app people already live in. \
+No new app to install, no desktop required, no mental overhead — Centurion shows up in the same \
+thread where family and close contacts chat. It is familiar, trusted, and carries rich context \
+(voice notes, images, documents).\n\n\
+For a sovereign personal AI, that is the difference between a tool you open and a presence you \
+talk to. The agent comes to the human's current — rather than asking the human to come to it.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+        intro.append(
+            &gtk::Label::builder()
+                .label("How connection works")
+                .css_classes(["title-3"])
+                .xalign(0.0)
+                .margin_top(8)
+                .build(),
+        );
+        intro.append(
+            &gtk::Label::builder()
+                .label(
+                    "You scan a QR code from this brain. Centurion runs as a WhatsApp client on \
+your own hardware — messages stay in your perimeter. No cloud relay, no third party reading the thread.\n\n\
+On your phone: WhatsApp → Settings → Linked devices → Link a device. After you scan, this wizard \
+waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        let continue_btn = gtk::Button::with_label("Continue to QR");
+        continue_btn.add_css_class("suggested-action");
+        continue_btn.set_halign(gtk::Align::Start);
+        continue_btn.set_margin_top(8);
+        intro.append(&continue_btn);
+        let intro_scroll = gtk::ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .child(&intro)
+            .build();
+        stack.add_named(&intro_scroll, Some("intro"));
+
+        // --- QR scan step ---
+        let qr_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        qr_page.set_margin_top(20);
+        qr_page.set_margin_bottom(20);
+        qr_page.set_margin_start(28);
+        qr_page.set_margin_end(28);
+        qr_page.append(
+            &gtk::Label::builder()
+                .label("Link a device")
+                .css_classes(["title-2"])
+                .xalign(0.0)
+                .build(),
+        );
+        qr_page.append(
+            &gtk::Label::builder()
+                .label(
+                    "1. Open WhatsApp on your phone\n\
+2. Go to Settings → Linked devices → Link a device\n\
+3. Scan the QR code below",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+        let qr_status = gtk::Label::builder()
+            .label("Preparing a secure QR on this brain…")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build();
+        qr_page.append(&qr_status);
+        let qr_holder = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        qr_holder.set_halign(gtk::Align::Center);
+        qr_holder.set_vexpand(true);
+        qr_page.append(&qr_holder);
+        let regenerate_btn = gtk::Button::with_label("Regenerate QR");
+        regenerate_btn.set_halign(gtk::Align::Center);
+        regenerate_btn.set_sensitive(false);
+        qr_page.append(&regenerate_btn);
+        qr_page.append(
+            &gtk::Label::builder()
+                .label("If the code expires or looks blank, tap Regenerate QR.")
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        let qr_scroll = gtk::ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .child(&qr_page)
+            .build();
+        stack.add_named(&qr_scroll, Some("qr"));
+
+        // --- Done step ---
+        let done_page = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        done_page.set_margin_top(20);
+        done_page.set_margin_bottom(20);
+        done_page.set_margin_start(28);
+        done_page.set_margin_end(28);
+        done_page.append(
+            &gtk::Label::builder()
+                .label("Connected ✓")
+                .css_classes(["title-2"])
+                .xalign(0.0)
+                .build(),
+        );
+        let done_identity = gtk::Label::builder()
+            .label("WhatsApp is now a home channel for this Centurion.")
             .wrap(true)
             .xalign(0.0)
             .build();
-        let qr_holder = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        qr_holder.set_halign(gtk::Align::Center);
-        root.append(&status);
-        root.append(&qr_holder);
+        done_page.append(&done_identity);
+        done_page.append(
+            &gtk::Label::builder()
+                .label(
+                    "Your phone must stay online for the link to remain active \
+(WhatsApp requirement). Keep WhatsApp installed and connected on that phone.",
+                )
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+        let test_btn = gtk::Button::with_label("Send a test message");
+        test_btn.add_css_class("suggested-action");
+        test_btn.set_halign(gtk::Align::Start);
+        test_btn.set_margin_top(8);
+        done_page.append(&test_btn);
+        let done_finish = gtk::Button::with_label("Done");
+        done_finish.set_halign(gtk::Align::Start);
+        done_page.append(&done_finish);
+        let done_scroll = gtk::ScrolledWindow::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .child(&done_page)
+            .build();
+        stack.add_named(&done_scroll, Some("done"));
+        stack.set_visible_child_name("intro");
+
         let toolbar = adw::ToolbarView::new();
         toolbar.add_top_bar(&header);
-        toolbar.set_content(Some(&root));
+        toolbar.set_content(Some(&stack));
         win.set_content(Some(&toolbar));
 
-        let _ = run_bridge_action(
-            "whatsapp_pair_start",
-            serde_json::json!({ "clear_session": clear_session }),
-        );
+        let pairing_started = Rc::new(Cell::new(false));
+        let clear_on_start = Rc::new(Cell::new(clear_session));
+        let last_qr = Rc::new(RefCell::new(String::new()));
+        let linked_display = Rc::new(RefCell::new(String::new()));
+        let poll_active = Rc::new(Cell::new(false));
+        let tick = Rc::new(Cell::new(0u32));
 
-        let status_c = status.clone();
+        let start_pairing = Rc::new({
+            let qr_status = qr_status.clone();
+            let qr_holder = qr_holder.clone();
+            let regenerate_btn = regenerate_btn.clone();
+            let pairing_started = pairing_started.clone();
+            let clear_on_start = clear_on_start.clone();
+            let last_qr = last_qr.clone();
+            let poll_active = poll_active.clone();
+            let tick = tick.clone();
+            move || {
+                poll_active.set(true);
+                tick.set(0);
+                while let Some(child) = qr_holder.first_child() {
+                    qr_holder.remove(&child);
+                }
+                last_qr.borrow_mut().clear();
+                qr_status.set_label("Preparing a secure QR on this brain…");
+                regenerate_btn.set_sensitive(false);
+                let clear = clear_on_start.get();
+                // After the first start, regenerates clear the session so Baileys
+                // can mint a fresh QR instead of reusing a dead one.
+                clear_on_start.set(true);
+                pairing_started.set(true);
+                let payload = run_bridge_action(
+                    "whatsapp_pair_start",
+                    serde_json::json!({ "clear_session": clear }),
+                );
+                if let Some(p) = payload {
+                    if p.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                        let msg = p
+                            .get("message")
+                            .or_else(|| p.get("error"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not start WhatsApp pairing.");
+                        qr_status.set_label(msg);
+                    }
+                } else {
+                    qr_status.set_label("Could not reach the local bridge to start pairing.");
+                }
+                regenerate_btn.set_sensitive(true);
+            }
+        });
+
+        continue_btn.connect_clicked({
+            let stack = stack.clone();
+            let start_pairing = start_pairing.clone();
+            let pairing_started = pairing_started.clone();
+            move |_| {
+                stack.set_visible_child_name("qr");
+                if !pairing_started.get() {
+                    start_pairing();
+                }
+            }
+        });
+
+        regenerate_btn.connect_clicked({
+            let start_pairing = start_pairing.clone();
+            move |_| start_pairing()
+        });
+
+        // Poll while the QR page is active (or until paired / closed).
+        let status_c = qr_status.clone();
         let qr_holder_c = qr_holder.clone();
         let gateway_row_c = gateway_row.clone();
         let platform_list_c = platform_list.clone();
         let parent_c = parent.clone();
         let win_c = win.clone();
-        let tick = Rc::new(Cell::new(0u32));
+        let stack_c = stack.clone();
+        let done_identity_c = done_identity.clone();
+        let linked_display_c = linked_display.clone();
+        let last_qr_c = last_qr.clone();
+        let poll_active_c = poll_active.clone();
         let tick_c = tick.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(1200), move || {
             if !win_c.is_visible() {
                 let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
                 return glib::ControlFlow::Break;
+            }
+            if !poll_active_c.get() {
+                return glib::ControlFlow::Continue;
+            }
+            // Once we reach the done page, stop pairing work but keep the window.
+            if stack_c.visible_child_name().as_deref() == Some("done") {
+                return glib::ControlFlow::Continue;
             }
             let payload = run_bridge_action("whatsapp_pair_status", serde_json::json!({}));
             let Some(payload) = payload else {
@@ -5532,7 +5765,7 @@ The token stays in ~/.centurion/.env on this machine only.",
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            if !message.is_empty() {
+            if !message.is_empty() && stack_c.visible_child_name().as_deref() == Some("qr") {
                 status_c.set_label(message);
             }
             if payload
@@ -5544,48 +5777,112 @@ The token stays in ~/.centurion/.env on this machine only.",
                 while let Some(child) = qr_holder_c.first_child() {
                     qr_holder_c.remove(&child);
                 }
-                status_c.set_label("WhatsApp linked. You can Start the gateway.");
+                let display = payload
+                    .get("display")
+                    .or_else(|| payload.get("identity"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("your WhatsApp account");
+                *linked_display_c.borrow_mut() = display.to_owned();
+                let jid = payload
+                    .get("identity")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let identity_line = if jid.is_empty() {
+                    format!(
+                        "Linked number: {display}\nMessages to this account now route into Centurion."
+                    )
+                } else {
+                    format!(
+                        "Linked identity: {display}\nWhatsApp JID: {jid}\n\
+Messages to this account now route into your Centurion conversation."
+                    )
+                };
+                done_identity_c.set_label(&identity_line);
                 refresh_gateway_ui(&parent_c, &gateway_row_c, &platform_list_c);
-                let done = adw::AlertDialog::builder()
-                    .heading("WhatsApp linked")
-                    .body("Pairing complete. Start the Messaging Gateway if it is stopped.")
-                    .close_response("ok")
-                    .build();
-                done.add_response("ok", "OK");
-                done.present(Some(&parent_c));
-                win_c.close();
-                return glib::ControlFlow::Break;
+                // Ensure the gateway is up so the channel is live.
+                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
+                stack_c.set_visible_child_name("done");
+                return glib::ControlFlow::Continue;
             }
             if let Some(b64) = payload.get("qr_png_base64").and_then(|v| v.as_str()) {
-                let png = glib::base64_decode(b64);
-                if !png.is_empty() {
-                    while let Some(child) = qr_holder_c.first_child() {
-                        qr_holder_c.remove(&child);
+                if *last_qr_c.borrow() != b64 {
+                    *last_qr_c.borrow_mut() = b64.to_owned();
+                    let png = glib::base64_decode(b64);
+                    if !png.is_empty() {
+                        while let Some(child) = qr_holder_c.first_child() {
+                            qr_holder_c.remove(&child);
+                        }
+                        qr_holder_c.append(&qr_image_from_png(&png, 300));
                     }
-                    qr_holder_c.append(&qr_image_from_png(&png, 320));
                 }
             }
             let n = tick_c.get().saturating_add(1);
             tick_c.set(n);
-            // Stop polling after ~5 minutes.
+            if n > 0 && n % 50 == 0 && stack_c.visible_child_name().as_deref() == Some("qr") {
+                // ~60s hint — WhatsApp QR codes expire.
+                status_c.set_label(
+                    "Still waiting for a scan. If the QR looks expired, tap Regenerate QR.",
+                );
+            }
             if n > 250 {
-                status_c.set_label("Pairing timed out. Close and tap Pair again.");
+                status_c.set_label(
+                    "Pairing timed out. Tap Regenerate QR to try again, or Close and return later.",
+                );
                 let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
-                return glib::ControlFlow::Break;
+                poll_active_c.set(false);
             }
             glib::ControlFlow::Continue
         });
 
+        test_btn.connect_clicked({
+            let parent = parent.clone();
+            let linked_display = linked_display.clone();
+            move |_| {
+                let _ = run_bridge_action("gateway_start", serde_json::json!({}));
+                let who = linked_display.borrow().clone();
+                let body = if who.is_empty() {
+                    "Open WhatsApp on your phone and send yourself a short message \
+(or message this Centurion account). You should get a reply in the same thread once the gateway is running."
+                        .to_owned()
+                } else {
+                    format!(
+                        "Open WhatsApp and send a short message to {who} \
+(or message yourself if this is your own number). Centurion should reply in that thread once the gateway is running."
+                    )
+                };
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Try a test message")
+                    .body(&body)
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.present(Some(&parent));
+            }
+        });
+
+        done_finish.connect_clicked({
+            let win = win.clone();
+            move |_| win.close()
+        });
+
         close_btn.connect_clicked({
             let win = win.clone();
+            let stack = stack.clone();
             move |_| {
-                let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                if stack.visible_child_name().as_deref() != Some("done") {
+                    let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                }
                 win.close();
             }
         });
-        win.connect_close_request(|_| {
-            let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
-            glib::Propagation::Proceed
+        win.connect_close_request({
+            let stack = stack.clone();
+            move |_| {
+                if stack.visible_child_name().as_deref() != Some("done") {
+                    let _ = run_bridge_action("whatsapp_pair_cancel", serde_json::json!({}));
+                }
+                glib::Propagation::Proceed
+            }
         });
         win.present();
     }

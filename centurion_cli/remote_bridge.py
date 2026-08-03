@@ -2286,6 +2286,40 @@ def _qr_png_base64_from_payload(qr: str) -> str | None:
         return None
 
 
+def _whatsapp_identity_from_creds(creds_path: "Path") -> dict[str, str]:
+    """Read Baileys ``creds.json`` and return displayable WhatsApp identity."""
+    import json
+    from pathlib import Path
+
+    out: dict[str, str] = {
+        "jid": "",
+        "phone": "",
+        "display": "",
+    }
+    path = Path(creds_path)
+    if not path.is_file():
+        return out
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return out
+    me = data.get("me") if isinstance(data, dict) else None
+    if not isinstance(me, dict):
+        return out
+    jid = str(me.get("id") or me.get("lid") or "").strip()
+    if not jid:
+        return out
+    phone = jid.split(":", 1)[0].split("@", 1)[0].lstrip("+")
+    display = f"+{phone}" if phone.isdigit() else jid
+    # Prefer the full WhatsApp JID form for operator clarity.
+    if "@" not in jid and phone.isdigit():
+        jid = f"{phone}@s.whatsapp.net"
+    out["jid"] = jid
+    out["phone"] = phone
+    out["display"] = display
+    return out
+
+
 def _handle_telegram_configure(
     request: dict[str, Any], request_id: str
 ) -> dict[str, Any]:
@@ -2414,7 +2448,9 @@ def _handle_whatsapp_pair_start(
             "pairing": True,
             "pid": proc.pid,
             "session_dir": str(session_dir),
-            "message": "Waiting for WhatsApp QR… Open WhatsApp → Linked devices → Link a device.",
+            "message": (
+                "Waiting for WhatsApp QR… On your phone: Settings → Linked devices → Link a device."
+            ),
         }
     except Exception as exc:
         return _error_response(request_id, action="whatsapp_pair_start", exc=exc)
@@ -2435,6 +2471,7 @@ def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
         pid_path = _whatsapp_pair_pid_path()
 
         if creds.is_file():
+            identity = _whatsapp_identity_from_creds(creds)
             save_env_value("WHATSAPP_ENABLED", "true")
             os.environ["WHATSAPP_ENABLED"] = "true"
             config = load_config()
@@ -2445,6 +2482,10 @@ def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
                     block = platforms.get("whatsapp") if isinstance(platforms.get("whatsapp"), dict) else {}
                     block = dict(block)
                     block["enabled"] = True
+                    if identity.get("jid"):
+                        block["identity"] = identity["jid"]
+                    if identity.get("phone"):
+                        block["phone"] = identity["phone"]
                     platforms["whatsapp"] = block
                     save_config(config)
             # Pair process should have exited; clean pid.
@@ -2457,21 +2498,30 @@ def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
                 qr_path.unlink()
             except Exception:
                 pass
+            display = identity.get("display") or identity.get("jid") or "this WhatsApp account"
             return {
                 "id": request_id,
                 "ok": True,
                 "action": "whatsapp_pair_status",
                 "state": "paired",
                 "paired": True,
-                "message": "WhatsApp linked. You can Start the gateway.",
+                "identity": identity.get("jid") or "",
+                "phone": identity.get("phone") or "",
+                "display": display,
+                "message": (
+                    f"Connected ✓ — Centurion is linked as {display}. "
+                    "Your phone must stay online for the link to remain active."
+                ),
             }
 
         qr_png = None
         qr_text = None
+        qr_updated_at = None
         if qr_path.is_file():
             try:
                 data = json.loads(qr_path.read_text(encoding="utf-8"))
                 qr_text = str(data.get("qr") or "").strip() or None
+                qr_updated_at = str(data.get("updated_at") or "").strip() or None
                 if qr_text:
                     qr_png = _qr_png_base64_from_payload(qr_text)
             except Exception:
@@ -2488,13 +2538,16 @@ def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
 
         if qr_png:
             state = "waiting_qr"
-            message = "Scan this QR with WhatsApp on your phone."
+            message = (
+                "Scan this QR with WhatsApp on your phone "
+                "(Settings → Linked devices → Link a device)."
+            )
         elif alive:
             state = "waiting_qr"
-            message = "Preparing QR…"
+            message = "Preparing a secure QR on this brain…"
         else:
             state = "idle"
-            message = "WhatsApp is not paired yet. Tap Pair to start."
+            message = "WhatsApp is not connected yet. Tap Connect to start."
 
         return {
             "id": request_id,
@@ -2504,6 +2557,8 @@ def _handle_whatsapp_pair_status(request_id: str) -> dict[str, Any]:
             "paired": False,
             "qr": qr_text,
             "qr_png_base64": qr_png,
+            "qr_updated_at": qr_updated_at,
+            "pairing_alive": alive,
             "message": message,
         }
     except Exception as exc:
