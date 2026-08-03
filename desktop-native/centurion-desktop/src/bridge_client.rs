@@ -92,14 +92,24 @@ fn ping_bridge_version(path: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-fn expected_bridge_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+fn orphan_is_current(path: &Path) -> bool {
+    // A live, responding listener is preferable to a forced recycle. Exact
+    // version mismatch used to kill a healthy daemon and could leave Chat stuck
+    // when the replacement spawn raced the old process. Lockstep releases keep
+    // Brain and Python close enough for Chat/settings.
+    ping_bridge_version(path).is_some()
 }
 
-fn orphan_is_current(path: &Path) -> bool {
-    match ping_bridge_version(path) {
-        Some(ver) => ver == expected_bridge_version(),
-        None => false,
+fn bridge_stderr_path() -> PathBuf {
+    PathBuf::from(resolve_centurion_home())
+        .join("run")
+        .join("bridge-daemon.stderr.log")
+}
+
+fn kill_tracked_child(state: &mut DaemonState) {
+    if let Some(mut child) = state.child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 
@@ -107,12 +117,18 @@ fn spawn_daemon(socket_path: &Path) -> Result<Child, String> {
     if let Some(parent) = socket_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    // Stale sock from a crashed daemon blocks bind; remove if nothing is listening.
-    if socket_path.exists() && !socket_connectable(socket_path) {
-        let _ = std::fs::remove_file(socket_path);
+    // Clear leftovers before bind. A connectable sock means something is still
+    // listening — stop it so we do not race Address-already-in-use.
+    if socket_path.exists() {
+        if socket_connectable(socket_path) {
+            stop_listener_on_socket(socket_path);
+        } else {
+            let _ = std::fs::remove_file(socket_path);
+        }
     }
 
-    let mut cmd = Command::new(resolve_bridge_python());
+    let python = resolve_bridge_python();
+    let mut cmd = Command::new(&python);
     cmd.args([
         "-m",
         "centurion_cli.remote_bridge",
@@ -121,8 +137,26 @@ fn spawn_daemon(socket_path: &Path) -> Result<Child, String> {
         &socket_path.to_string_lossy(),
     ])
     .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
+    .stdout(Stdio::null());
+
+    // Keep stderr for post-mortem (import/bind failures).
+    let stderr_path = bridge_stderr_path();
+    if let Some(parent) = stderr_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stderr_path)
+    {
+        Ok(f) => {
+            cmd.stderr(Stdio::from(f));
+        }
+        Err(_) => {
+            cmd.stderr(Stdio::null());
+        }
+    }
+
     configure_bridge_command(&mut cmd);
     cmd.env("CENTURION_BRIDGE_SOCKET", socket_path.as_os_str());
     cmd.spawn()
@@ -155,6 +189,26 @@ fn recycle_orphan_listener(path: &Path) {
     stop_listener_on_socket(path);
 }
 
+/// Spawn the daemon and wait until the socket accepts connections.
+fn spawn_daemon_ready(path: &Path, timeout: Duration) -> Result<Child, String> {
+    let mut child = spawn_daemon(path)?;
+    if wait_for_socket(path, timeout) {
+        return Ok(child);
+    }
+    // Still starting? Give a short grace if the process is alive.
+    match child.try_wait() {
+        Ok(None) => {
+            if wait_for_socket(path, Duration::from_secs(5)) {
+                return Ok(child);
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        Ok(Some(_)) | Err(_) => {}
+    }
+    Err("Centurion bridge daemon did not become ready.".to_owned())
+}
+
 /// Ensure the bridge daemon is running and accepting connections.
 pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
     let mut state = daemon_lock()
@@ -162,17 +216,15 @@ pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
         .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
     let path = state.socket_path.clone();
 
-    // First call in this Brain process: reuse orphan only when version matches.
+    // First call in this Brain process: reuse an orphan only when it answers ping.
     let first_check = !ORPHAN_CHECKED.swap(true, Ordering::SeqCst);
     if first_check {
-        if socket_connectable(&path) && orphan_is_current(&path) {
+        let orphan_ok = socket_connectable(&path) && orphan_is_current(&path);
+        if orphan_ok {
             return Ok(path);
         }
         if socket_connectable(&path) {
-            if let Some(mut child) = state.child.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+            kill_tracked_child(&mut state);
             drop(state);
             recycle_orphan_listener(&path);
             state = daemon_lock()
@@ -185,28 +237,63 @@ pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
         return Ok(path);
     }
 
+    // Tracked child from a prior spawn that never became ready — do not hard-fail
+    // Chat forever. Kill it, recycle the sock, and fall through to a fresh spawn.
     if let Some(child) = state.child.as_mut() {
         match child.try_wait() {
-            Ok(Some(_)) | Err(_) => state.child = None,
+            Ok(Some(_)) | Err(_) => {
+                state.child = None;
+            }
             Ok(None) => {
                 drop(state);
                 if wait_for_socket(&path, Duration::from_secs(8)) {
                     return Ok(path);
                 }
-                return Err("Centurion bridge daemon is not accepting connections.".to_owned());
+                // Stuck: alive but not accepting.
+                state = daemon_lock()
+                    .lock()
+                    .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+                kill_tracked_child(&mut state);
+                drop(state);
+                recycle_orphan_listener(&path);
+                state = daemon_lock()
+                    .lock()
+                    .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
             }
         }
     }
 
-    let child = spawn_daemon(&path)?;
-    state.child = Some(child);
-    drop(state);
-
-    if wait_for_socket(&path, Duration::from_secs(12)) {
-        Ok(path)
-    } else {
-        Err("Centurion bridge daemon did not become ready.".to_owned())
+    // Fresh spawn (with one automatic retry after recycle).
+    for attempt in 0..2 {
+        if socket_connectable(&path) {
+            return Ok(path);
+        }
+        kill_tracked_child(&mut state);
+        drop(state);
+        // Always clear orphans before bind so we never leave Chat on a stuck child.
+        recycle_orphan_listener(&path);
+        match spawn_daemon_ready(&path, Duration::from_secs(12)) {
+            Ok(child) => {
+                state = daemon_lock()
+                    .lock()
+                    .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+                state.child = Some(child);
+                return Ok(path);
+            }
+            Err(err) => {
+                state = daemon_lock()
+                    .lock()
+                    .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
+                kill_tracked_child(&mut state);
+                if attempt == 0 {
+                    continue;
+                }
+                return Err(err);
+            }
+        }
     }
+
+    Err("Centurion bridge daemon did not become ready.".to_owned())
 }
 
 /// Connect to the daemon (starts it if needed). One restart retry on failure.
@@ -219,13 +306,9 @@ pub fn connect_bridge() -> Result<UnixStream, String> {
                 let mut state = daemon_lock()
                     .lock()
                     .map_err(|_| "Bridge daemon lock poisoned.".to_owned())?;
-                if let Some(mut child) = state.child.take() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-                if state.socket_path.exists() {
-                    let _ = std::fs::remove_file(&state.socket_path);
-                }
+                kill_tracked_child(&mut state);
+                drop(state);
+                recycle_orphan_listener(&path);
             }
             let path = ensure_bridge_daemon()?;
             UnixStream::connect(&path)
