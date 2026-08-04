@@ -61,7 +61,7 @@ check "provider remove-backup help" \
 
 if [[ -n "${PYTHON_BIN}" ]]; then
   check "remote_bridge import" \
-    bash -c "\"${PYTHON_BIN}\" -c 'import centurion_cli.remote_bridge'"
+    bash -c "\"${PYTHON_BIN}\" -c 'import centurion_cli.remote_bridge, centurion.license.enforcement'"
   check "oversight_get via bridge" \
     bash -c "printf '%s' '{\"id\":\"smoke\",\"action\":\"oversight_get\"}' | \"${PYTHON_BIN}\" -m centurion_cli.remote_bridge | grep -q '\"ok\"'"
   check "soul_get via bridge" \

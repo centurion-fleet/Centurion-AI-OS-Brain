@@ -61,7 +61,12 @@ python3 -m venv "${VENV_DST}"
 
 echo "Verifying bundled import…"
 "${VENV_DST}/bin/python" -c \
-  "import centurion_cli.remote_bridge; import run_agent; import anthropic; import telegram; import aiohttp; import qrcode"
+  "import centurion; import centurion.license.enforcement; import centurion_cli.remote_bridge; import run_agent; import anthropic; import telegram; import aiohttp; import qrcode"
+
+# Drop setuptools build/ tree left in the staged repo by pip install — keeps the
+# RPM smaller and avoids PYTHONPATH confusion with a second copy of packages.
+rm -rf "${REPO_DST}/build" "${REPO_DST}/centurionai_os.egg-info" \
+  "${REPO_DST}/centurion_ai_os.egg-info" 2>/dev/null || true
 
 # Relocate shebangs from the staging path to the final system path.
 echo "Rewriting venv shebangs → ${FINAL_VENV}/bin/python"

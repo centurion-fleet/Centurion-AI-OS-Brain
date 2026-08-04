@@ -3059,6 +3059,38 @@ def _handle_license_status(request_id: str) -> dict[str, Any]:
                 "shipment_id": ent.shipment_id,
             },
         }
+    except ModuleNotFoundError as exc:
+        # Enforcement is off for customers; a missing ``centurion`` package must
+        # not brick Chat/Settings with "No module named centurion". Soft-allow.
+        if exc.name == "centurion" or (
+            isinstance(exc.name, str) and exc.name.startswith("centurion.")
+        ):
+            return {
+                "id": request_id,
+                "ok": True,
+                "action": "license_status",
+                "enabled": False,
+                "status": {"enabled": False},
+                "state": "unlicensed",
+                "plan": "",
+                "expires_at": "",
+                "message": "",
+                "license": {
+                    "state": "unlicensed",
+                    "tier": "",
+                    "license_id": "",
+                    "fingerprint": "",
+                    "mode": "allow",
+                    "agent_allowed": True,
+                    "message": "",
+                    "balance_paid_gbp": 0,
+                    "balance_target_gbp": 0,
+                    "balance_remaining_gbp": 0,
+                    "customer_name": "",
+                    "shipment_id": "",
+                },
+            }
+        return _error_response(request_id, action="license_status", exc=exc)
     except Exception as exc:
         return _error_response(request_id, action="license_status", exc=exc)
 

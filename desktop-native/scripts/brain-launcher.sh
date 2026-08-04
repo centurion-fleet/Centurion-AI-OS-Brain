@@ -78,7 +78,9 @@ cached_python_brain() {
     return 1
   fi
   [[ -n "${cached_path}" && -x "${cached_path}" ]] || return 1
-  "${cached_path}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1 || return 1
+  # Need both: bridge module and the ``centurion`` package (license/fleet).
+  "${cached_path}" -c "import centurion_cli.remote_bridge, centurion.license.enforcement" \
+    >/dev/null 2>&1 || return 1
   printf '%s\n' "${cached_path}"
 }
 
@@ -95,16 +97,20 @@ cache_python_brain() {
   mv -f "${tmp}" "${cache_file}"
 }
 
+python_imports_brain_core() {
+  local py="$1"
+  [[ -x "${py}" ]] || return 1
+  "${py}" -c "import centurion_cli.remote_bridge, centurion.license.enforcement" \
+    >/dev/null 2>&1
+}
+
 find_python_brain() {
-  if [[ -n "${CENTURION_PYTHON:-}" && -x "${CENTURION_PYTHON}" ]]; then
-    if "${CENTURION_PYTHON}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
-      printf '%s\n' "${CENTURION_PYTHON}"
-      return
-    fi
+  if [[ -n "${CENTURION_PYTHON:-}" ]] && python_imports_brain_core "${CENTURION_PYTHON}"; then
+    printf '%s\n' "${CENTURION_PYTHON}"
+    return
   fi
   # Prefer the core bundled inside the full Fedora RPM (blank-machine install).
-  if [[ -x "${BUNDLED_PYTHON}" ]] \
-    && "${BUNDLED_PYTHON}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
+  if python_imports_brain_core "${BUNDLED_PYTHON}"; then
     printf '%s\n' "${BUNDLED_PYTHON}"
     return
   fi
@@ -117,8 +123,7 @@ find_python_brain() {
       "${HOME}/.centurion/Centurion-AI-OS/venv/bin/python" \
       "${HOME}/.centurion/Centurion-AI-OS/.venv/bin/python"
     do
-      if [[ -x "${candidate}" ]] \
-        && "${candidate}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
+      if python_imports_brain_core "${candidate}"; then
         printf '%s\n' "${candidate}"
         return
       fi
@@ -134,8 +139,7 @@ find_python_brain() {
     "${HOME}/src/Centurion-AI-OS/.venv/bin/python" \
     "${HOME}/src/Centurion-AI-OS/venv/bin/python"
   do
-    if [[ -x "${candidate}" ]] \
-      && "${candidate}" -c "import centurion_cli.remote_bridge" >/dev/null 2>&1; then
+    if python_imports_brain_core "${candidate}"; then
       printf '%s\n' "${candidate}"
       return
     fi

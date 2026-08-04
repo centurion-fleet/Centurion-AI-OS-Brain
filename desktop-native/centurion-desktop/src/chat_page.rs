@@ -2480,18 +2480,42 @@ pub fn configure_bridge_command(command: &mut Command) {
     }
 }
 
-/// Resolve the Python that can `import centurion_cli` (venv preferred).
+/// True when ``python`` can import the Brain bridge *and* the ``centurion`` package.
+///
+/// New customer installs often had ``centurion_cli`` on an old user venv while
+/// license/fleet code needs ``import centurion`` — verify both so we never pick
+/// a half-installed interpreter (and never fall through to bare system python3).
+fn python_imports_brain_core(python: &str) -> bool {
+    let path = PathBuf::from(python);
+    if !path.is_file() {
+        return false;
+    }
+    Command::new(python)
+        .args([
+            "-c",
+            "import centurion_cli.remote_bridge, centurion.license.enforcement",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Resolve the Python that can import Brain core (bundled Fedora venv preferred).
 pub fn resolve_bridge_python() -> String {
     for key in ["CENTURION_PYTHON", "CENTURION_REMOTE_PYTHON"] {
         if let Ok(path) = std::env::var(key) {
             let trimmed = path.trim();
-            if !trimmed.is_empty() && PathBuf::from(trimmed).is_file() {
+            if !trimmed.is_empty() && python_imports_brain_core(trimmed) {
                 return trimmed.to_owned();
             }
         }
     }
 
     let mut candidates: Vec<PathBuf> = Vec::new();
+    // Full Get Brain RPM ships core here — prefer over any stale ~/.centurion venv.
+    candidates.push(PathBuf::from("/usr/lib/centurion/venv/bin/python"));
     if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
         let root = PathBuf::from(repo.trim());
         if !root.as_os_str().is_empty() {
@@ -2520,9 +2544,16 @@ pub fn resolve_bridge_python() -> String {
     }
 
     for path in candidates {
-        if path.is_file() {
-            return path.to_string_lossy().into_owned();
+        let candidate = path.to_string_lossy();
+        if python_imports_brain_core(candidate.as_ref()) {
+            return candidate.into_owned();
         }
+    }
+    // Last resort: still prefer the RPM python binary if present (import probe
+    // may fail before PYTHONPATH is applied by configure_bridge_command).
+    let bundled = "/usr/lib/centurion/venv/bin/python";
+    if PathBuf::from(bundled).is_file() {
+        return bundled.to_owned();
     }
     "python3".to_owned()
 }
@@ -2542,6 +2573,9 @@ pub fn resolve_centurion_cli() -> String {
     }
 
     let mut candidates: Vec<PathBuf> = Vec::new();
+    // Fedora Brain RPM wrappers / venv entry points first.
+    candidates.push(PathBuf::from("/usr/bin/centurion"));
+    candidates.push(PathBuf::from("/usr/lib/centurion/venv/bin/centurion"));
     if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
         let root = PathBuf::from(repo.trim());
         if !root.as_os_str().is_empty() {
