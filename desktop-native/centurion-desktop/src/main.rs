@@ -2452,19 +2452,16 @@ pairing stays available for early testing on the same Wi‑Fi.",
         if let Some((_, detail)) = load_update_attention() {
             items.push(SettingsAttentionItem::UpdateAvailable { detail });
         }
-        let bridge_thinking = run_bridge_action(
-            "settings_snapshot",
-            serde_json::json!({ "skip_probe": true }),
-        )
-        .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
-        .and_then(|payload| payload.get("thinking").cloned())
-        .filter(|thinking| thinking.is_object() && thinking.get("health").is_some())
-        .or_else(|| {
-            run_bridge_action("provider_status", serde_json::json!({ "skip_probe": true }))
-                .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
-                .and_then(|payload| payload.get("status").cloned())
-                .filter(|status| status.is_object() && status.get("health").is_some())
-        });
+        let bridge_thinking = cached_settings_snapshot()
+            .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
+            .and_then(|payload| payload.get("thinking").cloned())
+            .filter(|thinking| thinking.is_object() && thinking.get("health").is_some())
+            .or_else(|| {
+                run_bridge_action("provider_status", serde_json::json!({ "skip_probe": true }))
+                    .filter(|payload| payload.get("ok").and_then(|v| v.as_bool()) == Some(true))
+                    .and_then(|payload| payload.get("status").cloned())
+                    .filter(|status| status.is_object() && status.get("health").is_some())
+            });
         let cli_status = if bridge_thinking.is_none() {
             run_provider_command(&["status", "--skip-probe"]).and_then(|response| response.status)
         } else {
@@ -3665,41 +3662,43 @@ pairing stays available for early testing on the same Wi‑Fi.",
         firecrawl_line: String,
     }
 
+    /// TTL-cache the raw settings_snapshot ~45s so Settings reopen + attention
+    /// badge polls share one bridge round-trip.
+    fn cached_settings_snapshot() -> Option<serde_json::Value> {
+        use std::sync::Mutex;
+        use std::time::{Duration, Instant};
+        struct Cache {
+            at: Instant,
+            value: serde_json::Value,
+        }
+        static CACHE: OnceLock<Mutex<Option<Cache>>> = OnceLock::new();
+        let lock = CACHE.get_or_init(|| Mutex::new(None));
+        if let Ok(guard) = lock.lock() {
+            if let Some(hit) = guard.as_ref() {
+                if hit.at.elapsed() < Duration::from_secs(45) {
+                    return Some(hit.value.clone());
+                }
+            }
+        }
+        let snap =
+            run_bridge_action("settings_snapshot", serde_json::json!({ "skip_probe": true }))?;
+        if snap.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            return Some(snap);
+        }
+        if let Ok(mut guard) = lock.lock() {
+            *guard = Some(Cache {
+                at: Instant::now(),
+                value: snap.clone(),
+            });
+        }
+        Some(snap)
+    }
+
     /// `plain_health` picks the plain-language health phrasing used by the
     /// background poll; the first fill shows provider · model instead.
     fn collect_settings_fill(plain_health: bool) -> SettingsFill {
         // Prefer one bridge round-trip (no centurion CLI spawn). Fall back to
         // the legacy multi-call path when the daemon is older.
-        // TTL-cache the raw snapshot ~45s so Settings tab reopen stays snappy.
-        fn cached_settings_snapshot() -> Option<serde_json::Value> {
-            use std::sync::Mutex;
-            use std::time::{Duration, Instant};
-            struct Cache {
-                at: Instant,
-                value: serde_json::Value,
-            }
-            static CACHE: OnceLock<Mutex<Option<Cache>>> = OnceLock::new();
-            let lock = CACHE.get_or_init(|| Mutex::new(None));
-            if let Ok(guard) = lock.lock() {
-                if let Some(hit) = guard.as_ref() {
-                    if hit.at.elapsed() < Duration::from_secs(45) {
-                        return Some(hit.value.clone());
-                    }
-                }
-            }
-            let snap =
-                run_bridge_action("settings_snapshot", serde_json::json!({ "skip_probe": true }))?;
-            if snap.get("ok").and_then(|v| v.as_bool()) != Some(true) {
-                return Some(snap);
-            }
-            if let Ok(mut guard) = lock.lock() {
-                *guard = Some(Cache {
-                    at: Instant::now(),
-                    value: snap.clone(),
-                });
-            }
-            Some(snap)
-        }
 
         if let Some(snap) = cached_settings_snapshot() {
             if snap.get("ok").and_then(|v| v.as_bool()) == Some(true) {
@@ -3738,6 +3737,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
                     }
                     line
                 });
+
                 let backups = snap
                     .get("backups")
                     .and_then(|v| v.as_array())

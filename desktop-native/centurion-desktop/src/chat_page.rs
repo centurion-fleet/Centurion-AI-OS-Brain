@@ -6192,13 +6192,26 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let is_sending = is_sending.clone();
         let prompt_rename_session = prompt_rename_session.clone();
         let prompt_delete_session = prompt_delete_session.clone();
+        let refresh_sessions = refresh_sessions.clone();
+        // Coalesce concurrent sidebar refreshes — cold open used to fire
+        // session_list twice (eager + post-resume) and stampede the bridge.
+        let refresh_in_flight = Rc::new(Cell::new(false));
+        let refresh_pending = Rc::new(Cell::new(false));
         move || {
+            if refresh_in_flight.get() {
+                refresh_pending.set(true);
+                return;
+            }
+            refresh_in_flight.set(true);
             let session_list = session_list.clone();
             let session_stack = session_stack.clone();
             let session_id = session_id.clone();
             let is_sending = is_sending.clone();
             let prompt_rename_session = prompt_rename_session.clone();
             let prompt_delete_session = prompt_delete_session.clone();
+            let refresh_sessions = refresh_sessions.clone();
+            let refresh_in_flight = refresh_in_flight.clone();
+            let refresh_pending = refresh_pending.clone();
             let (tx, rx) = mpsc::channel::<Vec<SessionSummary>>();
             let active_for_fetch = session_id.borrow().clone();
             thread::spawn(move || {
@@ -6246,10 +6259,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             session_list.select_row(Some(&row));
                         }
                     }
+                    refresh_in_flight.set(false);
+                    if refresh_pending.replace(false) {
+                        let refresh_sessions = refresh_sessions.clone();
+                        glib::idle_add_local_once(move || refresh_sessions());
+                    }
                     glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    refresh_in_flight.set(false);
+                    glib::ControlFlow::Break
+                }
             });
         }
     }));
@@ -6316,7 +6337,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
     refresh_messages();
-    refresh_sessions();
+    // Sidebar fill runs once the initial session bind finishes (above) —
+    // an eager refresh_sessions() here doubled session_list on every cold open.
 
     // New chat
     {
