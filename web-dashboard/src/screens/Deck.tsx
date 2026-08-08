@@ -109,7 +109,7 @@ export function Deck() {
   );
 
   return (
-    <div className="mx-auto min-h-screen max-w-5xl px-4 pb-20 pt-8 sm:px-6 sm:pt-10">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 pb-20 pt-8 sm:px-6 sm:pt-10">
       {/* First viewport: brand + Primary as one composition */}
       <header className="mb-2 flex flex-wrap items-end justify-between gap-4">
         <div>

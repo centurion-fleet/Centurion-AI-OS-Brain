@@ -23,13 +23,13 @@ export const SupportingRow = memo(function SupportingRow({
       <h2 className="mb-4 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-dim">
         Supporting
       </h2>
-      <div className="hide-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
         {missions.map((m) => {
           const progress = missionProgress(m);
           return (
             <div
               key={m.id}
-              className="surface min-w-[220px] max-w-[260px] shrink-0 rounded-2xl p-4 text-left transition-colors hover:border-amber-glow/25 sm:min-w-[240px]"
+              className="surface rounded-2xl p-4 text-left transition-colors hover:border-amber-glow/25"
             >
               <button
                 type="button"
