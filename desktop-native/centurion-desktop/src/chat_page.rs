@@ -882,7 +882,7 @@ const COMPOSER_MIN_HEIGHT: i32 = 88;
 const COMPOSER_MAX_HEIGHT: i32 = 220;
 const COMPOSER_PLACEHOLDER: &str =
     "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
-const TRANSCRIPT_SPACER_PX: i32 = 112;
+const TRANSCRIPT_SPACER_PX: i32 = 200;
 
 /// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
 #[derive(Clone)]
@@ -4105,7 +4105,7 @@ fn schedule_scroll_to_latest(
     follow_bottom.set(true);
     scroll_chat_to_latest(message_scroll, programmatic);
 
-    for delay_ms in [16u64, 120] {
+    for delay_ms in [16u64, 120, 400] {
         let message_scroll = message_scroll.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic = programmatic.clone();

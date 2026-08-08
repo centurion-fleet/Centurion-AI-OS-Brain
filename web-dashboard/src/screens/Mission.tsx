@@ -301,7 +301,7 @@ export function Mission() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-3xl px-4 pb-20 pt-6 sm:px-6">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 pb-20 pt-6 sm:px-6">
       <Link
         to="/"
         className="mb-6 inline-flex text-sm text-ink-dim transition hover:text-amber-soft"
