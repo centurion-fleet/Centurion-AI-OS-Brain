@@ -97,7 +97,7 @@ if [[ "${EMBED_HITS}" -lt 1 ]]; then
 fi
 echo "  version guard: ${DESKTOP_BIN} embeds ${VERSION} ✓"
 
-echo "Packaging Smooth Transfer release ${VERSION} (${ARCH}) — desktop + remote helper, no mission-deck"
+echo "Packaging Smooth Transfer release ${VERSION} (${ARCH}) — desktop + remote helper + mission-deck"
 echo "  desktop:   ${DESKTOP_BIN}"
 echo "  remote:    ${REMOTE_BIN}"
 echo "  installer: ${INSTALLER_BIN}"
@@ -176,6 +176,18 @@ Advanced: ./Install-Brain   or   ./install.sh
 If install says Centurion core was not found, contact your advisor.
 EOF
 
+# Bundle the Mission Deck (React dashboard) so the Missions tab works on
+# smooth-transfer installs. Built fresh on Linux — no AppleDouble junk.
+DECK_SRC="${ROOT}/web-dashboard"
+if [[ -d "${DECK_SRC}/dist" && -f "${DECK_SRC}/server.js" ]]; then
+  mkdir -p "${STAGE}/${ARCHIVE_NAME}/mission-deck"
+  cp -a "${DECK_SRC}/dist" "${STAGE}/${ARCHIVE_NAME}/mission-deck/dist"
+  install -m 0644 "${DECK_SRC}/server.js" "${STAGE}/${ARCHIVE_NAME}/mission-deck/server.js"
+  echo "  mission-deck: bundled (dist + server.js)"
+else
+  echo "WARNING: web-dashboard/dist missing — Missions tab will show 'Mission Deck not found'." >&2
+fi
+
 # Exclude AppleDouble / junk even if something slips into stage later.
 mkdir -p "${DIST}"
 tar -C "${STAGE}" \
@@ -196,10 +208,6 @@ tar -C "${STAGE}" \
 # Fail if archive still contains AppleDouble junk.
 if tar -tzf "${OUT_TGZ}" | grep -E '(^|/)\._|/__MACOSX/' >/dev/null 2>&1; then
   echo "ERROR: archive still contains AppleDouble/__MACOSX junk." >&2
-  exit 1
-fi
-if tar -tzf "${OUT_TGZ}" | grep -E 'mission-deck' >/dev/null 2>&1; then
-  echo "ERROR: archive must not include mission-deck." >&2
   exit 1
 fi
 if ! tar -tzf "${OUT_TGZ}" | grep -E 'bin/centurion-desktop$' >/dev/null 2>&1; then

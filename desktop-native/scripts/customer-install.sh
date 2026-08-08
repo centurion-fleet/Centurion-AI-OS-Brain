@@ -227,6 +227,15 @@ if [[ -f "${ARCHIVE_ROOT}/metainfo/com.centurion.desktop.metainfo.xml" ]]; then
 fi
 
 MISSION_DECK_DST="${SHARE_DIR}/mission-deck"
+# Populate the Mission Deck from the archive so the Missions tab works on
+# smooth-transfer installs (the .desktop Exec points CENTURION_MISSION_DECK_DIR
+# here). Ships dist/ + server.js; server.js reads dist/ per request.
+if [[ -d "${ARCHIVE_ROOT}/mission-deck/dist" && -f "${ARCHIVE_ROOT}/mission-deck/server.js" ]]; then
+  mkdir -p "${MISSION_DECK_DST}"
+  cp -a "${ARCHIVE_ROOT}/mission-deck/dist" "${MISSION_DECK_DST}/dist"
+  install -m 0644 "${ARCHIVE_ROOT}/mission-deck/server.js" "${MISSION_DECK_DST}/server.js"
+  echo "Installed Mission Deck: ${MISSION_DECK_DST}"
+fi
 DESKTOP_ICON="com.centurion.desktop"
 if [[ -n "${ICON_ABS}" ]]; then
   DESKTOP_ICON="${ICON_ABS}"
