@@ -927,3 +927,136 @@ def test_remote_activity_filters_noisy_status_and_caps_terminal():
     )
     assert summary == "$ uname -a\nexit 0"
     assert "xxxx" not in summary
+
+def test_swarm_connect_and_invite_remain_frozen():
+    from centurion_cli import remote_bridge as rb
+
+    connect = rb._handle_swarm_connect({}, "req-1")
+    assert connect["ok"] is False
+    assert connect.get("code") == "MC_FROZEN"
+    invite = rb._handle_swarm_invite({}, "req-2")
+    assert invite["ok"] is False
+    assert invite.get("code") == "MC_FROZEN"
+
+def test_profiles_list_bridge_action(monkeypatch):
+    from types import SimpleNamespace
+
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setattr(
+        "centurion_cli.profiles.list_profiles",
+        lambda: [
+            SimpleNamespace(
+                name="default",
+                is_default=True,
+                model="m",
+                provider="p",
+                description="main",
+            ),
+            SimpleNamespace(
+                name="researcher",
+                is_default=False,
+                model="",
+                provider="",
+                description="",
+            ),
+        ],
+    )
+    resp = rb._handle_profiles_list("req-p")
+    assert resp["ok"] is True
+    assert [p["name"] for p in resp["profiles"]] == ["default", "researcher"]
+
+def test_swarm_create_requires_goal_and_workers(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    empty = rb._handle_swarm_create({"goal": "", "workers": []}, "req-a")
+    assert empty["ok"] is False
+
+    missing_workers = rb._handle_swarm_create(
+        {"goal": "Ship the report", "workers": []},
+        "req-b",
+    )
+    assert missing_workers["ok"] is False
+
+def test_swarm_create_happy_path(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from centurion_cli import remote_bridge as rb
+    from centurion_cli.kanban_swarm import SwarmCreated
+
+    monkeypatch.setattr(
+        "centurion_cli.profiles.profile_exists",
+        lambda name: name in {"default", "researcher", "writer"},
+    )
+
+    created_boards = []
+
+    def _fake_create_board(*, name, objective="", mission_id=None):
+        created_boards.append(name)
+        return {
+            "ok": True,
+            "swarm_id": "desk-collab-1",
+            "board": {"slug": "desk-collab-1", "name": name},
+            "message": "ok",
+        }
+
+    class _Conn:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "centurion_cli.swarm_state.create_collaboration_board",
+        _fake_create_board,
+    )
+    monkeypatch.setattr("centurion_cli.kanban_db.connect", lambda board=None: _Conn())
+    monkeypatch.setattr(
+        "centurion_cli.kanban_swarm.create_swarm",
+        lambda *a, **k: SwarmCreated(
+            root_id="root-1",
+            worker_ids=["w1", "w2"],
+            verifier_id="v1",
+            synthesizer_id="s1",
+        ),
+    )
+    monkeypatch.setattr(
+        "centurion_cli.kanban_db.dispatch_once",
+        lambda *a, **k: SimpleNamespace(spawned=2),
+    )
+    monkeypatch.setattr(
+        "centurion_cli.swarm_state.get_swarm_snapshot",
+        lambda: {"ok": True, "swarms": [{"id": "desk-collab-1", "workers": []}]},
+    )
+
+    resp = rb._handle_swarm_create(
+        {
+            "goal": "Draft a weekly briefing",
+            "name": "Weekly briefing",
+            "workers": [
+                {"profile": "researcher", "title": "Research"},
+                {"profile": "writer", "title": "Write"},
+            ],
+            "verifier_assignee": "default",
+            "synthesizer_assignee": "writer",
+        },
+        "req-ok",
+    )
+    assert resp["ok"] is True
+    assert resp["swarm_id"] == "desk-collab-1"
+    assert resp["root_id"] == "root-1"
+    assert resp["worker_ids"] == ["w1", "w2"]
+    assert created_boards == ["Weekly briefing"]
+
+def test_swarm_create_missing_profile(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setattr("centurion_cli.profiles.profile_exists", lambda name: False)
+    resp = rb._handle_swarm_create(
+        {
+            "goal": "Do the thing",
+            "workers": [{"profile": "nope", "title": "Nope"}],
+        },
+        "req-miss",
+    )
+    assert resp["ok"] is False
+    assert resp.get("code") == "PROFILE_MISSING"
+
