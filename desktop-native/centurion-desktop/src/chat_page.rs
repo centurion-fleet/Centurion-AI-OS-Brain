@@ -4389,6 +4389,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
     let session_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(load_session_id()));
     let is_sending = Rc::new(RefCell::new(false));
+    // Bumped on Stop / conversation switch so a late Done from a cancelled
+    // worker cannot re-lock the UI or append into the wrong session.
+    let turn_epoch = Rc::new(Cell::new(0u64));
     let switching = Rc::new(Cell::new(false));
 
     // Virtualized transcript — ListView only binds visible rows (long chats stay smooth).
@@ -6046,27 +6049,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             // Amber pulse on Focus banner while Centurion is working in Focus mode.
             focus_pulse.set_visible(sending && intent.get() == ChatIntent::Focus);
             // Keep composer editable while generating (Cursor-like); busy Send enqueues.
-            new_chat_button.set_sensitive(!sending);
-            session_list.set_sensitive(!sending);
+            // Conversations stay selectable — a hung turn must not freeze the sidebar.
+            new_chat_button.set_sensitive(true);
+            session_list.set_sensitive(true);
             refresh_queue_strip();
         }
-    });
-
-    let stop_turn: Rc<dyn Fn()> = Rc::new({
-        let turn_cancel = turn_cancel.clone();
-        move || {
-            if let Some(flag) = turn_cancel.borrow().as_ref() {
-                flag.store(true, Ordering::SeqCst);
-            }
-        }
-    });
-    stop_button.connect_clicked({
-        let stop_turn = stop_turn.clone();
-        move |_| stop_turn()
-    });
-    strip_stop.connect_clicked({
-        let stop_turn = stop_turn.clone();
-        move |_| stop_turn()
     });
 
     let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
@@ -6096,6 +6083,42 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             approval_box.set_visible(false);
             set_chat_attention(0);
         }
+    });
+
+    let abort_active_turn: Rc<dyn Fn()> = Rc::new({
+        let turn_cancel = turn_cancel.clone();
+        let turn_epoch = turn_epoch.clone();
+        let set_sending = set_sending.clone();
+        let finish_activity_summary = finish_activity_summary.clone();
+        let reset_activity = reset_activity.clone();
+        let clear_approval = clear_approval.clone();
+        let pending_approval_tx = pending_approval_tx.clone();
+        move || {
+            if let Some(flag) = turn_cancel.borrow().as_ref() {
+                flag.store(true, Ordering::SeqCst);
+            }
+            turn_epoch.set(turn_epoch.get().wrapping_add(1));
+            set_sending(false);
+            clear_approval();
+            *pending_approval_tx.borrow_mut() = None;
+            let _ = finish_activity_summary();
+            reset_activity();
+        }
+    });
+
+    let stop_turn: Rc<dyn Fn()> = Rc::new({
+        let abort_active_turn = abort_active_turn.clone();
+        move || {
+            abort_active_turn();
+        }
+    });
+    stop_button.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
+    });
+    strip_stop.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
     });
 
     let start_new_chat: Rc<dyn Fn()> = Rc::new({
@@ -6524,10 +6547,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     // New chat
     {
         let start_new_chat = start_new_chat.clone();
+        let abort_active_turn = abort_active_turn.clone();
         let is_sending = is_sending.clone();
         new_chat_button.connect_clicked(move |_| {
             if *is_sending.borrow() {
-                return;
+                abort_active_turn();
             }
             start_new_chat();
         });
@@ -6542,6 +6566,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let set_error = set_error.clone();
         let clear_approval = clear_approval.clone();
         let is_sending = is_sending.clone();
+        let abort_active_turn = abort_active_turn.clone();
         let switching = switching.clone();
         let follow_bottom = follow_bottom.clone();
         let assistant_name = assistant_name.clone();
@@ -6550,8 +6575,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let context_bar = context_bar.clone();
         let title_label = title.clone();
         session_list.connect_row_activated(move |_, row| {
-            if *is_sending.borrow() || switching.get() {
+            if switching.get() {
                 return;
+            }
+            if *is_sending.borrow() {
+                abort_active_turn();
             }
             let target_id = row.widget_name().to_string();
             if target_id.is_empty() {
@@ -6700,6 +6728,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let apply_activity = apply_activity.clone();
         let finish_activity_summary = finish_activity_summary.clone();
         let turn_cancel = turn_cancel.clone();
+        let turn_epoch = turn_epoch.clone();
         let show_proposal_choices = show_proposal_choices.clone();
         let keep_proposal_context = keep_proposal_context.clone();
         let pending_proposal = pending_proposal.clone();
@@ -6757,6 +6786,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             show_activity_working();
             let cancel = Arc::new(AtomicBool::new(false));
             *turn_cancel.borrow_mut() = Some(cancel.clone());
+            turn_epoch.set(turn_epoch.get().wrapping_add(1));
+            let my_epoch = turn_epoch.get();
             set_sending(true);
 
             let discuss_topic = active_discuss.borrow().clone();
@@ -6903,7 +6934,19 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let submit_slot_for_self = submit_slot_for_self.clone();
             let apply_focus_banner_for_turn = apply_focus_banner.clone();
             let focus_banner_gen_for_turn = focus_banner_gen.clone();
+            let turn_epoch = turn_epoch.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
+                // Stale after Stop / conversation switch — drain until Done, ignore UI writes.
+                if turn_epoch.get() != my_epoch {
+                    match event_rx.try_recv() {
+                        Ok(WorkerEvent::Done(_))
+                        | Err(mpsc::TryRecvError::Disconnected) => {
+                            return glib::ControlFlow::Break;
+                        }
+                        Ok(_) => return glib::ControlFlow::Continue,
+                        Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    }
+                }
                 // Drain a burst per tick. A tool-heavy turn emits activity far
                 // faster than one event per 50ms, so a single try_recv per tick
                 // makes the trail trail the worker. Capped so GTK keeps a slice.
