@@ -883,6 +883,10 @@ const COMPOSER_MAX_HEIGHT: i32 = 220;
 const COMPOSER_PLACEHOLDER: &str =
     "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
 const TRANSCRIPT_SPACER_PX: i32 = 200;
+/// Initial ListStore window on resume / rebuild — full history stays in `messages`.
+const INITIAL_VISIBLE_MESSAGES: usize = 50;
+/// How many older messages to prepend when “Load earlier” is clicked.
+const LOAD_EARLIER_BATCH: usize = 50;
 
 /// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
 #[derive(Clone)]
@@ -4491,9 +4495,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     transcript_spacer.set_size_request(-1, TRANSCRIPT_SPACER_PX);
     transcript_spacer.set_hexpand(true);
 
+    let load_earlier = gtk::Button::with_label("Load earlier messages");
+    load_earlier.add_css_class("flat");
+    load_earlier.add_css_class("centurion-chat-load-earlier");
+    load_earlier.set_halign(gtk::Align::Center);
+    load_earlier.set_margin_top(8);
+    load_earlier.set_margin_bottom(4);
+    load_earlier.set_visible(false);
+
     // Cursor-style: bubbles + live Activity share one scroll surface; composer stays fixed below.
     let transcript_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_box.set_hexpand(true);
+    transcript_box.append(&load_earlier);
     transcript_box.append(&message_list);
     transcript_box.append(&activity_card);
     transcript_box.append(&transcript_spacer);
@@ -5560,20 +5573,19 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let regenerate_slot = regenerate_slot_for_factory.clone();
     let rendered_count = Rc::new(Cell::new(0usize));
     let showing_empty_placeholder = Rc::new(Cell::new(false));
+    // Index into `messages` of the first row currently in the ListStore.
+    let visible_start = Rc::new(Cell::new(0usize));
 
-    let rebuild_messages: Rc<dyn Fn()> = Rc::new({
+    let fill_store_from_visible: Rc<dyn Fn()> = {
         let message_store = message_store.clone();
         let messages = messages.clone();
-        let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
-        let title = title.clone();
-        let follow_bottom = follow_bottom.clone();
-        let programmatic_scroll = programmatic_scroll.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
-        move || {
+        let visible_start = visible_start.clone();
+        let load_earlier = load_earlier.clone();
+        Rc::new(move || {
             let name = assistant_name.borrow().clone();
-            title.set_label(&format!("Chat with {name}"));
             message_store.remove_all();
             let msgs = messages.borrow();
             if msgs.is_empty() {
@@ -5590,22 +5602,47 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 };
                 message_store.append(&glib::BoxedAnyObject::new(item));
                 rendered_count.set(0);
+                visible_start.set(0);
                 showing_empty_placeholder.set(true);
-            } else {
-                let last_assistant_idx = msgs
-                    .iter()
-                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
-                for (idx, message) in msgs.iter().enumerate() {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: Some(idx) == last_assistant_idx,
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-                rendered_count.set(msgs.len());
-                showing_empty_placeholder.set(false);
+                load_earlier.set_visible(false);
+                return;
             }
+            let n = msgs.len();
+            let start = visible_start.get().min(n);
+            visible_start.set(start);
+            let last_assistant_idx = msgs
+                .iter()
+                .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
+            for (idx, message) in msgs.iter().enumerate().skip(start) {
+                let item = TranscriptItem {
+                    message: message.clone(),
+                    assistant_name: name.clone(),
+                    is_last_assistant: Some(idx) == last_assistant_idx,
+                };
+                message_store.append(&glib::BoxedAnyObject::new(item));
+            }
+            rendered_count.set(n);
+            showing_empty_placeholder.set(false);
+            load_earlier.set_visible(start > 0);
+        })
+    };
+
+    let rebuild_messages: Rc<dyn Fn()> = Rc::new({
+        let messages = messages.clone();
+        let message_scroll = message_scroll.clone();
+        let assistant_name = assistant_name.clone();
+        let title = title.clone();
+        let follow_bottom = follow_bottom.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        let visible_start = visible_start.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
+        move || {
+            let name = assistant_name.borrow().clone();
+            title.set_label(&format!("Chat with {name}"));
+            let n = messages.borrow().len();
+            // Fresh session / resume: show the latest window only.
+            visible_start.set(n.saturating_sub(INITIAL_VISIBLE_MESSAGES));
+            fill_store_from_visible();
             schedule_scroll_to_latest(
                 &message_scroll,
                 &follow_bottom,
@@ -5616,7 +5653,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     /// Append newly pushed messages without tearing down the whole ListBox.
     let sync_messages: Rc<dyn Fn()> = Rc::new({
-        let message_store = message_store.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
@@ -5625,6 +5661,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let programmatic_scroll = programmatic_scroll.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
         let rebuild_messages = rebuild_messages.clone();
         move || {
             let name = assistant_name.borrow().clone();
@@ -5640,35 +5677,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             if n == already {
                 return;
             }
-            // Re-flag last assistant for regenerate affordance.
-            if already > 0 {
-                message_store.remove_all();
-                let last_assistant_idx = msgs
-                    .iter()
-                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
-                for (idx, message) in msgs.iter().enumerate() {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: Some(idx) == last_assistant_idx,
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-            } else {
-                for (idx, message) in msgs.iter().enumerate().skip(already) {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: idx + 1 == n
-                            && message.role == ChatRole::Assistant
-                            && message.activity.is_none(),
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-            }
-            rendered_count.set(n);
-            showing_empty_placeholder.set(false);
+            // Grow in place: refresh the visible window (still capped) so the
+            // regenerate affordance tracks the new last assistant without
+            // materializing the entire history into the ListStore.
             drop(msgs);
+            fill_store_from_visible();
             schedule_scroll_to_latest(
                 &message_scroll,
                 &follow_bottom,
@@ -5676,6 +5689,43 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             );
         }
     });
+
+    {
+        let visible_start = visible_start.clone();
+        let messages = messages.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
+        let message_scroll = message_scroll.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        load_earlier.connect_clicked(move |_| {
+            let n = messages.borrow().len();
+            if n == 0 {
+                return;
+            }
+            let cur = visible_start.get().min(n);
+            if cur == 0 {
+                return;
+            }
+            // Preserve viewport: remember distance from bottom before prepend.
+            let adj = message_scroll.vadjustment();
+            let old_upper = adj.upper();
+            let old_value = adj.value();
+            let dist_from_bottom = (old_upper - old_value).max(0.0);
+
+            let next = cur.saturating_sub(LOAD_EARLIER_BATCH);
+            visible_start.set(next);
+            fill_store_from_visible();
+
+            // After store grows upward, keep the same messages on screen.
+            programmatic_scroll.set(true);
+            let adj = message_scroll.vadjustment();
+            let new_value = (adj.upper() - dist_from_bottom).max(adj.lower());
+            adj.set_value(new_value);
+            let programmatic_scroll = programmatic_scroll.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_millis(80), move || {
+                programmatic_scroll.set(false);
+            });
+        });
+    }
 
     // Full rebuild for session switch / clear; incremental sync for live turns.
     let refresh_messages = rebuild_messages.clone();
