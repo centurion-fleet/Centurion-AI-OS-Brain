@@ -5651,7 +5651,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
-    /// Append newly pushed messages without tearing down the whole ListBox.
+    // Incremental refresh for live turns: re-render the visible window only
+    // (capped at INITIAL_VISIBLE_MESSAGES), not the full transcript history.
     let sync_messages: Rc<dyn Fn()> = Rc::new({
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
