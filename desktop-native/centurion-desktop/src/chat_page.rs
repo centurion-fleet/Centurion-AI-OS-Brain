@@ -882,6 +882,9 @@ const COMPOSER_MIN_HEIGHT: i32 = 88;
 const COMPOSER_MAX_HEIGHT: i32 = 220;
 const COMPOSER_PLACEHOLDER: &str =
     "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
+// Breath below the last bubble / activity card. Composer is stacked under the
+// ScrolledWindow (not overlaid); scroll helpers pin *above* this spacer so the
+// latest content sits flush above the gap, not lost inside it.
 const TRANSCRIPT_SPACER_PX: i32 = 200;
 /// Initial ListStore window on resume / rebuild — full history stays in `messages`.
 const INITIAL_VISIBLE_MESSAGES: usize = 50;
@@ -4147,16 +4150,23 @@ fn refresh_assistant_name_async(
     });
 }
 
+/// Scroll position that keeps the latest bubble/activity visible *above* the
+/// trailing transcript spacer (not buried inside the empty gap).
+fn chat_follow_bottom_target(adj: &gtk::Adjustment) -> f64 {
+    let absolute_bottom = (adj.upper() - adj.page_size()).max(adj.lower());
+    (absolute_bottom - f64::from(TRANSCRIPT_SPACER_PX)).max(adj.lower())
+}
+
 fn scroll_chat_to_latest(
     message_scroll: &gtk::ScrolledWindow,
     programmatic: &Rc<Cell<bool>>,
 ) {
     // Pin via the ScrolledWindow adjustment so ListView / ListBox both work
-    // (Fedora Brain: ListBox::scroll_to is unavailable).
+    // (Fedora Brain: ListBox::scroll_to is unavailable). Target is above the
+    // transcript spacer so the spacer stays as breath under the latest content.
     programmatic.set(true);
     let adj = message_scroll.vadjustment();
-    let target = (adj.upper() - adj.page_size()).max(adj.lower());
-    adj.set_value(target);
+    adj.set_value(chat_follow_bottom_target(&adj));
     let programmatic = programmatic.clone();
     glib::idle_add_local_once(move || {
         programmatic.set(false);
@@ -4171,7 +4181,8 @@ fn schedule_scroll_to_latest(
     follow_bottom.set(true);
     scroll_chat_to_latest(message_scroll, programmatic);
 
-    for delay_ms in [16u64, 120, 400] {
+    // Late retries catch ListView measure + async image height after paint.
+    for delay_ms in [16u64, 120, 400, 900] {
         let message_scroll = message_scroll.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic = programmatic.clone();
@@ -4213,6 +4224,7 @@ fn wire_follow_bottom_scroll(
     programmatic: Rc<Cell<bool>>,
 ) {
     let adj = message_scroll.vadjustment();
+    // Near the *content* bottom (above spacer), not the absolute scroll end.
     const NEAR_BOTTOM_PX: f64 = 80.0;
 
     adj.connect_changed({
@@ -4222,7 +4234,7 @@ fn wire_follow_bottom_scroll(
             if !follow_bottom.get() {
                 return;
             }
-            let target = (adj.upper() - adj.page_size()).max(adj.lower());
+            let target = chat_follow_bottom_target(adj);
             if (adj.value() - target).abs() > 0.5 {
                 programmatic.set(true);
                 adj.set_value(target);
@@ -4241,9 +4253,9 @@ fn wire_follow_bottom_scroll(
             if programmatic.get() {
                 return;
             }
-            let target = (adj.upper() - adj.page_size()).max(adj.lower());
-            // If the user scrolls away from the bottom, stop chasing until
-            // they return near the bottom or the next send arms follow again.
+            let target = chat_follow_bottom_target(adj);
+            // If the user scrolls away from the content bottom, stop chasing
+            // until they return near it or the next send arms follow again.
             follow_bottom.set(adj.value() >= target - NEAR_BOTTOM_PX);
         }
     });
@@ -4489,6 +4501,17 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     activity_card.append(&activity_more_label);
     let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
     activity_card.append(&activity_tools);
+    // Live assistant draft (Cursor-like token stream) — plain text until Done.
+    let stream_draft = gtk::Label::builder()
+        .label("")
+                    .wrap(true)
+                    .xalign(0.0)
+                    .selectable(true)
+                    .visible(false)
+                    .css_classes(["centurion-chat-stream-draft"])
+                    .build();
+    activity_card.append(&stream_draft);
+    let stream_draft_text = Rc::new(RefCell::new(String::new()));
 
     let transcript_spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_spacer.add_css_class("centurion-chat-transcript-spacer");
@@ -4593,6 +4616,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         move || {
             clear_activity_box();
             thinking_label.set_label("");
@@ -4606,6 +4631,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             activity_has_thinking.set(false);
             activity_thinking_text.borrow_mut().clear();
             activity_tool_lines.borrow_mut().clear();
+            stream_draft_text.borrow_mut().clear();
+            stream_draft.set_label("");
+            stream_draft.set_visible(false);
             activity_card.set_visible(false);
         }
     });
@@ -4641,6 +4669,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
         let programmatic_scroll = programmatic_scroll.clone();
@@ -4666,6 +4696,32 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     *activity_thinking_text.borrow_mut() = text;
                     activity_title.set_label("Thinking…");
                     // Label-only updates — skip scroll churn when already following.
+                }
+                "stream" | "stream_delta" => {
+                    let chunk = if event.text.is_empty() {
+                        event.line.clone()
+                    } else {
+                        event.text.clone()
+                    };
+                    if chunk.is_empty() {
+                        return;
+                    }
+                    activity_card.set_visible(true);
+                    {
+                        let mut buf = stream_draft_text.borrow_mut();
+                        buf.push_str(&chunk);
+                        // Cap live draft so a huge reply doesn't choke GTK labels.
+                        const MAX_DRAFT: usize = 24_000;
+                        if buf.len() > MAX_DRAFT {
+                            let keep = MAX_DRAFT / 2;
+                            let trimmed = buf[buf.len() - keep..].to_owned();
+                            *buf = format!("…{trimmed}");
+                        }
+                        stream_draft.set_label(buf.as_str());
+                    }
+                    stream_draft.set_visible(true);
+                    activity_title.set_label("Writing…");
+                    needs_scroll = true;
                 }
                 "tool" => {
                     let title = if event.tool.trim().is_empty() {
@@ -4721,13 +4777,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         return;
                     }
                     // Lifecycle crumbs update the title only — no Status cards.
+                    // Heartbeats / long Still-working lines keep their full text.
                     activity_card.set_visible(true);
-                    let title = if line.len() > 80 {
+                    let lower = line.to_ascii_lowercase();
+                    let title = if lower.contains("still working") {
+                        line.trim().to_owned()
+                    } else if line.len() > 120 {
                         "Working…".to_owned()
                     } else {
                         line.trim().to_owned()
                     };
                     activity_title.set_label(&title);
+                    needs_scroll = lower.contains("still working");
                 }
                 _ => {
                     let line = if event.line.is_empty() {
@@ -4764,7 +4825,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         move || {
+            // Always drop the live token draft — final assistant bubble replaces it.
+            stream_draft_text.borrow_mut().clear();
+            stream_draft.set_label("");
+            stream_draft.set_visible(false);
+
             let tools = activity_tool_count.get();
             let thinking = activity_has_thinking.get();
             if tools == 0 && !thinking {
