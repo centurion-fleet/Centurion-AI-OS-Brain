@@ -3845,7 +3845,9 @@ fn parse_message_blocks(markdown: &str) -> std::sync::Arc<Vec<MessageBlock>> {
             return hit.clone();
         }
     }
-    let blocks = std::sync::Arc::new(parse_message_blocks_uncached(markdown));
+    let blocks = std::sync::Arc::new(coalesce_paragraph_blocks(
+        parse_message_blocks_uncached(markdown),
+    ));
     if let Ok(mut guard) = cache.lock() {
         if guard.len() > 256 {
             guard.clear();
@@ -3853,6 +3855,31 @@ fn parse_message_blocks(markdown: &str) -> std::sync::Arc<Vec<MessageBlock>> {
         guard.insert(key, blocks.clone());
     }
     blocks
+}
+
+/// Merge consecutive prose paragraphs into one GTK label (fewer widgets per message).
+/// Headings stay separate; Code/Rule are hard boundaries.
+fn coalesce_paragraph_blocks(blocks: Vec<MessageBlock>) -> Vec<MessageBlock> {
+    let mut out: Vec<MessageBlock> = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match (&mut out.last_mut(), block) {
+            (
+                Some(MessageBlock::Paragraph {
+                    markup: prev,
+                    heading: None,
+                }),
+                MessageBlock::Paragraph {
+                    markup: next,
+                    heading: None,
+                },
+            ) => {
+                prev.push_str("\n\n");
+                prev.push_str(&next);
+            }
+            (_, other) => out.push(other),
+        }
+    }
+    out
 }
 
 fn parse_message_blocks_uncached(markdown: &str) -> Vec<MessageBlock> {
