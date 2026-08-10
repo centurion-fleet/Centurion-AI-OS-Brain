@@ -77,6 +77,143 @@ def _task_outcome_id(board_slug: str, task_id: str) -> str:
     return f"{board_slug}:{task_id}:outcome"
 
 
+def _result_preview(text: str | None, *, limit: int = 240) -> str:
+    raw = str(text or "").strip()
+    if len(raw) <= limit:
+        return raw
+    return raw[: limit - 1] + "…"
+
+
+def _find_swarm_topology(
+    conn: Any,
+    tasks: list[Any],
+) -> tuple[str | None, dict[str, Any], dict[str, Any]]:
+    """Locate kanban_swarm_v1 root via blackboard topology (if any)."""
+    try:
+        from centurion_cli.kanban_swarm import latest_blackboard
+    except Exception:
+        return None, {}, {}
+
+    by_id = {str(t.id): t for t in tasks}
+    # Prefer done roots; fall back to any task with topology.
+    ordered = sorted(
+        tasks,
+        key=lambda t: (0 if getattr(t, "status", "") == "done" else 1, -(getattr(t, "created_at", 0) or 0)),
+    )
+    for task in ordered:
+        try:
+            board = latest_blackboard(conn, task.id)
+        except Exception:
+            continue
+        topo = board.get("topology")
+        if isinstance(topo, dict) and topo.get("worker_ids") and topo.get("verifier_id"):
+            return str(task.id), topo, board
+    # Topology may exist even if root not in the list_tasks window.
+    for task in tasks:
+        tid = str(getattr(task, "id", "") or "")
+        if tid in by_id and "Swarm:" in str(getattr(task, "title", "") or ""):
+            try:
+                board = latest_blackboard(conn, tid)
+            except Exception:
+                continue
+            topo = board.get("topology")
+            if isinstance(topo, dict):
+                return tid, topo, board
+    return None, {}, {}
+
+
+def _swarm_workers_payload(
+    tasks_by_id: dict[str, Any],
+    topology: dict[str, Any],
+) -> list[dict[str, Any]]:
+    workers: list[dict[str, Any]] = []
+    for wid in topology.get("worker_ids") or []:
+        task = tasks_by_id.get(str(wid))
+        if not task:
+            workers.append(
+                {
+                    "task_id": str(wid),
+                    "title": "Worker",
+                    "assignee": "",
+                    "role": "worker",
+                    "status": "unknown",
+                    "result": "",
+                }
+            )
+            continue
+        workers.append(
+            {
+                "task_id": task.id,
+                "title": task.title,
+                "assignee": task.assignee or "",
+                "role": "worker",
+                "status": task.status,
+                "result": _result_preview(task.result),
+            }
+        )
+    for role, key in (("verifier", "verifier_id"), ("synthesizer", "synthesizer_id")):
+        rid = topology.get(key)
+        if not rid:
+            continue
+        task = tasks_by_id.get(str(rid))
+        if not task:
+            workers.append(
+                {
+                    "task_id": str(rid),
+                    "title": role.title(),
+                    "assignee": "",
+                    "role": role,
+                    "status": "unknown",
+                    "result": "",
+                }
+            )
+            continue
+        workers.append(
+            {
+                "task_id": task.id,
+                "title": task.title,
+                "assignee": task.assignee or "",
+                "role": role,
+                "status": task.status,
+                "result": _result_preview(task.result),
+            }
+        )
+    return workers
+
+
+def _participants_from_workers(workers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    participants: list[dict[str, Any]] = [
+        {
+            "id": "human-owner",
+            "name": "You",
+            "kind": "human",
+            "role": "owner",
+            "is_active": False,
+        }
+    ]
+    seen: set[str] = set()
+    for w in workers:
+        assignee = str(w.get("assignee") or "").strip()
+        if not assignee or assignee in seen:
+            # Still show a slot even if duplicate profile shares assignee.
+            key = f"{assignee}:{w.get('role')}:{w.get('task_id')}"
+        else:
+            key = assignee
+            seen.add(assignee)
+        participants.append(
+            {
+                "id": str(w.get("task_id") or key),
+                "name": assignee or str(w.get("title") or "Centurion"),
+                "kind": "centurion",
+                "role": str(w.get("role") or "worker"),
+                "is_active": str(w.get("status") or "") == "running",
+                "status": str(w.get("status") or ""),
+                "title": str(w.get("title") or ""),
+            }
+        )
+    return participants
+
+
 def _local_board_snapshot() -> dict[str, Any]:
     """Return collaboration summaries derived from local kanban boards."""
     try:
@@ -98,14 +235,22 @@ def _local_board_snapshot() -> dict[str, Any]:
         slug = str(board.get("slug") or board.get("id") or "").strip()
         if not slug:
             continue
+        conn = None
+        tasks: list[Any] = []
+        root_id = None
+        topology: dict[str, Any] = {}
+        blackboard: dict[str, Any] = {}
         try:
             conn = kanban_db.connect(board=slug)
-            tasks = kanban_db.list_tasks(conn, include_archived=False, order_by="updated", limit=50)
+            # Wider window so swarm roots + children stay visible together.
+            tasks = kanban_db.list_tasks(conn, include_archived=False, order_by="updated", limit=200)
+            root_id, topology, blackboard = _find_swarm_topology(conn, tasks)
         except Exception:
             continue
         finally:
             try:
-                conn.close()  # type: ignore[name-defined]
+                if conn is not None:
+                    conn.close()
             except Exception:
                 pass
 
@@ -117,9 +262,54 @@ def _local_board_snapshot() -> dict[str, Any]:
         running = [task for task in tasks if task.status == "running"]
         done = [task for task in tasks if task.status == "done"]
         pulse = _pulse_from_tasks("active", "execute", tasks)
+        if topology and not running and not blocked:
+            worker_statuses = []
+            tasks_by_id = {str(t.id): t for t in tasks}
+            for wid in topology.get("worker_ids") or []:
+                t = tasks_by_id.get(str(wid))
+                if t:
+                    worker_statuses.append(t.status)
+            if worker_statuses and all(s == "todo" for s in worker_statuses):
+                pulse = "forming"
+            elif worker_statuses and all(s in {"done", "archived"} for s in worker_statuses):
+                # Verifier/synthesizer may still be pending.
+                pulse = pulse
         updated_at = max((task.started_at or task.created_at for task in tasks), default=None)
         title = str(board.get("name") or board.get("title") or slug.replace("-", " ").title())
-        objective = str(board.get("description") or "Your Centurions are working together on this collaboration.")
+        objective = str(
+            (topology.get("goal") if isinstance(topology, dict) else None)
+            or board.get("description")
+            or "Your Centurions are working together on this collaboration."
+        )
+
+        tasks_by_id = {str(t.id): t for t in tasks}
+        workers_payload = _swarm_workers_payload(tasks_by_id, topology) if topology else []
+        if workers_payload:
+            participants = _participants_from_workers(workers_payload)
+        else:
+            participants = [
+                {
+                    "id": "human-owner",
+                    "name": "You",
+                    "kind": "human",
+                    "role": "owner",
+                    "is_active": False,
+                },
+                {
+                    "id": "centurion-worker",
+                    "name": "Your Centurion",
+                    "kind": "centurion",
+                    "role": "operator",
+                    "is_active": bool(running),
+                },
+            ]
+
+        # Public blackboard view — drop internal topology / author bookkeeping noise.
+        public_bb = {
+            k: v
+            for k, v in (blackboard or {}).items()
+            if k not in {"topology", "_authors"}
+        }
 
         swarms.append(
             {
@@ -129,23 +319,11 @@ def _local_board_snapshot() -> dict[str, Any]:
                 "objective": objective,
                 "status": "running" if pulse != "complete" else "complete",
                 "pulse": "waiting" if blocked else pulse,
-                "formation_source": "manual",
-                "participants": [
-                    {
-                        "id": "human-owner",
-                        "name": "You",
-                        "kind": "human",
-                        "role": "owner",
-                        "is_active": False,
-                    },
-                    {
-                        "id": "centurion-worker",
-                        "name": "Your Centurion",
-                        "kind": "centurion",
-                        "role": "operator",
-                        "is_active": bool(running),
-                    },
-                ],
+                "formation_source": "swarm" if topology else "manual",
+                "participants": participants,
+                "workers": workers_payload,
+                "blackboard": public_bb,
+                "root_id": root_id,
                 "pending_signal_count": len(blocked),
                 "updated_at": _iso_from_epoch(updated_at),
                 "completed_at": _iso_from_epoch(max((task.completed_at or 0 for task in done), default=0))
@@ -171,19 +349,39 @@ def _local_board_snapshot() -> dict[str, Any]:
                 }
             )
 
-        for task in done[:5]:
-            if not task.result:
-                continue
+        # Prefer synthesizer result as the headline outcome when present.
+        synth_id = str((topology or {}).get("synthesizer_id") or "")
+        synth_task = tasks_by_id.get(synth_id) if synth_id else None
+        if synth_task and synth_task.result and synth_task.status == "done":
             outcomes.append(
                 {
-                    "id": _task_outcome_id(slug, task.id),
+                    "id": _task_outcome_id(slug, synth_task.id),
                     "swarm_id": slug,
-                    "description": task.result,
+                    "description": synth_task.result,
                     "status": "ready",
-                    "owner_name": task.assignee or "Your Centurion",
-                    "created_at": _iso_from_epoch(task.completed_at or task.started_at or task.created_at),
+                    "owner_name": synth_task.assignee or "Synthesizer",
+                    "role": "synthesizer",
+                    "created_at": _iso_from_epoch(
+                        synth_task.completed_at or synth_task.started_at or synth_task.created_at
+                    ),
                 }
             )
+        else:
+            for task in done[:5]:
+                if not task.result:
+                    continue
+                outcomes.append(
+                    {
+                        "id": _task_outcome_id(slug, task.id),
+                        "swarm_id": slug,
+                        "description": task.result,
+                        "status": "ready",
+                        "owner_name": task.assignee or "Your Centurion",
+                        "created_at": _iso_from_epoch(
+                            task.completed_at or task.started_at or task.created_at
+                        ),
+                    }
+                )
 
         for task in tasks[:8]:
             activities.append(
@@ -439,6 +637,167 @@ def create_collaboration_board(
         "swarm": swarm,
         "snapshot": snapshot,
         "message": f"Collaboration “{title}” is ready on this Sovereign.",
+    }
+
+
+def create_local_swarm(
+    *,
+    goal: str,
+    workers: list[dict[str, Any]] | None = None,
+    verifier_assignee: str = "",
+    synthesizer_assignee: str = "",
+    name: str = "",
+    board: str | None = None,
+    mission_id: str | None = None,
+    idempotency_key: str | None = None,
+    dispatch: bool = True,
+) -> dict[str, Any]:
+    """Create a local board (if needed) and a Kanban Swarm v1 task graph.
+
+    Portal Mission Control is never used. Assignees must be real Centurion
+    profiles so the gateway dispatcher can spawn ``centurion -p <profile>``.
+    """
+    goal_text = str(goal or "").strip()
+    if not goal_text:
+        return {"ok": False, "error": "A collaboration goal is required."}
+
+    try:
+        from centurion_cli import kanban_db
+        from centurion_cli.kanban_swarm import SwarmWorkerSpec, create_swarm
+        from centurion_cli.profiles import profile_exists
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    raw_workers = workers if isinstance(workers, list) else []
+    if len(raw_workers) < 1:
+        return {"ok": False, "error": "At least one worker is required."}
+
+    specs: list[SwarmWorkerSpec] = []
+    for i, item in enumerate(raw_workers, start=1):
+        if not isinstance(item, dict):
+            return {"ok": False, "error": f"workers[{i}] must be an object."}
+        profile = str(item.get("profile") or "").strip()
+        title = str(item.get("title") or "").strip() or f"Worker {i}"
+        body = str(item.get("body") or title).strip()
+        skills_raw = item.get("skills") or []
+        if isinstance(skills_raw, str):
+            skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
+        elif isinstance(skills_raw, list):
+            skills = [str(s).strip() for s in skills_raw if str(s).strip()]
+        else:
+            skills = []
+        try:
+            priority = int(item.get("priority") or 0)
+        except (TypeError, ValueError):
+            priority = 0
+        if not profile:
+            return {"ok": False, "error": f"workers[{i}].profile is required."}
+        if profile != "default" and not profile_exists(profile):
+            return {
+                "ok": False,
+                "error": f"Profile “{profile}” does not exist. Create it with centurion -p {profile} setup.",
+                "code": "PROFILE_MISSING",
+            }
+        specs.append(
+            SwarmWorkerSpec(
+                profile=profile,
+                title=title,
+                body=body,
+                skills=skills,
+                priority=priority,
+            )
+        )
+
+    verifier = str(verifier_assignee or "").strip() or specs[0].profile
+    synthesizer = str(synthesizer_assignee or "").strip() or specs[0].profile
+    for label, assignee in (("verifier", verifier), ("synthesizer", synthesizer)):
+        if assignee != "default" and not profile_exists(assignee):
+            return {
+                "ok": False,
+                "error": f"{label.title()} profile “{assignee}” does not exist.",
+                "code": "PROFILE_MISSING",
+            }
+
+    slug = str(board or "").strip() or None
+    board_meta: dict[str, Any] | None = None
+    if slug:
+        try:
+            boards = {str(b.get("slug") or ""): b for b in kanban_db.list_boards(include_archived=False)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        if slug not in boards:
+            return {"ok": False, "error": f"Board “{slug}” was not found.", "code": "BOARD_MISSING"}
+        board_meta = boards[slug]
+    else:
+        board_name = str(name or "").strip() or goal_text.splitlines()[0][:60]
+        created = create_collaboration_board(
+            name=board_name,
+            objective=goal_text,
+            mission_id=mission_id,
+        )
+        if not created.get("ok"):
+            return created
+        slug = str(created.get("swarm_id") or "").strip()
+        board_meta = created.get("board") if isinstance(created.get("board"), dict) else {"slug": slug}
+        if not slug:
+            return {"ok": False, "error": "Could not create a collaboration board."}
+
+    conn = None
+    created_swarm = None
+    dispatched = False
+    dispatch_error = None
+    try:
+        conn = kanban_db.connect(board=slug)
+        created_swarm = create_swarm(
+            conn,
+            goal=goal_text,
+            workers=specs,
+            verifier_assignee=verifier,
+            synthesizer_assignee=synthesizer,
+            root_title=f"Swarm: {goal_text.splitlines()[0][:80]}",
+            idempotency_key=str(idempotency_key).strip() if idempotency_key else None,
+            created_by="desktop-swarm",
+        )
+        if dispatch:
+            try:
+                kanban_db.dispatch_once(conn, board=slug, dry_run=False)
+                dispatched = True
+            except Exception as exc:
+                dispatch_error = str(exc)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+
+    if created_swarm is None:
+        return {"ok": False, "error": "Swarm graph was not created."}
+
+    snapshot = get_swarm_snapshot()
+    swarm = next((s for s in snapshot.get("swarms", []) if s.get("id") == slug), None)
+    return {
+        "ok": True,
+        "swarm_id": slug,
+        "board": board_meta,
+        "root_id": created_swarm.root_id,
+        "worker_ids": list(created_swarm.worker_ids),
+        "verifier_id": created_swarm.verifier_id,
+        "synthesizer_id": created_swarm.synthesizer_id,
+        "dispatched": dispatched,
+        "dispatch_error": dispatch_error,
+        "swarm": swarm,
+        "snapshot": snapshot,
+        "message": (
+            f"Collaboration swarm formed on board “{slug}”. "
+            + (
+                "Workers nudged for dispatch."
+                if dispatched
+                else "Start the gateway so workers can run."
+            )
+        ),
     }
 
 

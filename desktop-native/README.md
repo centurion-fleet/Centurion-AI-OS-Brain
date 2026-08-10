@@ -106,6 +106,29 @@ Crypto Chat stays end-to-end encrypted (X25519 + XSalsa20-Poly1305) between iPho
 
 The native desktop **Link iPhone — show QR** panel mints the same connection string as a full-screen QR (auto-refreshes every few minutes).
 
+### Local Collaborations DoD (Fedora unit smoke)
+
+Brain-local Kanban swarm formation from Desktop (no Portal Mission Control):
+
+```bash
+# From desktop-native/
+cargo build --release -p centurion-desktop
+# Bridge coverage (host tree root):
+../scripts/run_tests.sh tests/centurion_cli/test_remote_bridge.py
+```
+
+On the Fedora unit with Centurion installed and **gateway running** (`kanban.dispatch_in_gateway` default true):
+
+1. Settings → Collaborations → **Open** → **Form collaboration**.
+2. Goal required; pick 2 worker profiles + verifier + synthesizer (profiles must exist: `centurion -p <name> setup`).
+3. Submit → board appears; live card shows workers with real status (not fake progress).
+4. Confirm workers spawn (`centurion -p <profile> chat` / gateway logs) and blackboard updates in detail view.
+5. Block a worker → signal shows Resolve/Note; resolve from UI.
+6. When synthesizer completes, Outcomes prefer its result.
+7. **Discuss** seeds Chat with board/root/workers/blackboard framing (no portal tokens).
+
+`swarm_connect` / `swarm_invite` stay `MC_FROZEN`. Empty board remains a secondary path.
+
 ## Local chat
 
 The Chat tab embeds the real `centurion --tui` inside a VTE terminal — the same

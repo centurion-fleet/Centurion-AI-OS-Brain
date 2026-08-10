@@ -108,6 +108,8 @@ struct SubAgent {
     role: String,
     active: bool,
     summary: String,
+    /// 0.0–1.0 progress for “How it's working” bars (from real task status).
+    progress: f64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -118,6 +120,68 @@ struct LiveActivity {
     progress: f64,
     phase: String,
     agents: Vec<SubAgent>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SwarmWorkerRow {
+    task_id: String,
+    title: String,
+    assignee: String,
+    role: String,
+    status: String,
+    result: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SwarmOrb {
+    id: String,
+    name: String,
+    pulse: String,
+    objective: String,
+    detail: String,
+    signals: Vec<(String, String)>, // id, message
+    outcomes: Vec<String>,
+    root_id: String,
+    workers: Vec<SwarmWorkerRow>,
+    blackboard_json: String,
+}
+
+impl SwarmOrb {
+    fn workers_summary(&self) -> String {
+        if self.workers.is_empty() {
+            return String::new();
+        }
+        self.workers
+            .iter()
+            .map(|w| {
+                format!(
+                    "- [{}] {} ({}) — {}",
+                    w.role,
+                    if w.title.is_empty() { "task" } else { &w.title },
+                    if w.assignee.is_empty() {
+                        "unassigned"
+                    } else {
+                        &w.assignee
+                    },
+                    w.status
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn discuss_topic(&self) -> DiscussTopic {
+        DiscussTopic::Collab {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            pulse: self.pulse.clone(),
+            objective: self.objective.clone(),
+            board_id: self.id.clone(),
+            root_id: self.root_id.clone(),
+            workers_summary: self.workers_summary(),
+            blackboard_json: self.blackboard_json.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -185,17 +249,6 @@ struct CommitmentItem {
 struct MissionInfo {
     statement: String,
     targets: Vec<CommitmentItem>,
-}
-
-#[derive(Clone, Debug, Default)]
-struct SwarmOrb {
-    id: String,
-    name: String,
-    pulse: String,
-    objective: String,
-    detail: String,
-    signals: Vec<(String, String)>, // id, message
-    outcomes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -281,6 +334,17 @@ fn pulse_phase(pulse: &str) -> &'static str {
     }
 }
 
+fn worker_status_progress(status: &str) -> f64 {
+    match status {
+        "done" | "complete" | "completed" => 1.0,
+        "running" => 0.65,
+        "ready" => 0.35,
+        "blocked" => 0.4,
+        "todo" => 0.15,
+        _ => 0.2,
+    }
+}
+
 fn map_live(swarm: &Value, activities: &[Value]) -> LiveActivity {
     let id = json_str(swarm.get("id"));
     let display = json_str(swarm.get("display_name"));
@@ -310,20 +374,59 @@ fn map_live(swarm: &Value, activities: &[Value]) -> LiveActivity {
     } else {
         objective.clone()
     };
-    let agents = swarm
-        .get("participants")
+    let workers = swarm
+        .get("workers")
         .and_then(|v| v.as_array())
         .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|p| json_str(p.get("kind")) == "centurion")
-        .map(|p| SubAgent {
-            name: json_str(p.get("name")),
-            role: json_str(p.get("role")),
-            active: p.get("is_active").and_then(|v| v.as_bool()).unwrap_or(false),
-            summary: objective.clone(),
-        })
-        .collect();
+        .unwrap_or_default();
+    let agents: Vec<SubAgent> = if !workers.is_empty() {
+        workers
+            .into_iter()
+            .map(|w| {
+                let status = json_str(w.get("status"));
+                SubAgent {
+                    name: {
+                        let assignee = json_str(w.get("assignee"));
+                        if assignee.is_empty() {
+                            json_str(w.get("title"))
+                        } else {
+                            assignee
+                        }
+                    },
+                    role: json_str(w.get("role")),
+                    active: status == "running",
+                    summary: {
+                        let result = json_str(w.get("result"));
+                        if result.is_empty() {
+                            format!("{} · {status}", json_str(w.get("title")))
+                        } else {
+                            result
+                        }
+                    },
+                    progress: worker_status_progress(&status),
+                }
+            })
+            .collect()
+    } else {
+        swarm
+            .get("participants")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|p| json_str(p.get("kind")) == "centurion")
+            .map(|p| {
+                let active = p.get("is_active").and_then(|v| v.as_bool()).unwrap_or(false);
+                SubAgent {
+                    name: json_str(p.get("name")),
+                    role: json_str(p.get("role")),
+                    active,
+                    summary: objective.clone(),
+                    progress: if active { 0.65 } else { 0.15 },
+                }
+            })
+            .collect()
+    };
     LiveActivity {
         id,
         summary,
@@ -686,14 +789,36 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                 .map(|o| json_str(o.get("description")))
                 .filter(|d| !d.is_empty())
                 .collect();
+            let workers: Vec<SwarmWorkerRow> = s
+                .get("workers")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|w| SwarmWorkerRow {
+                    task_id: json_str(w.get("task_id")),
+                    title: json_str(w.get("title")),
+                    assignee: json_str(w.get("assignee")),
+                    role: json_str(w.get("role")),
+                    status: json_str(w.get("status")),
+                    result: json_str(w.get("result")),
+                })
+                .collect();
+            let blackboard_json = s
+                .get("blackboard")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "{}".to_owned());
             SwarmOrb {
-                id,
+                id: id.clone(),
                 name: json_str(s.get("display_name")),
                 pulse: json_str(s.get("pulse")),
                 objective,
                 detail,
                 signals: signal_items,
                 outcomes: outcome_items,
+                root_id: json_str(s.get("root_id")),
+                workers,
+                blackboard_json,
             }
         })
         .filter(|s| !s.name.is_empty())
@@ -1466,6 +1591,47 @@ fn show_collab_detail_dialog(
                 .build(),
         );
     }
+    if !orb.workers.is_empty() {
+        body.append(
+            &gtk::Label::builder()
+                .label("Workers")
+                .xalign(0.0)
+                .css_classes(["heading"])
+                .margin_top(6)
+                .build(),
+        );
+        for w in &orb.workers {
+            let line = format!(
+                "{} · {} · {}{}",
+                if w.role.is_empty() { "worker" } else { &w.role },
+                if w.title.is_empty() { "task" } else { &w.title },
+                w.status,
+                if w.assignee.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", w.assignee)
+                }
+            );
+            body.append(
+                &gtk::Label::builder()
+                    .label(&line)
+                    .wrap(true)
+                    .xalign(0.0)
+                    .build(),
+            );
+            if !w.result.is_empty() {
+                body.append(
+                    &gtk::Label::builder()
+                        .label(&w.result)
+                        .wrap(true)
+                        .xalign(0.0)
+                        .css_classes(["dim-label"])
+                        .build(),
+                );
+            }
+        }
+    }
+    append_blackboard_kv(&body, &orb.blackboard_json);
     if !orb.signals.is_empty() {
         body.append(
             &gtk::Label::builder()
@@ -1563,7 +1729,7 @@ fn show_collab_detail_dialog(
     dialog.add_response("note", "Add note");
     dialog.add_response("discuss", "Discuss");
     dialog.set_response_appearance("discuss", adw::ResponseAppearance::Suggested);
-    let orb_id = orb.id.clone();
+    let orb_topic = orb.discuss_topic();
     let name = orb.name.clone();
     let objective = orb.objective.clone();
     let pulse = orb.pulse.clone();
@@ -1577,12 +1743,7 @@ fn show_collab_detail_dialog(
     dialog.connect_response(None, move |_d, response| match response {
         "discuss" => {
             on_ask(
-                DiscussTopic::Collab {
-                    id: orb_id.clone(),
-                    name: name.clone(),
-                    pulse: pulse.clone(),
-                    objective: objective.clone(),
-                },
+                orb_topic.clone(),
                 format!(
                     "Let's discuss collaboration “{name}” (pulse: {pulse}).\n\nObjective: {objective}\n\nWhat should we do next?"
                 ),
@@ -1599,12 +1760,7 @@ fn show_collab_detail_dialog(
                 );
             } else {
                 on_ask(
-                    DiscussTopic::Collab {
-                        id: orb_id.clone(),
-                        name: name.clone(),
-                        pulse: pulse.clone(),
-                        objective: objective.clone(),
-                    },
+                    orb_topic.clone(),
                     format!(
                         "Note on collaboration “{name}” (pulse: {pulse}).\n\nObjective: {objective}\n\n"
                     ),
@@ -1674,8 +1830,14 @@ Add a Fleet peer in Settings to involve another Centurion.",
                     .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
                 if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
                     let board_id = payload
-                        .get("board_id")
+                        .get("swarm_id")
+                        .or_else(|| payload.get("board_id"))
                         .or_else(|| payload.get("id"))
+                        .or_else(|| {
+                            payload
+                                .get("result")
+                                .and_then(|r| r.get("swarm_id"))
+                        })
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_owned();
@@ -1724,6 +1886,598 @@ Settings to involve another Centurion."
     });
     dialog.present(Some(parent));
 }
+
+fn load_profile_names() -> Vec<String> {
+    let payload = run_bridge_action("profiles_list", serde_json::json!({}));
+    let mut names = payload
+        .as_ref()
+        .and_then(|v| v.get("profiles"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.get("name").and_then(|n| n.as_str()).map(|s| s.to_owned()))
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if names.is_empty() {
+        names.push("default".to_owned());
+    }
+    if !names.iter().any(|n| n == "default") {
+        names.insert(0, "default".to_owned());
+    }
+    names
+}
+
+fn gateway_running_hint() -> (bool, String) {
+    let payload = run_bridge_action("gateway_status", serde_json::json!({}));
+    let running = payload
+        .as_ref()
+        .and_then(|v| {
+            v.get("running")
+                .or_else(|| v.get("result").and_then(|r| r.get("running")))
+                .and_then(|x| x.as_bool())
+        })
+        .unwrap_or(false);
+    if running {
+        (true, "Gateway is running — workers can dispatch.".to_owned())
+    } else {
+        (
+            false,
+            "Gateway is not running. Workers will queue until you start it in Settings."
+                .to_owned(),
+        )
+    }
+}
+
+fn append_profile_dropdown(box_: &gtk::Box, label: &str, profiles: &[String]) -> gtk::DropDown {
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.append(
+        &gtk::Label::builder()
+            .label(label)
+            .xalign(0.0)
+            .width_chars(14)
+            .build(),
+    );
+    let labels: Vec<&str> = profiles.iter().map(|s| s.as_str()).collect();
+    let drop = gtk::DropDown::from_strings(&labels);
+    drop.set_hexpand(true);
+    row.append(&drop);
+    box_.append(&row);
+    drop
+}
+
+fn append_blackboard_kv(body: &gtk::Box, blackboard_json: &str) {
+    let trimmed = blackboard_json.trim();
+    if trimmed.is_empty() || trimmed == "{}" || trimmed == "null" {
+        return;
+    }
+    body.append(
+        &gtk::Label::builder()
+            .label("Blackboard")
+            .xalign(0.0)
+            .css_classes(["heading"])
+            .margin_top(6)
+            .build(),
+    );
+    let parsed: Value = serde_json::from_str(trimmed).unwrap_or(Value::Null);
+    if let Some(obj) = parsed.as_object() {
+        if obj.is_empty() {
+            body.append(&empty_label("Empty blackboard."));
+            return;
+        }
+        for (key, val) in obj {
+            let shown = match val {
+                Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            body.append(
+                &gtk::Label::builder()
+                    .label(&format!("{key}: {shown}"))
+                    .wrap(true)
+                    .xalign(0.0)
+                    .selectable(true)
+                    .css_classes(["dim-label"])
+                    .build(),
+            );
+        }
+    } else {
+        body.append(
+            &gtk::Label::builder()
+                .label(trimmed)
+                .wrap(true)
+                .xalign(0.0)
+                .selectable(true)
+                .css_classes(["dim-label"])
+                .build(),
+        );
+    }
+}
+
+/// Formation dialog: goal + 2 workers + verifier + synthesizer → `swarm_create`.
+pub fn show_form_swarm_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+    let profiles = load_profile_names();
+    let (gw_ok, gw_hint) = gateway_running_hint();
+
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    box_.set_margin_top(4);
+    let hint = gtk::Label::builder()
+        .label(&gw_hint)
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .build();
+    box_.append(&hint);
+    if !gw_ok {
+        let start_gw = gtk::Button::with_label("Start gateway");
+        start_gw.add_css_class("flat");
+        let hint_lbl = hint.clone();
+        start_gw.connect_clicked(move |btn| {
+            btn.set_sensitive(false);
+            let hint_lbl = hint_lbl.clone();
+            let btn = btn.clone();
+            crate::chat_page::run_bridge_action_async(
+                "gateway_start",
+                serde_json::json!({}),
+                move |payload| {
+                    let ok = payload
+                        .as_ref()
+                        .and_then(|v| v.get("ok"))
+                        .and_then(|v| v.as_bool())
+                        == Some(true);
+                    if ok {
+                        hint_lbl.set_label(
+                            "Gateway start requested — workers can dispatch once it is up.",
+                        );
+                    } else {
+                        let msg = payload
+                            .as_ref()
+                            .and_then(|v| v.get("message"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not start gateway. Use Settings → Gateway.");
+                        hint_lbl.set_label(msg);
+                        btn.set_sensitive(true);
+                    }
+                },
+            );
+        });
+        box_.append(&start_gw);
+    }
+
+    let goal = gtk::TextView::builder()
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .accepts_tab(false)
+        .build();
+    goal.set_size_request(-1, 80);
+    let goal_frame = gtk::Frame::new(Some("Mission goal"));
+    goal_frame.set_child(Some(&goal));
+    box_.append(&goal_frame);
+
+    let name_entry = gtk::Entry::builder()
+        .placeholder_text("Collaboration name (optional)")
+        .hexpand(true)
+        .build();
+    box_.append(&name_entry);
+
+    let w1_title = gtk::Entry::builder()
+        .placeholder_text("Worker 1 title")
+        .text("Research")
+        .hexpand(true)
+        .build();
+    let w1_skills = gtk::Entry::builder()
+        .placeholder_text("Worker 1 skills (optional, comma-separated)")
+        .hexpand(true)
+        .build();
+    let w2_title = gtk::Entry::builder()
+        .placeholder_text("Worker 2 title")
+        .text("Draft")
+        .hexpand(true)
+        .build();
+    let w2_skills = gtk::Entry::builder()
+        .placeholder_text("Worker 2 skills (optional, comma-separated)")
+        .hexpand(true)
+        .build();
+    box_.append(&w1_title);
+    let w1_profile = append_profile_dropdown(&box_, "Worker 1 profile", &profiles);
+    box_.append(&w1_skills);
+    box_.append(&w2_title);
+    let w2_profile = append_profile_dropdown(&box_, "Worker 2 profile", &profiles);
+    box_.append(&w2_skills);
+    let verifier = append_profile_dropdown(&box_, "Verifier", &profiles);
+    let synthesizer = append_profile_dropdown(&box_, "Synthesizer", &profiles);
+
+    let dialog = adw::AlertDialog::builder()
+        .heading("Form collaboration")
+        .body(
+            "Creates a local Kanban Swarm on this Brain: planning root, two workers, \
+verifier, then synthesizer. No portal tokens.",
+        )
+        .extra_child(&box_)
+        .close_response("cancel")
+        .default_response("form")
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("form", "Form swarm");
+    dialog.set_response_appearance("form", adw::ResponseAppearance::Suggested);
+
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    let profiles_for_idx = profiles.clone();
+    dialog.connect_response(None, move |_d, response| {
+        if response != "form" {
+            return;
+        }
+        let buffer = goal.buffer();
+        let (start, end) = buffer.bounds();
+        let goal_text = buffer.text(&start, &end, false).trim().to_owned();
+        if goal_text.is_empty() {
+            let err = adw::AlertDialog::builder()
+                .heading("Goal required")
+                .body("Describe what the collaboration should achieve.")
+                .close_response("ok")
+                .build();
+            err.add_response("ok", "OK");
+            err.present(Some(&parent_w));
+            return;
+        }
+        let pick = |drop: &gtk::DropDown| -> String {
+            let idx = drop.selected() as usize;
+            profiles_for_idx
+                .get(idx)
+                .cloned()
+                .unwrap_or_else(|| "default".to_owned())
+        };
+        let skills_list = |entry: &gtk::Entry| -> Vec<String> {
+            entry
+                .text()
+                .split(',')
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        };
+        let req = serde_json::json!({
+            "goal": goal_text,
+            "name": name_entry.text().trim(),
+            "workers": [
+                {
+                    "profile": pick(&w1_profile),
+                    "title": {
+                        let t = w1_title.text().trim().to_owned();
+                        if t.is_empty() { "Research".to_owned() } else { t }
+                    },
+                    "body": w1_title.text().trim(),
+                    "skills": skills_list(&w1_skills),
+                },
+                {
+                    "profile": pick(&w2_profile),
+                    "title": {
+                        let t = w2_title.text().trim().to_owned();
+                        if t.is_empty() { "Draft".to_owned() } else { t }
+                    },
+                    "body": w2_title.text().trim(),
+                    "skills": skills_list(&w2_skills),
+                },
+            ],
+            "verifier_assignee": pick(&verifier),
+            "synthesizer_assignee": pick(&synthesizer),
+            "dispatch": true,
+        });
+        let refresh = refresh.clone();
+        let parent_w = parent_w.clone();
+        let created_note = Arc::new(Mutex::new(None::<String>));
+        let created_note_worker = Arc::clone(&created_note);
+        run_async_then(
+            parent_w.clone(),
+            refresh,
+            move || {
+                let payload = run_bridge_action("swarm_create", req)
+                    .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
+                if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    let swarm_id = payload
+                        .get("swarm_id")
+                        .or_else(|| payload.get("result").and_then(|r| r.get("swarm_id")))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_owned();
+                    let note = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Swarm formed.")
+                        .to_owned();
+                    let full = if swarm_id.is_empty() {
+                        note
+                    } else {
+                        format!("{note}\n\nBoard: {swarm_id}")
+                    };
+                    if let Ok(mut slot) = created_note_worker.lock() {
+                        *slot = Some(full);
+                    }
+                    Ok(())
+                } else {
+                    Err(payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Could not form swarm.")
+                        .to_owned())
+                }
+            },
+            Rc::new({
+                let created_note = Arc::clone(&created_note);
+                let parent_w = parent_w.clone();
+                move || {
+                    if let Some(note) = created_note.lock().ok().and_then(|mut s| s.take()) {
+                        let done = adw::AlertDialog::builder()
+                            .heading("Swarm formed")
+                            .body(&note)
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent_w));
+                    }
+                }
+            }),
+        );
+    });
+    dialog.present(Some(parent));
+}
+
+/// Full Collaborations surface (Settings entry) — live snapshot + formation.
+pub fn show_collaborations_window(
+    parent: &impl IsA<gtk::Widget>,
+    on_ask: Rc<dyn Fn(DiscussTopic, String)>,
+) {
+    let transient = parent
+        .root()
+        .and_downcast::<gtk::Window>()
+        .or_else(|| {
+            parent
+                .ancestor(gtk::Window::static_type())
+                .and_downcast::<gtk::Window>()
+        });
+
+    let mut builder = adw::Window::builder()
+        .title("Collaborations")
+        .default_width(520)
+        .default_height(640)
+        .modal(true);
+    if let Some(ref top) = transient {
+        builder = builder.transient_for(top);
+    }
+    let window = builder.build();
+
+    let toolbar = adw::ToolbarView::new();
+    let header = adw::HeaderBar::new();
+    header.set_title_widget(Some(&gtk::Label::new(Some("Collaborations"))));
+    toolbar.add_top_bar(&header);
+
+    let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    outer.set_margin_top(12);
+    outer.set_margin_bottom(12);
+    outer.set_margin_start(16);
+    outer.set_margin_end(16);
+
+    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let form_btn = gtk::Button::with_label("Form collaboration");
+    form_btn.add_css_class("suggested-action");
+    let empty_board_btn = gtk::Button::with_label("Empty board");
+    empty_board_btn.add_css_class("flat");
+    let refresh_btn = gtk::Button::with_label("Refresh");
+    refresh_btn.add_css_class("flat");
+    actions.append(&form_btn);
+    actions.append(&empty_board_btn);
+    actions.append(&refresh_btn);
+    outer.append(&actions);
+
+    let status = gtk::Label::builder()
+        .label("Loading…")
+        .xalign(0.0)
+        .css_classes(["dim-label"])
+        .build();
+    outer.append(&status);
+
+    let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let scroll = gtk::ScrolledWindow::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .child(&list)
+        .build();
+    outer.append(&scroll);
+    toolbar.set_content(Some(&outer));
+    window.set_content(Some(&toolbar));
+
+    let on_ask: Rc<dyn Fn(DiscussTopic, String)> = Rc::new({
+        let window = window.clone();
+        let on_ask = on_ask.clone();
+        move |topic: DiscussTopic, kickoff: String| {
+            window.close();
+            on_ask(topic, kickoff);
+        }
+    });
+
+    let feed: Rc<RefCell<HomeFeed>> = Rc::new(RefCell::new(HomeFeed::default()));
+    let poll_alive = Rc::new(Cell::new(true));
+
+    let refresh_feed: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
+    let paint: Rc<dyn Fn()> = Rc::new({
+        let feed = feed.clone();
+        let list = list.clone();
+        let status = status.clone();
+        let window_w = window.clone().upcast::<gtk::Widget>();
+        let on_ask = on_ask.clone();
+        let refresh_feed = refresh_feed.clone();
+        move || {
+            clear_box(&list);
+            let data = feed.borrow().clone();
+            if let Some(err) = &data.error {
+                status.set_label(err);
+            } else if data.swarms.is_empty() {
+                status.set_label(
+                    "No collaborations yet. Form a swarm to put workers on a local board.",
+                );
+            } else {
+                status.set_label(&format!(
+                    "{} collaboration{} · local boards only",
+                    data.swarms.len(),
+                    if data.swarms.len() == 1 { "" } else { "s" }
+                ));
+            }
+            let refresh = refresh_feed
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| Rc::new(|| {}) as Rc<dyn Fn()>);
+            if let Some(live) = &data.live {
+                let card = card_box();
+                card.append(
+                    &gtk::Label::builder()
+                        .label("Working on now")
+                        .xalign(0.0)
+                        .css_classes(["heading"])
+                        .build(),
+                );
+                card.append(
+                    &gtk::Label::builder()
+                        .label(&live.summary)
+                        .wrap(true)
+                        .xalign(0.0)
+                        .build(),
+                );
+                if !live.detail.is_empty() {
+                    card.append(
+                        &gtk::Label::builder()
+                            .label(&live.detail)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(["dim-label"])
+                            .build(),
+                    );
+                }
+                let bar = gtk::ProgressBar::new();
+                bar.set_fraction(live.progress.clamp(0.0, 1.0));
+                card.append(&bar);
+                let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                let how = gtk::Button::with_label("Show how it's working");
+                how.add_css_class("flat");
+                let live_clone = live.clone();
+                let parent = window_w.clone();
+                how.connect_clicked(move |_| show_how_dialog(&parent, &live_clone));
+                actions.append(&how);
+                if let Some(orb) = data.swarms.iter().find(|s| s.id == live.id) {
+                    let ask = discuss_icon_button("Discuss this collaboration");
+                    ask.add_css_class("suggested-action");
+                    let on_ask = on_ask.clone();
+                    let topic = orb.discuss_topic();
+                    let name = orb.name.clone();
+                    ask.connect_clicked(move |_| {
+                        on_ask(
+                            topic.clone(),
+                            format!(
+                                "Let's discuss collaboration “{name}”. What's the status and what do you need from me?"
+                            ),
+                        );
+                    });
+                    actions.append(&ask);
+                }
+                card.append(&actions);
+                list.append(&card);
+            }
+            for orb in &data.swarms {
+                let chip = gtk::Button::new();
+                chip.add_css_class("flat");
+                chip.add_css_class("centurion-home-orb");
+                let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                row.append(
+                    &gtk::Label::builder()
+                        .label(&format!("{} · {}", orb.name, orb.pulse))
+                        .xalign(0.0)
+                        .build(),
+                );
+                if !orb.detail.is_empty() {
+                    row.append(
+                        &gtk::Label::builder()
+                            .label(&orb.detail)
+                            .xalign(0.0)
+                            .css_classes(["dim-label"])
+                            .build(),
+                    );
+                }
+                chip.set_child(Some(&row));
+                let orb_clone = orb.clone();
+                let parent = window_w.clone();
+                let on_ask = on_ask.clone();
+                let refresh = refresh.clone();
+                chip.connect_clicked(move |_| {
+                    show_collab_detail_dialog(&parent, &orb_clone, on_ask.clone(), refresh.clone());
+                });
+                list.append(&chip);
+            }
+        }
+    });
+
+    let do_refresh: Rc<dyn Fn()> = Rc::new({
+        let feed = feed.clone();
+        let paint = paint.clone();
+        move || {
+            let (tx, rx) = mpsc::channel::<HomeFeed>();
+            thread::spawn(move || {
+                let snapshot = run_bridge_action("swarm_snapshot", serde_json::json!({}))
+                    .unwrap_or_else(|| serde_json::json!({"ok": false, "swarms": []}));
+                let mapped = map_feed(&snapshot, &[], &serde_json::json!({}));
+                let _ = tx.send(mapped);
+            });
+            let feed = feed.clone();
+            let paint = paint.clone();
+            glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
+                Ok(next) => {
+                    *feed.borrow_mut() = next;
+                    paint();
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+            });
+        }
+    });
+    *refresh_feed.borrow_mut() = Some(do_refresh.clone());
+
+    form_btn.connect_clicked({
+        let window_w = window.clone().upcast::<gtk::Widget>();
+        let do_refresh = do_refresh.clone();
+        move |_| show_form_swarm_dialog(&window_w, do_refresh.clone())
+    });
+    empty_board_btn.connect_clicked({
+        let window_w = window.clone().upcast::<gtk::Widget>();
+        let do_refresh = do_refresh.clone();
+        move |_| show_connect_collab_dialog(&window_w, do_refresh.clone())
+    });
+    refresh_btn.connect_clicked({
+        let do_refresh = do_refresh.clone();
+        move |_| do_refresh()
+    });
+
+    do_refresh();
+    glib::timeout_add_seconds_local(8, {
+        let do_refresh = do_refresh.clone();
+        let poll_alive = poll_alive.clone();
+        move || {
+            if !poll_alive.get() {
+                return glib::ControlFlow::Break;
+            }
+            do_refresh();
+            glib::ControlFlow::Continue
+        }
+    });
+    window.connect_close_request({
+        let poll_alive = poll_alive.clone();
+        move |_| {
+            poll_alive.set(false);
+            glib::Propagation::Proceed
+        }
+    });
+
+    window.present();
+}
+
 
 fn clear_box(container: &gtk::Box) {
     while let Some(child) = container.first_child() {
@@ -1804,7 +2558,7 @@ fn show_how_dialog(parent: &impl IsA<gtk::Widget>, live: &LiveActivity) {
                 );
             }
             let bar = gtk::ProgressBar::new();
-            bar.set_fraction(if agent.active { 0.65 } else { 0.15 });
+            bar.set_fraction(agent.progress.clamp(0.0, 1.0));
             row.append(&bar);
             body.append(&row);
         }
@@ -3194,14 +3948,26 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                         let live_id = live.id.clone();
                         let summary = live.summary.clone();
                         let detail = live.detail.clone();
+                        let matching = data
+                            .swarms
+                            .iter()
+                            .find(|s| s.id == live_id)
+                            .cloned();
                         ask.connect_clicked(move |_| {
-                            on_ask(
-                                DiscussTopic::Collab {
+                            let topic = matching.as_ref().map(|o| o.discuss_topic()).unwrap_or_else(
+                                || DiscussTopic::Collab {
                                     id: live_id.clone(),
                                     name: summary.clone(),
                                     pulse: "active".to_owned(),
                                     objective: detail.clone(),
+                                    board_id: live_id.clone(),
+                                    root_id: String::new(),
+                                    workers_summary: String::new(),
+                                    blackboard_json: String::new(),
                                 },
+                            );
+                            on_ask(
+                                topic,
                                 format!(
                                     "You're working on: {summary}\n\nRecent: {detail}\n\nWhat's the status and what do you need from me?"
                                 ),

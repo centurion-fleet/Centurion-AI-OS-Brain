@@ -109,6 +109,11 @@ pub enum DiscussTopic {
         name: String,
         pulse: String,
         objective: String,
+        /// Kanban board slug (usually same as `id`).
+        board_id: String,
+        root_id: String,
+        workers_summary: String,
+        blackboard_json: String,
     },
     Document {
         /// life.db document id when known (Focus mission docs).
@@ -1295,21 +1300,48 @@ fn frame_collab_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         name,
         pulse,
         objective,
+        board_id,
+        root_id,
+        workers_summary,
+        blackboard_json,
     } = topic
     else {
         return user_text.to_owned();
     };
-    let id_line = if id.is_empty() {
+    let board = if board_id.is_empty() { id.as_str() } else { board_id.as_str() };
+    let id_line = if board.is_empty() {
         String::new()
     } else {
-        format!("Collaboration ID: {id}\n")
+        format!("Collaboration board: {board}\n")
+    };
+    let root_line = if root_id.is_empty() {
+        String::new()
+    } else {
+        format!("Swarm root task: {root_id}\n")
+    };
+    let workers_block = if workers_summary.trim().is_empty() {
+        String::new()
+    } else {
+        format!("Workers:\n{workers_summary}\n\n")
+    };
+    let bb_block = if blackboard_json.trim().is_empty() || blackboard_json.trim() == "{}" {
+        String::new()
+    } else {
+        let capped = if blackboard_json.len() > 2500 {
+            format!("{}…", &blackboard_json[..2499])
+        } else {
+            blackboard_json.clone()
+        };
+        format!("Blackboard (JSON):\n{capped}\n\n")
     };
     format!(
         "[Sovereign AI Brain — Collaboration discuss]\n\
-The user is talking about an active collaboration / swarm on this Brain.\n\n\
-{id_line}Name: {name}\n\
+The user is steering an active local collaboration / swarm on this Brain \
+(kanban board scoped). Prefer board-local actions; do not ask for portal tokens.\n\n\
+{id_line}{root_line}Name: {name}\n\
 Pulse: {pulse}\n\
 Objective: {objective}\n\n\
+{workers_block}{bb_block}\
 Stay grounded in this collaboration. Ask before irreversible external actions.\n\n\
 User message:\n\
 {user_text}"

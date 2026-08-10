@@ -1461,7 +1461,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
             )
             .icon_name("system-users-symbolic")
             .build();
-        let collab_connect_button = gtk::Button::with_label("New board");
+        let collab_connect_button = gtk::Button::with_label("Open");
         collab_connect_button.add_css_class("suggested-action");
         collab_connect_button.set_valign(gtk::Align::Center);
         collab_connect_row.add_suffix(&collab_connect_button);
@@ -2021,13 +2021,18 @@ pairing stays available for early testing on the same Wi‑Fi.",
         });
         collab_connect_button.connect_clicked({
             let window = window.clone();
-            let home_handle = home_handle.clone();
+            let chat_handle = chat_handle.clone();
+            let stack = stack.clone();
             move |_| {
-                crate::home_page::show_connect_collab_dialog(
+                crate::home_page::show_collaborations_window(
                     &window,
                     Rc::new({
-                        let home_handle = home_handle.clone();
-                        move || home_handle.refresh()
+                        let chat_handle = chat_handle.clone();
+                        let stack = stack.clone();
+                        move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
+                            stack.set_visible_child_name("chat");
+                            chat_handle.seed_discuss_topic(topic, &kickoff);
+                        }
                     }),
                 );
             }

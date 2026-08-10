@@ -95,6 +95,10 @@ def handle_request(
         return _handle_swarm_resolve_signal(request, request_id)
     if action == "swarm_create_board":
         return _handle_swarm_create_board(request, request_id)
+    if action == "swarm_create":
+        return _handle_swarm_create(request, request_id)
+    if action == "profiles_list":
+        return _handle_profiles_list(request_id)
     if action == "beneficiary_snapshot":
         return _handle_beneficiary_snapshot(request_id)
     if action == "beneficiary_set_family_member":
@@ -880,6 +884,69 @@ def _handle_swarm_create_board(request: dict[str, Any], request_id: str) -> dict
         }
     except Exception as exc:
         return _error_response(request_id, action="swarm_create_board", exc=exc)
+
+
+def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Form a local Kanban Swarm v1 graph (2+ workers + verifier + synthesizer)."""
+    try:
+        from centurion_cli.swarm_state import create_local_swarm
+
+        workers = request.get("workers")
+        if not isinstance(workers, list):
+            workers = []
+        result = create_local_swarm(
+            goal=str(request.get("goal") or "").strip(),
+            workers=workers,
+            verifier_assignee=str(request.get("verifier_assignee") or "").strip(),
+            synthesizer_assignee=str(request.get("synthesizer_assignee") or "").strip(),
+            name=str(request.get("name") or "").strip(),
+            board=str(request.get("board") or request.get("swarm_id") or "").strip() or None,
+            mission_id=str(request.get("mission_id") or "").strip() or None,
+            idempotency_key=str(request.get("idempotency_key") or "").strip() or None,
+            dispatch=bool(request.get("dispatch", True)),
+        )
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_create",
+            "message": result.get("message") or result.get("error"),
+            "code": result.get("code"),
+            "result": result,
+            "snapshot": result.get("snapshot"),
+            "swarm_id": result.get("swarm_id"),
+            "root_id": result.get("root_id"),
+            "worker_ids": result.get("worker_ids"),
+            "verifier_id": result.get("verifier_id"),
+            "synthesizer_id": result.get("synthesizer_id"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_create", exc=exc)
+
+
+def _handle_profiles_list(request_id: str) -> dict[str, Any]:
+    """List Centurion profiles for Desktop swarm formation pickers."""
+    try:
+        from centurion_cli.profiles import list_profiles
+
+        profiles = []
+        for info in list_profiles():
+            profiles.append(
+                {
+                    "name": info.name,
+                    "is_default": bool(info.is_default),
+                    "model": info.model or "",
+                    "provider": info.provider or "",
+                    "description": getattr(info, "description", "") or "",
+                }
+            )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "profiles_list",
+            "profiles": profiles,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="profiles_list", exc=exc)
 
 
 def _handle_beneficiary_snapshot(request_id: str) -> dict[str, Any]:
