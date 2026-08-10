@@ -7362,5 +7362,75 @@ mod tests {
         assert_eq!(normalize_target_type("should"), "shouldHave");
         assert_eq!(normalize_target_type("nice_to_have"), "niceToHave");
     }
+
+    /// WS3 B3 proxy: paragraph coalescing must cut widget count on a 100-message corpus.
+    #[test]
+    fn ws3_chat_render_proxy_coalesce_cuts_blocks() {
+        use std::time::Instant;
+
+        let mut before_blocks = 0usize;
+        let mut after_blocks = 0usize;
+        let mut before_paras = 0usize;
+        let mut after_paras = 0usize;
+        let t0 = Instant::now();
+        for i in 0..100 {
+            let md = format!(
+                "## Turn {i}\n\nFirst paragraph about topic {i}.\n\n\
+                 Second paragraph continues the thought.\n\n\
+                 - item a\n- item b\n- item c\n\n\
+                 {}",
+                if i % 5 == 0 {
+                    format!(
+                        "```python\n{}\n```\n",
+                        "print('hello')\n".repeat(40)
+                    )
+                } else {
+                    String::new()
+                }
+            );
+            let raw = parse_message_blocks_uncached(&md);
+            before_blocks += raw.len();
+            before_paras += raw
+                .iter()
+                .filter(|b| matches!(b, MessageBlock::Paragraph { heading: None, .. }))
+                .count();
+            let coal = coalesce_paragraph_blocks(raw);
+            after_blocks += coal.len();
+            after_paras += coal
+                .iter()
+                .filter(|b| matches!(b, MessageBlock::Paragraph { heading: None, .. }))
+                .count();
+        }
+        let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        let reduction_pct = if before_blocks == 0 {
+            0.0
+        } else {
+            100.0 * (before_blocks - after_blocks) as f64 / before_blocks as f64
+        };
+        eprintln!(
+            "ws3_chat_render_proxy: messages=100 before_blocks={before_blocks} \
+             after_blocks={after_blocks} before_paras={before_paras} after_paras={after_paras} \
+             block_reduction_pct={reduction_pct:.1} parse_ms={elapsed_ms:.1}"
+        );
+        assert!(
+            after_blocks < before_blocks,
+            "coalesce should reduce total blocks ({after_blocks} vs {before_blocks})"
+        );
+        assert!(
+            after_paras < before_paras,
+            "coalesce should reduce non-heading paragraphs ({after_paras} vs {before_paras})"
+        );
+        assert!(
+            reduction_pct >= 20.0,
+            "expected ≥20% block reduction on prose-heavy corpus, got {reduction_pct:.1}%"
+        );
+    }
+
+    #[test]
+    fn ws3_lazy_code_threshold_constant() {
+        assert!(EAGER_CODE_CHARS >= 200);
+        assert!(INITIAL_VISIBLE_MESSAGES == 50);
+        assert!(LOAD_EARLIER_BATCH == 50);
+    }
 }
 
