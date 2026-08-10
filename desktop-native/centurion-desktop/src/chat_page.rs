@@ -3755,43 +3755,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 body.append(&chat_text_label(markup, false, *heading));
             }
             MessageBlock::Code { text, lang } => {
-                let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
-                block.add_css_class("centurion-chat-code-block");
-                let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                header.add_css_class("centurion-chat-code-header");
-                let lang_label = if lang.is_empty() {
-                    "code".to_owned()
-                } else {
-                    lang.clone()
-                };
-                header.append(
-                    &gtk::Label::builder()
-                        .label(&lang_label)
-                        .xalign(0.0)
-                        .hexpand(true)
-                        .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
-                        .build(),
-                );
-                let copy_btn = gtk::Button::with_label("Copy");
-                copy_btn.add_css_class("flat");
-                copy_btn.set_tooltip_text(Some("Copy code"));
-                let code_for_copy = text.clone();
-                copy_btn.connect_clicked(move |btn| {
-                    btn.clipboard().set_text(&code_for_copy);
-                });
-                header.append(&copy_btn);
-                block.append(&header);
-                let code_label = gtk::Label::builder()
-                    .label(text.as_str())
-                    .wrap(true)
-                    .wrap_mode(gtk::pango::WrapMode::Char)
-                    .xalign(0.0)
-                    .selectable(true)
-                    .max_width_chars(64)
-                    .css_classes(["centurion-chat-code"])
-                    .build();
-                block.append(&code_label);
-                body.append(&block);
+                body.append(&lazy_code_block(text, lang));
             }
             MessageBlock::Rule => {
                 body.append(
@@ -3804,6 +3768,77 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
     }
 
     body
+}
+
+/// Short fences stay eager (Copy + label). Larger fences stay collapsed until shown
+/// so long transcripts do not pay for hundreds of selectable code Labels on bind.
+const EAGER_CODE_CHARS: usize = 600;
+
+fn code_block_label(text: &str) -> gtk::Label {
+    gtk::Label::builder()
+        .label(text)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::Char)
+        .xalign(0.0)
+        .selectable(true)
+        .max_width_chars(64)
+        .css_classes(["centurion-chat-code"])
+        .build()
+}
+
+fn lazy_code_block(text: &str, lang: &str) -> gtk::Box {
+    let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    block.add_css_class("centurion-chat-code-block");
+
+    let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    header.add_css_class("centurion-chat-code-header");
+    let lang_label = if lang.is_empty() {
+        "code".to_owned()
+    } else {
+        lang.to_owned()
+    };
+    header.append(
+        &gtk::Label::builder()
+            .label(&lang_label)
+            .xalign(0.0)
+            .hexpand(true)
+            .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
+            .build(),
+    );
+
+    let copy_btn = gtk::Button::with_label("Copy");
+    copy_btn.add_css_class("flat");
+    copy_btn.set_tooltip_text(Some("Copy code"));
+    let code_for_copy = text.to_owned();
+    copy_btn.connect_clicked(move |btn| {
+        btn.clipboard().set_text(&code_for_copy);
+    });
+    header.append(&copy_btn);
+    block.append(&header);
+
+    if text.len() <= EAGER_CODE_CHARS {
+        block.append(&code_block_label(text));
+        return block;
+    }
+
+    let line_count = text.lines().count().max(1);
+    let body_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let show_btn = gtk::Button::with_label(&format!("Show code ({line_count} lines)"));
+    show_btn.add_css_class("flat");
+    show_btn.set_halign(gtk::Align::Start);
+    show_btn.set_tooltip_text(Some("Expand code block"));
+    let code_text = text.to_owned();
+    let slot = body_slot.clone();
+    show_btn.connect_clicked(move |btn| {
+        if slot.first_child().is_some() {
+            return;
+        }
+        slot.append(&code_block_label(&code_text));
+        btn.set_visible(false);
+    });
+    block.append(&show_btn);
+    block.append(&body_slot);
+    block
 }
 
 enum MessageBlock {
