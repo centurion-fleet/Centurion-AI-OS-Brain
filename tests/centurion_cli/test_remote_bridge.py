@@ -927,3 +927,34 @@ def test_remote_activity_filters_noisy_status_and_caps_terminal():
     )
     assert summary == "$ uname -a\nexit 0"
     assert "xxxx" not in summary
+
+
+def test_remote_notify_interval_defaults_and_disable(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.delenv("CENTURION_AGENT_NOTIFY_INTERVAL", raising=False)
+    assert rb._remote_notify_interval_seconds({}) == 30.0
+    assert rb._remote_notify_interval_seconds({"agent": {"gateway_notify_interval": 0}}) is None
+    assert rb._remote_notify_interval_seconds({"agent": {"gateway_notify_interval": 45}}) == 45.0
+    monkeypatch.setenv("CENTURION_AGENT_NOTIFY_INTERVAL", "12")
+    assert rb._remote_notify_interval_seconds({"agent": {"gateway_notify_interval": 180}}) == 12.0
+
+
+def test_remote_stream_delta_callback_emits_coalesced_chunks(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setenv("CENTURION_REMOTE_EVENTS", "1")
+    emitted = []
+
+    def _capture(event):
+        emitted.append(event)
+
+    monkeypatch.setattr(rb, "_emit_remote_event", _capture)
+    cb = rb._make_remote_stream_delta_callback()
+    cb("Hello ")
+    cb("world")
+    cb(None)  # force flush
+    assert emitted
+    assert emitted[0]["centurion_event"] == "activity"
+    assert emitted[0]["kind"] == "stream"
+    assert emitted[0]["text"] == "Hello world"

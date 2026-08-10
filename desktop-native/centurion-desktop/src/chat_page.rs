@@ -882,7 +882,14 @@ const COMPOSER_MIN_HEIGHT: i32 = 88;
 const COMPOSER_MAX_HEIGHT: i32 = 220;
 const COMPOSER_PLACEHOLDER: &str =
     "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
+// Breath below the last bubble / activity card. Composer is stacked under the
+// ScrolledWindow (not overlaid); scroll helpers pin *above* this spacer so the
+// latest content sits flush above the gap, not lost inside it.
 const TRANSCRIPT_SPACER_PX: i32 = 200;
+/// Initial ListStore window on resume / rebuild — full history stays in `messages`.
+const INITIAL_VISIBLE_MESSAGES: usize = 50;
+/// How many older messages to prepend when “Load earlier” is clicked.
+const LOAD_EARLIER_BATCH: usize = 50;
 
 /// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
 #[derive(Clone)]
@@ -3755,43 +3762,7 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
                 body.append(&chat_text_label(markup, false, *heading));
             }
             MessageBlock::Code { text, lang } => {
-                let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
-                block.add_css_class("centurion-chat-code-block");
-                let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                header.add_css_class("centurion-chat-code-header");
-                let lang_label = if lang.is_empty() {
-                    "code".to_owned()
-                } else {
-                    lang.clone()
-                };
-                header.append(
-                    &gtk::Label::builder()
-                        .label(&lang_label)
-                        .xalign(0.0)
-                        .hexpand(true)
-                        .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
-                        .build(),
-                );
-                let copy_btn = gtk::Button::with_label("Copy");
-                copy_btn.add_css_class("flat");
-                copy_btn.set_tooltip_text(Some("Copy code"));
-                let code_for_copy = text.clone();
-                copy_btn.connect_clicked(move |btn| {
-                    btn.clipboard().set_text(&code_for_copy);
-                });
-                header.append(&copy_btn);
-                block.append(&header);
-                let code_label = gtk::Label::builder()
-                    .label(text.as_str())
-                    .wrap(true)
-                    .wrap_mode(gtk::pango::WrapMode::Char)
-                    .xalign(0.0)
-                    .selectable(true)
-                    .max_width_chars(64)
-                    .css_classes(["centurion-chat-code"])
-                    .build();
-                block.append(&code_label);
-                body.append(&block);
+                body.append(&lazy_code_block(text, lang));
             }
             MessageBlock::Rule => {
                 body.append(
@@ -3804,6 +3775,77 @@ fn formatted_message_body(markdown: &str) -> gtk::Box {
     }
 
     body
+}
+
+/// Short fences stay eager (Copy + label). Larger fences stay collapsed until shown
+/// so long transcripts do not pay for hundreds of selectable code Labels on bind.
+const EAGER_CODE_CHARS: usize = 600;
+
+fn code_block_label(text: &str) -> gtk::Label {
+    gtk::Label::builder()
+        .label(text)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::Char)
+        .xalign(0.0)
+        .selectable(true)
+        .max_width_chars(64)
+        .css_classes(["centurion-chat-code"])
+        .build()
+}
+
+fn lazy_code_block(text: &str, lang: &str) -> gtk::Box {
+    let block = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    block.add_css_class("centurion-chat-code-block");
+
+    let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    header.add_css_class("centurion-chat-code-header");
+    let lang_label = if lang.is_empty() {
+        "code".to_owned()
+    } else {
+        lang.to_owned()
+    };
+    header.append(
+        &gtk::Label::builder()
+            .label(&lang_label)
+            .xalign(0.0)
+            .hexpand(true)
+            .css_classes(["caption", "dim-label", "centurion-chat-code-lang"])
+            .build(),
+    );
+
+    let copy_btn = gtk::Button::with_label("Copy");
+    copy_btn.add_css_class("flat");
+    copy_btn.set_tooltip_text(Some("Copy code"));
+    let code_for_copy = text.to_owned();
+    copy_btn.connect_clicked(move |btn| {
+        btn.clipboard().set_text(&code_for_copy);
+    });
+    header.append(&copy_btn);
+    block.append(&header);
+
+    if text.len() <= EAGER_CODE_CHARS {
+        block.append(&code_block_label(text));
+        return block;
+    }
+
+    let line_count = text.lines().count().max(1);
+    let body_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let show_btn = gtk::Button::with_label(&format!("Show code ({line_count} lines)"));
+    show_btn.add_css_class("flat");
+    show_btn.set_halign(gtk::Align::Start);
+    show_btn.set_tooltip_text(Some("Expand code block"));
+    let code_text = text.to_owned();
+    let slot = body_slot.clone();
+    show_btn.connect_clicked(move |btn| {
+        if slot.first_child().is_some() {
+            return;
+        }
+        slot.append(&code_block_label(&code_text));
+        btn.set_visible(false);
+    });
+    block.append(&show_btn);
+    block.append(&body_slot);
+    block
 }
 
 enum MessageBlock {
@@ -3845,7 +3887,9 @@ fn parse_message_blocks(markdown: &str) -> std::sync::Arc<Vec<MessageBlock>> {
             return hit.clone();
         }
     }
-    let blocks = std::sync::Arc::new(parse_message_blocks_uncached(markdown));
+    let blocks = std::sync::Arc::new(coalesce_paragraph_blocks(
+        parse_message_blocks_uncached(markdown),
+    ));
     if let Ok(mut guard) = cache.lock() {
         if guard.len() > 256 {
             guard.clear();
@@ -3853,6 +3897,31 @@ fn parse_message_blocks(markdown: &str) -> std::sync::Arc<Vec<MessageBlock>> {
         guard.insert(key, blocks.clone());
     }
     blocks
+}
+
+/// Merge consecutive prose paragraphs into one GTK label (fewer widgets per message).
+/// Headings stay separate; Code/Rule are hard boundaries.
+fn coalesce_paragraph_blocks(blocks: Vec<MessageBlock>) -> Vec<MessageBlock> {
+    let mut out: Vec<MessageBlock> = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match (&mut out.last_mut(), block) {
+            (
+                Some(MessageBlock::Paragraph {
+                    markup: prev,
+                    heading: None,
+                }),
+                MessageBlock::Paragraph {
+                    markup: next,
+                    heading: None,
+                },
+            ) => {
+                prev.push_str("\n\n");
+                prev.push_str(&next);
+            }
+            (_, other) => out.push(other),
+        }
+    }
+    out
 }
 
 fn parse_message_blocks_uncached(markdown: &str) -> Vec<MessageBlock> {
@@ -4081,16 +4150,23 @@ fn refresh_assistant_name_async(
     });
 }
 
+/// Scroll position that keeps the latest bubble/activity visible *above* the
+/// trailing transcript spacer (not buried inside the empty gap).
+fn chat_follow_bottom_target(adj: &gtk::Adjustment) -> f64 {
+    let absolute_bottom = (adj.upper() - adj.page_size()).max(adj.lower());
+    (absolute_bottom - f64::from(TRANSCRIPT_SPACER_PX)).max(adj.lower())
+}
+
 fn scroll_chat_to_latest(
     message_scroll: &gtk::ScrolledWindow,
     programmatic: &Rc<Cell<bool>>,
 ) {
     // Pin via the ScrolledWindow adjustment so ListView / ListBox both work
-    // (Fedora Brain: ListBox::scroll_to is unavailable).
+    // (Fedora Brain: ListBox::scroll_to is unavailable). Target is above the
+    // transcript spacer so the spacer stays as breath under the latest content.
     programmatic.set(true);
     let adj = message_scroll.vadjustment();
-    let target = (adj.upper() - adj.page_size()).max(adj.lower());
-    adj.set_value(target);
+    adj.set_value(chat_follow_bottom_target(&adj));
     let programmatic = programmatic.clone();
     glib::idle_add_local_once(move || {
         programmatic.set(false);
@@ -4105,7 +4181,8 @@ fn schedule_scroll_to_latest(
     follow_bottom.set(true);
     scroll_chat_to_latest(message_scroll, programmatic);
 
-    for delay_ms in [16u64, 120, 400] {
+    // Late retries catch ListView measure + async image height after paint.
+    for delay_ms in [16u64, 120, 400, 900] {
         let message_scroll = message_scroll.clone();
         let follow_bottom = follow_bottom.clone();
         let programmatic = programmatic.clone();
@@ -4147,6 +4224,7 @@ fn wire_follow_bottom_scroll(
     programmatic: Rc<Cell<bool>>,
 ) {
     let adj = message_scroll.vadjustment();
+    // Near the *content* bottom (above spacer), not the absolute scroll end.
     const NEAR_BOTTOM_PX: f64 = 80.0;
 
     adj.connect_changed({
@@ -4156,7 +4234,7 @@ fn wire_follow_bottom_scroll(
             if !follow_bottom.get() {
                 return;
             }
-            let target = (adj.upper() - adj.page_size()).max(adj.lower());
+            let target = chat_follow_bottom_target(adj);
             if (adj.value() - target).abs() > 0.5 {
                 programmatic.set(true);
                 adj.set_value(target);
@@ -4175,9 +4253,9 @@ fn wire_follow_bottom_scroll(
             if programmatic.get() {
                 return;
             }
-            let target = (adj.upper() - adj.page_size()).max(adj.lower());
-            // If the user scrolls away from the bottom, stop chasing until
-            // they return near the bottom or the next send arms follow again.
+            let target = chat_follow_bottom_target(adj);
+            // If the user scrolls away from the content bottom, stop chasing
+            // until they return near it or the next send arms follow again.
             follow_bottom.set(adj.value() >= target - NEAR_BOTTOM_PX);
         }
     });
@@ -4311,6 +4389,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
     let session_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(load_session_id()));
     let is_sending = Rc::new(RefCell::new(false));
+    // Bumped on Stop / conversation switch so a late Done from a cancelled
+    // worker cannot re-lock the UI or append into the wrong session.
+    let turn_epoch = Rc::new(Cell::new(0u64));
     let switching = Rc::new(Cell::new(false));
 
     // Virtualized transcript — ListView only binds visible rows (long chats stay smooth).
@@ -4423,15 +4504,35 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     activity_card.append(&activity_more_label);
     let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
     activity_card.append(&activity_tools);
+    // Live assistant draft (Cursor-like token stream) — plain text until Done.
+    let stream_draft = gtk::Label::builder()
+        .label("")
+                    .wrap(true)
+                    .xalign(0.0)
+                    .selectable(true)
+                    .visible(false)
+                    .css_classes(["centurion-chat-stream-draft"])
+                    .build();
+    activity_card.append(&stream_draft);
+    let stream_draft_text = Rc::new(RefCell::new(String::new()));
 
     let transcript_spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_spacer.add_css_class("centurion-chat-transcript-spacer");
     transcript_spacer.set_size_request(-1, TRANSCRIPT_SPACER_PX);
     transcript_spacer.set_hexpand(true);
 
+    let load_earlier = gtk::Button::with_label("Load earlier messages");
+    load_earlier.add_css_class("flat");
+    load_earlier.add_css_class("centurion-chat-load-earlier");
+    load_earlier.set_halign(gtk::Align::Center);
+    load_earlier.set_margin_top(8);
+    load_earlier.set_margin_bottom(4);
+    load_earlier.set_visible(false);
+
     // Cursor-style: bubbles + live Activity share one scroll surface; composer stays fixed below.
     let transcript_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_box.set_hexpand(true);
+    transcript_box.append(&load_earlier);
     transcript_box.append(&message_list);
     transcript_box.append(&activity_card);
     transcript_box.append(&transcript_spacer);
@@ -4518,6 +4619,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         move || {
             clear_activity_box();
             thinking_label.set_label("");
@@ -4531,6 +4634,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             activity_has_thinking.set(false);
             activity_thinking_text.borrow_mut().clear();
             activity_tool_lines.borrow_mut().clear();
+            stream_draft_text.borrow_mut().clear();
+            stream_draft.set_label("");
+            stream_draft.set_visible(false);
             activity_card.set_visible(false);
         }
     });
@@ -4566,6 +4672,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
         let programmatic_scroll = programmatic_scroll.clone();
@@ -4591,6 +4699,32 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     *activity_thinking_text.borrow_mut() = text;
                     activity_title.set_label("Thinking…");
                     // Label-only updates — skip scroll churn when already following.
+                }
+                "stream" | "stream_delta" => {
+                    let chunk = if event.text.is_empty() {
+                        event.line.clone()
+                    } else {
+                        event.text.clone()
+                    };
+                    if chunk.is_empty() {
+                        return;
+                    }
+                    activity_card.set_visible(true);
+                    {
+                        let mut buf = stream_draft_text.borrow_mut();
+                        buf.push_str(&chunk);
+                        // Cap live draft so a huge reply doesn't choke GTK labels.
+                        const MAX_DRAFT: usize = 24_000;
+                        if buf.len() > MAX_DRAFT {
+                            let keep = MAX_DRAFT / 2;
+                            let trimmed = buf[buf.len() - keep..].to_owned();
+                            *buf = format!("…{trimmed}");
+                        }
+                        stream_draft.set_label(buf.as_str());
+                    }
+                    stream_draft.set_visible(true);
+                    activity_title.set_label("Writing…");
+                    needs_scroll = true;
                 }
                 "tool" => {
                     let title = if event.tool.trim().is_empty() {
@@ -4646,13 +4780,18 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                         return;
                     }
                     // Lifecycle crumbs update the title only — no Status cards.
+                    // Heartbeats / long Still-working lines keep their full text.
                     activity_card.set_visible(true);
-                    let title = if line.len() > 80 {
+                    let lower = line.to_ascii_lowercase();
+                    let title = if lower.contains("still working") {
+                        line.trim().to_owned()
+                    } else if line.len() > 120 {
                         "Working…".to_owned()
                     } else {
                         line.trim().to_owned()
                     };
                     activity_title.set_label(&title);
+                    needs_scroll = lower.contains("still working");
                 }
                 _ => {
                     let line = if event.line.is_empty() {
@@ -4689,7 +4828,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let activity_has_thinking = activity_has_thinking.clone();
         let activity_thinking_text = activity_thinking_text.clone();
         let activity_tool_lines = activity_tool_lines.clone();
+        let stream_draft = stream_draft.clone();
+        let stream_draft_text = stream_draft_text.clone();
         move || {
+            // Always drop the live token draft — final assistant bubble replaces it.
+            stream_draft_text.borrow_mut().clear();
+            stream_draft.set_label("");
+            stream_draft.set_visible(false);
+
             let tools = activity_tool_count.get();
             let thinking = activity_has_thinking.get();
             if tools == 0 && !thinking {
@@ -5498,20 +5644,19 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let regenerate_slot = regenerate_slot_for_factory.clone();
     let rendered_count = Rc::new(Cell::new(0usize));
     let showing_empty_placeholder = Rc::new(Cell::new(false));
+    // Index into `messages` of the first row currently in the ListStore.
+    let visible_start = Rc::new(Cell::new(0usize));
 
-    let rebuild_messages: Rc<dyn Fn()> = Rc::new({
+    let fill_store_from_visible: Rc<dyn Fn()> = {
         let message_store = message_store.clone();
         let messages = messages.clone();
-        let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
-        let title = title.clone();
-        let follow_bottom = follow_bottom.clone();
-        let programmatic_scroll = programmatic_scroll.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
-        move || {
+        let visible_start = visible_start.clone();
+        let load_earlier = load_earlier.clone();
+        Rc::new(move || {
             let name = assistant_name.borrow().clone();
-            title.set_label(&format!("Chat with {name}"));
             message_store.remove_all();
             let msgs = messages.borrow();
             if msgs.is_empty() {
@@ -5528,22 +5673,47 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 };
                 message_store.append(&glib::BoxedAnyObject::new(item));
                 rendered_count.set(0);
+                visible_start.set(0);
                 showing_empty_placeholder.set(true);
-            } else {
-                let last_assistant_idx = msgs
-                    .iter()
-                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
-                for (idx, message) in msgs.iter().enumerate() {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: Some(idx) == last_assistant_idx,
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-                rendered_count.set(msgs.len());
-                showing_empty_placeholder.set(false);
+                load_earlier.set_visible(false);
+                return;
             }
+            let n = msgs.len();
+            let start = visible_start.get().min(n);
+            visible_start.set(start);
+            let last_assistant_idx = msgs
+                .iter()
+                .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
+            for (idx, message) in msgs.iter().enumerate().skip(start) {
+                let item = TranscriptItem {
+                    message: message.clone(),
+                    assistant_name: name.clone(),
+                    is_last_assistant: Some(idx) == last_assistant_idx,
+                };
+                message_store.append(&glib::BoxedAnyObject::new(item));
+            }
+            rendered_count.set(n);
+            showing_empty_placeholder.set(false);
+            load_earlier.set_visible(start > 0);
+        })
+    };
+
+    let rebuild_messages: Rc<dyn Fn()> = Rc::new({
+        let messages = messages.clone();
+        let message_scroll = message_scroll.clone();
+        let assistant_name = assistant_name.clone();
+        let title = title.clone();
+        let follow_bottom = follow_bottom.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        let visible_start = visible_start.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
+        move || {
+            let name = assistant_name.borrow().clone();
+            title.set_label(&format!("Chat with {name}"));
+            let n = messages.borrow().len();
+            // Fresh session / resume: show the latest window only.
+            visible_start.set(n.saturating_sub(INITIAL_VISIBLE_MESSAGES));
+            fill_store_from_visible();
             schedule_scroll_to_latest(
                 &message_scroll,
                 &follow_bottom,
@@ -5552,9 +5722,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
-    /// Append newly pushed messages without tearing down the whole ListBox.
+    // Incremental refresh for live turns: re-render the visible window only
+    // (capped at INITIAL_VISIBLE_MESSAGES), not the full transcript history.
     let sync_messages: Rc<dyn Fn()> = Rc::new({
-        let message_store = message_store.clone();
         let messages = messages.clone();
         let message_scroll = message_scroll.clone();
         let assistant_name = assistant_name.clone();
@@ -5563,6 +5733,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let programmatic_scroll = programmatic_scroll.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
         let rebuild_messages = rebuild_messages.clone();
         move || {
             let name = assistant_name.borrow().clone();
@@ -5578,35 +5749,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             if n == already {
                 return;
             }
-            // Re-flag last assistant for regenerate affordance.
-            if already > 0 {
-                message_store.remove_all();
-                let last_assistant_idx = msgs
-                    .iter()
-                    .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
-                for (idx, message) in msgs.iter().enumerate() {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: Some(idx) == last_assistant_idx,
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-            } else {
-                for (idx, message) in msgs.iter().enumerate().skip(already) {
-                    let item = TranscriptItem {
-                        message: message.clone(),
-                        assistant_name: name.clone(),
-                        is_last_assistant: idx + 1 == n
-                            && message.role == ChatRole::Assistant
-                            && message.activity.is_none(),
-                    };
-                    message_store.append(&glib::BoxedAnyObject::new(item));
-                }
-            }
-            rendered_count.set(n);
-            showing_empty_placeholder.set(false);
+            // Grow in place: refresh the visible window (still capped) so the
+            // regenerate affordance tracks the new last assistant without
+            // materializing the entire history into the ListStore.
             drop(msgs);
+            fill_store_from_visible();
             schedule_scroll_to_latest(
                 &message_scroll,
                 &follow_bottom,
@@ -5614,6 +5761,43 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             );
         }
     });
+
+    {
+        let visible_start = visible_start.clone();
+        let messages = messages.clone();
+        let fill_store_from_visible = fill_store_from_visible.clone();
+        let message_scroll = message_scroll.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        load_earlier.connect_clicked(move |_| {
+            let n = messages.borrow().len();
+            if n == 0 {
+                return;
+            }
+            let cur = visible_start.get().min(n);
+            if cur == 0 {
+                return;
+            }
+            // Preserve viewport: remember distance from bottom before prepend.
+            let adj = message_scroll.vadjustment();
+            let old_upper = adj.upper();
+            let old_value = adj.value();
+            let dist_from_bottom = (old_upper - old_value).max(0.0);
+
+            let next = cur.saturating_sub(LOAD_EARLIER_BATCH);
+            visible_start.set(next);
+            fill_store_from_visible();
+
+            // After store grows upward, keep the same messages on screen.
+            programmatic_scroll.set(true);
+            let adj = message_scroll.vadjustment();
+            let new_value = (adj.upper() - dist_from_bottom).max(adj.lower());
+            adj.set_value(new_value);
+            let programmatic_scroll = programmatic_scroll.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_millis(80), move || {
+                programmatic_scroll.set(false);
+            });
+        });
+    }
 
     // Full rebuild for session switch / clear; incremental sync for live turns.
     let refresh_messages = rebuild_messages.clone();
@@ -5865,27 +6049,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             // Amber pulse on Focus banner while Centurion is working in Focus mode.
             focus_pulse.set_visible(sending && intent.get() == ChatIntent::Focus);
             // Keep composer editable while generating (Cursor-like); busy Send enqueues.
-            new_chat_button.set_sensitive(!sending);
-            session_list.set_sensitive(!sending);
+            // Conversations stay selectable — a hung turn must not freeze the sidebar.
+            new_chat_button.set_sensitive(true);
+            session_list.set_sensitive(true);
             refresh_queue_strip();
         }
-    });
-
-    let stop_turn: Rc<dyn Fn()> = Rc::new({
-        let turn_cancel = turn_cancel.clone();
-        move || {
-            if let Some(flag) = turn_cancel.borrow().as_ref() {
-                flag.store(true, Ordering::SeqCst);
-            }
-        }
-    });
-    stop_button.connect_clicked({
-        let stop_turn = stop_turn.clone();
-        move |_| stop_turn()
-    });
-    strip_stop.connect_clicked({
-        let stop_turn = stop_turn.clone();
-        move |_| stop_turn()
     });
 
     let pending_approval_tx: Rc<RefCell<Option<mpsc::Sender<ApprovalDecision>>>> =
@@ -5915,6 +6083,42 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             approval_box.set_visible(false);
             set_chat_attention(0);
         }
+    });
+
+    let abort_active_turn: Rc<dyn Fn()> = Rc::new({
+        let turn_cancel = turn_cancel.clone();
+        let turn_epoch = turn_epoch.clone();
+        let set_sending = set_sending.clone();
+        let finish_activity_summary = finish_activity_summary.clone();
+        let reset_activity = reset_activity.clone();
+        let clear_approval = clear_approval.clone();
+        let pending_approval_tx = pending_approval_tx.clone();
+        move || {
+            if let Some(flag) = turn_cancel.borrow().as_ref() {
+                flag.store(true, Ordering::SeqCst);
+            }
+            turn_epoch.set(turn_epoch.get().wrapping_add(1));
+            set_sending(false);
+            clear_approval();
+            *pending_approval_tx.borrow_mut() = None;
+            let _ = finish_activity_summary();
+            reset_activity();
+        }
+    });
+
+    let stop_turn: Rc<dyn Fn()> = Rc::new({
+        let abort_active_turn = abort_active_turn.clone();
+        move || {
+            abort_active_turn();
+        }
+    });
+    stop_button.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
+    });
+    strip_stop.connect_clicked({
+        let stop_turn = stop_turn.clone();
+        move |_| stop_turn()
     });
 
     let start_new_chat: Rc<dyn Fn()> = Rc::new({
@@ -6343,10 +6547,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     // New chat
     {
         let start_new_chat = start_new_chat.clone();
+        let abort_active_turn = abort_active_turn.clone();
         let is_sending = is_sending.clone();
         new_chat_button.connect_clicked(move |_| {
             if *is_sending.borrow() {
-                return;
+                abort_active_turn();
             }
             start_new_chat();
         });
@@ -6361,6 +6566,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let set_error = set_error.clone();
         let clear_approval = clear_approval.clone();
         let is_sending = is_sending.clone();
+        let abort_active_turn = abort_active_turn.clone();
         let switching = switching.clone();
         let follow_bottom = follow_bottom.clone();
         let assistant_name = assistant_name.clone();
@@ -6369,8 +6575,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let context_bar = context_bar.clone();
         let title_label = title.clone();
         session_list.connect_row_activated(move |_, row| {
-            if *is_sending.borrow() || switching.get() {
+            if switching.get() {
                 return;
+            }
+            if *is_sending.borrow() {
+                abort_active_turn();
             }
             let target_id = row.widget_name().to_string();
             if target_id.is_empty() {
@@ -6519,6 +6728,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let apply_activity = apply_activity.clone();
         let finish_activity_summary = finish_activity_summary.clone();
         let turn_cancel = turn_cancel.clone();
+        let turn_epoch = turn_epoch.clone();
         let show_proposal_choices = show_proposal_choices.clone();
         let keep_proposal_context = keep_proposal_context.clone();
         let pending_proposal = pending_proposal.clone();
@@ -6576,6 +6786,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             show_activity_working();
             let cancel = Arc::new(AtomicBool::new(false));
             *turn_cancel.borrow_mut() = Some(cancel.clone());
+            turn_epoch.set(turn_epoch.get().wrapping_add(1));
+            let my_epoch = turn_epoch.get();
             set_sending(true);
 
             let discuss_topic = active_discuss.borrow().clone();
@@ -6722,7 +6934,19 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let submit_slot_for_self = submit_slot_for_self.clone();
             let apply_focus_banner_for_turn = apply_focus_banner.clone();
             let focus_banner_gen_for_turn = focus_banner_gen.clone();
+            let turn_epoch = turn_epoch.clone();
             glib::timeout_add_local(Duration::from_millis(50), move || {
+                // Stale after Stop / conversation switch — drain until Done, ignore UI writes.
+                if turn_epoch.get() != my_epoch {
+                    match event_rx.try_recv() {
+                        Ok(WorkerEvent::Done(_))
+                        | Err(mpsc::TryRecvError::Disconnected) => {
+                            return glib::ControlFlow::Break;
+                        }
+                        Ok(_) => return glib::ControlFlow::Continue,
+                        Err(mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    }
+                }
                 // Drain a burst per tick. A tool-heavy turn emits activity far
                 // faster than one event per 50ms, so a single try_recv per tick
                 // makes the trail trail the worker. Capped so GTK keeps a slice.
@@ -7249,6 +7473,76 @@ mod tests {
         assert_eq!(normalize_target_type("Must Do"), "essential");
         assert_eq!(normalize_target_type("should"), "shouldHave");
         assert_eq!(normalize_target_type("nice_to_have"), "niceToHave");
+    }
+
+    /// WS3 B3 proxy: paragraph coalescing must cut widget count on a 100-message corpus.
+    #[test]
+    fn ws3_chat_render_proxy_coalesce_cuts_blocks() {
+        use std::time::Instant;
+
+        let mut before_blocks = 0usize;
+        let mut after_blocks = 0usize;
+        let mut before_paras = 0usize;
+        let mut after_paras = 0usize;
+        let t0 = Instant::now();
+        for i in 0..100 {
+            let md = format!(
+                "## Turn {i}\n\nFirst paragraph about topic {i}.\n\n\
+                 Second paragraph continues the thought.\n\n\
+                 - item a\n- item b\n- item c\n\n\
+                 {}",
+                if i % 5 == 0 {
+                    format!(
+                        "```python\n{}\n```\n",
+                        "print('hello')\n".repeat(40)
+                    )
+                } else {
+                    String::new()
+                }
+            );
+            let raw = parse_message_blocks_uncached(&md);
+            before_blocks += raw.len();
+            before_paras += raw
+                .iter()
+                .filter(|b| matches!(b, MessageBlock::Paragraph { heading: None, .. }))
+                .count();
+            let coal = coalesce_paragraph_blocks(raw);
+            after_blocks += coal.len();
+            after_paras += coal
+                .iter()
+                .filter(|b| matches!(b, MessageBlock::Paragraph { heading: None, .. }))
+                .count();
+        }
+        let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        let reduction_pct = if before_blocks == 0 {
+            0.0
+        } else {
+            100.0 * (before_blocks - after_blocks) as f64 / before_blocks as f64
+        };
+        eprintln!(
+            "ws3_chat_render_proxy: messages=100 before_blocks={before_blocks} \
+             after_blocks={after_blocks} before_paras={before_paras} after_paras={after_paras} \
+             block_reduction_pct={reduction_pct:.1} parse_ms={elapsed_ms:.1}"
+        );
+        assert!(
+            after_blocks < before_blocks,
+            "coalesce should reduce total blocks ({after_blocks} vs {before_blocks})"
+        );
+        assert!(
+            after_paras < before_paras,
+            "coalesce should reduce non-heading paragraphs ({after_paras} vs {before_paras})"
+        );
+        assert!(
+            reduction_pct >= 20.0,
+            "expected ≥20% block reduction on prose-heavy corpus, got {reduction_pct:.1}%"
+        );
+    }
+
+    #[test]
+    fn ws3_lazy_code_threshold_constant() {
+        assert!(EAGER_CODE_CHARS >= 200);
+        assert!(INITIAL_VISIBLE_MESSAGES == 50);
+        assert!(LOAD_EARLIER_BATCH == 50);
     }
 }
 

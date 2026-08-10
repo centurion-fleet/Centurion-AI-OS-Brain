@@ -1554,6 +1554,158 @@ def _make_remote_activity_callbacks(
     return tool_progress_callback, status_callback
 
 
+def _remote_notify_interval_seconds(cfg: dict[str, Any] | None = None) -> float | None:
+    """Heartbeat interval for Desktop Chat (Cursor-like mid-turn pulse).
+
+    Honours ``agent.gateway_notify_interval`` / ``CENTURION_AGENT_NOTIFY_INTERVAL``.
+    ``0`` disables. Default **30s** for remote (Telegram gateway defaults to 180s;
+    Desktop needs a tighter pulse while waiting on tools / provider).
+    """
+    import os
+
+    raw = os.environ.get("CENTURION_AGENT_NOTIFY_INTERVAL", "").strip()
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            value = 30.0
+    else:
+        agent_cfg = (cfg or {}).get("agent") if isinstance(cfg, dict) else None
+        if isinstance(agent_cfg, dict) and "gateway_notify_interval" in agent_cfg:
+            try:
+                value = float(agent_cfg.get("gateway_notify_interval"))
+            except (TypeError, ValueError):
+                value = 30.0
+        else:
+            value = 30.0
+    if value <= 0:
+        return None
+    return value
+
+
+def _make_remote_stream_delta_callback() -> Any:
+    """Emit coalesced assistant token deltas as NDJSON activity (kind=stream)."""
+    import threading
+    import time
+
+    lock = threading.Lock()
+    pending: list[str] = []
+    flush_scheduled = [False]
+    # ~60ms coalesce keeps Desktop paint cheap (WS3 B1/B2).
+    min_gap = 0.06
+
+    def _flush() -> None:
+        with lock:
+            if not pending:
+                flush_scheduled[0] = False
+                return
+            chunk = "".join(pending)
+            pending.clear()
+            flush_scheduled[0] = False
+        if not chunk or not _remote_events_enabled():
+            return
+        if len(chunk) > 4000:
+            chunk = chunk[:4000]
+        _emit_remote_event(
+            {
+                "centurion_event": "activity",
+                "kind": "stream",
+                "text": chunk,
+                "line": chunk,
+            }
+        )
+
+    def _schedule_flush() -> None:
+        def _later() -> None:
+            time.sleep(min_gap)
+            _flush()
+
+        threading.Thread(
+            target=_later,
+            name="remote-stream-flush",
+            daemon=True,
+        ).start()
+
+    def stream_delta_callback(text: str | None) -> None:
+        if not _remote_events_enabled():
+            return
+        if text is None:
+            _flush()
+            return
+        if not isinstance(text, str) or not text:
+            return
+        with lock:
+            pending.append(text)
+            already = flush_scheduled[0]
+            if not already:
+                flush_scheduled[0] = True
+        if not already:
+            _schedule_flush()
+
+    return stream_delta_callback
+
+
+def _start_remote_still_working_heartbeat(
+    agent: Any,
+    cfg: dict[str, Any] | None = None,
+) -> Any:
+    """Background ``Still working…`` pulses while ``run_conversation`` is alive.
+
+    Returns a ``threading.Event`` — set it to stop the thread.
+    """
+    import threading
+    import time
+
+    interval = _remote_notify_interval_seconds(cfg)
+    stop = threading.Event()
+    if interval is None:
+        return stop
+
+    started = time.time()
+
+    def _loop() -> None:
+        while not stop.wait(interval):
+            if not _remote_events_enabled():
+                continue
+            elapsed_mins = int((time.time() - started) // 60)
+            detail = ""
+            try:
+                summary = agent.get_activity_summary()
+                parts: list[str] = [
+                    f"iteration {summary.get('api_call_count', 0)}/"
+                    f"{summary.get('max_iterations', '?')}"
+                ]
+                current = (summary.get("current_tool") or "").strip()
+                if current:
+                    parts.append(f"running: {current}")
+                else:
+                    desc = (summary.get("last_activity_desc") or "").strip()
+                    if desc:
+                        parts.append(desc)
+                    else:
+                        parts.append("waiting for provider response")
+                detail = " — " + ", ".join(parts)
+            except Exception:
+                detail = ""
+            line = f"Still working… ({elapsed_mins} min elapsed{detail})"
+            _emit_remote_event(
+                {
+                    "centurion_event": "activity",
+                    "kind": "status",
+                    "event": "heartbeat",
+                    "message": line[:400],
+                    "line": line[:400],
+                }
+            )
+
+    threading.Thread(
+        target=_loop,
+        name="remote-still-working",
+        daemon=True,
+    ).start()
+    return stop
+
+
 def _run_agent_quiet(
     text: str,
     *,
@@ -1982,21 +2134,30 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         ephemeral_system_prompt=identity_ephemeral,
     )
     agent.suppress_status_output = True
-    agent.stream_delta_callback = None
     agent.tool_gen_callback = None
 
     progress_mode = _resolve_remote_tool_progress_mode(cfg)
+    heartbeat_stop = None
     if _remote_events_enabled() and progress_mode != "off":
         tool_cb, status_cb = _make_remote_activity_callbacks(mode=progress_mode)
         agent.tool_progress_callback = tool_cb
         agent.status_callback = status_cb
+        agent.stream_delta_callback = _make_remote_stream_delta_callback()
+        heartbeat_stop = _start_remote_still_working_heartbeat(agent, cfg)
+    else:
+        agent.stream_delta_callback = None
 
-    result = agent.run_conversation(
-        user_message=api_user_message,
-        conversation_history=history or None,
-        task_id=session_id,
-        persist_user_message=text,
-    )
+    try:
+        result = agent.run_conversation(
+            user_message=api_user_message,
+            conversation_history=history or None,
+            task_id=session_id,
+            persist_user_message=text,
+        )
+    finally:
+        if heartbeat_stop is not None:
+            heartbeat_stop.set()
+
     if isinstance(result, dict):
         raw = str(result.get("final_response") or result.get("response") or "")
     else:

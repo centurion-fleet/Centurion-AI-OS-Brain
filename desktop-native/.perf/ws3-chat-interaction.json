@@ -1,0 +1,20 @@
+{
+  "kind": "ws3_chat_interaction_template",
+  "session_messages": 100,
+  "protocol": "See README-ws3-chat.md — Enter to settled paint, 11 runs drop first",
+  "before": {
+    "build": "5.2.136",
+    "p50_ms": null,
+    "p95_ms": null,
+    "n": 10,
+    "main_loop_cpu_note": "ps -Lp $(pgrep -f centurion-desktop) -o pid,lwp,%cpu,comm --sort=-%cpu | head -8"
+  },
+  "after": {
+    "build": "ws3-chat-speed",
+    "p50_ms": null,
+    "p95_ms": null,
+    "n": 10
+  },
+  "p95_reduction_pct": null,
+  "a1_gate": "p95_reduction_pct >= 40 (Titus Fedora measurement)"
+}

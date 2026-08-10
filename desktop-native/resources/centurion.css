@@ -183,6 +183,17 @@ button.link {
   margin-top: 4px;
 }
 
+.centurion-chat-stream-draft {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: alpha(@centurion_warm, 0.08);
+  border: 1px solid alpha(@centurion_border, 0.7);
+  color: @centurion_ink;
+  font-size: 0.95em;
+  line-height: 1.35;
+}
+
 .centurion-chat-transcript-spacer {
   min-height: 200px;
 }

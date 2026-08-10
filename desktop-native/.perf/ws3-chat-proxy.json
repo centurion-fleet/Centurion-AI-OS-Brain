@@ -1,0 +1,15 @@
+{
+  "kind": "ws3_chat_render_proxy",
+  "messages": 100,
+  "before_blocks": 420,
+  "after_blocks": 220,
+  "before_paragraphs": 300,
+  "after_paragraphs": 100,
+  "block_reduction_pct": 47.6,
+  "parse_ms": 0.5,
+  "notes": [
+    "Structural proxy for B1.1 coalesce \u2014 not A1 interaction latency.",
+    "INITIAL_VISIBLE_MESSAGES=50 caps ListStore on resume (B2).",
+    "Large code fences lazy-build Label until Show (B1.2)."
+  ]
+}
