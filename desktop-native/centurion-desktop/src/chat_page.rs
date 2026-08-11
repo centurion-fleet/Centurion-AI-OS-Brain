@@ -1328,7 +1328,12 @@ fn frame_collab_discuss(user_text: &str, topic: &DiscussTopic) -> String {
         String::new()
     } else {
         let capped = if blackboard_json.len() > 2500 {
-            format!("{}…", &blackboard_json[..2499])
+            // Truncate on a UTF-8 char boundary — byte-slicing mid-character panics.
+            let mut end = 2499;
+            while !blackboard_json.is_char_boundary(end) {
+                end -= 1;
+            }
+            format!("{}…", &blackboard_json[..end])
         } else {
             blackboard_json.clone()
         };

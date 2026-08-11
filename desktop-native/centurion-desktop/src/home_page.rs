@@ -2140,19 +2140,19 @@ verifier, then synthesizer. No portal tokens.",
             "workers": [
                 {
                     "profile": pick(&w1_profile),
-                    "title": {
+                    "title": ({
                         let t = w1_title.text().trim().to_owned();
                         if t.is_empty() { "Research".to_owned() } else { t }
-                    },
+                    }),
                     "body": w1_title.text().trim(),
                     "skills": skills_list(&w1_skills),
                 },
                 {
                     "profile": pick(&w2_profile),
-                    "title": {
+                    "title": ({
                         let t = w2_title.text().trim().to_owned();
                         if t.is_empty() { "Draft".to_owned() } else { t }
-                    },
+                    }),
                     "body": w2_title.text().trim(),
                     "skills": skills_list(&w2_skills),
                 },
