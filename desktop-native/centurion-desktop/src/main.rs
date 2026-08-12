@@ -1015,7 +1015,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Away-from-home access comes later via a Centurion-hosted relay — no router setup for Unbox.",
+                    "Away-from-home chat: turn on Settings → Chat from anywhere after pairing. Same App Store app; no router setup for Unbox.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -1403,6 +1403,136 @@ pairing stays available for early testing on the same Wi‑Fi.",
         gateway_platform_list.set_margin_end(32);
         gateway_platform_list.set_margin_bottom(8);
         settings.append(&gateway_platform_list);
+
+        let anywhere_group = adw::PreferencesGroup::builder()
+            .title("Chat from anywhere")
+            .description(
+                "When you leave home Wi‑Fi, the same App Store iPhone reaches this Brain through Centurion’s cloud (end-to-end encrypted). Home LAN Crypto Chat stays preferred when you’re on the same network.",
+            )
+            .build();
+        let anywhere_row = adw::ActionRow::builder()
+            .title("Anywhere")
+            .subtitle("Checking…")
+            .icon_name("network-wireless-symbolic")
+            .build();
+        let anywhere_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
+        anywhere_row.add_suffix(&anywhere_switch);
+        anywhere_group.add(&anywhere_row);
+        settings.append(&anywhere_group);
+
+        // Refresh Anywhere switch off the UI thread.
+        {
+            let anywhere_row = anywhere_row.clone();
+            let anywhere_switch = anywhere_switch.clone();
+            let (tx, rx) = std::sync::mpsc::channel::<(bool, String)>();
+            std::thread::spawn(move || {
+                let resp = run_bridge_action(
+                    "remote_relay_status",
+                    serde_json::json!({}),
+                );
+                let enabled = resp
+                    .as_ref()
+                    .and_then(|v| v.get("enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let online = resp
+                    .as_ref()
+                    .and_then(|v| v.get("presence"))
+                    .and_then(|v| v.get("online"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let subtitle = if enabled && online {
+                    "On — Brain presence live on Centurion cloud"
+                } else if enabled {
+                    "On — waiting for relay presence"
+                } else {
+                    "Off — home Wi‑Fi / Desktop only (most private)"
+                };
+                let _ = tx.send((enabled, subtitle.to_owned()));
+            });
+            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                match rx.try_recv() {
+                    Ok((enabled, subtitle)) => {
+                        anywhere_switch.set_active(enabled);
+                        anywhere_row.set_subtitle(&subtitle);
+                        glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                }
+            });
+        }
+        {
+            let anywhere_row = anywhere_row.clone();
+            let anywhere_switch = anywhere_switch.clone();
+            anywhere_switch.connect_state_set(move |switch, state| {
+                let anywhere_row = anywhere_row.clone();
+                let switch = switch.clone();
+                let action = if state {
+                    "remote_relay_enable"
+                } else {
+                    "remote_relay_disable"
+                };
+                let (tx, rx) = std::sync::mpsc::channel::<Result<(bool, String), String>>();
+                std::thread::spawn(move || {
+                    let resp = run_bridge_action(action, serde_json::json!({}));
+                    let ok = resp
+                        .as_ref()
+                        .and_then(|v| v.get("ok"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if !ok {
+                        let msg = resp
+                            .as_ref()
+                            .and_then(|v| v.get("message").or_else(|| v.get("error")))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Could not update Anywhere.")
+                            .to_owned();
+                        let _ = tx.send(Err(msg));
+                        return;
+                    }
+                    let enabled = resp
+                        .as_ref()
+                        .and_then(|v| v.get("enabled"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(state);
+                    let online = resp
+                        .as_ref()
+                        .and_then(|v| v.get("presence"))
+                        .and_then(|v| v.get("online"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let subtitle = if enabled && online {
+                        "On — Brain presence live on Centurion cloud"
+                    } else if enabled {
+                        "On — waiting for relay presence"
+                    } else {
+                        "Off — home Wi‑Fi / Desktop only (most private)"
+                    };
+                    let _ = tx.send(Ok((enabled, subtitle.to_owned())));
+                });
+                glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                    match rx.try_recv() {
+                        Ok(Ok((enabled, subtitle))) => {
+                            switch.set_active(enabled);
+                            anywhere_row.set_subtitle(&subtitle);
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Err(msg)) => {
+                            switch.set_active(!state);
+                            anywhere_row.set_subtitle(&msg);
+                            glib::ControlFlow::Break
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            switch.set_active(!state);
+                            glib::ControlFlow::Break
+                        }
+                    }
+                });
+                glib::Propagation::Stop
+            });
+        }
 
         let research_group = adw::PreferencesGroup::builder()
             .title("Research tools")

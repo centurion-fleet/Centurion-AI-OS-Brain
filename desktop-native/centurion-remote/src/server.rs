@@ -129,6 +129,7 @@ async fn handle_connection(
                 id,
                 text,
                 session_id,
+                life_inject,
             } => {
                 info!(
                     %peer,
@@ -145,6 +146,7 @@ async fn handle_connection(
                     &request_id,
                     &text,
                     session_id.as_deref(),
+                    life_inject,
                     Some(event_tx),
                     Some(approval_rx),
                 );

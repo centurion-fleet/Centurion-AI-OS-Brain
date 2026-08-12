@@ -20,6 +20,8 @@ struct SettingsView: View {
     @State private var showPrivacyTrust = false
     @State private var showPairingSheet = false
     @State private var showRecoverySheet = false
+    @State private var anywhereBusy = false
+    @State private var anywhereError: String?
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
@@ -51,6 +53,7 @@ struct SettingsView: View {
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                         GatewayControlSection()
+                        anywhereRelaySection
                     }
                     youSection
                     memoryHorizonSection
@@ -363,6 +366,85 @@ struct SettingsView: View {
                 .tint(ColorTheme.accent())
                 .labelsHidden()
             }
+        }
+    }
+
+    private var anywhereRelaySection: some View {
+        let enabled = (connectionManager.remoteRelayStatus["enabled"] as? Bool) ?? false
+        let online = ((connectionManager.remoteRelayStatus["presence"] as? [String: Any])?["online"] as? Bool) ?? false
+        let subtitle: String = {
+            if anywhereBusy { return "Updating…" }
+            if enabled && online {
+                return "On — Brain presence live. Away uses Centurion cloud (E2E); home Wi‑Fi still preferred."
+            }
+            if enabled {
+                return "On — waiting for Brain presence on the relay"
+            }
+            return "Off — Crypto Chat on home Wi‑Fi only (most private)"
+        }()
+        return settingsSection(
+            title: "Chat from anywhere",
+            icon: "globe",
+            footer: "Pair once at home. Enable on this Brain so the same App Store app works away from Wi‑Fi while the Brain is online. Content stays end-to-end encrypted; Centurion cloud sees metadata only."
+        ) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Anywhere")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { enabled },
+                        set: { newValue in
+                            Task { @MainActor in
+                                anywhereBusy = true
+                                anywhereError = nil
+                                do {
+                                    if newValue {
+                                        _ = try await connectionManager.enableRemoteRelay()
+                                    } else {
+                                        _ = try await connectionManager.disableRemoteRelay()
+                                    }
+                                    _ = await connectionManager.refreshRemoteRelayStatus()
+                                } catch {
+                                    anywhereError = connectionManager.friendlyRemoteError(error)
+                                }
+                                anywhereBusy = false
+                            }
+                        }
+                    )
+                )
+                .labelsHidden()
+                .disabled(anywhereBusy || connectionManager.connectionState != .connected)
+            }
+            .onAppear {
+                Task { _ = await connectionManager.refreshRemoteRelayStatus() }
+            }
+            if let anywhereError {
+                Text(anywhereError)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.error())
+            }
+
+            sectionDivider
+
+            Button {
+                UIApplication.shared.open(CenturionHelp.localRemoteTelegramPrivacy)
+            } label: {
+                CenturionListRow(
+                    icon: "lock.shield",
+                    title: "Privacy choices",
+                    subtitle: "Local, Remote anywhere, or Telegram"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

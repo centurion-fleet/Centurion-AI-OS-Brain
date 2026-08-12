@@ -218,6 +218,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     handoff_state TEXT,
     handoff_platform TEXT,
     handoff_error TEXT,
+    -- Conversation topic metadata (Desktop Discuss / iPhone Remote topics).
+    -- topic_kind: plan|collab|mission|document|decision|commitment|horizon|generic|…
+    -- topic_ref: JSON string with stable ids (board_id, plan_id, mission_id, …).
+    topic_kind TEXT,
+    topic_ref TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -1079,6 +1084,56 @@ class SessionDB:
             )
             row = cursor.fetchone()
         return row["title"] if row else None
+
+    def set_session_topic(
+        self,
+        session_id: str,
+        topic_kind: Optional[str] = None,
+        topic_ref: Optional[Any] = None,
+    ) -> bool:
+        """Persist conversation-topic metadata for Discuss / Remote trays.
+
+        ``topic_ref`` may be a JSON string or a dict (serialized here).
+        Empty kind clears both fields. Returns True when the session exists.
+        """
+        kind = (str(topic_kind).strip() if topic_kind is not None else "") or None
+        if kind is None:
+            ref_text = None
+        elif isinstance(topic_ref, dict):
+            ref_text = json.dumps(topic_ref, ensure_ascii=False)
+        elif topic_ref is None:
+            ref_text = None
+        else:
+            ref_text = str(topic_ref).strip() or None
+
+        def _do(conn):
+            cur = conn.execute(
+                "UPDATE sessions SET topic_kind = ?, topic_ref = ? WHERE id = ?",
+                (kind, ref_text, session_id),
+            )
+            return cur.rowcount
+
+        return self._execute_write(_do) > 0
+
+    def get_session_topic(self, session_id: str) -> Dict[str, Any]:
+        """Return ``{topic_kind, topic_ref}`` for a session (ref parsed if JSON)."""
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT topic_kind, topic_ref FROM sessions WHERE id = ?",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+        if not row:
+            return {"topic_kind": None, "topic_ref": None}
+        kind = row["topic_kind"]
+        raw = row["topic_ref"]
+        parsed: Any = raw
+        if isinstance(raw, str) and raw.strip().startswith(("{", "[")):
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = raw
+        return {"topic_kind": kind, "topic_ref": parsed}
 
     def get_session_by_title(self, title: str) -> Optional[Dict[str, Any]]:
         """Look up a session by exact title. Returns session dict or None."""

@@ -34,6 +34,9 @@ struct ChatView: View {
 
     /// Pull-down tray state
     @State private var showTray = false
+    @State private var showRenameAlert = false
+    @State private var renameTarget: Conversation?
+    @State private var renameDraft = ""
 
     var body: some View {
         Group {
@@ -53,6 +56,24 @@ struct ChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .alert("Rename topic", isPresented: $showRenameAlert) {
+            TextField("Name", text: $renameDraft)
+            Button("Cancel", role: .cancel) {
+                renameTarget = nil
+            }
+            Button("Save") {
+                guard let target = renameTarget else { return }
+                Task { @MainActor in
+                    let updated = await messageService.renameHostTopic(target, title: renameDraft)
+                    if selectedConversation?.id == target.id {
+                        selectedConversation = updated
+                    }
+                    renameTarget = nil
+                }
+            }
+        } message: {
+            Text("Choose a name for this conversation topic.")
+        }
     }
 
     private var chatContent: some View {
@@ -159,8 +180,14 @@ struct ChatView: View {
     private var conversationTrayTrigger: some View {
         Button(action: {
             Haptics.lightTap()
+            let opening = !showTray
             withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
                 showTray.toggle()
+            }
+            if opening {
+                Task { @MainActor in
+                    _ = await messageService.syncHostTopicsFromBrain()
+                }
             }
         }) {
             HStack(spacing: 4) {
@@ -228,6 +255,38 @@ struct ChatView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     traySectionHeader("Stream", icon: "bubble.left.and.bubble.right")
                     allChatTrayRow()
+
+                    if connectionManager.connectionState == .connected {
+                        Button {
+                            Haptics.mediumTap()
+                            Task { @MainActor in
+                                let created = await messageService.startNewFreeformTopic()
+                                withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                                    selectedConversation = created
+                                    showTray = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: Spacing.sm) {
+                                ZStack {
+                                    Circle()
+                                        .fill(ColorTheme.accent().opacity(0.12))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(ColorTheme.accent())
+                                }
+                                Text("New topic")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(ColorTheme.primaryText())
+                                Spacer()
+                            }
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.sm)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     // Mission conversations
                     let missionConvs = messageService.conversations.filter { !$0.context.isStandalone }
@@ -341,9 +400,12 @@ struct ChatView: View {
     private func trayRow(_ conversation: Conversation) -> some View {
         Button(action: {
             Haptics.mediumTap()
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
-                selectedConversation = conversation
-                showTray = false
+            Task { @MainActor in
+                let opened = await messageService.openHostTopic(conversation)
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                    selectedConversation = opened
+                    showTray = false
+                }
             }
         }) {
             HStack(spacing: Spacing.sm) {
@@ -381,6 +443,22 @@ struct ChatView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename") {
+                renameTarget = conversation
+                renameDraft = conversation.displayTitle
+                showRenameAlert = true
+            }
+            Button("Delete", role: .destructive) {
+                Task { @MainActor in
+                    let id = conversation.id
+                    await messageService.deleteHostTopic(conversation)
+                    if selectedConversation?.id == id {
+                        selectedConversation = messageService.currentConversation
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Context Header

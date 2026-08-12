@@ -81,4 +81,9 @@ enum CenturionHelp {
         category: "privacy-and-security",
         slug: "memory-horizon-and-vault"
     )
+    /// Local vs Centurion Remote vs Telegram — transport privacy tiers.
+    static let localRemoteTelegramPrivacy = article(
+        category: "privacy-and-security",
+        slug: "local-remote-telegram-privacy"
+    )
 }

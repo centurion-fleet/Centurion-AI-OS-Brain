@@ -27,6 +27,14 @@ enum ConversationContext: Codable, Equatable, Hashable {
         missionName: String,
         subjectName: String?
     )
+    /// Local collaboration board Discuss (Brain kanban swarm).
+    case collab(id: UUID, name: String, boardId: String?)
+    /// Focus / Documents Discuss.
+    case document(id: UUID?, title: String, missionId: UUID?)
+    /// Decision Discuss from Home / Focus.
+    case decision(id: UUID, title: String)
+    /// Memory Horizon layer Discuss.
+    case horizon(layer: String)
     case standalone(title: String)
 
     var displayTitle: String {
@@ -38,6 +46,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .plan(_, let title): return title
         case .mission(_, let name, _): return name
         case .missionTarget(_, let name, _, _, _): return name
+        case .collab(_, let name, _): return name
+        case .document(_, let title, _): return title
+        case .decision(_, let title): return title
+        case .horizon(let layer): return "Memory Horizon · \(layer)"
         case .standalone(let title): return title
         }
     }
@@ -55,6 +67,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .missionTarget(_, let name, _, let mission, let subject):
             if let subject, !subject.isEmpty { return "\(subject) > \(mission) > \(name)" }
             return "\(mission) > \(name)"
+        case .collab(_, let name, _): return "Collaboration · \(name)"
+        case .document(_, let title, _): return "Document · \(title)"
+        case .decision(_, let title): return "Decision · \(title)"
+        case .horizon(let layer): return "Memory Horizon · \(layer)"
         case .standalone: return "Chat"
         }
     }
@@ -68,6 +84,10 @@ enum ConversationContext: Codable, Equatable, Hashable {
         case .plan: return "list.clipboard"
         case .mission: return "flag.fill"
         case .missionTarget: return "checkmark.circle.fill"
+        case .collab: return "person.3.fill"
+        case .document: return "doc.text.fill"
+        case .decision: return "arrow.triangle.branch"
+        case .horizon: return "circle.hexagongrid.fill"
         case .standalone: return "message.fill"
         }
     }
@@ -90,6 +110,14 @@ enum ConversationContext: Codable, Equatable, Hashable {
             return (label, ColorTheme.accent())
         case .missionTarget(_, let name, _, let mission, _):
             return ("\(mission) > \(name)", ColorTheme.accent().opacity(0.85))
+        case .collab(_, let name, _):
+            return ("Collab · \(name)", ColorTheme.accent())
+        case .document(_, let title, _):
+            return ("Document · \(title)", ColorTheme.accent().opacity(0.9))
+        case .decision(_, let title):
+            return ("Decision · \(title)", ColorTheme.accent())
+        case .horizon(let layer):
+            return ("Horizon · \(layer)", ColorTheme.accent().opacity(0.85))
         case .standalone:
             return ("Chat", ColorTheme.mutedText())
         }
@@ -109,6 +137,7 @@ enum ConversationContext: Codable, Equatable, Hashable {
         switch self {
         case .mission(let id, _, _): return id
         case .missionTarget(_, _, let missionId, _, _): return missionId
+        case .document(_, _, let missionId): return missionId
         default: return nil
         }
     }
@@ -118,9 +147,64 @@ enum ConversationContext: Codable, Equatable, Hashable {
         return nil
     }
 
+    /// Brain SessionDB topic_kind for durable Discuss restore.
+    var hostTopicKind: String? {
+        switch self {
+        case .plan: return "plan"
+        case .commitment: return "commitment"
+        case .mission, .missionTarget: return "mission"
+        case .collab: return "collab"
+        case .document: return "document"
+        case .decision: return "decision"
+        case .horizon: return "horizon"
+        case .standalone: return "generic"
+        case .program, .target, .task: return "generic"
+        }
+    }
+
+    /// Brain SessionDB topic_ref JSON object.
+    var hostTopicRef: [String: Any]? {
+        switch self {
+        case .plan(let id, let title):
+            return ["plan_id": id.uuidString, "title": title]
+        case .commitment(let id, let title):
+            return ["commitment_id": id.uuidString, "title": title]
+        case .mission(let id, let name, let subjectName):
+            var ref: [String: Any] = ["mission_id": id.uuidString, "title": name]
+            if let subjectName { ref["subject_name"] = subjectName }
+            return ref
+        case .missionTarget(let id, let name, let missionId, let missionName, _):
+            return [
+                "mission_id": missionId.uuidString,
+                "target_id": id.uuidString,
+                "target_title": name,
+                "title": missionName,
+            ]
+        case .collab(let id, let name, let boardId):
+            return [
+                "id": id.uuidString,
+                "name": name,
+                "board_id": boardId ?? id.uuidString,
+            ]
+        case .document(let id, let title, let missionId):
+            var ref: [String: Any] = ["title": title]
+            if let id { ref["id"] = id.uuidString }
+            if let missionId { ref["mission_id"] = missionId.uuidString }
+            return ref
+        case .decision(let id, let title):
+            return ["decision_id": id.uuidString, "title": title]
+        case .horizon(let layer):
+            return ["layer": layer]
+        case .standalone(let title):
+            return ["title": title, "kind": "topic"]
+        case .program(_, let name), .target(_, let name, _), .task(_, let name, _, _):
+            return ["title": name, "kind": "topic"]
+        }
+    }
+
     /// Coding keys — flattened for Codable conformance
     enum CodingKeys: String, CodingKey {
-        case type, id, name, programName, targetName, title, subjectName, missionName, missionId
+        case type, id, name, programName, targetName, title, subjectName, missionName, missionId, boardId, layer
     }
 
     init(from decoder: Decoder) throws {
@@ -169,6 +253,23 @@ enum ConversationContext: Codable, Equatable, Hashable {
                 missionName: missionName,
                 subjectName: subjectName
             )
+        case "collab":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let name = try container.decode(String.self, forKey: .name)
+            let boardId = try container.decodeIfPresent(String.self, forKey: .boardId)
+            self = .collab(id: id, name: name, boardId: boardId)
+        case "document":
+            let id = try container.decodeIfPresent(UUID.self, forKey: .id)
+            let title = try container.decode(String.self, forKey: .title)
+            let missionId = try container.decodeIfPresent(UUID.self, forKey: .missionId)
+            self = .document(id: id, title: title, missionId: missionId)
+        case "decision":
+            let id = try container.decode(UUID.self, forKey: .id)
+            let title = try container.decode(String.self, forKey: .title)
+            self = .decision(id: id, title: title)
+        case "horizon":
+            let layer = try container.decode(String.self, forKey: .layer)
+            self = .horizon(layer: layer)
         case "standalone":
             let title = try container.decode(String.self, forKey: .title)
             self = .standalone(title: title)
@@ -215,6 +316,23 @@ enum ConversationContext: Codable, Equatable, Hashable {
             try container.encode(missionId, forKey: .missionId)
             try container.encode(missionName, forKey: .missionName)
             try container.encodeIfPresent(subjectName, forKey: .subjectName)
+        case .collab(let id, let name, let boardId):
+            try container.encode("collab", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(name, forKey: .name)
+            try container.encodeIfPresent(boardId, forKey: .boardId)
+        case .document(let id, let title, let missionId):
+            try container.encode("document", forKey: .type)
+            try container.encodeIfPresent(id, forKey: .id)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(missionId, forKey: .missionId)
+        case .decision(let id, let title):
+            try container.encode("decision", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(title, forKey: .title)
+        case .horizon(let layer):
+            try container.encode("horizon", forKey: .type)
+            try container.encode(layer, forKey: .layer)
         case .standalone(let title):
             try container.encode("standalone", forKey: .type)
             try container.encode(title, forKey: .title)

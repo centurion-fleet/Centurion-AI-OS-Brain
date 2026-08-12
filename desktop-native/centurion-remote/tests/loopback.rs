@@ -84,6 +84,7 @@ async fn encrypted_chat_round_trip_over_tcp() {
         id: request_id,
         text: "Hello".to_owned(),
         session_id: None,
+        life_inject: None,
     }
     .to_json()
     .expect("request JSON");
@@ -169,6 +170,7 @@ async fn revoked_device_receives_error_on_next_message() {
         id: request_id,
         text: "After revoke".to_owned(),
         session_id: None,
+        life_inject: None,
     }
     .to_json()
     .expect("request JSON");
@@ -407,6 +409,7 @@ async fn smoke_bind_echo_round_trip() {
         id: request_id,
         text: "Smoke".to_owned(),
         session_id: None,
+        life_inject: None,
     }
     .to_json()
     .expect("request JSON");

@@ -91,6 +91,15 @@ struct WelcomeOnboardingView: View {
                         .foregroundColor(ColorTheme.mutedText())
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
+                    Button {
+                        UIApplication.shared.open(CenturionHelp.localRemoteTelegramPrivacy)
+                    } label: {
+                        Text("Privacy choices: local, Remote, or Telegram")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, Spacing.xs)
                 }
                 .frame(maxWidth: .infinity)
             }

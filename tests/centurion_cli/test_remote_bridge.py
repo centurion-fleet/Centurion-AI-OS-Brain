@@ -1060,3 +1060,43 @@ def test_swarm_create_missing_profile(monkeypatch):
     assert resp["ok"] is False
     assert resp.get("code") == "PROFILE_MISSING"
 
+
+def test_session_topic_metadata_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    created = handle_request(
+        {
+            "id": "t-1",
+            "action": "session_new",
+            "title": "Mission · Launch",
+            "topic_kind": "mission",
+            "topic_ref": {"mission_id": "m-1", "target_id": "t-9"},
+        }
+    )
+    assert created["ok"] is True
+    assert created["topic_kind"] == "mission"
+    assert created["topic_ref"]["mission_id"] == "m-1"
+    sid = created["session_id"]
+
+    listed = handle_request({"id": "t-2", "action": "session_list", "source": "remote"})
+    row = next(r for r in listed["sessions"] if r["id"] == sid)
+    assert row["topic_kind"] == "mission"
+    assert row["topic_ref"]["target_id"] == "t-9"
+
+    resumed = handle_request({"id": "t-3", "action": "session_resume", "session_id": sid})
+    assert resumed["ok"] is True
+    assert resumed["topic_kind"] == "mission"
+    assert resumed["title"] == "Mission · Launch"
+
+    updated = handle_request(
+        {
+            "id": "t-4",
+            "action": "session_set_topic",
+            "session_id": sid,
+            "topic_kind": "plan",
+            "topic_ref": {"plan_id": "p-2"},
+        }
+    )
+    assert updated["ok"] is True
+    assert updated["topic_kind"] == "plan"
+    assert updated["topic_ref"]["plan_id"] == "p-2"
+

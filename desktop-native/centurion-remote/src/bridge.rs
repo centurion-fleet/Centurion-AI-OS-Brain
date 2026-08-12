@@ -36,6 +36,7 @@ pub trait AgentBridge: Send + Sync {
         request_id: &str,
         text: &str,
         session_id: Option<&str>,
+        life_inject: Option<Value>,
         event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
         mut approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError>;
@@ -109,12 +110,16 @@ impl AgentBridge for PythonBridge {
         request_id: &str,
         text: &str,
         session_id: Option<&str>,
+        life_inject: Option<Value>,
         event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
         approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError> {
         let mut extra = serde_json::Map::new();
         if let Some(session_id) = session_id {
             extra.insert("session_id".to_owned(), Value::String(session_id.to_owned()));
+        }
+        if let Some(inject) = life_inject {
+            extra.insert("life_inject".to_owned(), inject);
         }
         let events = event_tx.is_some();
         let response = self
@@ -565,6 +570,7 @@ impl AgentBridge for EchoBridge {
         _request_id: &str,
         text: &str,
         session_id: Option<&str>,
+        _life_inject: Option<Value>,
         _event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
         _approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError> {

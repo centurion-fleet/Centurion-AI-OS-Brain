@@ -1808,6 +1808,20 @@ DEFAULT_CONFIG = {
         "trust_recent_files_seconds": 600,
     },
 
+    # Chat from anywhere — Supabase Realtime relay (LAN :9119 Crypto Chat unchanged).
+    # Control plane is Centurion Vercel; pipe is Supabase Realtime. Content stays E2E.
+    "remote_relay": {
+        "enabled": False,
+        "supabase_url": "",
+        "supabase_anon_key": "",
+        # Install id registered with Vercel enable API (stable per Brain install).
+        "install_id": "",
+        # Channel prefix — full channel is f"brain:{install_id}".
+        "channel_prefix": "brain",
+        # Soft reassembled ciphertext cap on the away path (bytes).
+        "max_reassembled_bytes": 1048576,
+    },
+
     # Session storage — controls automatic cleanup of ~/.centurion/state.db.
     # state.db accumulates every session, message, tool call, and FTS5 index
     # entry forever.  Without auto-pruning, a heavy user (gateway + cron)

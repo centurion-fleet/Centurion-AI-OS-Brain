@@ -10,7 +10,7 @@ pub const KEY_EXCHANGE_FRAME_BYTES: usize = 1 + PUBLIC_KEY_BYTES;
 pub const FRAME_HEADER_BYTES: usize = 4;
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RemoteMessage {
     Chat {
@@ -18,6 +18,10 @@ pub enum RemoteMessage {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session_id: Option<String>,
+        /// Optional life.db inject payload (mission/target/document ids).
+        /// Applied inside `remote_bridge` chat — same shape as Desktop bridge JSON.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        life_inject: Option<serde_json::Value>,
     },
     ChatResponse {
         id: Uuid,
@@ -763,9 +767,16 @@ mod tests {
             id: Uuid::new_v4(),
             text: "Hello".to_owned(),
             session_id: Some("remote_abc".to_owned()),
+            life_inject: Some(serde_json::json!({
+                "message": "Hello",
+                "current_view": { "mission_id": "m-1" }
+            })),
         };
         let encoded = message.to_json().expect("serialize");
         assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), message);
+        let json = String::from_utf8(encoded).expect("utf8");
+        assert!(json.contains("life_inject"));
+        assert!(json.contains("mission_id"));
     }
 
     #[test]

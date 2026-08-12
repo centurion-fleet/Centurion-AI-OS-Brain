@@ -263,6 +263,261 @@ impl DiscussTopic {
             detail: detail.to_owned(),
         }
     }
+
+    /// Stable SessionDB `topic_kind` for Durable Discuss restore.
+    pub fn topic_kind(&self) -> &'static str {
+        match self {
+            Self::Plan { .. } => "plan",
+            Self::Collab { .. } => "collab",
+            Self::Document { .. } => "document",
+            Self::Mission { .. } => "mission",
+            Self::Commitment { .. } => "commitment",
+            Self::Horizon { .. } => "horizon",
+            Self::Decision { .. } => "decision",
+            Self::Generic { .. } => "generic",
+        }
+    }
+
+    /// JSON `topic_ref` persisted beside the session for Desktop/iPhone restore.
+    pub fn topic_ref(&self) -> Value {
+        match self {
+            Self::Plan {
+                id,
+                title,
+                status,
+                goal,
+                summary,
+                steps,
+                risks,
+            } => serde_json::json!({
+                "plan_id": id,
+                "title": title,
+                "status": status,
+                "goal": goal,
+                "summary": summary,
+                "steps": steps,
+                "risks": risks,
+            }),
+            Self::Collab {
+                id,
+                name,
+                pulse,
+                objective,
+                board_id,
+                root_id,
+                workers_summary,
+                blackboard_json,
+            } => serde_json::json!({
+                "id": id,
+                "name": name,
+                "pulse": pulse,
+                "objective": objective,
+                "board_id": board_id,
+                "root_id": root_id,
+                "workers_summary": workers_summary,
+                "blackboard_json": blackboard_json,
+            }),
+            Self::Document {
+                id,
+                mission_id,
+                doc_type,
+                title,
+                summary,
+                plan_id,
+                body_excerpt,
+            } => serde_json::json!({
+                "id": id,
+                "mission_id": mission_id,
+                "doc_type": doc_type,
+                "title": title,
+                "summary": summary,
+                "plan_id": plan_id,
+                "body_excerpt": body_excerpt,
+            }),
+            Self::Mission {
+                statement,
+                id,
+                title,
+                target_id,
+                target_title,
+                target_type,
+                target_description,
+                target_status,
+                sequence_number,
+            } => serde_json::json!({
+                "mission_id": id,
+                "title": title,
+                "statement": statement,
+                "target_id": target_id,
+                "target_title": target_title,
+                "target_type": target_type,
+                "target_description": target_description,
+                "target_status": target_status,
+                "sequence_number": sequence_number,
+            }),
+            Self::Commitment {
+                id,
+                title,
+                description,
+                active,
+                mission_statement,
+            } => serde_json::json!({
+                "commitment_id": id,
+                "title": title,
+                "description": description,
+                "active": active,
+                "mission_statement": mission_statement,
+            }),
+            Self::Horizon { layer, detail } => serde_json::json!({
+                "layer": layer,
+                "detail": detail,
+            }),
+            Self::Decision {
+                id,
+                title,
+                chosen,
+                context,
+                mission_id,
+                mission_title,
+                target_id,
+            } => serde_json::json!({
+                "decision_id": id,
+                "title": title,
+                "chosen": chosen,
+                "context": context,
+                "mission_id": mission_id,
+                "mission_title": mission_title,
+                "target_id": target_id,
+            }),
+            Self::Generic { title, kind, detail } => serde_json::json!({
+                "title": title,
+                "kind": kind,
+                "detail": detail,
+            }),
+        }
+    }
+
+    /// Rebuild Discuss framing from SessionDB topic metadata (best-effort).
+    pub fn from_session_meta(kind: &str, title: &str, topic_ref: Option<&Value>) -> Option<Self> {
+        let kind = kind.trim().to_ascii_lowercase();
+        if kind.is_empty() {
+            return None;
+        }
+        let r = topic_ref.unwrap_or(&Value::Null);
+        let str_field = |key: &str| -> Option<String> {
+            r.get(key)
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+        };
+        let opt_str = |key: &str| -> Option<String> { str_field(key) };
+        let display = {
+            let t = title.trim();
+            if t.is_empty() {
+                str_field("title")
+                    .or_else(|| str_field("name"))
+                    .unwrap_or_else(|| "Discussion".to_owned())
+            } else {
+                t.to_owned()
+            }
+        };
+        match kind.as_str() {
+            "plan" => Some(Self::Plan {
+                id: str_field("plan_id").or_else(|| str_field("id")).unwrap_or_default(),
+                title: display,
+                status: str_field("status").unwrap_or_default(),
+                goal: str_field("goal").unwrap_or_default(),
+                summary: str_field("summary").unwrap_or_default(),
+                steps: r
+                    .get("steps")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                risks: r
+                    .get("risks")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            }),
+            "collab" => Some(Self::Collab {
+                id: str_field("id")
+                    .or_else(|| str_field("board_id"))
+                    .unwrap_or_default(),
+                name: display,
+                pulse: str_field("pulse").unwrap_or_default(),
+                objective: str_field("objective").unwrap_or_default(),
+                board_id: str_field("board_id")
+                    .or_else(|| str_field("id"))
+                    .unwrap_or_default(),
+                root_id: str_field("root_id").unwrap_or_default(),
+                workers_summary: str_field("workers_summary").unwrap_or_default(),
+                blackboard_json: str_field("blackboard_json").unwrap_or_else(|| "{}".to_owned()),
+            }),
+            "document" => Some(Self::Document {
+                id: opt_str("id"),
+                mission_id: opt_str("mission_id"),
+                doc_type: opt_str("doc_type"),
+                title: display,
+                summary: str_field("summary").unwrap_or_default(),
+                plan_id: opt_str("plan_id"),
+                body_excerpt: str_field("body_excerpt").unwrap_or_default(),
+            }),
+            "mission" => Some(Self::Mission {
+                statement: str_field("statement").unwrap_or_else(|| display.clone()),
+                id: opt_str("mission_id").or_else(|| opt_str("id")),
+                title: Some(display),
+                target_id: opt_str("target_id"),
+                target_title: opt_str("target_title"),
+                target_type: opt_str("target_type"),
+                target_description: opt_str("target_description"),
+                target_status: opt_str("target_status"),
+                sequence_number: r.get("sequence_number").and_then(|v| v.as_i64()),
+            }),
+            "commitment" => Some(Self::Commitment {
+                id: str_field("commitment_id")
+                    .or_else(|| str_field("id"))
+                    .unwrap_or_default(),
+                title: display,
+                description: str_field("description").unwrap_or_default(),
+                active: r.get("active").and_then(|v| v.as_bool()).unwrap_or(true),
+                mission_statement: str_field("mission_statement").unwrap_or_default(),
+            }),
+            "horizon" => Some(Self::Horizon {
+                layer: str_field("layer").unwrap_or_else(|| display.clone()),
+                detail: str_field("detail").unwrap_or_default(),
+            }),
+            "decision" => Some(Self::Decision {
+                id: str_field("decision_id")
+                    .or_else(|| str_field("id"))
+                    .unwrap_or_default(),
+                title: display,
+                chosen: str_field("chosen").unwrap_or_default(),
+                context: str_field("context").unwrap_or_default(),
+                mission_id: opt_str("mission_id"),
+                mission_title: opt_str("mission_title"),
+                target_id: opt_str("target_id"),
+            }),
+            "generic" | "topic" => Some(Self::Generic {
+                title: display,
+                kind: str_field("kind").unwrap_or_else(|| "topic".to_owned()),
+                detail: str_field("detail").unwrap_or_default(),
+            }),
+            _ => Some(Self::Generic {
+                title: display,
+                kind: kind,
+                detail: str_field("detail").unwrap_or_default(),
+            }),
+        }
+    }
 }
 
 fn truncate_chars(s: &str, max: usize) -> String {
@@ -2781,10 +3036,21 @@ fn ensure_session_id() -> Result<String, String> {
     Ok(session_id)
 }
 
-fn create_named_session(title: &str, previous_session_id: Option<&str>) -> Result<String, String> {
+fn create_named_session(
+    title: &str,
+    previous_session_id: Option<&str>,
+    topic_kind: Option<&str>,
+    topic_ref: Option<&Value>,
+) -> Result<String, String> {
     let mut payload = serde_json::json!({ "title": title });
     if let Some(prev) = previous_session_id.map(str::trim).filter(|s| !s.is_empty()) {
         payload["previous_session_id"] = serde_json::json!(prev);
+    }
+    if let Some(kind) = topic_kind.map(str::trim).filter(|s| !s.is_empty()) {
+        payload["topic_kind"] = serde_json::json!(kind);
+        if let Some(reference) = topic_ref {
+            payload["topic_ref"] = reference.clone();
+        }
     }
     let response = run_bridge_json("session_new", payload)?;
     if response.get("ok").and_then(|v| v.as_bool()) != Some(true) {
@@ -2803,12 +3069,28 @@ fn create_named_session(title: &str, previous_session_id: Option<&str>) -> Resul
     Ok(session_id)
 }
 
+fn set_session_topic(session_id: &str, topic_kind: &str, topic_ref: Option<&Value>) {
+    let kind = topic_kind.trim();
+    if kind.is_empty() || session_id.trim().is_empty() {
+        return;
+    }
+    let mut payload = serde_json::json!({
+        "session_id": session_id,
+        "topic_kind": kind,
+    });
+    if let Some(reference) = topic_ref {
+        payload["topic_ref"] = reference.clone();
+    }
+    let _ = run_bridge_json("session_set_topic", payload);
+}
+
 /// Bridge work for Focus → Discuss. Must never run on the GTK main thread.
 enum TopicSessionOutcome {
     Resumed {
         sid: String,
         history: Vec<ChatMessage>,
         assistant: String,
+        topic: Option<DiscussTopic>,
     },
     Created { sid: String, assistant: String },
     SoftFail { err: String, assistant: String },
@@ -2817,9 +3099,15 @@ enum TopicSessionOutcome {
 fn open_topic_session_worker(
     topic_title: &str,
     previous: Option<String>,
+    topic_kind: Option<String>,
+    topic_ref: Option<Value>,
 ) -> TopicSessionOutcome {
     let assistant = load_assistant_display_name();
     let previous = previous.filter(|s| !s.trim().is_empty());
+    let kind = topic_kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     if let Some(existing) = find_session_by_title(topic_title) {
         // Same session or resume existing topic thread — always load history off-thread
@@ -2833,12 +3121,23 @@ fn open_topic_session_worker(
             }
         }
         match resume_session(&existing.id) {
-            Ok((sid, history)) => {
+            Ok((sid, history, topic)) => {
                 save_session_id(&sid);
+                // Backfill metadata when Discuss opens an older title-matched session.
+                if topic.is_none() {
+                    if let Some(kind) = kind {
+                        set_session_topic(&sid, kind, topic_ref.as_ref());
+                    }
+                }
                 return TopicSessionOutcome::Resumed {
                     sid,
                     history,
                     assistant,
+                    topic: topic.or_else(|| {
+                        kind.and_then(|k| {
+                            DiscussTopic::from_session_meta(k, topic_title, topic_ref.as_ref())
+                        })
+                    }),
                 };
             }
             Err(_) => {
@@ -2853,7 +3152,12 @@ fn open_topic_session_worker(
             serde_json::json!({ "session_id": sid }),
         );
     }
-    match create_named_session(topic_title, previous.as_deref()) {
+    match create_named_session(
+        topic_title,
+        previous.as_deref(),
+        kind,
+        topic_ref.as_ref(),
+    ) {
         Ok(sid) => TopicSessionOutcome::Created { sid, assistant },
         Err(err) => TopicSessionOutcome::SoftFail { err, assistant },
     }
@@ -3032,7 +3336,9 @@ fn list_sessions_filtered(include_empty: bool) -> Vec<SessionSummary> {
         .collect()
 }
 
-fn resume_session(session_id: &str) -> Result<(String, Vec<ChatMessage>), String> {
+fn resume_session(
+    session_id: &str,
+) -> Result<(String, Vec<ChatMessage>, Option<DiscussTopic>), String> {
     let response = run_bridge_json(
         "session_resume",
         serde_json::json!({ "session_id": session_id }),
@@ -3049,12 +3355,23 @@ fn resume_session(session_id: &str) -> Result<(String, Vec<ChatMessage>), String
         .and_then(|v| v.as_str())
         .unwrap_or(session_id)
         .to_owned();
+    let title = response
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
     let messages = response
         .get("messages")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    Ok((tip, parse_bridge_messages(&messages)))
+    let topic = response
+        .get("topic_kind")
+        .and_then(|v| v.as_str())
+        .and_then(|kind| {
+            DiscussTopic::from_session_meta(kind, &title, response.get("topic_ref"))
+        });
+    Ok((tip, parse_bridge_messages(&messages), topic))
 }
 
 fn rename_session(session_id: &str, title: &str) -> Result<String, String> {
@@ -6157,7 +6474,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             let follow_bottom = follow_bottom.clone();
                                             let assistant_name = assistant_name.clone();
                                             let (tx, rx) = mpsc::channel::<
-                                                Result<(String, Vec<ChatMessage>), String>,
+                                                Result<
+                                                    (String, Vec<ChatMessage>, Option<DiscussTopic>),
+                                                    String,
+                                                >,
                                             >();
                                             thread::spawn(move || {
                                                 let _ = tx.send(resume_session(&next.id));
@@ -6165,7 +6485,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             glib::timeout_add_local(
                                                 Duration::from_millis(50),
                                                 move || match rx.try_recv() {
-                                                    Ok(Ok((sid, history))) => {
+                                                    Ok(Ok((sid, history, _topic))) => {
                                                         save_session_id(&sid);
                                                         *session_id.borrow_mut() = Some(sid);
                                                         *messages.borrow_mut() = history;
@@ -6322,13 +6642,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let refresh_sessions = refresh_sessions.clone();
         let set_error = set_error.clone();
         let (tx, rx) =
-            mpsc::channel::<Result<Option<(String, Vec<ChatMessage>)>, String>>();
+            mpsc::channel::<Result<Option<(String, Vec<ChatMessage>, Option<DiscussTopic>)>, String>>();
         thread::spawn(move || {
             let listed = list_sessions();
             if let Some(sid) = load_session_id() {
                 let history = load_history(&sid);
                 if listed.iter().any(|s| s.id == sid) || !history.is_empty() {
-                    let _ = tx.send(Ok(Some((sid, history))));
+                    let _ = tx.send(Ok(Some((sid, history, None))));
                     return;
                 }
                 // Stale pointer (deleted / empty-only) — drop it.
@@ -6337,8 +6657,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             }
             if let Some(next) = listed.into_iter().next() {
                 match resume_session(&next.id) {
-                    Ok(pair) => {
-                        let _ = tx.send(Ok(Some(pair)));
+                    Ok(triple) => {
+                        let _ = tx.send(Ok(Some(triple)));
                     }
                     Err(err) => {
                         let _ = tx.send(Err(err));
@@ -6349,7 +6669,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let _ = tx.send(Ok(None));
         });
         glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-            Ok(Ok(Some((sid, history)))) => {
+            Ok(Ok(Some((sid, history, _topic)))) => {
                 save_session_id(&sid);
                 *session_id.borrow_mut() = Some(sid);
                 *messages.borrow_mut() = history;
@@ -6419,10 +6739,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             switching.set(true);
             clear_approval();
             set_error(None);
-            // Leaving a Discuss thread — drop topic framing for the resumed chat.
-            *active_discuss.borrow_mut() = None;
-            context_banner.set_label("");
-            context_bar.set_visible(false);
             let messages = messages.clone();
             let session_id = session_id.clone();
             let refresh_messages = refresh_messages.clone();
@@ -6432,21 +6748,38 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let follow_bottom = follow_bottom.clone();
             let assistant_name = assistant_name.clone();
             let title_label = title_label.clone();
+            let active_discuss = active_discuss.clone();
+            let context_banner = context_banner.clone();
+            let context_bar = context_bar.clone();
             // Resolve the display name in the same worker as the resume so the UI
             // continuation never blocks on soul_get.
-            let (tx, rx) = mpsc::channel::<Result<(String, Vec<ChatMessage>, String), String>>();
+            let (tx, rx) = mpsc::channel::<
+                Result<(String, Vec<ChatMessage>, Option<DiscussTopic>, String), String>,
+            >();
             thread::spawn(move || {
-                let resumed = resume_session(&target_id)
-                    .map(|(sid, history)| (sid, history, load_assistant_display_name()));
+                let resumed = resume_session(&target_id).map(|(sid, history, topic)| {
+                    (sid, history, topic, load_assistant_display_name())
+                });
                 let _ = tx.send(resumed);
             });
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
-                Ok(Ok((sid, history, name))) => {
+                Ok(Ok((sid, history, topic, name))) => {
                     save_session_id(&sid);
                     *session_id.borrow_mut() = Some(sid);
                     *messages.borrow_mut() = history;
                     *assistant_name.borrow_mut() = name;
                     title_label.set_label(&format!("Chat with {}", assistant_name.borrow()));
+                    *active_discuss.borrow_mut() = topic.clone();
+                    match topic.as_ref() {
+                        Some(t) => {
+                            context_banner.set_label(&t.banner_label());
+                            context_bar.set_visible(true);
+                        }
+                        None => {
+                            context_banner.set_label("");
+                            context_bar.set_visible(false);
+                        }
+                    }
                     follow_bottom.set(true);
                     refresh_messages();
                     refresh_sessions();
@@ -7105,6 +7438,9 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         let assistant_name = assistant_name.clone();
         let title_label = title.clone();
         let input = input.clone();
+        let active_discuss = active_discuss.clone();
+        let context_banner = context_banner.clone();
+        let context_bar = context_bar.clone();
         let discuss_open_gen = Rc::new(Cell::new(0u64));
         move |topic_title: String| {
             clear_approval();
@@ -7139,12 +7475,21 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                 discuss_open_gen.set(next);
                 next
             };
+            let topic_meta = active_discuss.borrow().as_ref().map(|t| {
+                (t.topic_kind().to_owned(), t.topic_ref())
+            });
             let (tx, rx) = mpsc::channel::<TopicSessionOutcome>();
             let title_for_worker = topic_title.clone();
             thread::spawn(move || {
+                let (kind, reference) = match topic_meta {
+                    Some((k, r)) => (Some(k), Some(r)),
+                    None => (None, None),
+                };
                 let _ = tx.send(open_topic_session_worker(
                     &title_for_worker,
                     previous,
+                    kind,
+                    reference,
                 ));
             });
 
@@ -7156,6 +7501,9 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let assistant_name = assistant_name.clone();
             let input = input.clone();
             let discuss_open_gen = discuss_open_gen.clone();
+            let active_discuss = active_discuss.clone();
+            let context_banner = context_banner.clone();
+            let context_bar = context_bar.clone();
             glib::timeout_add_local(Duration::from_millis(16), move || match rx.try_recv() {
                 Ok(outcome) => {
                     if discuss_open_gen.get() != open_gen {
@@ -7166,11 +7514,17 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                             sid,
                             history,
                             assistant,
+                            topic,
                         } => {
                             *assistant_name.borrow_mut() = assistant;
                             *session_id.borrow_mut() = Some(sid);
                             let has_history = !history.is_empty();
                             *messages.borrow_mut() = history;
+                            if let Some(t) = topic {
+                                *active_discuss.borrow_mut() = Some(t.clone());
+                                context_banner.set_label(&t.banner_label());
+                                context_bar.set_visible(true);
+                            }
                             refresh_messages();
                             if has_history {
                                 // Continuing the topic thread — don't leave a fresh kickoff.

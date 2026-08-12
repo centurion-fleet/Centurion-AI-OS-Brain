@@ -51,6 +51,24 @@ def handle_request(
     request_id = str(request.get("id") or "")
     action = str(request.get("action") or "chat").strip().lower()
 
+    if action.startswith("remote_relay_"):
+        try:
+            from centurion_cli.remote_relay_service import bridge_handle
+
+            handled = bridge_handle(action, request)
+            if handled is not None:
+                handled.setdefault("id", request_id)
+                return handled
+        except Exception as exc:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": action,
+                "error": str(exc),
+                "message": "Remote relay control failed.",
+                "retryable": True,
+            }
+
     if action == "chat":
         return _handle_chat(request, request_id=request_id, run_agent=run_agent)
     if action == "provider_status":
@@ -233,6 +251,8 @@ def handle_request(
         return _handle_session_list(request, request_id)
     if action == "session_new":
         return _handle_session_new(request, request_id)
+    if action == "session_set_topic":
+        return _handle_session_set_topic(request, request_id)
     if action == "session_end_continuity":
         return _handle_session_end_continuity(request, request_id)
     if action == "session_resume":
@@ -1761,7 +1781,12 @@ def _start_approval_stdin_reader(default_session_key: str) -> None:
     _start_approval_line_reader(default_session_key, sys.stdin.readline)
 
 
-def _ensure_remote_session(*, title: str | None = None) -> str:
+def _ensure_remote_session(
+    *,
+    title: str | None = None,
+    topic_kind: str | None = None,
+    topic_ref: Any = None,
+) -> str:
     import uuid
 
     from centurion_state import SessionDB
@@ -1773,6 +1798,11 @@ def _ensure_remote_session(*, title: str | None = None) -> str:
         if title:
             try:
                 db.set_session_title(session_id, title)
+            except Exception:
+                pass
+        if topic_kind:
+            try:
+                db.set_session_topic(session_id, topic_kind=topic_kind, topic_ref=topic_ref)
             except Exception:
                 pass
     finally:
@@ -2689,6 +2719,8 @@ def _handle_session_list(request: dict[str, Any], request_id: str) -> dict[str, 
                 "last_active": row.get("last_active"),
                 "message_count": row.get("message_count") or 0,
                 "source": row.get("source") or source,
+                "topic_kind": row.get("topic_kind") or "",
+                "topic_ref": _parse_topic_ref(row.get("topic_ref")),
             }
             for row in rows
         ]
@@ -2700,6 +2732,23 @@ def _handle_session_list(request: dict[str, Any], request_id: str) -> dict[str, 
         }
     except Exception as exc:
         return _error_response(request_id, action="session_list", exc=exc)
+
+
+def _parse_topic_ref(raw: Any) -> Any:
+    """Return topic_ref as dict/list when JSON, else string/None."""
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return None
+    if text.startswith(("{", "[")):
+        try:
+            return json.loads(text)
+        except Exception:
+            return text
+    return text
 
 
 def _commit_remote_session_continuity(session_id: str | None) -> dict[str, Any]:
@@ -2766,16 +2815,74 @@ def _handle_session_new(request: dict[str, Any], request_id: str) -> dict[str, A
         previous = str(request.get("previous_session_id") or "").strip()
         continuity = _commit_remote_session_continuity(previous or None)
         title = str(request.get("title") or "").strip() or None
-        session_id = _ensure_remote_session(title=title)
+        topic_kind = str(request.get("topic_kind") or "").strip() or None
+        topic_ref = request.get("topic_ref")
+        session_id = _ensure_remote_session(
+            title=title,
+            topic_kind=topic_kind,
+            topic_ref=topic_ref,
+        )
         return {
             "id": request_id,
             "ok": True,
             "action": "session_new",
             "session_id": session_id,
+            "topic_kind": topic_kind or "",
+            "topic_ref": _parse_topic_ref(topic_ref) if topic_kind else None,
             "continuity": continuity,
         }
     except Exception as exc:
         return _error_response(request_id, action="session_new", exc=exc)
+
+
+def _handle_session_set_topic(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Attach or clear Discuss topic metadata on an existing remote session."""
+    try:
+        from centurion_state import SessionDB
+
+        session_id = str(request.get("session_id") or "").strip()
+        if not session_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_set_topic",
+                "code": "INVALID_REQUEST",
+                "error": "session_id is required.",
+                "message": "session_id is required.",
+                "retryable": False,
+            }
+        topic_kind = str(request.get("topic_kind") or "").strip() or None
+        topic_ref = request.get("topic_ref")
+        db = SessionDB()
+        try:
+            tip = db.resolve_resume_session_id(session_id)
+            ok = db.set_session_topic(tip, topic_kind=topic_kind, topic_ref=topic_ref)
+            topic = db.get_session_topic(tip) if ok else {"topic_kind": None, "topic_ref": None}
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        if not ok:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "session_set_topic",
+                "code": "NOT_FOUND",
+                "error": "Session not found.",
+                "message": "Session not found.",
+                "retryable": False,
+            }
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "session_set_topic",
+            "session_id": tip,
+            "topic_kind": topic.get("topic_kind") or "",
+            "topic_ref": topic.get("topic_ref"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="session_set_topic", exc=exc)
 
 
 def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -2797,6 +2904,8 @@ def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str
         try:
             tip = db.resolve_resume_session_id(session_id)
             messages = db.get_messages_as_conversation(tip, include_ancestors=True)
+            topic = db.get_session_topic(tip)
+            session_row = db.get_session(tip) or {}
         finally:
             try:
                 db.close()
@@ -2807,6 +2916,9 @@ def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str
             "ok": True,
             "action": "session_resume",
             "session_id": tip,
+            "title": session_row.get("title") or "",
+            "topic_kind": topic.get("topic_kind") or "",
+            "topic_ref": topic.get("topic_ref"),
             "messages": messages,
         }
     except Exception as exc:

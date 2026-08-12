@@ -34,6 +34,27 @@ final class ConnectionManager: ObservableObject {
     /// Dangerous-tool approval waiting for the owner during an in-flight Crypto Chat turn.
     @Published var pendingToolApproval: PendingToolApproval?
 
+    /// Prefer LAN Crypto Chat when linked; RelayTransport is the away fallback.
+    @Published private(set) var transportPreference: TransportPreference = .lanPreferred
+    @Published private(set) var remoteRelayStatus: [String: Any] = [:]
+    /// Away Realtime pipe (Supabase). Idle while LAN Crypto Chat is up.
+    let relayAway = RelayAwayClient()
+
+    enum TransportPreference: String, Equatable {
+        case lanPreferred
+        case relayAway
+    }
+
+    /// True when LAN Crypto Chat is up — always preferred over the cloud relay.
+    var prefersLanCryptoChat: Bool {
+        connectionState == .connected && currentSessionKey != nil
+    }
+
+    /// Away pipe is live (Realtime joined). Still not a substitute for LAN DoD.
+    var isRelayAwayConnected: Bool {
+        transportPreference == .relayAway && relayAway.isConnected
+    }
+
     /// Live session is up and messages are secretboxed.
     var isChannelEncrypted: Bool {
         connectionState == .connected && currentSessionKey != nil
@@ -466,6 +487,8 @@ final class ConnectionManager: ObservableObject {
             }
 
             guard self.connectionState == .disconnected || self.isErrorState else { return }
+            // Away candidate: try Realtime when LAN/remote TCP is down and Brain is online.
+            Task { await self.considerRelayAway() }
             guard self.hasPersistedLink else { return }
             self.allowLanFallback = true
             self.recoveryPrefersPrimary = false
@@ -499,7 +522,11 @@ final class ConnectionManager: ObservableObject {
         approvalRetryTask = nil
     }
 
-    func sendMessage(_ text: String, sessionId: String? = nil) async throws -> (text: String, sessionId: String?) {
+    func sendMessage(
+        _ text: String,
+        sessionId: String? = nil,
+        lifeInject: [String: Any]? = nil
+    ) async throws -> (text: String, sessionId: String?) {
         guard let sessionKey = currentSessionKey,
               let connection = connection else {
             throw ConnectionError.notConnected
@@ -513,6 +540,9 @@ final class ConnectionManager: ObservableObject {
         ]
         if let sessionId, !sessionId.isEmpty {
             body["session_id"] = sessionId
+        }
+        if let lifeInject, !lifeInject.isEmpty {
+            body["life_inject"] = lifeInject
         }
         let plaintext = try JSONSerialization.data(withJSONObject: body)
 
@@ -647,9 +677,119 @@ final class ConnectionManager: ObservableObject {
         return (payload["sessions"] as? [[String: Any]]) ?? []
     }
 
-    func createHostSession(title: String? = nil) async throws -> String {
+    /// Refresh Brain `remote_relay` status. LAN stays preferred when connected.
+    @discardableResult
+    func refreshRemoteRelayStatus() async -> [String: Any] {
+        guard connectionState == .connected else {
+            await considerRelayAway()
+            return remoteRelayStatus
+        }
+        // LAN up — tear down any away socket (product rule: prefer :9119).
+        if relayAway.isConnected {
+            relayAway.disconnect(resetEpoch: true)
+        }
+        do {
+            let payload = try await invokeRemote(action: "remote_relay_status")
+            remoteRelayStatus = payload
+            // Cache cloud endpoints from Brain for away reconnect without LAN.
+            if let url = payload["supabase_url"] as? String, !url.isEmpty,
+               let key = payload["supabase_anon_key"] as? String, !key.isEmpty {
+                relayAway.configure(supabaseURL: url, anonKey: key)
+            } else if let url = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseURL"),
+                      !url.isEmpty {
+                // Already configured on device
+            }
+            if let installId = payload["install_id"] as? String, !installId.isEmpty {
+                UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")
+            }
+            let enabled = payload["enabled"] as? Bool ?? false
+            let online = ((payload["presence"] as? [String: Any])?["online"] as? Bool) ?? false
+            // Product rule: if LAN is up, stay on LAN even when relay is enabled.
+            if prefersLanCryptoChat {
+                transportPreference = .lanPreferred
+            } else if enabled && online {
+                transportPreference = .relayAway
+            } else {
+                transportPreference = .lanPreferred
+            }
+            return payload
+        } catch {
+            return remoteRelayStatus
+        }
+    }
+
+    /// When LAN Crypto Chat is down, join Realtime if Brain presence is online.
+    func considerRelayAway() async {
+        if prefersLanCryptoChat {
+            if relayAway.isConnected {
+                relayAway.disconnect(resetEpoch: true)
+            }
+            transportPreference = .lanPreferred
+            return
+        }
+        let enabled = (remoteRelayStatus["enabled"] as? Bool)
+            ?? UserDefaults.standard.bool(forKey: "centurion.remoteRelay.enabledHint")
+        let installId = (remoteRelayStatus["install_id"] as? String)
+            ?? UserDefaults.standard.string(forKey: "centurion.remoteRelay.installId")
+            ?? ""
+        guard enabled || !installId.isEmpty else {
+            transportPreference = .lanPreferred
+            return
+        }
+        if !installId.isEmpty {
+            UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")
+        }
+        if let enabledFlag = remoteRelayStatus["enabled"] as? Bool {
+            UserDefaults.standard.set(enabledFlag, forKey: "centurion.remoteRelay.enabledHint")
+        }
+        await relayAway.refreshPresence(installId: installId)
+        guard relayAway.brainOnline else {
+            transportPreference = .lanPreferred
+            return
+        }
+        do {
+            if !relayAway.isConnected {
+                try await relayAway.connect(installId: installId)
+            }
+            transportPreference = .relayAway
+        } catch {
+            transportPreference = .lanPreferred
+        }
+    }
+
+    /// Enable Chat from anywhere on the linked Brain (control plane + presence).
+    func enableRemoteRelay(supabaseUrl: String? = nil, anonKey: String? = nil) async throws -> [String: Any] {
+        var extra: [String: Any] = [:]
+        if let supabaseUrl, !supabaseUrl.isEmpty { extra["supabase_url"] = supabaseUrl }
+        if let anonKey, !anonKey.isEmpty { extra["supabase_anon_key"] = anonKey }
+        let payload = try await invokeRemote(action: "remote_relay_enable", extra: extra)
+        remoteRelayStatus = payload
+        if let url = payload["supabase_url"] as? String, !url.isEmpty,
+           let key = payload["supabase_anon_key"] as? String, !key.isEmpty {
+            relayAway.configure(supabaseURL: url, anonKey: key)
+        }
+        if let installId = payload["install_id"] as? String, !installId.isEmpty {
+            UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")
+        }
+        UserDefaults.standard.set(true, forKey: "centurion.remoteRelay.enabledHint")
+        return payload
+    }
+
+    func createHostSession(
+        title: String? = nil,
+        previousSessionId: String? = nil,
+        topicKind: String? = nil,
+        topicRef: [String: Any]? = nil
+    ) async throws -> String {
         var extra: [String: Any] = [:]
         if let title, !title.isEmpty { extra["title"] = title }
+        if let previousSessionId, !previousSessionId.isEmpty {
+            extra["previous_session_id"] = previousSessionId
+        }
+        if let topicKind, !topicKind.isEmpty {
+            extra["topic_kind"] = topicKind
+            if let topicRef { extra["topic_ref"] = topicRef }
+        }
         let payload = try await invokeRemote(action: "session_new", extra: extra)
         guard let sessionId = payload["session_id"] as? String, !sessionId.isEmpty else {
             throw ConnectionError.invalidResponse
@@ -657,14 +797,63 @@ final class ConnectionManager: ObservableObject {
         return sessionId
     }
 
-    func resumeHostSession(_ sessionId: String) async throws -> (sessionId: String, messages: [[String: Any]]) {
+    func setHostSessionTopic(
+        sessionId: String,
+        topicKind: String?,
+        topicRef: [String: Any]? = nil
+    ) async throws {
+        var extra: [String: Any] = ["session_id": sessionId]
+        if let topicKind, !topicKind.isEmpty {
+            extra["topic_kind"] = topicKind
+            if let topicRef { extra["topic_ref"] = topicRef }
+        } else {
+            extra["topic_kind"] = ""
+        }
+        _ = try await invokeRemote(action: "session_set_topic", extra: extra)
+    }
+
+    func renameHostSession(sessionId: String, title: String) async throws -> String {
+        let payload = try await invokeRemote(
+            action: "session_rename",
+            extra: ["session_id": sessionId, "title": title]
+        )
+        return (payload["title"] as? String) ?? title
+    }
+
+    func deleteHostSession(sessionId: String) async throws {
+        _ = try await invokeRemote(
+            action: "session_delete",
+            extra: ["session_id": sessionId]
+        )
+    }
+
+    func disableRemoteRelay() async throws -> [String: Any] {
+        let payload = try await invokeRemote(action: "remote_relay_disable")
+        remoteRelayStatus = payload
+        UserDefaults.standard.set(false, forKey: "centurion.remoteRelay.enabledHint")
+        relayAway.disconnect(resetEpoch: true)
+        if prefersLanCryptoChat {
+            transportPreference = .lanPreferred
+        }
+        return payload
+    }
+
+    func resumeHostSession(_ sessionId: String) async throws -> (
+        sessionId: String,
+        title: String,
+        topicKind: String,
+        topicRef: Any?,
+        messages: [[String: Any]]
+    ) {
         let payload = try await invokeRemote(
             action: "session_resume",
             extra: ["session_id": sessionId]
         )
         let tip = (payload["session_id"] as? String) ?? sessionId
         let messages = (payload["messages"] as? [[String: Any]]) ?? []
-        return (tip, messages)
+        let title = (payload["title"] as? String) ?? ""
+        let topicKind = (payload["topic_kind"] as? String) ?? ""
+        return (tip, title, topicKind, payload["topic_ref"], messages)
     }
 
     func refreshThinkingStatus() async {
