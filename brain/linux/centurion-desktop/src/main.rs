@@ -1430,25 +1430,8 @@ pairing stays available for early testing on the same Wi‑Fi.",
                     "remote_relay_status",
                     serde_json::json!({}),
                 );
-                let enabled = resp
-                    .as_ref()
-                    .and_then(|v| v.get("enabled"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let online = resp
-                    .as_ref()
-                    .and_then(|v| v.get("presence"))
-                    .and_then(|v| v.get("online"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let subtitle = if enabled && online {
-                    "On — Brain presence live on Centurion cloud"
-                } else if enabled {
-                    "On — waiting for relay presence"
-                } else {
-                    "Off — home Wi‑Fi / Desktop only (most private)"
-                };
-                let _ = tx.send((enabled, subtitle.to_owned()));
+                let (enabled, subtitle) = anywhere_relay_subtitle(resp.as_ref());
+                let _ = tx.send((enabled, subtitle));
             });
             glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
                 match rx.try_recv() {
@@ -1491,25 +1474,8 @@ pairing stays available for early testing on the same Wi‑Fi.",
                         let _ = tx.send(Err(msg));
                         return;
                     }
-                    let enabled = resp
-                        .as_ref()
-                        .and_then(|v| v.get("enabled"))
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(state);
-                    let online = resp
-                        .as_ref()
-                        .and_then(|v| v.get("presence"))
-                        .and_then(|v| v.get("online"))
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    let subtitle = if enabled && online {
-                        "On — Brain presence live on Centurion cloud"
-                    } else if enabled {
-                        "On — waiting for relay presence"
-                    } else {
-                        "Off — home Wi‑Fi / Desktop only (most private)"
-                    };
-                    let _ = tx.send(Ok((enabled, subtitle.to_owned())));
+                    let (enabled, subtitle) = anywhere_relay_subtitle(resp.as_ref());
+                    let _ = tx.send(Ok((enabled, subtitle)));
                 });
                 glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
                     match rx.try_recv() {
@@ -3745,7 +3711,54 @@ pairing stays available for early testing on the same Wi‑Fi.",
         crate::chat_page::resolve_bridge_python()
     }
 
-    fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
+    
+    fn anywhere_relay_subtitle(resp: Option<&serde_json::Value>) -> (bool, String) {
+        let enabled = resp
+            .and_then(|v| v.get("enabled"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let online = resp
+            .and_then(|v| v.get("presence"))
+            .and_then(|v| v.get("online"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let ws_ok = resp
+            .and_then(|v| v.get("websockets_installed"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let pipe_ready = resp
+            .and_then(|v| v.get("realtime_pipe_ready"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let last_error = resp
+            .and_then(|v| v.get("presence"))
+            .and_then(|v| v.get("last_error"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let hint = resp
+            .and_then(|v| v.get("hint"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let subtitle = if enabled && !ws_ok {
+            last_error
+                .or(hint)
+                .unwrap_or("On — install Away deps (Check for update / remote-relay)")
+                .to_owned()
+        } else if enabled && pipe_ready {
+            "On — Away pipe ready (home Wi‑Fi still preferred when nearby)".to_owned()
+        } else if enabled && online {
+            "On — Brain presence live on Centurion cloud".to_owned()
+        } else if enabled {
+            last_error
+                .unwrap_or("On — waiting for relay presence")
+                .to_owned()
+        } else {
+            "Off — home Wi‑Fi / Desktop only (most private)".to_owned()
+        };
+        (enabled, subtitle)
+    }
+
+fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
         crate::chat_page::run_bridge_action(action, extra)
     }
 

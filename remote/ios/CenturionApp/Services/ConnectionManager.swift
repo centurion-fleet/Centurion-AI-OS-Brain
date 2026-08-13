@@ -805,10 +805,16 @@ final class ConnectionManager: ObservableObject {
         await relayAway.refreshPresence(installId: installId)
         guard relayAway.brainOnline else {
             transportPreference = .lanPreferred
-            if connectionState == .connected && connection == nil {
-                connectionState = .error(
-                    "Your Sovereign is offline. Chat from anywhere needs the Brain online."
-                )
+            // Honest offline — same class as gateway-down (never fall back to demo).
+            if connection == nil {
+                let detail = relayAway.lastError?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let message: String
+                if let detail, !detail.isEmpty {
+                    message = "Your Sovereign is offline for Chat from anywhere. \(detail)"
+                } else {
+                    message = "Your Sovereign is offline. Chat from anywhere needs the Brain online and awake."
+                }
+                connectionState = .error(message)
             }
             return
         }
@@ -828,9 +834,11 @@ final class ConnectionManager: ObservableObject {
         } catch {
             transportPreference = .lanPreferred
             if connection == nil {
+                let detail = (error as? LocalizedError)?.errorDescription
+                    ?? relayAway.lastError
+                    ?? error.localizedDescription
                 connectionState = .error(
-                    (error as? LocalizedError)?.errorDescription
-                        ?? "Could not reach your Sovereign over Chat from anywhere."
+                    "Could not reach your Sovereign over Chat from anywhere. \(detail)"
                 )
             }
         }
