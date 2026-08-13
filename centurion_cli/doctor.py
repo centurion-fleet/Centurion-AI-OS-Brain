@@ -290,6 +290,9 @@ def _check_remote_relay(issues: list[str]) -> None:
         last_error = (status.get("presence") or {}).get("last_error")
         if last_error:
             check_warn("Away last error", f"({last_error})")
+        check_info(
+            "Away DoD soak: python -m centurion_cli.remote_relay_speed --checklist"
+        )
     except Exception as exc:
         check_warn("Chat from anywhere check failed", str(exc))
 

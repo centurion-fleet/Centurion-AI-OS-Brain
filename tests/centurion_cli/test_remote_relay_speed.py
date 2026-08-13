@@ -54,3 +54,10 @@ def test_summarize_speed_report_away():
 
 def test_cli_demo_exit_zero():
     assert main(["--demo", "--json"]) == 0
+
+
+def test_cli_checklist_exit_zero(capsys):
+    assert main(["--checklist"]) == 0
+    out = capsys.readouterr().out
+    assert "Away-over-relay DoD" in out
+    assert "App Store" in out

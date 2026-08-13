@@ -83,6 +83,10 @@ Evaluate recorded samples against the budgets above (fixture only — does not h
 # Green demo (LAN + Away synthetic samples)
 python -m centurion_cli.remote_relay_speed --demo
 
+# Print Away DoD checklist (gates App Store “anywhere”)
+python -m centurion_cli.remote_relay_speed --checklist
+python -m centurion_cli.remote_relay_speed --checklist --status
+
 # Paste device/Brain soak samples (ms, comma-separated)
 python -m centurion_cli.remote_relay_speed --away \
   --rtt 120,150,180,190 \

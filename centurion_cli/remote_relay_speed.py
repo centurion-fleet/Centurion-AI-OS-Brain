@@ -169,6 +169,51 @@ def _parse_samples(raw: str) -> list[float]:
     return [float(p) for p in parts]
 
 
+AWAY_DOD_CHECKLIST = (
+    "Away-over-relay DoD (gates App Store “anywhere”) — cellular + CGNAT",
+    "",
+    "[ ] Pair once at home; enable Chat from anywhere on Brain (websockets + Supabase env)",
+    "[ ] Leave Wi‑Fi; same topics list and resume over RelayTransport",
+    "[ ] Mid-turn tool approval over Away",
+    "[ ] Brain offline → clear failure (same honesty as Telegram gateway down)",
+    "[ ] Reconnect mid-turn → retryable error; no half-delivered approvals",
+    "[ ] Chunked history resume >180KB succeeds; oversize soft-fails cleanly",
+    "[ ] Speed budgets green — iPhone Settings → Copy speed soak samples, then:",
+    "      python -m centurion_cli.remote_relay_speed --away --rtt … --ttft … --cold …",
+    "[ ] Privacy Help linked from Settings / Unbox",
+    "",
+    "Until all boxes are green, do not unlock App Store “works anywhere” copy.",
+    "See brain/linux/docs/REMOTE_RELAY.md",
+)
+
+
+def print_away_dod_checklist(*, file=None) -> None:
+    out = sys.stdout if file is None else file
+    for line in AWAY_DOD_CHECKLIST:
+        print(line, file=out)
+
+
+def remote_relay_readiness() -> dict[str, Any]:
+    """Best-effort Away readiness snapshot for soak operators (no PII)."""
+    try:
+        from centurion_cli import remote_relay_service as rrs
+
+        status = rrs.status()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    ready = bool(status.get("realtime_pipe_ready")) and bool(
+        status.get("websockets_installed")
+    )
+    return {
+        "ok": ready,
+        "enabled": bool(status.get("enabled")),
+        "websockets_installed": bool(status.get("websockets_installed")),
+        "realtime_pipe_ready": bool(status.get("realtime_pipe_ready")),
+        "supabase_url_configured": bool(status.get("supabase_url_configured")),
+        "hint": status.get("hint") or "",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Evaluate Centurion Remote speed budgets (no network)."
@@ -191,12 +236,36 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated approval-appear samples in ms (send → sheet)",
     )
     parser.add_argument(
+        "--checklist",
+        action="store_true",
+        help="Print Away DoD soak checklist (gates App Store anywhere)",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Print Brain remote_relay readiness JSON (when config available)",
+    )
+    parser.add_argument(
         "--demo",
         action="store_true",
         help="Run a green LAN demo + a green Away demo and print JSON",
     )
     parser.add_argument("--json", action="store_true", help="Print machine JSON only")
     args = parser.parse_args(argv)
+
+    if args.checklist:
+        print_away_dod_checklist()
+        if args.status:
+            print("")
+            print(json.dumps(remote_relay_readiness(), indent=2))
+        return 0
+
+    if args.status and not (
+        args.demo or args.rtt or args.ttft or args.cold or args.approval
+    ):
+        payload = remote_relay_readiness()
+        print(json.dumps(payload, indent=2 if not args.json else None))
+        return 0 if payload.get("ok") else 1
 
     if args.demo:
         lan = summarize_speed_report(
@@ -224,7 +293,9 @@ def main(argv: list[str] | None = None) -> int:
         approval_appear_ms=_parse_samples(args.approval) if args.approval else None,
     )
     if not report["checks"]:
-        parser.error("Provide --rtt / --ttft / --cold / --approval samples, or --demo")
+        parser.error(
+            "Provide --rtt / --ttft / --cold / --approval samples, or --demo / --checklist / --status"
+        )
     print(json.dumps(report, indent=2 if not args.json else None))
     return 0 if report["ok"] else 1
 
