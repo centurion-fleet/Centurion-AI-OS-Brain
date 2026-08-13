@@ -3,14 +3,14 @@ name: Native Linux
 on:
   pull_request:
     paths:
-      - "desktop-native/**"
+      - "brain/**"
       - "centurion_cli/remote_bridge.py"
       - "tests/centurion_cli/test_remote_bridge.py"
       - ".github/workflows/native-linux.yml"
   push:
     branches: [main]
     paths:
-      - "desktop-native/**"
+      - "brain/**"
       - "centurion_cli/remote_bridge.py"
       - "tests/centurion_cli/test_remote_bridge.py"
       - ".github/workflows/native-linux.yml"
@@ -34,15 +34,15 @@ jobs:
           pkgconf-pkg-config gtk4-devel libadwaita-devel vte291-gtk4-devel
 
       - name: Check formatting
-        working-directory: desktop-native
+        working-directory: brain
         run: cargo fmt --all -- --check
 
       - name: Run native tests
-        working-directory: desktop-native
+        working-directory: brain
         run: cargo test --workspace --locked
 
       - name: Run Clippy
-        working-directory: desktop-native
+        working-directory: brain
         # Protocol crates stay strict. The GTK app ships against Fedora libadwaita APIs
         # that still emit deprecated/pedantic noise; allow those there only.
         run: |
@@ -78,4 +78,4 @@ jobs:
           scripts/run_tests.sh tests/centurion_cli/test_remote_bridge.py
 
       - name: Run loopback smoke script
-        run: desktop-native/scripts/e2e-smoke.sh
+        run: brain/linux/scripts/e2e-smoke.sh

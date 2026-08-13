@@ -147,7 +147,7 @@ sudo dnf install -y cargo rust gcc gcc-c++ pkgconf-pkg-config \
 **3. Build and install the Brain:**
 
 ```bash
-bash ~/.centurion/Centurion-AI-OS/desktop-native/scripts/install-user.sh
+bash ~/.centurion/Centurion-AI-OS/brain/linux/scripts/install-user.sh
 ```
 
 The app then appears in the application menu as **Sovereign AI Brain** (or launch directly with `~/.local/bin/centurion-desktop`). The build also installs `centurion-remote` — the encrypted iPhone pairing service — and enables its user systemd unit.
@@ -159,7 +159,7 @@ The app then appears in the application menu as **Sovereign AI Brain** (or launc
 `centurion update -y` (or Settings → **Check for updates**) updates the Python brain and pulls the latest code, but does **not** rebuild the GTK binary. After a release, rebuild the desktop app from the repo checkout:
 
 ```bash
-bash ~/.centurion/Centurion-AI-OS/desktop-native/scripts/force-brain-update.sh
+bash ~/.centurion/Centurion-AI-OS/brain/linux/scripts/force-brain-update.sh
 ```
 
 That forces the checkout to `origin/main` and rebuilds — the one-shot recovery for the case where the GUI update can't stash or pull.

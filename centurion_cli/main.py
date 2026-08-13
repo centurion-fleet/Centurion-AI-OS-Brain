@@ -8460,7 +8460,7 @@ def _version_newer(candidate: str, installed: str) -> bool:
 
 
 def _read_desktop_native_version(root: Path) -> str | None:
-    """Read workspace package version from ``desktop-native/Cargo.toml``."""
+    """Read workspace package version from ``brain/linux/Cargo.toml``."""
     cargo = root / "desktop-native" / "Cargo.toml"
     if not cargo.is_file():
         return None
@@ -8878,7 +8878,7 @@ def _cmd_update_check(args=None):
                 "status": "update_available",
                 "update_action": "rebuild_screen",
                 "recommended_command": (
-                    "desktop-native/scripts/install-user.sh"
+                    "brain/linux/scripts/install-user.sh"
                 ),
                 "message": screen_reason
                 or "Sovereign AI Brain update available — rebuild from your Centurion folder.",

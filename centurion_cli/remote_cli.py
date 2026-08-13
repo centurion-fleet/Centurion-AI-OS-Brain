@@ -35,7 +35,7 @@ def _run_remote(argv: list[str]) -> int:
     except FileNotFoundError:
         print(
             "centurion-remote was not found. Install the desktop-native package "
-            "(see desktop-native/README.md) or put centurion-remote on PATH.",
+            "(see brain/linux/README.md) or put centurion-remote on PATH.",
             file=sys.stderr,
         )
         return 1

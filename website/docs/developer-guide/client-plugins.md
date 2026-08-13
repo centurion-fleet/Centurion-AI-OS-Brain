@@ -6,7 +6,7 @@ Centurion has three plugin surfaces. They are **not** interchangeable.
 |---------|---------------|-----------------|-------------------|
 | **Agent plugins** | Python agent / CLI / gateway | Tools, hooks, slash commands, providers, skills | `~/.centurion/plugins/`, pip entry points, `centurion plugins` |
 | **Dashboard plugins** | Web dashboard (`centurion dashboard`) | Sidebar widgets via `plugins/*/dashboard/manifest.json` | Same plugin tree; dashboard discovers manifests |
-| **Client plugins (Brain)** | Linux GTK Brain (`desktop-native`) | Settings rows / Home cards (v0: list only) | Same manifests; Brain reads via bridge `plugin_list` |
+| **Client plugins (Brain)** | Linux GTK Brain (`brain/` (linux host under `brain/linux/`)) | Settings rows / Home cards (v0: list only) | Same manifests; Brain reads via bridge `plugin_list` |
 
 ## What `centurion plugins` does **not** do
 

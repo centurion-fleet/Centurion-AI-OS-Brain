@@ -16,7 +16,7 @@ optional `REMOTE_RELAY_ADMIN_TOKEN`.
 
 Staged copy (sales site): `-personal-centurion-website-v5/app/api/remote-relay/`.
 
-Apply schema: `desktop-native/docs/remote-relay-supabase.sql`.
+Apply schema: `brain/linux/docs/remote-relay-supabase.sql`.
 
 Brain: `centurion_cli.remote_relay_service` + bridge actions `remote_relay_*`.
 LAN `:9119` Crypto Chat stays preferred when reachable.

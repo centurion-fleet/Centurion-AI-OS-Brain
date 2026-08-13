@@ -6,20 +6,22 @@ on:
   push:
     branches: [main]
     paths:
-      - "desktop-native/scripts/package-brain-release.sh"
-      - "desktop-native/scripts/package-brain-rpm.sh"
-      - "desktop-native/scripts/customer-install.sh"
-      - "desktop-native/scripts/brain-launcher.sh"
-      - "desktop-native/scripts/cleanup-user-brain-launcher.sh"
-      - "desktop-native/scripts/bundle-centurion-core.sh"
-      - "desktop-native/scripts/stage-mission-deck.sh"
-      - "desktop-native/scripts/stage-whatsapp-bridge.sh"
+      - "brain/linux/scripts/package-brain-release.sh"
+      - "brain/linux/scripts/package-brain-rpm.sh"
+      - "brain/linux/scripts/customer-install.sh"
+      - "brain/linux/scripts/brain-launcher.sh"
+      - "brain/linux/scripts/cleanup-user-brain-launcher.sh"
+      - "brain/linux/scripts/bundle-centurion-core.sh"
+      - "brain/linux/scripts/stage-mission-deck.sh"
+      - "brain/linux/scripts/stage-whatsapp-bridge.sh"
       - "scripts/whatsapp-bridge/**"
-      - "web-dashboard/**"
-      - "desktop-native/centurion-install-brain/**"
-      - "desktop-native/centurion-desktop/**"
-      - "desktop-native/resources/**"
-      - "desktop-native/Cargo.toml"
+      - "brain/web-dashboard/**"
+      - "brain/linux/centurion-install-brain/**"
+      - "brain/linux/centurion-desktop/**"
+      - "brain/service/**"
+      - "brain/linux/resources/**"
+      - "brain/Cargo.toml"
+      - "brain/Cargo.lock"
       - "centurion_cli/__init__.py"
       - ".github/workflows/package-brain-release.yml"
 
@@ -46,7 +48,7 @@ jobs:
           nodejs npm
 
       - name: Build Brain binaries (release)
-        working-directory: desktop-native
+        working-directory: brain
         run: >-
           cargo build --release
           -p centurion-desktop
@@ -54,7 +56,7 @@ jobs:
           -p centurion-install-brain
 
       - name: Build Mission Deck (Focus tab)
-        working-directory: web-dashboard
+        working-directory: brain/web-dashboard
         run: |
           npm ci --no-audit --no-fund
           npm run build
@@ -67,19 +69,19 @@ jobs:
           test -d node_modules
 
       - name: Package Smooth Transfer archive (.tar.gz)
-        run: desktop-native/scripts/package-brain-release.sh
+        run: brain/linux/scripts/package-brain-release.sh
 
       - name: Package Fedora installer (.rpm)
-        run: desktop-native/scripts/package-brain-rpm.sh
+        run: brain/linux/scripts/package-brain-rpm.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: centurion-brain-linux-x86_64
           path: |
-            desktop-native/dist/centurion-brain-*.rpm
-            desktop-native/dist/centurion-brain-*.rpm.sha256
-            desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz
-            desktop-native/dist/centurion-brain-*-linux-x86_64.tar.gz.sha256
+            brain/linux/dist/centurion-brain-*.rpm
+            brain/linux/dist/centurion-brain-*.rpm.sha256
+            brain/linux/dist/centurion-brain-*-linux-x86_64.tar.gz
+            brain/linux/dist/centurion-brain-*-linux-x86_64.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14

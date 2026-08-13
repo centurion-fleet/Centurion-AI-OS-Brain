@@ -49,6 +49,15 @@ Centurion-AI-OS/
 │   ├── image_gen/        # Image-generation providers
 │   └── <others>/         # disk-cleanup, example-dashboard, google_meet, platforms,
 │                         #   spotify, strike-freedom-cockpit, ...
+├── brain/                # Sovereign AI Brain hosts (Linux shipping; macOS roadmap)
+│   ├── linux/            # GTK Brain shell + packaging (ex-desktop-native)
+│   ├── macos/            # macOS Brain scaffold
+│   ├── service/          # centurion-remote (:9119) + centurion-common
+│   └── web-dashboard/    # Missions / Mission Deck (embedded in Brain)
+├── remote/               # Phone remotes (control a Brain)
+│   ├── ios/              # Centurion Remote (App Store / TestFlight)
+│   └── android/          # Google Play Remote scaffold
+├── shared/               # Cross Brain+Remote assets (design-tokens, protocol docs)
 ├── optional-skills/      # Heavier/niche skills shipped but NOT active by default
 ├── skills/               # Built-in skills bundled with the repo
 ├── ui-tui/               # Ink (React) terminal UI — `centurion --tui`
@@ -950,11 +959,12 @@ automatically scope to the active profile.
 ## Known Pitfalls
 
 ### Brain product focus — freeze iPhone plumbing expansions
-Sovereign AI Brain (`desktop-native/`) is the primary client surface. Do **not**
-expand pairing, away-from-home relay, phone stream, or Unbox-as-product work
-unless fixing a security or build blocker. Prefer Soul continuity, Home Pulse,
-fleet presence, narrative onboarding, and client plugin seams. See
-`desktop-native/README.md` and `website/docs/developer-guide/client-plugins.md`.
+Sovereign AI Brain (`brain/linux/` GTK host; Rust workspace under `brain/`) is the
+primary client surface. Do **not** expand pairing, away-from-home relay, phone
+stream, or Unbox-as-product work unless fixing a security or build blocker.
+Prefer Soul continuity, Home Pulse, fleet presence, narrative onboarding, and
+client plugin seams. See `brain/README.md`, `brain/linux/README.md`, and
+`website/docs/developer-guide/client-plugins.md`.
 
 ### DO NOT hardcode `~/.centurion` paths
 Use `get_centurion_home()` from `centurion_constants` for code paths. Use `display_centurion_home()`
@@ -1133,15 +1143,18 @@ them into invariants before re-requesting review.
 
 ## Version Lockstep Policy
 
-Centurion AI OS, the **Centurion Desktop App** (`desktop/` Tauri and `desktop-native/`), the **CenturionAI Remote** (iPhone, `ios/CenturionApp/`), the **sales website**, and the **Help center** are **versioned in lockstep** as **Centurion v5**. All customer-facing products share the same **5.x.y** and are released together.
+Centurion AI OS, the **Sovereign AI Brain** (`brain/`), the **Centurion Remote**
+(iPhone under `remote/ios/`; Android roadmap under `remote/android/`), the
+**sales website**, and the **Help center** are **versioned in lockstep** as
+**Centurion v5**. All customer-facing products share the same **5.x.y** and are
+released together. See also `shared/VERSIONING.md`.
 
 | Product | Location | Version Source |
 |---------|----------|---------------|
 | Centurion AI OS | `centurion_cli/__init__.py` | `__version__` |
 | Centurion AI OS | `pyproject.toml` | `project.version` |
-| Desktop (native) | `desktop-native/Cargo.toml` | `workspace.package.version` |
-| Desktop (Tauri) | `desktop/src-tauri/Cargo.toml` | `package.version` |
-| iPhone App | `ios/CenturionApp/project.yml` → `MARKETING_VERSION` / Info.plist | `CFBundleShortVersionString` |
+| Brain (Rust workspace) | `brain/Cargo.toml` | `workspace.package.version` |
+| iPhone Remote | `remote/ios/CenturionApp/project.yml` → `MARKETING_VERSION` / Info.plist | `CFBundleShortVersionString` |
 | Sales website | `-personal-centurion-website-v5` `package.json` + `SITE_VERSION` | `5.x.y` |
 | Help center | `personal-centurion-help-center` `package.json` + `SITE_VERSION` | `5.x.y` |
 

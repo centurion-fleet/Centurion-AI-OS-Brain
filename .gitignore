@@ -60,7 +60,10 @@ environments/benchmarks/evals/
 centurion_cli/web_dist/
 
 # Native desktop and Xcode generated output
-desktop-native/target/
+brain/target/
+brain/linux/target/
+remote/ios/CenturionApp/build/
+# Legacy path (pre client-folder reorg)
 ios/CenturionApp/build/
 **/xcuserdata/
 *.xcuserstate
@@ -84,4 +87,7 @@ centurion_cli/tui_dist/*
 centurion_cli/scripts/
 docs/superpowers/*
 # Smooth Transfer package output
-desktop-native/dist/
+brain/linux/dist/
+
+brain/web-dashboard/node_modules/
+brain/web-dashboard/dist/
