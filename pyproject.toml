@@ -212,6 +212,9 @@ all = [
   "centurionai-os[google]",
   "centurionai-os[web]",
   "centurionai-os[youtube]",
+  # Away Crypto Chat pipe (Brain dials out). Pure-Python wheels; required before
+  # Realtime can carry frames — keep in [all] so Brain `centurion update` ships it.
+  "centurionai-os[remote-relay]",
 ]
 
 [project.scripts]

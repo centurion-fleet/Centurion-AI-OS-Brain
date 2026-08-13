@@ -630,7 +630,7 @@ wheels = [
 
 [[package]]
 name = "centurionai-os"
-version = "5.2.137"
+version = "5.2.138"
 source = { editable = "." }
 dependencies = [
     { name = "croniter" },
@@ -665,6 +665,7 @@ all = [
     { name = "google-auth-oauthlib" },
     { name = "mcp" },
     { name = "ptyprocess", marker = "sys_platform != 'win32'" },
+    { name = "pynacl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
@@ -673,6 +674,7 @@ all = [
     { name = "simple-term-menu" },
     { name = "ty" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
     { name = "youtube-transcript-api" },
 ]
 anthropic = [
@@ -855,6 +857,7 @@ requires-dist = [
     { name = "centurionai-os", extras = ["mcp"], marker = "extra == 'termux'" },
     { name = "centurionai-os", extras = ["pty"], marker = "extra == 'all'" },
     { name = "centurionai-os", extras = ["pty"], marker = "extra == 'termux'" },
+    { name = "centurionai-os", extras = ["remote-relay"], marker = "extra == 'all'" },
     { name = "centurionai-os", extras = ["sms"], marker = "extra == 'all'" },
     { name = "centurionai-os", extras = ["sms"], marker = "extra == 'termux-all'" },
     { name = "centurionai-os", extras = ["termux"], marker = "extra == 'termux-all'" },

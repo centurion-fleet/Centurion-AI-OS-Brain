@@ -55,8 +55,9 @@ See Help Center: *Local, Remote anywhere, or Telegram — privacy choices*.
 | Mid-turn activity frames Brain→phone (tool/thinking/status) | Done (`BridgeTurnEvent::Activity` + `RemoteMessage::Activity`) |
 | Generic BridgeAction passthrough (desk ops / remote_relay_*) | Done (`centurion-common` / `centurion-remote`) |
 | Help privacy tiers linked (Settings + Unbox) | Done |
-| Live Supabase websocket against production project | Ops: enroll project + set Vercel env; install `websockets` |
+| Live Supabase websocket against production project | Ops: enroll project + set Vercel env; `websockets` ships via `[all]` / `[remote-relay]` |
 | Away DoD / App Store “anywhere” copy | **Gated** until Away DoD checklist below is green on cellular + CGNAT |
+| `remote_relay_status` reports `websockets_installed` / `realtime_pipe_ready` | Done |
 
 LAN `:9119` Crypto Chat remains preferred whenever reachable.
 

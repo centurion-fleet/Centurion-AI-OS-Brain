@@ -18,7 +18,7 @@ struct ConnectionView: View {
                     trustStatement
                     deviceLinkCard
 
-                    if connectionManager.connectionState == .connected {
+                    if connectionManager.isCryptoChatReady {
                         thinkingServiceCard
                     }
 
@@ -81,10 +81,10 @@ struct ConnectionView: View {
                 icon: "antenna.radiowaves.left.and.right",
                 headline: deviceLinkHeadline,
                 detail: deviceLinkDetail,
-                isPositive: connectionManager.connectionState == .connected,
+                isPositive: connectionManager.isCryptoChatReady,
                 accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
             )
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
             }
         }
@@ -107,7 +107,7 @@ struct ConnectionView: View {
 
     @ViewBuilder
     private var primaryActionButton: some View {
-        if connectionManager.connectionState != .connected {
+        if !connectionManager.isCryptoChatReady {
             if hasSavedLink {
                 VStack(spacing: Spacing.sm) {
                     Button {
@@ -194,6 +194,9 @@ struct ConnectionView: View {
     }
 
     private var deviceLinkHeadline: String {
+        if connectionManager.isRelayAwayConnected {
+            return "Linked · Away"
+        }
         switch connectionManager.connectionState {
         case .connected:
             let badge = connectionManager.linkPathBadge
@@ -206,6 +209,11 @@ struct ConnectionView: View {
     }
 
     private var deviceLinkDetail: String {
+        if connectionManager.isRelayAwayConnected {
+            return connectionManager.isChannelEncrypted
+                ? "Crypto Chat on — Away via Centurion relay"
+                : "Linked Away via Centurion relay"
+        }
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
@@ -215,7 +223,7 @@ struct ConnectionView: View {
                 if device.isRemotePath || device.isTailscalePath {
                     return base
                 }
-                return "\(base). Remote pairing keeps you linked away from home."
+                return "\(base). Chat from anywhere uses Centurion relay when you leave home Wi‑Fi."
             }
             return connectionManager.isChannelEncrypted
                 ? "Crypto Chat on — linked to your Sovereign"
@@ -270,16 +278,16 @@ struct DeviceLinkSection: View {
                         icon: "antenna.radiowaves.left.and.right",
                         headline: deviceLinkHeadline,
                         detail: deviceLinkDetail,
-                        isPositive: connectionManager.connectionState == .connected,
+                        isPositive: connectionManager.isCryptoChatReady,
                         accessibilityLabel: "Device link, \(deviceLinkHeadline). \(deviceLinkDetail)"
                     )
 
-                    if connectionManager.connectionState == .connected {
+                    if connectionManager.isCryptoChatReady {
                         EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    if connectionManager.connectionState != .connected {
+                    if !connectionManager.isCryptoChatReady {
                         VStack(spacing: Spacing.sm) {
                             if hasSavedLink {
                                 Button {
@@ -349,6 +357,9 @@ struct DeviceLinkSection: View {
     }
 
     private var deviceLinkHeadline: String {
+        if connectionManager.isRelayAwayConnected {
+            return "Linked · Away"
+        }
         switch connectionManager.connectionState {
         case .connected:
             let badge = connectionManager.linkPathBadge
@@ -361,6 +372,11 @@ struct DeviceLinkSection: View {
     }
 
     private var deviceLinkDetail: String {
+        if connectionManager.isRelayAwayConnected {
+            return connectionManager.isChannelEncrypted
+                ? "Crypto Chat on — Away via Centurion relay"
+                : "Linked Away via Centurion relay"
+        }
         switch connectionManager.connectionState {
         case .connected:
             if let device = connectionManager.connectedDevice {
@@ -370,7 +386,7 @@ struct DeviceLinkSection: View {
                 if device.isRemotePath || device.isTailscalePath {
                     return base
                 }
-                return "\(base). Remote pairing keeps you linked away from home."
+                return "\(base). Chat from anywhere uses Centurion relay when you leave home Wi‑Fi."
             }
             return connectionManager.isChannelEncrypted
                 ? "Crypto Chat on — linked to your Sovereign"
@@ -402,7 +418,7 @@ struct ThinkingServiceSection: View {
 
             AtmosphericSurface {
                 VStack(spacing: Spacing.md) {
-                    if connectionManager.connectionState == .connected {
+                    if connectionManager.isCryptoChatReady {
                         CenturionStatusCard(
                             title: "Thinking service",
                             icon: "brain.head.profile",
@@ -503,17 +519,19 @@ struct ConnectionPairingSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                switch connectionManager.connectionState {
-                case .connected:
+                if connectionManager.isCryptoChatReady {
                     connectedState
-                case .awaitingApproval(let message):
-                    awaitingApprovalState(message: message)
-                case .connecting:
-                    connectingState
-                case .error(let message):
-                    errorState(message: message)
-                default:
-                    pairingForm
+                } else {
+                    switch connectionManager.connectionState {
+                    case .awaitingApproval(let message):
+                        awaitingApprovalState(message: message)
+                    case .connecting:
+                        connectingState
+                    case .error(let message):
+                        errorState(message: message)
+                    default:
+                        pairingForm
+                    }
                 }
             }
             .background(ColorTheme.background())
@@ -537,16 +555,25 @@ struct ConnectionPairingSheet: View {
                     }
                 )
             }
-            .onChange(of: connectionManager.connectionState) { _, newState in
-                // Stay open for pairing approval; only auto-close on a stable link.
-                if newState == .connected {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(600))
-                        if connectionManager.connectionState == .connected {
-                            dismiss()
-                        }
-                    }
-                }
+            .onChange(of: connectionManager.connectionState) { _, _ in
+                dismissPairingIfLinked()
+            }
+            .onChange(of: connectionManager.transportPreference) { _, _ in
+                dismissPairingIfLinked()
+            }
+            .onReceive(connectionManager.relayAway.$isConnected) { _ in
+                dismissPairingIfLinked()
+            }
+        }
+    }
+
+    private func dismissPairingIfLinked() {
+        // Stay open for pairing approval; only auto-close on a stable link.
+        guard connectionManager.isCryptoChatReady else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            if connectionManager.isCryptoChatReady {
+                dismiss()
             }
         }
     }

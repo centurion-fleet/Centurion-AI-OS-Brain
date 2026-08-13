@@ -91,6 +91,15 @@ def get_relay_session() -> RelaySession:
         return _SESSION
 
 
+def _websockets_installed() -> bool:
+    try:
+        import websockets  # type: ignore  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def status() -> dict[str, Any]:
     cfg = _load_config()
     with _STATE_LOCK:
@@ -98,8 +107,10 @@ def status() -> dict[str, Any]:
     # Anon key is safe to return over Crypto Chat so the phone can cache
     # cloud endpoints for away reconnect (same class as public Supabase anon).
     anon = str(cfg.get("supabase_anon_key") or "").strip()
+    ws_ok = _websockets_installed()
+    enabled = bool(cfg.get("enabled"))
     return {
-        "enabled": bool(cfg.get("enabled")),
+        "enabled": enabled,
         "install_id": str(cfg.get("install_id") or ""),
         "channel": channel_name(str(cfg.get("install_id") or "") or None)
         if cfg.get("install_id")
@@ -107,12 +118,20 @@ def status() -> dict[str, Any]:
         "supabase_url": str(cfg.get("supabase_url") or "").strip(),
         "supabase_url_configured": bool(str(cfg.get("supabase_url") or "").strip()),
         "supabase_anon_key": anon,
+        "websockets_installed": ws_ok,
+        "realtime_pipe_ready": bool(enabled and ws_ok and presence.get("online")),
         "presence": presence,
         "lan_crypto_chat": {
             "port": 9119,
             "unchanged": True,
             "preferred_when_reachable": True,
         },
+        "hint": (
+            None
+            if ws_ok
+            else "Install Away deps: pip install 'centurionai-os[remote-relay]' "
+            "(or run Brain Settings → Check for update)."
+        ),
     }
 
 
@@ -163,12 +182,19 @@ def enable(*, supabase_url: str = "", supabase_anon_key: str = "") -> dict[str, 
     _save_config_patch(patch)
     session = get_relay_session()
     epoch = session.reset_connection()
+    ws_ok = _websockets_installed()
+    missing_msg = (
+        None
+        if ws_ok
+        else "websockets not installed — Away Crypto Chat needs "
+        "pip install 'centurionai-os[remote-relay]' (or Brain update)."
+    )
     with _STATE_LOCK:
         _PRESENCE.update(
             {
                 "online": True,
                 "conn_epoch": epoch,
-                "last_error": None,
+                "last_error": missing_msg,
                 "updated_at": time.time(),
             }
         )
@@ -179,6 +205,9 @@ def enable(*, supabase_url: str = "", supabase_anon_key: str = "") -> dict[str, 
         _ensure_realtime_client().start_background()
     except Exception as exc:
         logger.info("remote_relay outbound start deferred: %s", exc)
+        with _STATE_LOCK:
+            _PRESENCE["last_error"] = str(exc)[:240]
+            _PRESENCE["updated_at"] = time.time()
     return status()
 
 

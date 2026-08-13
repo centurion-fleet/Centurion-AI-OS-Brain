@@ -34,6 +34,8 @@ def test_bridge_remote_relay_status(tmp_path, monkeypatch):
     resp = handle_request({"id": "1", "action": "remote_relay_status"})
     assert resp["ok"] is True
     assert resp["enabled"] is False
+    assert "websockets_installed" in resp
+    assert "realtime_pipe_ready" in resp
     assert resp["lan_crypto_chat"]["unchanged"] is True
     assert resp["lan_crypto_chat"]["preferred_when_reachable"] is True
 

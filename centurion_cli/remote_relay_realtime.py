@@ -194,9 +194,21 @@ class RelayRealtimeClient:
         try:
             import websockets  # type: ignore  # noqa: F401
         except ImportError:
-            logger.info(
-                "remote_relay: websockets not installed — presence-only outbound"
+            logger.warning(
+                "remote_relay: websockets not installed — presence-only outbound "
+                "(install centurionai-os[remote-relay])"
             )
+            try:
+                from centurion_cli import remote_relay_service as _svc
+
+                with _svc._STATE_LOCK:
+                    _svc._PRESENCE["last_error"] = (
+                        "websockets not installed — Away Crypto Chat needs "
+                        "pip install 'centurionai-os[remote-relay]'."
+                    )
+                    _svc._PRESENCE["updated_at"] = time.time()
+            except Exception:
+                pass
             while not self._stop.wait(30.0):
                 push_presence(online=True, conn_epoch=self.session.conn)
             push_presence(online=False, conn_epoch=self.session.conn)
