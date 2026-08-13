@@ -117,7 +117,7 @@ final class PlanStore: ObservableObject {
 
     /// Pull host plans + templates when connected.
     func refreshFromHost(connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         do {
             let remotePlans = try await connectionManager.fetchPlans(status: "all")
             if !remotePlans.isEmpty {
@@ -146,7 +146,7 @@ final class PlanStore: ObservableObject {
     /// Persist a plan locally and push to host when connected.
     func upsertAndSync(_ plan: PlanArtifact, connectionManager: ConnectionManager?) async {
         upsert(plan)
-        guard let connectionManager, connectionManager.connectionState == .connected else { return }
+        guard let connectionManager, connectionManager.isCryptoChatReady else { return }
         do {
             if let saved = try await connectionManager.putPlan(plan) {
                 upsert(saved)
@@ -174,7 +174,7 @@ final class PlanStore: ObservableObject {
         }()
         markStatus(id, status: localStatus)
 
-        guard let connectionManager, connectionManager.connectionState == .connected else { return }
+        guard let connectionManager, connectionManager.isCryptoChatReady else { return }
         do {
             if let updated = try await connectionManager.decidePlan(
                 planId: id.uuidString,

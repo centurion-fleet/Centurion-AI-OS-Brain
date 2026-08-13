@@ -9,7 +9,7 @@ struct MemoryHorizonView: View {
     @State private var chatTarget: ChatSheetTarget?
 
     private var linked: Bool {
-        connectionManager.connectionState == .connected
+        connectionManager.isCryptoChatReady
     }
 
     var body: some View {

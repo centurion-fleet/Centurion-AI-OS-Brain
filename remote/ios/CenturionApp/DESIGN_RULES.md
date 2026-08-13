@@ -361,9 +361,9 @@ Two orb families share `OrbDesign` tokens in `DesignSystem.swift`:
 
 ## Pairing (Connect) — QR first
 
-- Primary CTA: **Scan QR code** (camera). Payload is the existing `token:…@host:9119` string.
+- Primary CTA: **Scan QR code** (camera). Payload is the existing `token:…@lan-host:9119` string for **home Wi‑Fi pairing**.
 - Secondary: **Paste code instead** (accessibility / no-camera / App Review).
-- Do not present paste as the default path. Away-from-home (tunnel/public :9119) is the assumed topology; same Wi‑Fi / Bonjour is optional only.
+- Do not present paste as the default path. Away-from-home uses **Chat from anywhere** (Centurion relay) after enable — not DIY tunnel/public `:9119` as the default topology. Same Wi‑Fi / Bonjour is optional convenience at home.
 
 ---
 

@@ -52,10 +52,20 @@ struct WelcomeOnboardingView: View {
             ConnectionPairingSheet()
                 .environmentObject(connectionManager)
         }
-        .onChange(of: connectionManager.connectionState) { _, state in
-            if state == .connected && step == .connect {
-                showPairingSheet = false
-            }
+        .onChange(of: connectionManager.connectionState) { _, _ in
+            dismissPairingIfLinked()
+        }
+        .onChange(of: connectionManager.transportPreference) { _, _ in
+            dismissPairingIfLinked()
+        }
+        .onReceive(connectionManager.relayAway.$isConnected) { _ in
+            dismissPairingIfLinked()
+        }
+    }
+
+    private func dismissPairingIfLinked() {
+        if connectionManager.isCryptoChatReady && step == .connect {
+            showPairingSheet = false
         }
     }
 
@@ -78,7 +88,7 @@ struct WelcomeOnboardingView: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Link your Centurion",
-                subtitle: "Scan the QR code on your Centurion's screen. It works from anywhere once TCP 9119 is reachable. Paste remains available as a fallback. Same Wi‑Fi is optional when you’re nearby."
+                subtitle: "Scan the QR code on your Centurion while you’re on home Wi‑Fi — that pairs Crypto Chat. Later, turn on Chat from anywhere on the Brain so the same app works away from home (no home IP or port-forward). Paste remains a fallback."
             )
 
             AtmosphericSurface {
@@ -105,7 +115,7 @@ struct WelcomeOnboardingView: View {
             }
             .padding(.horizontal, Spacing.lg)
 
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
             }
         }
@@ -148,7 +158,7 @@ struct WelcomeOnboardingView: View {
                 .buttonStyle(CenturionPrimaryButtonStyle())
             case .connect:
                 VStack(spacing: Spacing.md) {
-                    if connectionManager.connectionState == .connected {
+                    if connectionManager.isCryptoChatReady {
                         Button("Continue") {
                             withAnimation(Motion.standard) { step = .mission }
                             Haptics.lightTap()

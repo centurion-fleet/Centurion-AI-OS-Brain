@@ -50,6 +50,16 @@ enum RelayTransport {
             sessionKeysValid = true
         }
 
+        func adoptConn(_ epoch: String) {
+            let trimmed = epoch.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed != conn else { return }
+            parts.removeAll()
+            meta.removeAll()
+            waiting.removeAll()
+            sessionKeysValid = false
+            conn = trimmed
+        }
+
         func expectResponse(id: String) {
             waiting.insert(id)
         }

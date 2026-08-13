@@ -30,19 +30,19 @@ struct GatewayControlSection: View {
 
             HStack(spacing: Spacing.sm) {
                 Button("Refresh") { Task { await refresh() } }
-                    .disabled(busy || connectionManager.connectionState != .connected)
+                    .disabled(busy || !connectionManager.isCryptoChatReady)
                 Button(running ? "Stop" : "Start") {
                     Task { await toggleRunning() }
                 }
-                .disabled(busy || connectionManager.connectionState != .connected)
+                .disabled(busy || !connectionManager.isCryptoChatReady)
                 Button("Restart") {
                     Task { await restart() }
                 }
-                .disabled(busy || connectionManager.connectionState != .connected)
+                .disabled(busy || !connectionManager.isCryptoChatReady)
             }
             .buttonStyle(.bordered)
 
-            if connectionManager.connectionState != .connected {
+            if !connectionManager.isCryptoChatReady {
                 Text("Link your Sovereign away-from-home to manage the gateway.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
@@ -66,7 +66,7 @@ struct GatewayControlSection: View {
                             .foregroundColor(ColorTheme.mutedText())
                     }
                 }
-                .disabled(busy || connectionManager.connectionState != .connected)
+                .disabled(busy || !connectionManager.isCryptoChatReady)
             }
 
             if let errorMessage {
@@ -84,7 +84,7 @@ struct GatewayControlSection: View {
         .background(ColorTheme.surface())
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .task(id: connectionManager.connectionState) {
-            guard connectionManager.connectionState == .connected else { return }
+            guard connectionManager.isCryptoChatReady else { return }
             await refresh()
         }
     }

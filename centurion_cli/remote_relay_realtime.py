@@ -207,9 +207,15 @@ class RelayRealtimeClient:
                 asyncio.run(self._session_loop())
             except Exception as exc:
                 logger.warning("remote_relay realtime session error: %s", exc)
-            # Reconnect = new conn epoch + re-KX
+            # Reconnect = new conn epoch + re-KX + drop LAN splice
             inflight = self.session.fail_inflight_on_reconnect()
             epoch = self.session.reset_connection()
+            try:
+                from centurion_cli.remote_relay_splice import reset_lan_splice
+
+                reset_lan_splice()
+            except Exception:
+                pass
             if inflight:
                 logger.info(
                     "remote_relay reconnect: %d in-flight id(s) need retry",
@@ -316,6 +322,14 @@ class RelayRealtimeClient:
         kind, body = self.session.ingest_event(raw)
         if body is None:
             return None
+        envelope_id = str(raw.get("id") or "") if isinstance(raw, dict) else ""
+        # Crypto Chat tunnel: splice KX + secretbox frames into local :9119.
+        try:
+            from centurion_cli.remote_relay_splice import on_relay_inbound
+
+            on_relay_inbound(kind, body, envelope_id)
+        except Exception as exc:
+            logger.warning("remote_relay inbound dispatch failed: %s", exc)
         if kind in ("kx_client", "kx_server"):
             return body
         if self.on_plaintext_frame and self.session.session_keys_valid:

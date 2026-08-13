@@ -124,11 +124,23 @@ def _ensure_realtime_client():
             return _REALTIME
     from centurion_cli.remote_relay_realtime import RelayRealtimeClient
 
+    # Wire Crypto Chat tunnel: inbound Realtime → localhost :9119 splice.
     client = RelayRealtimeClient(session=get_relay_session())
     with _STATE_LOCK:
         if _REALTIME is None:
             _REALTIME = client
         return _REALTIME
+
+
+def start_if_enabled() -> dict[str, Any] | None:
+    """On bridge daemon boot: resume Away pump when config already enabled."""
+    cfg = _load_config()
+    if not cfg.get("enabled"):
+        return None
+    return enable(
+        supabase_url=str(cfg.get("supabase_url") or ""),
+        supabase_anon_key=str(cfg.get("supabase_anon_key") or ""),
+    )
 
 
 def publish_relay_envelopes(events: list[dict[str, Any]]) -> None:
@@ -189,6 +201,12 @@ def disable() -> dict[str, Any]:
             client.stop()
         except Exception:
             pass
+    try:
+        from centurion_cli.remote_relay_splice import reset_lan_splice
+
+        reset_lan_splice()
+    except Exception:
+        pass
     try:
         from centurion_cli.remote_relay_realtime import push_presence
 

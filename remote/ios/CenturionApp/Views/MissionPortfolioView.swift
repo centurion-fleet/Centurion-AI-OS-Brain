@@ -157,17 +157,17 @@ struct MissionPortfolioView: View {
             Task { await reloadPulseFeed(forceRefresh: true) }
         }
         .onChange(of: swarmStore.activities.count) { _, _ in
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 applyPulseFromSwarmStore()
             }
         }
         .onChange(of: swarmStore.outcomes.count) { _, _ in
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 applyPulseFromSwarmStore()
             }
         }
         .onChange(of: swarmStore.signals.count) { _, _ in
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 applyPulseFromSwarmStore()
             }
         }
@@ -259,10 +259,10 @@ struct MissionPortfolioView: View {
                     } else {
                         EmptyState(
                             icon: "bolt.circle",
-                            title: connectionManager.connectionState == .connected
+                            title: connectionManager.isCryptoChatReady
                                 ? "Nothing running right now"
                                 : "Working on now",
-                            message: connectionManager.connectionState == .connected
+                            message: connectionManager.isCryptoChatReady
                                 ? "When your Sovereign is mid-loop, it shows up here."
                                 : "Link your Sovereign in You to see live work."
                         )
@@ -274,7 +274,7 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "trophy",
                             title: "No finished work yet",
-                            message: connectionManager.connectionState == .connected
+                            message: connectionManager.isCryptoChatReady
                                 ? "Completed outcomes from your Sovereign will appear here."
                                 : "Link your Sovereign to see finished wins."
                         )
@@ -288,7 +288,7 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "doc.richtext",
                             title: "No outputs yet",
-                            message: connectionManager.connectionState == .connected
+                            message: connectionManager.isCryptoChatReady
                                 ? "Documents and results your Sovereign creates will appear here."
                                 : "Link your Sovereign to see documents it creates."
                         )
@@ -300,7 +300,7 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "checkmark.circle",
                             title: "All clear",
-                            message: connectionManager.connectionState == .connected
+                            message: connectionManager.isCryptoChatReady
                                 ? "Nothing needs your choice right now."
                                 : "Link your Sovereign to see decisions that need you."
                         )
@@ -310,7 +310,7 @@ struct MissionPortfolioView: View {
                         EmptyState(
                             icon: "waveform.path.ecg",
                             title: "No updates yet",
-                            message: connectionManager.connectionState == .connected
+                            message: connectionManager.isCryptoChatReady
                                 ? "Activity from your Sovereign streams in here."
                                 : "Link your Sovereign to see its update stream."
                         )
@@ -347,9 +347,14 @@ struct MissionPortfolioView: View {
     }
 
     /// Opens Crypto Chat about a Pulse item and seeds a one-time context note.
-    private func openDiscuss(title: String, detail: String) {
+    private func openDiscuss(title: String, detail: String, topicKind: String = "decision") {
         Haptics.lightTap()
-        let conversation = messageService.seedDiscussContext(title: title, detail: detail)
+        let conversation = messageService.seedDiscussContext(
+            title: title,
+            detail: detail,
+            topicKind: topicKind,
+            topicRef: ["title": title, "source": "pulse"]
+        )
         chatTarget = ChatSheetTarget(context: conversation.context)
     }
 
@@ -362,7 +367,7 @@ struct MissionPortfolioView: View {
     }
 
     private func reloadPulseFeed(forceRefresh: Bool = false) async {
-        if connectionManager.connectionState == .connected {
+        if connectionManager.isCryptoChatReady {
             if forceRefresh || !isDataLoaded {
                 await swarmStore.refresh(from: connectionManager)
             }
@@ -440,7 +445,7 @@ struct MissionPortfolioView: View {
                 detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
             )
         } else if label.contains("hold") {
-            // Keep in Needs your choice — no resolve.
+            // Keep in Needs your choice — leave swarm signal pending (no resolve).
             Haptics.lightTap()
         } else {
             openDiscuss(
@@ -455,7 +460,7 @@ struct MissionPortfolioView: View {
             await planStore.decide(plan.id, choice: "approve", connectionManager: connectionManager)
             if let signalId = plan.signalId {
                 swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
-            } else if connectionManager.connectionState == .connected {
+            } else if connectionManager.isCryptoChatReady {
                 openPlanDiscuss(
                     plan,
                     kickoffNote: "Please proceed with this plan."
@@ -1097,7 +1102,7 @@ struct MissionPortfolioView: View {
                 EmptyState(
                     icon: "list.clipboard",
                     title: "No plans yet",
-                    message: connectionManager.connectionState == .connected
+                    message: connectionManager.isCryptoChatReady
                         ? "Use Propose first in Chat, or start from a template below when available."
                         : "Link your Sovereign to review plans here."
                 )

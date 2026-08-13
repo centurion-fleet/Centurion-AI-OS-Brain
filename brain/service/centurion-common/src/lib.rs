@@ -605,6 +605,15 @@ pub enum RemoteMessage {
         pattern_key: Option<String>,
         choices: Vec<String>,
     },
+    /// Brain → phone: mid-turn tool/thinking/status line (honest waiting).
+    Activity {
+        id: Uuid,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool: Option<String>,
+    },
     /// Phone → Brain: resolve a pending approval.
     ApprovalRespond {
         id: Uuid,
@@ -620,6 +629,20 @@ pub enum RemoteMessage {
         ok: bool,
         resolved: u32,
     },
+    /// Generic Brain bridge passthrough (desk ops, remote_relay_*, Firecrawl, …).
+    /// Parsed via ``from_json`` fallback when the ``type`` is not a dedicated variant.
+    BridgeAction {
+        id: Uuid,
+        action: String,
+        #[serde(default, flatten)]
+        params: serde_json::Map<String, serde_json::Value>,
+    },
+    BridgeActionResponse {
+        id: Uuid,
+        action: String,
+        /// Full ``remote_bridge.handle_request`` JSON (flattened on the wire).
+        payload: serde_json::Value,
+    },
     Error {
         id: Option<Uuid>,
         code: String,
@@ -630,11 +653,81 @@ pub enum RemoteMessage {
 
 impl RemoteMessage {
     pub fn to_json(&self) -> Result<Vec<u8>, ProtocolError> {
-        serde_json::to_vec(self).map_err(ProtocolError::Json)
+        match self {
+            Self::BridgeActionResponse { id, action, payload } => {
+                let mut map = match payload {
+                    serde_json::Value::Object(m) => m.clone(),
+                    other => {
+                        let mut m = serde_json::Map::new();
+                        m.insert("result".to_owned(), other.clone());
+                        m
+                    }
+                };
+                map.insert(
+                    "type".to_owned(),
+                    serde_json::Value::String(format!("{action}_response")),
+                );
+                map.insert(
+                    "id".to_owned(),
+                    serde_json::Value::String(id.to_string()),
+                );
+                if !map.contains_key("ok") {
+                    map.insert("ok".to_owned(), serde_json::Value::Bool(true));
+                }
+                serde_json::to_vec(&map).map_err(ProtocolError::Json)
+            }
+            other => serde_json::to_vec(other).map_err(ProtocolError::Json),
+        }
     }
 
     pub fn from_json(payload: &[u8]) -> Result<Self, ProtocolError> {
-        serde_json::from_slice(payload).map_err(ProtocolError::Json)
+        if let Ok(msg) = serde_json::from_slice::<Self>(payload) {
+            return Ok(msg);
+        }
+        let value: serde_json::Value =
+            serde_json::from_slice(payload).map_err(ProtocolError::Json)?;
+        let obj = value.as_object().ok_or_else(|| {
+            ProtocolError::Json(serde_json::from_slice::<Self>(b"0").unwrap_err())
+        })?;
+        let Some(action) = obj
+            .get("type")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        else {
+            return Err(ProtocolError::Json(
+                serde_json::from_slice::<Self>(b"0").unwrap_err(),
+            ));
+        };
+        // Dedicated variants already failed — treat as bridge passthrough.
+        if matches!(
+            action,
+            "error"
+                | "ready"
+                | "pong"
+                | "ping"
+                | "pair"
+                | "pair_required"
+                | "pair_rejected"
+                | "chat_response"
+        ) || action.ends_with("_response")
+        {
+            return Err(ProtocolError::Json(
+                serde_json::from_slice::<Self>(b"0").unwrap_err(),
+            ));
+        }
+        let id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .unwrap_or_else(Uuid::new_v4);
+        let mut params = obj.clone();
+        params.remove("type");
+        params.remove("id");
+        Ok(Self::BridgeAction {
+            id,
+            action: action.to_owned(),
+            params,
+        })
     }
 }
 
@@ -799,5 +892,48 @@ mod tests {
         };
         let encoded = rejected.to_json().expect("serialize");
         assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), rejected);
+    }
+
+    #[test]
+    fn activity_roundtrips() {
+        let id = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let msg = RemoteMessage::Activity {
+            id,
+            message: "$ ls".to_owned(),
+            kind: Some("tool".to_owned()),
+            tool: Some("terminal".to_owned()),
+        };
+        let encoded = msg.to_json().expect("serialize");
+        assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), msg);
+        let json = String::from_utf8(encoded).expect("utf8");
+        assert!(json.contains(r#""type":"activity""#));
+        assert!(json.contains(r#""message":"$ ls""#));
+    }
+
+    #[test]
+    fn bridge_action_fallback_parses_unknown_type() {
+        let raw = br#"{"type":"remote_relay_status","id":"11111111-1111-1111-1111-111111111111","foo":1}"#;
+        let msg = RemoteMessage::from_json(raw).expect("parse bridge action");
+        match msg {
+            RemoteMessage::BridgeAction { action, params, .. } => {
+                assert_eq!(action, "remote_relay_status");
+                assert_eq!(params.get("foo").and_then(|v| v.as_i64()), Some(1));
+            }
+            other => panic!("expected BridgeAction, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn bridge_action_response_flattens_type() {
+        let id = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let msg = RemoteMessage::BridgeActionResponse {
+            id,
+            action: "ops_glance".to_owned(),
+            payload: serde_json::json!({"ok": true, "summary": "idle"}),
+        };
+        let bytes = msg.to_json().expect("encode");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value.get("type").and_then(|v| v.as_str()), Some("ops_glance_response"));
+        assert_eq!(value.get("summary").and_then(|v| v.as_str()), Some("idle"));
     }
 }

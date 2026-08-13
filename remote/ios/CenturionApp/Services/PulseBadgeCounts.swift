@@ -13,12 +13,12 @@ enum PulseBadgeCounts {
     }
 
     static func feed(
-        connectionState: ConnectionManager.ConnectionState,
+        isCryptoChatReady: Bool,
         showsDemoContent: Bool,
         swarmStore: SwarmStore,
         planStore: PlanStore
     ) -> PulseFeedMapper.Feed {
-        if connectionState == .connected {
+        if isCryptoChatReady {
             return PulseFeedMapper.map(from: swarmStore, planStore: planStore)
         }
         if showsDemoContent {
@@ -70,14 +70,14 @@ enum PulseBadgeCounts {
     }
 
     static func total(
-        connectionState: ConnectionManager.ConnectionState,
+        isCryptoChatReady: Bool,
         showsDemoContent: Bool,
         swarmStore: SwarmStore,
         planStore: PlanStore,
         lastSeen: LastSeen
     ) -> Int {
         let feed = feed(
-            connectionState: connectionState,
+            isCryptoChatReady: isCryptoChatReady,
             showsDemoContent: showsDemoContent,
             swarmStore: swarmStore,
             planStore: planStore

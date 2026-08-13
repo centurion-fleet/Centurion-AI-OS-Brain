@@ -6,7 +6,7 @@ import SwiftUI
 final class AppDataMode: ObservableObject {
     @Published private(set) var showsDemoContent: Bool = true
 
-    func update(connectionState: ConnectionManager.ConnectionState) {
-        showsDemoContent = connectionState != .connected
+    func update(isCryptoChatReady: Bool) {
+        showsDemoContent = !isCryptoChatReady
     }
 }

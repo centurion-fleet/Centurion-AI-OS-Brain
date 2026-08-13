@@ -32,7 +32,7 @@ final class OversightStore: ObservableObject {
     }
 
     func refresh(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         isSyncing = true
         defer { isSyncing = false }
         do {
@@ -68,7 +68,7 @@ final class OversightStore: ObservableObject {
         applyLevelPreset: Bool,
         connectionManager: ConnectionManager
     ) async {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             lastSavedMessage = "Saved on this phone. Link your Sovereign to sync."
             return
         }

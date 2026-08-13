@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "centurionai-os"
-version = "5.2.137"
+version = "5.2.138"
 description = "Centurion AI OS — The self-improving sovereign AI agent that runs on your own hardware"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -158,6 +158,8 @@ termux-all = [
   "centurionai-os[web]",
 ]
 dingtalk = ["dingtalk-stream==0.24.3", "alibabacloud-dingtalk==2.2.42", "qrcode==7.4.2"]
+# Chat from anywhere (Brain Realtime outbound). LAN Crypto Chat works without these.
+remote-relay = ["websockets==15.0.1", "pynacl==1.5.0"]
 feishu = ["lark-oapi==1.5.3", "qrcode==7.4.2"]
 google = [
   # Required by the google-workspace skill (Gmail, Calendar, Drive, Contacts,

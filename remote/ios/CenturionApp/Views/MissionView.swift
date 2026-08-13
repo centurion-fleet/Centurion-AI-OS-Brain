@@ -36,7 +36,7 @@ struct MissionView: View {
                         Text(isSyncing ? "Syncing…" : "Sync Life Mission to Sovereign")
                     }
                     .buttonStyle(CenturionSecondaryButtonStyle())
-                    .disabled(isSyncing || connectionManager.connectionState != .connected)
+                    .disabled(isSyncing || !connectionManager.isCryptoChatReady)
                 }
 
                 if let syncMessage {
@@ -101,7 +101,7 @@ struct MissionView: View {
     }
 
     private func openCommitmentChat(for target: LifeMissionTarget) {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             chatError = "Pair with your Sovereign in You first, then chat about this commitment."
             return
         }

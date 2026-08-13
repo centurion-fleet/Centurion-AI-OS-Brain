@@ -49,12 +49,28 @@ See Help Center: *Local, Remote anywhere, or Telegram — privacy choices*.
 | iPhone prefer-LAN / You → Anywhere toggle | Done |
 | Desktop Settings → Chat from anywhere | Done |
 | Brain outbound presence + Realtime client | Done (`remote_relay_realtime.py` singleton pump) |
-| iPhone away `RelayAwayClient` when LAN down | Done (pipe + presence; full chat tunnel over Realtime still soak-tested in Away DoD) |
+| Brain Realtime → localhost `:9119` Crypto Chat splice | Done (`remote_relay_splice.py`) |
+| iPhone Away Crypto Chat (KX + frames + approvals over Realtime) | Done (`RelayAwayClient` + `ConnectionManager` transport mux) |
+| iPhone everyday surfaces gate on `isCryptoChatReady` (LAN or Away) | Done (stores/Settings/Home/Chat/Help) |
+| Mid-turn activity frames Brain→phone (tool/thinking/status) | Done (`BridgeTurnEvent::Activity` + `RemoteMessage::Activity`) |
+| Generic BridgeAction passthrough (desk ops / remote_relay_*) | Done (`centurion-common` / `centurion-remote`) |
 | Help privacy tiers linked (Settings + Unbox) | Done |
-| Live Supabase websocket against production project | Ops: enroll project + set Vercel env |
-| Away DoD / App Store “anywhere” copy | **Gated** until Away DoD passes |
+| Live Supabase websocket against production project | Ops: enroll project + set Vercel env; install `websockets` |
+| Away DoD / App Store “anywhere” copy | **Gated** until Away DoD checklist below is green on cellular + CGNAT |
 
 LAN `:9119` Crypto Chat remains preferred whenever reachable.
+
+### Speed budgets (Workstream C)
+
+Instrument on device (`lastTransportRttMs` / `lastTtftOverheadMs`) and Brain logs (no PII):
+
+| Metric | LAN | Away |
+|--------|-----|------|
+| Transport RTT (ping) | p50 &lt; 50ms, p95 &lt; 150ms | p50 &lt; 200ms, p95 &lt; 500ms |
+| Transport overhead on first UI token | &lt; 100ms p95 | &lt; 400ms p95 |
+| Cold Anywhere connect + re-KX | N/A | &lt; 3s p95 |
+
+Warm Realtime while Anywhere is enabled; one KX per `conn` epoch; stream frames immediately (no batch-until-complete).
 
 ## TestFlight path (LAN topics first)
 
@@ -75,12 +91,18 @@ LAN `:9119` Crypto Chat remains preferred whenever reachable.
 
 ## Away-over-relay DoD (gates App Store “anywhere”)
 
-- [ ] Pair once at home; enable Chat from anywhere on Brain
+Code path for Crypto Chat over Realtime is implemented (Brain splice + iPhone mux). Ops still must soak:
+
+- [ ] Pair once at home; enable Chat from anywhere on Brain (`websockets` + Supabase env)
 - [ ] Leave Wi‑Fi; same topics list and resume over RelayTransport
+- [ ] Mid-turn tool approval over Away
 - [ ] Brain offline → clear failure (same honesty as Telegram gateway down)
 - [ ] Reconnect mid-turn → retryable error; no half-delivered approvals
 - [ ] Chunked history resume >180KB succeeds; oversize soft-fails cleanly
+- [ ] Speed budgets green (see table above) on cellular
 - [ ] Privacy Help article linked from Settings / Unbox
+
+Until this checklist is green, App Store marketing must not claim “works anywhere” as a finished guarantee — review notes already describe the relay product path (not DIY `:9119`).
 
 ## Customer help
 

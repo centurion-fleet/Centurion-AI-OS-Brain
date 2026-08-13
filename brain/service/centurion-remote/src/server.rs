@@ -139,7 +139,7 @@ async fn handle_connection(
                     "iPhone chat request received"
                 );
                 let request_id = id.to_string();
-                let (event_tx, mut event_rx) = mpsc::channel(8);
+                let (event_tx, mut event_rx) = mpsc::channel(32);
                 let (approval_tx, approval_rx) = mpsc::channel(8);
                 let bridge = Arc::clone(&state.bridge);
                 let chat_fut = bridge.chat(
@@ -154,15 +154,29 @@ async fn handle_connection(
                 let chat_response = loop {
                     tokio::select! {
                         Some(event) = event_rx.recv() => {
-                            let push = RemoteMessage::ApprovalRequest {
-                                id,
-                                approval_id: event.approval_id,
-                                session_key: event.session_key,
-                                command: event.command,
-                                description: event.description,
-                                pattern_key: (!event.pattern_key.is_empty())
-                                    .then_some(event.pattern_key),
-                                choices: event.choices,
+                            let push = match event {
+                                crate::bridge::BridgeTurnEvent::Approval(event) => {
+                                    RemoteMessage::ApprovalRequest {
+                                        id,
+                                        approval_id: event.approval_id,
+                                        session_key: event.session_key,
+                                        command: event.command,
+                                        description: event.description,
+                                        pattern_key: (!event.pattern_key.is_empty())
+                                            .then_some(event.pattern_key),
+                                        choices: event.choices,
+                                    }
+                                }
+                                crate::bridge::BridgeTurnEvent::Activity {
+                                    message,
+                                    kind,
+                                    tool,
+                                } => RemoteMessage::Activity {
+                                    id,
+                                    message,
+                                    kind: Some(kind).filter(|s| !s.is_empty()),
+                                    tool,
+                                },
                             };
                             write_message(&mut stream, &session, &push).await?;
                         }
@@ -1679,6 +1693,24 @@ async fn handle_connection(
                             .get("resolved")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0) as u32,
+                    },
+                    Err(error) => bridge_error_response(Some(id), error),
+                }
+            }
+            RemoteMessage::BridgeAction { id, action, params } => {
+                match state
+                    .bridge
+                    .invoke(
+                        &id.to_string(),
+                        &action,
+                        serde_json::Value::Object(params),
+                    )
+                    .await
+                {
+                    Ok(payload) => RemoteMessage::BridgeActionResponse {
+                        id,
+                        action,
+                        payload,
                     },
                     Err(error) => bridge_error_response(Some(id), error),
                 }

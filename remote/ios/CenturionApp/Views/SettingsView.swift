@@ -22,6 +22,14 @@ struct SettingsView: View {
     @State private var showRecoverySheet = false
     @State private var anywhereBusy = false
     @State private var anywhereError: String?
+    @State private var deskOpsBusy = false
+    @State private var deskOpsStatus = ""
+    @State private var deskOpsError: String?
+    @State private var showLicenseSheet = false
+    @State private var licenseCode = ""
+    @State private var firecrawlKey = ""
+    @State private var showFirecrawlSheet = false
+    @State private var brainVersionLabel = ""
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
@@ -38,7 +46,7 @@ struct SettingsView: View {
         TabPageChrome(title: "You") {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
-                    if connectionManager.connectionState != .connected {
+                    if !connectionManager.isCryptoChatReady {
                         linkHeroSection
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
@@ -54,6 +62,8 @@ struct SettingsView: View {
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                         GatewayControlSection()
                         anywhereRelaySection
+                        deskOpsSection
+                        brainUpdatesSection
                     }
                     youSection
                     memoryHorizonSection
@@ -138,6 +148,44 @@ struct SettingsView: View {
                                 .foregroundColor(ColorTheme.accent())
                         }
                     }
+            }
+        }
+        .sheet(isPresented: $showLicenseSheet) {
+            NavigationStack {
+                Form {
+                    Section("Redeem") {
+                        TextField("License code", text: $licenseCode)
+                        Button("Activate") {
+                            Task { await redeemLicense() }
+                        }
+                        .disabled(licenseCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || deskOpsBusy)
+                    }
+                }
+                .navigationTitle("License")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showLicenseSheet = false }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showFirecrawlSheet) {
+            NavigationStack {
+                Form {
+                    Section("FIRECRAWL_API_KEY") {
+                        SecureField("API key", text: $firecrawlKey)
+                        Button("Save on Brain") {
+                            Task { await saveFirecrawlKey() }
+                        }
+                        .disabled(firecrawlKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || deskOpsBusy)
+                    }
+                }
+                .navigationTitle("Firecrawl")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showFirecrawlSheet = false }
+                    }
+                }
             }
         }
     }
@@ -303,6 +351,61 @@ struct SettingsView: View {
         }
     }
 
+    private var brainUpdatesSection: some View {
+        settingsSection(
+            title: "Updates",
+            icon: "arrow.triangle.2.circlepath",
+            footer: "The iPhone app updates from the App Store. Brain / OS packages update on the desk — this phone does not rebuild GTK."
+        ) {
+            settingsRow(icon: "iphone", title: "Remote app") {
+                Text(appVersion)
+                    .font(.subheadline)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
+
+            sectionDivider
+
+            Button {
+                Task { await refreshBrainVersion() }
+            } label: {
+                CenturionListRow(
+                    icon: "desktopcomputer",
+                    title: "Brain / OS",
+                    subtitle: brainVersionLabel.isEmpty
+                        ? "Tap to read version from this Brain"
+                        : brainVersionLabel
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            CenturionReassuranceRow(
+                icon: "hammer",
+                title: "Update on the desk",
+                detail: "Install Brain / Centurion OS updates on your computer, then reopen Remote."
+            )
+        }
+        .onAppear {
+            if brainVersionLabel.isEmpty {
+                Task { await refreshBrainVersion() }
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshBrainVersion() async {
+        do {
+            let payload = try await connectionManager.bridgePing()
+            let version = (payload["version"] as? String)
+                ?? (payload["centurion_version"] as? String)
+                ?? "unknown"
+            brainVersionLabel = "Centurion OS \(version)"
+        } catch {
+            brainVersionLabel = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
     private var supportSection: some View {
         settingsSection(
             title: "Support",
@@ -422,7 +525,7 @@ struct SettingsView: View {
                     )
                 )
                 .labelsHidden()
-                .disabled(anywhereBusy || connectionManager.connectionState != .connected)
+                .disabled(anywhereBusy || !connectionManager.isCryptoChatReady)
             }
             .onAppear {
                 Task { _ = await connectionManager.refreshRemoteRelayStatus() }
@@ -445,6 +548,246 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var deskOpsSection: some View {
+        settingsSection(
+            title: "Brain desk",
+            icon: "desktopcomputer",
+            footer: "Same controls as Linux Brain Settings — works on home Wi‑Fi and Chat from anywhere."
+        ) {
+            Button {
+                Task { await refreshDeskOpsGlance() }
+            } label: {
+                CenturionListRow(
+                    icon: "gauge.with.dots.needle.33percent",
+                    title: "Ops glance",
+                    subtitle: deskOpsStatus.isEmpty ? "Scheduled jobs & board summary" : deskOpsStatus
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(deskOpsBusy || !connectionManager.isCryptoChatReady)
+
+            sectionDivider
+
+            Button {
+                Task { await refreshLicenseStatus() }
+                showLicenseSheet = true
+            } label: {
+                CenturionListRow(
+                    icon: "rosette",
+                    title: "License",
+                    subtitle: "Status and redeem on this Brain"
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button {
+                showFirecrawlSheet = true
+            } label: {
+                CenturionListRow(
+                    icon: "flame",
+                    title: "Firecrawl",
+                    subtitle: "Research tool API key on the Brain"
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button {
+                Task { await refreshSkillsSnapshot() }
+            } label: {
+                CenturionListRow(
+                    icon: "wrench.and.screwdriver",
+                    title: "Skills & tools",
+                    subtitle: deskOpsStatus.hasPrefix("Skills:") ? deskOpsStatus : "Snapshot of tools on this Brain"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(deskOpsBusy || !connectionManager.isCryptoChatReady)
+
+            sectionDivider
+
+            Button {
+                Task { await refreshFleetStatus() }
+            } label: {
+                CenturionListRow(
+                    icon: "antenna.radiowaves.left.and.right",
+                    title: "Fleet peer",
+                    subtitle: "Status of this Brain on the fleet"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(deskOpsBusy || !connectionManager.isCryptoChatReady)
+
+            sectionDivider
+
+            Button {
+                Task { await refreshPlugins() }
+            } label: {
+                CenturionListRow(
+                    icon: "puzzlepiece.extension",
+                    title: "Installed plugins",
+                    subtitle: "List plugins on this Brain"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(deskOpsBusy || !connectionManager.isCryptoChatReady)
+
+            sectionDivider
+
+            Button {
+                Task { await previewTelegramImport() }
+            } label: {
+                CenturionListRow(
+                    icon: "paperplane",
+                    title: "Telegram history",
+                    subtitle: "Preview import into Brain sessions"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(deskOpsBusy || !connectionManager.isCryptoChatReady)
+
+            if let deskOpsError {
+                Text(deskOpsError)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.error())
+                    .padding(.top, 4)
+            } else if !deskOpsStatus.isEmpty {
+                Text(deskOpsStatus)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .padding(.top, 4)
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshDeskOpsGlance() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.opsGlance()
+            if let summary = payload["summary"] as? String, !summary.isEmpty {
+                deskOpsStatus = summary
+            } else {
+                deskOpsStatus = "Ops glance updated"
+            }
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func refreshLicenseStatus() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.licenseStatus()
+            let mode = (payload["mode"] as? String)
+                ?? (payload["license_mode"] as? String)
+                ?? "unknown"
+            deskOpsStatus = "License: \(mode)"
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func redeemLicense() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            _ = try await connectionManager.licenseRedeem(code: licenseCode)
+            deskOpsStatus = "License redeemed"
+            showLicenseSheet = false
+            licenseCode = ""
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func saveFirecrawlKey() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            _ = try await connectionManager.setToolEnv(key: "FIRECRAWL_API_KEY", value: firecrawlKey)
+            deskOpsStatus = "Firecrawl key saved on Brain"
+            showFirecrawlSheet = false
+            firecrawlKey = ""
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func refreshSkillsSnapshot() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.toolsSkillsSnapshot()
+            let count = (payload["skills"] as? [Any])?.count
+                ?? (payload["tools"] as? [Any])?.count
+                ?? 0
+            deskOpsStatus = "Skills: \(count) entries"
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func refreshFleetStatus() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.fleetStatus()
+            let peers = (payload["peers"] as? [Any])?.count ?? 0
+            deskOpsStatus = "Fleet peers: \(peers)"
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func refreshPlugins() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.pluginList()
+            let count = (payload["plugins"] as? [Any])?.count
+                ?? (payload["installed"] as? [Any])?.count
+                ?? 0
+            deskOpsStatus = "Plugins: \(count)"
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
+        }
+    }
+
+    @MainActor
+    private func previewTelegramImport() async {
+        deskOpsBusy = true
+        deskOpsError = nil
+        defer { deskOpsBusy = false }
+        do {
+            let payload = try await connectionManager.telegramImportPreview()
+            let n = (payload["sessions"] as? [Any])?.count
+                ?? (payload["count"] as? Int)
+                ?? 0
+            deskOpsStatus = "Telegram import preview: \(n) session(s)"
+        } catch {
+            deskOpsError = connectionManager.friendlyRemoteError(error)
         }
     }
 
@@ -627,7 +970,7 @@ struct KeyExportView: View {
             VStack(spacing: Spacing.lg) {
                 SheetHeader(
                     title: "Your iPhone Security Code",
-                    subtitle: "For remote pairing, paste the token:…@host:9119 code from your Centurion. On the same Wi‑Fi without a token, you can still approve with: centurion-remote approve <code>."
+                    subtitle: "Pair on home Wi‑Fi with the QR (or paste token:…@lan-host:9119). Away uses Chat from anywhere after you enable it — no home IP. On the same Wi‑Fi without a token, you can still approve with: centurion-remote approve <code>."
                 )
 
                 Image(systemName: "key.fill")

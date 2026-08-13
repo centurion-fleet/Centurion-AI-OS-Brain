@@ -27,7 +27,7 @@ final class MemoryHorizonStore: ObservableObject {
     }
 
     func refresh(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             lastError = nil
             return
         }

@@ -9,7 +9,7 @@ struct SecurityHubView: View {
     @State private var showMessagingComparison = true
 
     private var isConnected: Bool {
-        connectionManager.connectionState == .connected
+        connectionManager.isCryptoChatReady
     }
 
     var body: some View {

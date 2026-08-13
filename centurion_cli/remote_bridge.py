@@ -5244,6 +5244,17 @@ def serve_bridge(
         name="bridge-warm-imports",
         daemon=True,
     ).start()
+    # Resume Chat-from-anywhere Realtime pump if already enabled in config.
+    try:
+        from centurion_cli.remote_relay_service import start_if_enabled
+
+        threading.Thread(
+            target=start_if_enabled,
+            name="bridge-remote-relay-start",
+            daemon=True,
+        ).start()
+    except Exception:
+        pass
 
     with (
         ThreadPoolExecutor(max_workers=max(1, workers)) as control_pool,

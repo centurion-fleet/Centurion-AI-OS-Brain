@@ -27,6 +27,6 @@ final class AppServices: ObservableObject {
         self.beneficiaryStore = BeneficiaryStore()
         self.oversightStore = OversightStore()
         self.memoryHorizonStore = MemoryHorizonStore()
-        dataMode.update(connectionState: connectionManager.connectionState)
+        dataMode.update(isCryptoChatReady: connectionManager.isCryptoChatReady)
     }
 }

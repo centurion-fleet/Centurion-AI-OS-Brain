@@ -22,6 +22,18 @@ pub struct BridgeApprovalEvent {
     pub choices: Vec<String>,
 }
 
+/// Mid-turn push from `remote_bridge` NDJSON (`centurion_event`).
+#[derive(Debug, Clone)]
+pub enum BridgeTurnEvent {
+    Approval(BridgeApprovalEvent),
+    /// Tool / thinking / status line for honest waiting UI (no PII required).
+    Activity {
+        message: String,
+        kind: String,
+        tool: Option<String>,
+    },
+}
+
 #[derive(Debug, Clone)]
 pub struct BridgeApprovalDecision {
     pub session_key: String,
@@ -37,7 +49,7 @@ pub trait AgentBridge: Send + Sync {
         text: &str,
         session_id: Option<&str>,
         life_inject: Option<Value>,
-        event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
+        event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
         mut approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError>;
 
@@ -111,7 +123,7 @@ impl AgentBridge for PythonBridge {
         text: &str,
         session_id: Option<&str>,
         life_inject: Option<Value>,
-        event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
+        event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
         approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError> {
         let mut extra = serde_json::Map::new();
@@ -232,7 +244,7 @@ impl PythonBridge {
         &self,
         request: BridgeRequest<'_>,
         events: bool,
-        event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
+        event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
         mut approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<Value, BridgeError> {
         let mut command = Command::new(&self.python);
@@ -308,41 +320,8 @@ impl PythonBridge {
                             .map_err(BridgeError::InvalidResponse)?;
                         // Never treat mid-turn activity NDJSON as the chat final.
                         if value.get("centurion_event").is_some() {
-                            if value.get("centurion_event").and_then(|v| v.as_str())
-                                == Some("approval_request")
-                            {
-                                if let Some(tx) = &event_tx {
-                                    let event = BridgeApprovalEvent {
-                                        approval_id: value_string(&value, "approval_id")
-                                            .unwrap_or_default(),
-                                        session_key: value_string(&value, "session_key")
-                                            .unwrap_or_default(),
-                                        command: value_string(&value, "command")
-                                            .unwrap_or_default(),
-                                        description: value_string(&value, "description")
-                                            .unwrap_or_default(),
-                                        pattern_key: value_string(&value, "pattern_key")
-                                            .unwrap_or_default(),
-                                        choices: value
-                                            .get("choices")
-                                            .and_then(|item| item.as_array())
-                                            .map(|items| {
-                                                items
-                                                    .iter()
-                                                    .filter_map(|item| {
-                                                        item.as_str().map(str::to_owned)
-                                                    })
-                                                    .collect()
-                                            })
-                                            .unwrap_or_else(|| {
-                                                vec![
-                                                    "once".to_owned(),
-                                                    "session".to_owned(),
-                                                    "always".to_owned(),
-                                                    "deny".to_owned(),
-                                                ]
-                                            }),
-                                    };
+                            if let Some(tx) = &event_tx {
+                                if let Some(event) = turn_event_from_ndjson(&value) {
                                     let _ = tx.send(event).await;
                                 }
                             }
@@ -414,6 +393,50 @@ fn serialize_bridge_request_line(request: &BridgeRequest<'_>) -> Result<Vec<u8>,
     let mut bytes = serialize_bridge_request(request)?;
     bytes.push(b'\n');
     Ok(bytes)
+}
+
+fn turn_event_from_ndjson(value: &Value) -> Option<BridgeTurnEvent> {
+    match value.get("centurion_event").and_then(|v| v.as_str())? {
+        "approval_request" => Some(BridgeTurnEvent::Approval(BridgeApprovalEvent {
+            approval_id: value_string(value, "approval_id").unwrap_or_default(),
+            session_key: value_string(value, "session_key").unwrap_or_default(),
+            command: value_string(value, "command").unwrap_or_default(),
+            description: value_string(value, "description").unwrap_or_default(),
+            pattern_key: value_string(value, "pattern_key").unwrap_or_default(),
+            choices: value
+                .get("choices")
+                .and_then(|item| item.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_else(|| {
+                    vec![
+                        "once".to_owned(),
+                        "session".to_owned(),
+                        "always".to_owned(),
+                        "deny".to_owned(),
+                    ]
+                }),
+        })),
+        "activity" | "tool_progress" | "status" => {
+            let message = value_string(value, "text")
+                .or_else(|| value_string(value, "line"))
+                .or_else(|| value_string(value, "message"))
+                .or_else(|| value_string(value, "preview"))
+                .filter(|s| !s.trim().is_empty())?;
+            Some(BridgeTurnEvent::Activity {
+                message,
+                kind: value_string(value, "kind")
+                    .or_else(|| value_string(value, "event"))
+                    .unwrap_or_else(|| "status".to_owned()),
+                tool: value_string(value, "tool"),
+            })
+        }
+        _ => None,
+    }
 }
 
 fn is_bridge_chat_final(value: &Value) -> bool {
@@ -558,6 +581,43 @@ mod tests {
         assert_eq!(value["text"], "done");
         assert_eq!(value["session_id"], "remote_abc");
     }
+
+    #[test]
+    fn turn_event_parses_activity_and_approval() {
+        let activity = serde_json::json!({
+            "centurion_event": "activity",
+            "kind": "tool",
+            "tool": "terminal",
+            "text": "$ ls"
+        });
+        match turn_event_from_ndjson(&activity).expect("activity") {
+            BridgeTurnEvent::Activity {
+                message,
+                kind,
+                tool,
+            } => {
+                assert_eq!(message, "$ ls");
+                assert_eq!(kind, "tool");
+                assert_eq!(tool.as_deref(), Some("terminal"));
+            }
+            other => panic!("expected activity, got {other:?}"),
+        }
+
+        let approval = serde_json::json!({
+            "centurion_event": "approval_request",
+            "approval_id": "a1",
+            "session_key": "s1",
+            "command": "rm -rf /",
+            "description": "Dangerous"
+        });
+        match turn_event_from_ndjson(&approval).expect("approval") {
+            BridgeTurnEvent::Approval(ev) => {
+                assert_eq!(ev.approval_id, "a1");
+                assert_eq!(ev.command, "rm -rf /");
+            }
+            other => panic!("expected approval, got {other:?}"),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -571,7 +631,7 @@ impl AgentBridge for EchoBridge {
         text: &str,
         session_id: Option<&str>,
         _life_inject: Option<Value>,
-        _event_tx: Option<mpsc::Sender<BridgeApprovalEvent>>,
+        _event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
         _approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<BridgeChatResult, BridgeError> {
         Ok(BridgeChatResult {

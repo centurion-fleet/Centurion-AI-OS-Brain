@@ -105,9 +105,30 @@ struct GetHelpView: View {
                 }
                 .buttonStyle(CenturionPrimaryButtonStyle())
                 .accessibilityHint("Copies the support code to the clipboard")
+
+                ShareLink(
+                    item: shareSupportText,
+                    subject: Text("Centurion support code"),
+                    message: Text("Support code from Sovereign AI Remote")
+                ) {
+                    Text("Share Support Code")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(ColorTheme.accent())
             }
             .frame(maxWidth: .infinity)
         }
+    }
+
+    private var shareSupportText: String {
+        var parts = ["Centurion support code: \(supportCode)"]
+        if !supportSummary.isEmpty {
+            parts.append(supportSummary)
+        }
+        return parts.joined(separator: "\n")
     }
 
     private var actionButtons: some View {
@@ -118,7 +139,7 @@ struct GetHelpView: View {
                 Text(didGenerateCode ? "Create New Support Code" : "Send to Support")
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
-            .disabled(isWorking || connectionManager.connectionState != .connected)
+            .disabled(isWorking || !connectionManager.isCryptoChatReady)
             .accessibilityLabel("Send to Support")
             .accessibilityHint("Creates a support code on your Sovereign")
 
@@ -128,7 +149,7 @@ struct GetHelpView: View {
                 Text("Try to Fix Automatically")
             }
             .buttonStyle(CenturionSecondaryButtonStyle())
-            .disabled(isWorking || connectionManager.connectionState != .connected)
+            .disabled(isWorking || !connectionManager.isCryptoChatReady)
             .accessibilityLabel("Try to Fix Automatically")
             .accessibilityHint("Restores your last working thinking service setup")
 
@@ -138,7 +159,7 @@ struct GetHelpView: View {
                 Text("Check Again")
             }
             .buttonStyle(CenturionGhostButtonStyle())
-            .disabled(isWorking || connectionManager.connectionState != .connected)
+            .disabled(isWorking || !connectionManager.isCryptoChatReady)
         }
     }
 

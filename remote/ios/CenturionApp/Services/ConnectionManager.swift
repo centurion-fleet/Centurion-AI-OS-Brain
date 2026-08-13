@@ -33,6 +33,8 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var clientFingerprint: String?
     /// Dangerous-tool approval waiting for the owner during an in-flight Crypto Chat turn.
     @Published var pendingToolApproval: PendingToolApproval?
+    /// Honest waiting — short activity hint while a turn is in flight (no PII).
+    @Published var turnActivityHint: String?
 
     /// Prefer LAN Crypto Chat when linked; RelayTransport is the away fallback.
     @Published private(set) var transportPreference: TransportPreference = .lanPreferred
@@ -55,13 +57,21 @@ final class ConnectionManager: ObservableObject {
         transportPreference == .relayAway && relayAway.isConnected
     }
 
-    /// Live session is up and messages are secretboxed.
+    /// Live session is up and messages are secretboxed (LAN or Away relay).
     var isChannelEncrypted: Bool {
-        connectionState == .connected && currentSessionKey != nil
+        currentSessionKey != nil && (connectionState == .connected || isRelayAwayConnected)
     }
 
-    /// "Remote", "Tailscale", or "Wi‑Fi" when linked; empty otherwise.
+    /// True when either LAN Crypto Chat or Away relay Crypto Chat is ready.
+    var isCryptoChatReady: Bool {
+        currentSessionKey != nil && (connection != nil || isRelayAwayConnected)
+    }
+
+    /// "Remote", "Away", "Tailscale", or "Wi‑Fi" when linked; empty otherwise.
     var linkPathBadge: String {
+        if isRelayAwayConnected {
+            return "Away"
+        }
         guard connectionState == .connected,
               let device = connectedDevice ?? pendingDevice else { return "" }
         if device.isRemotePath {
@@ -104,6 +114,9 @@ final class ConnectionManager: ObservableObject {
     private static let lastRemoteDeviceKey = "centurion.remote.lastRemoteDevice"
 
     private let chatTimeoutSeconds: TimeInterval = 180
+    /// Transport + TTFT overhead markers (Workstream C — no PII).
+    private(set) var lastTransportRttMs: Double?
+    private(set) var lastTtftOverheadMs: Double?
 
     enum ConnectionState: Equatable {
         case disconnected
@@ -527,8 +540,7 @@ final class ConnectionManager: ObservableObject {
         sessionId: String? = nil,
         lifeInject: [String: Any]? = nil
     ) async throws -> (text: String, sessionId: String?) {
-        guard let sessionKey = currentSessionKey,
-              let connection = connection else {
+        guard currentSessionKey != nil, isCryptoChatReady else {
             throw ConnectionError.notConnected
         }
 
@@ -546,14 +558,12 @@ final class ConnectionManager: ObservableObject {
         }
         let plaintext = try JSONSerialization.data(withJSONObject: body)
 
+        let sendStarted = Date()
+        turnActivityHint = "Waiting on your Sovereign…"
         let responseData: Data
         do {
             responseData = try await withTimeout(seconds: chatTimeoutSeconds) {
-                try await self.remoteIO.exchange(
-                    connection: connection,
-                    secureChannel: self.secureChannel,
-                    sessionKey: sessionKey,
-                    maximumFrameSize: self.maximumFrameSize,
+                try await self.exchangeEncrypted(
                     plaintext: plaintext,
                     onPush: { [weak self] push in
                         await MainActor.run {
@@ -563,12 +573,15 @@ final class ConnectionManager: ObservableObject {
                 )
             }
         } catch is TimeoutError {
+            turnActivityHint = nil
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
             pendingToolApproval = nil
             throw ConnectionError.serverRejected(message)
         }
+        lastTtftOverheadMs = Date().timeIntervalSince(sendStarted) * 1000
+        turnActivityHint = nil
         pendingToolApproval = nil
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let responseType = json["type"] as? String else {
@@ -612,15 +625,29 @@ final class ConnectionManager: ObservableObject {
 
     @MainActor
     private func handlePushedRemoteMessage(_ push: [String: Any]) {
-        guard let type = push["type"] as? String, type == "approval_request" else { return }
-        pendingToolApproval = PendingToolApproval(
-            approvalId: (push["approval_id"] as? String) ?? "",
-            sessionKey: (push["session_key"] as? String) ?? "",
-            command: (push["command"] as? String) ?? "",
-            description: (push["description"] as? String) ?? "This action needs your approval.",
-            patternKey: push["pattern_key"] as? String,
-            choices: (push["choices"] as? [String]) ?? ["once", "session", "always", "deny"]
-        )
+        guard let type = push["type"] as? String else { return }
+        if type == "approval_request" {
+            turnActivityHint = "Approval needed"
+            pendingToolApproval = PendingToolApproval(
+                approvalId: (push["approval_id"] as? String) ?? "",
+                sessionKey: (push["session_key"] as? String) ?? "",
+                command: (push["command"] as? String) ?? "",
+                description: (push["description"] as? String) ?? "This action needs your approval.",
+                patternKey: push["pattern_key"] as? String,
+                choices: (push["choices"] as? [String]) ?? ["once", "session", "always", "deny"]
+            )
+            return
+        }
+        if type == "activity" || type == "tool_progress" || type == "status" {
+            let detail = (push["message"] as? String)
+                ?? (push["text"] as? String)
+                ?? (push["line"] as? String)
+                ?? (push["description"] as? String)
+                ?? (push["preview"] as? String)
+                ?? (push["tool"] as? String)
+                ?? "Working…"
+            turnActivityHint = detail
+        }
     }
 
     func respondToToolApproval(choice: String, resolveAll: Bool = false) async throws {
@@ -742,19 +769,162 @@ final class ConnectionManager: ObservableObject {
         if let enabledFlag = remoteRelayStatus["enabled"] as? Bool {
             UserDefaults.standard.set(enabledFlag, forKey: "centurion.remoteRelay.enabledHint")
         }
+        // Prefer cached cloud endpoints when LAN is down.
+        if RelayAwayClient.Cloud.supabaseURL.isEmpty,
+           let url = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseURL"),
+           let key = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseAnonKey"),
+           !url.isEmpty, !key.isEmpty {
+            relayAway.configure(supabaseURL: url, anonKey: key)
+        }
         await relayAway.refreshPresence(installId: installId)
         guard relayAway.brainOnline else {
             transportPreference = .lanPreferred
+            if connectionState == .connected && connection == nil {
+                connectionState = .error(
+                    "Your Sovereign is offline. Chat from anywhere needs the Brain online."
+                )
+            }
             return
         }
         do {
+            let kxStarted = Date()
             if !relayAway.isConnected {
                 try await relayAway.connect(installId: installId)
             }
+            if currentSessionKey == nil || !relayAway.transportSession.sessionKeysValid {
+                try await performRelayKeyExchange()
+            }
+            lastTransportRttMs = Date().timeIntervalSince(kxStarted) * 1000
             transportPreference = .relayAway
+            connectionState = .connected
+            startKeepalive()
+            Task { await refreshThinkingStatus() }
         } catch {
             transportPreference = .lanPreferred
+            if connection == nil {
+                connectionState = .error(
+                    (error as? LocalizedError)?.errorDescription
+                        ?? "Could not reach your Sovereign over Chat from anywhere."
+                )
+            }
         }
+    }
+
+    /// KX + Ready over RelayTransport (mirrors LAN ``completeKeyExchange``).
+    private func performRelayKeyExchange() async throws {
+        guard let identityKey else {
+            throw ConnectionError.notConnected
+        }
+        var publicKey = identityKey.publicKey
+        publicKey.insert(0x01, at: 0)
+        try await relayAway.sendKx(publicKey, client: true)
+        let kxInbound = try await relayAway.waitForInbound(timeoutSeconds: handshakeTimeoutSeconds)
+        guard case .kxServer(let data) = kxInbound, data.count == 33, data[0] == 0x01 else {
+            throw ConnectionError.invalidResponse
+        }
+        let serverPublicKey = Data(data.dropFirst())
+        let sessionKey = try SessionKey.exchange(
+            theirPublicKey: serverPublicKey,
+            mySecretKey: identityKey.secretKey,
+            myPublicKey: identityKey.publicKey
+        )
+        relayAway.markKxComplete()
+        // Ready / PairRequired (encrypted status frame).
+        let statusInbound = try await relayAway.waitForInbound(timeoutSeconds: handshakeTimeoutSeconds)
+        guard case .frame(let statusFrame) = statusInbound else {
+            throw ConnectionError.invalidResponse
+        }
+        let statusData = try secureChannel.decrypt(statusFrame, using: sessionKey)
+        var status = try JSONDecoder().decode(RemoteEnvelope.self, from: statusData)
+
+        if status.type == "pair_required" {
+            let token = pendingPairingToken ?? RemotePairingTokenStore.load()
+            guard let token, !token.isEmpty else {
+                throw ConnectionError.serverRejected(
+                    "Your Centurion needs a pairing code. Pair once on home Wi‑Fi first."
+                )
+            }
+            let pairRequest = RemoteEnvelope(type: "pair", token: token)
+            let pairPlain = try JSONEncoder().encode(pairRequest)
+            currentSessionKey = sessionKey
+            let pairResponseData = try await exchangeEncrypted(plaintext: pairPlain)
+            status = try JSONDecoder().decode(RemoteEnvelope.self, from: pairResponseData)
+            if status.type == "pair_rejected" || status.type == "error" {
+                currentSessionKey = nil
+                throw ConnectionError.serverRejected(
+                    status.message ?? "That pairing code could not be verified."
+                )
+            }
+        }
+
+        if status.type == "error" {
+            if status.code == "PAIRING_APPROVAL_REQUIRED" {
+                currentSessionKey = nil
+                connectionState = .awaitingApproval(
+                    status.message
+                        ?? "Approve this iPhone on your Sovereign computer, then try Chat from anywhere again."
+                )
+                throw ConnectionError.serverRejected(status.message ?? "Approval required")
+            }
+            throw ConnectionError.serverRejected(
+                status.message ?? "Approve this iPhone on your Sovereign, then try again."
+            )
+        }
+        guard status.type == "ready" else {
+            throw ConnectionError.invalidResponse
+        }
+        let trustIdentifier = pendingDevice?.serviceName
+            ?? pendingDevice?.hostname
+            ?? connectedDevice?.serviceName
+            ?? connectedDevice?.hostname
+            ?? "default-centurion"
+        try ServerTrustStore.verifyOrStore(
+            identifier: trustIdentifier,
+            publicKey: serverPublicKey
+        )
+        currentSessionKey = sessionKey
+    }
+
+    /// Encrypt + send over LAN TCP or Away relay; demux approval pushes.
+    private func exchangeEncrypted(
+        plaintext: Data,
+        onPush: (([String: Any]) async -> Void)? = nil
+    ) async throws -> Data {
+        guard let sessionKey = currentSessionKey else {
+            throw ConnectionError.notConnected
+        }
+        if prefersLanCryptoChat, let connection {
+            return try await remoteIO.exchange(
+                connection: connection,
+                secureChannel: secureChannel,
+                sessionKey: sessionKey,
+                maximumFrameSize: maximumFrameSize,
+                plaintext: plaintext,
+                onPush: onPush
+            )
+        }
+        if isRelayAwayConnected {
+            let encrypted = try secureChannel.encrypt(plaintext, using: sessionKey)
+            try await relayAway.sendCiphertext(encrypted)
+            while true {
+                let inbound = try await relayAway.waitForInbound(timeoutSeconds: chatTimeoutSeconds)
+                guard case .frame(let frame) = inbound else { continue }
+                let decrypted = try secureChannel.decrypt(frame, using: sessionKey)
+                if let json = try? JSONSerialization.jsonObject(with: decrypted) as? [String: Any],
+                   let type = json["type"] as? String,
+                   type == "approval_request"
+                    || type == "activity"
+                    || type == "tool_progress"
+                    || type == "status" {
+                    if let onPush {
+                        await onPush(json)
+                    }
+                    continue
+                }
+                return decrypted
+            }
+        }
+        throw ConnectionError.notConnected
     }
 
     /// Enable Chat from anywhere on the linked Brain (control plane + presence).
@@ -838,6 +1008,52 @@ final class ConnectionManager: ObservableObject {
         return payload
     }
 
+    // MARK: - Desk ops (Brain Settings parity)
+
+    func opsGlance() async throws -> [String: Any] {
+        try await invokeRemote(action: "ops_glance")
+    }
+
+    func licenseStatus() async throws -> [String: Any] {
+        try await invokeRemote(action: "license_status")
+    }
+
+    func licenseRedeem(code: String) async throws -> [String: Any] {
+        try await invokeRemote(
+            action: "license_redeem",
+            extra: ["code": code],
+            timeoutSeconds: 60
+        )
+    }
+
+    func setToolEnv(key: String, value: String) async throws -> [String: Any] {
+        try await invokeRemote(
+            action: "tool_env_set",
+            extra: ["key": key, "value": value],
+            timeoutSeconds: 45
+        )
+    }
+
+    func toolsSkillsSnapshot() async throws -> [String: Any] {
+        try await invokeRemote(action: "tools_skills_snapshot")
+    }
+
+    func fleetStatus() async throws -> [String: Any] {
+        try await invokeRemote(action: "fleet_status")
+    }
+
+    func pluginList() async throws -> [String: Any] {
+        try await invokeRemote(action: "plugin_list")
+    }
+
+    func telegramImportPreview() async throws -> [String: Any] {
+        try await invokeRemote(action: "telegram_import_preview", timeoutSeconds: 60)
+    }
+
+    func bridgePing() async throws -> [String: Any] {
+        try await invokeRemote(action: "bridge_ping", timeoutSeconds: 15)
+    }
+
     func resumeHostSession(_ sessionId: String) async throws -> (
         sessionId: String,
         title: String,
@@ -857,7 +1073,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func refreshThinkingStatus() async {
-        guard connectionState == .connected else { return }
+        guard isCryptoChatReady else { return }
         do {
             let payload = try await invokeRemote(action: "provider_status")
             if let statusData = try? JSONSerialization.data(withJSONObject: payload["status"] ?? [:]),
@@ -1497,8 +1713,7 @@ final class ConnectionManager: ObservableObject {
         extra: [String: Any] = [:],
         timeoutSeconds: TimeInterval = 30
     ) async throws -> [String: Any] {
-        guard let sessionKey = currentSessionKey,
-              let connection = connection else {
+        guard currentSessionKey != nil, isCryptoChatReady else {
             throw ConnectionError.notConnected
         }
 
@@ -1513,13 +1728,7 @@ final class ConnectionManager: ObservableObject {
         let plaintext = try JSONSerialization.data(withJSONObject: body)
 
         let responseData = try await withTimeout(seconds: timeoutSeconds) {
-            try await self.remoteIO.exchange(
-                connection: connection,
-                secureChannel: self.secureChannel,
-                sessionKey: sessionKey,
-                maximumFrameSize: self.maximumFrameSize,
-                plaintext: plaintext
-            )
+            try await self.exchangeEncrypted(plaintext: plaintext)
         }
 
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
@@ -1573,6 +1782,22 @@ final class ConnectionManager: ObservableObject {
             "session_resume_response": "session_resume",
             "session_history_response": "session_history",
             "approval_respond_response": "approval_respond",
+            "remote_relay_status_response": "remote_relay_status",
+            "remote_relay_enable_response": "remote_relay_enable",
+            "remote_relay_disable_response": "remote_relay_disable",
+            "settings_snapshot_response": "settings_snapshot",
+            "tool_env_get_response": "tool_env_get",
+            "tool_env_set_response": "tool_env_set",
+            "license_status_response": "license_status",
+            "license_activate_response": "license_activate",
+            "license_redeem_response": "license_redeem",
+            "tools_skills_snapshot_response": "tools_skills_snapshot",
+            "fleet_status_response": "fleet_status",
+            "fleet_ping_response": "fleet_ping",
+            "plugin_list_response": "plugin_list",
+            "ops_glance_response": "ops_glance",
+            "telegram_import_preview_response": "telegram_import_preview",
+            "telegram_import_bundle_response": "telegram_import_bundle",
         ]
 
         if let expected = expectedResponses[responseType], expected == action {
@@ -1844,23 +2069,18 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func sendPing() async throws {
-        guard let sessionKey = currentSessionKey,
-              let connection = connection else {
+        guard currentSessionKey != nil, isCryptoChatReady else {
             throw ConnectionError.notConnected
         }
 
         let request = RemoteEnvelope(type: "ping")
         let plaintext = try JSONEncoder().encode(request)
+        let pingStarted = Date()
 
         let responseData = try await withTimeout(seconds: 15) {
-            try await self.remoteIO.exchange(
-                connection: connection,
-                secureChannel: self.secureChannel,
-                sessionKey: sessionKey,
-                maximumFrameSize: self.maximumFrameSize,
-                plaintext: plaintext
-            )
+            try await self.exchangeEncrypted(plaintext: plaintext)
         }
+        lastTransportRttMs = Date().timeIntervalSince(pingStarted) * 1000
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
         if response.type == "error", response.code == "DEVICE_REVOKED" {
             handleDeviceRevoked(
@@ -2013,12 +2233,16 @@ private actor RemoteIOPipeline {
             )
             let decrypted = try secureChannel.decrypt(responseFrame, using: sessionKey)
             if let json = try? JSONSerialization.jsonObject(with: decrypted) as? [String: Any],
-               let type = json["type"] as? String,
-               type == "approval_request" {
-                if let onPush {
-                    await onPush(json)
+               let type = json["type"] as? String {
+                if type == "approval_request"
+                    || type == "activity"
+                    || type == "tool_progress"
+                    || type == "status" {
+                    if let onPush {
+                        await onPush(json)
+                    }
+                    continue
                 }
-                continue
             }
             return decrypted
         }

@@ -70,7 +70,7 @@ Capture checklist:
 ## Camera / QR pairing disclosure
 
 - [`NSCameraUsageDescription`](project.yml) — camera used **only** to scan the pairing QR on the Centurion screen.
-- Review notes should mention: away-reachable Brain on TCP 9119 + QR link (paste fallback available).
+- Review notes should mention: pair on home Wi‑Fi via QR; **Chat from anywhere** uses Centurion outbound relay (no customer port-forward). Paste fallback available.
 
 ## Features intentionally not shipped as unfinished
 

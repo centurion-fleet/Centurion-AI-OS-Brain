@@ -7,6 +7,8 @@ final class RelayAwayClient: ObservableObject {
     @Published private(set) var isConnected = false
     @Published private(set) var lastError: String?
     @Published private(set) var brainOnline = false
+    /// Brain-published Realtime conn epoch (phone adopts before KX).
+    @Published private(set) var brainConnEpoch: String?
 
     private let session = RelayTransport.Session()
     private var webSocket: URLSessionWebSocketTask?
@@ -14,6 +16,16 @@ final class RelayAwayClient: ObservableObject {
     private var refCounter = 0
     private var topic = ""
     private var receiveLoopActive = false
+
+    /// Inbound reassembled ciphertext (or KX) waiting for ConnectionManager.
+    private var inboundCipherQueue: [Inbound] = []
+    private var inboundWaiters: [CheckedContinuation<Inbound, Error>] = []
+    private var joinContinuation: CheckedContinuation<Void, Error>?
+
+    enum Inbound {
+        case kxServer(Data)
+        case frame(Data)
+    }
 
     /// Bundled Centurion cloud endpoints (same App Store binary for every customer).
     /// Overridable via UserDefaults for staging.
@@ -37,6 +49,8 @@ final class RelayAwayClient: ObservableObject {
         }
     }
 
+    var transportSession: RelayTransport.Session { session }
+
     func configure(supabaseURL: String, anonKey: String) {
         UserDefaults.standard.set(supabaseURL, forKey: "centurion.remoteRelay.supabaseURL")
         UserDefaults.standard.set(anonKey, forKey: "centurion.remoteRelay.supabaseAnonKey")
@@ -48,9 +62,9 @@ final class RelayAwayClient: ObservableObject {
         let key = Cloud.supabaseAnonKey
         guard !base.isEmpty, !key.isEmpty, !installId.isEmpty else {
             brainOnline = false
+            brainConnEpoch = nil
             return
         }
-        // Resolve brain uuid then read presence — best-effort.
         guard let installURL = URL(
             string: "\(base)/rest/v1/remote_brain_installs?install_id=eq.\(installId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? installId)&select=id"
         ) else {
@@ -77,6 +91,7 @@ final class RelayAwayClient: ObservableObject {
             let (pdata, _) = try await URLSession.shared.data(for: preq)
             let prows = try JSONSerialization.jsonObject(with: pdata) as? [[String: Any]] ?? []
             brainOnline = (prows.first?["online"] as? Bool) ?? false
+            brainConnEpoch = prows.first?["conn_epoch"] as? String
         } catch {
             brainOnline = false
             lastError = error.localizedDescription
@@ -96,11 +111,15 @@ final class RelayAwayClient: ObservableObject {
         }
 
         disconnect(resetEpoch: true)
+        // Align conn epoch with Brain before any KX (stale-conn checks).
+        if let epoch = brainConnEpoch, !epoch.isEmpty {
+            session.adoptConn(epoch)
+        }
         let wsURL = try Self.websocketURL(supabaseURL: base, apiKey: key)
         topic = "realtime:brain:\(installId)"
-        let session = URLSession(configuration: .default)
-        urlSession = session
-        let task = session.webSocketTask(with: wsURL)
+        let urlSession = URLSession(configuration: .default)
+        self.urlSession = urlSession
+        let task = urlSession.webSocketTask(with: wsURL)
         webSocket = task
         task.resume()
         try await joinChannel(installId: installId)
@@ -112,11 +131,15 @@ final class RelayAwayClient: ObservableObject {
 
     func disconnect(resetEpoch: Bool = true) {
         receiveLoopActive = false
+        failWaiters(RelayTransport.RelayError.staleConn)
+        joinContinuation?.resume(throwing: CancellationError())
+        joinContinuation = nil
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         urlSession?.invalidateAndCancel()
         urlSession = nil
         isConnected = false
+        inboundCipherQueue.removeAll()
         if resetEpoch {
             _ = session.resetConnection()
         }
@@ -136,6 +159,34 @@ final class RelayAwayClient: ObservableObject {
         let envelopes = session.outboundKx(body: data, client: client)
         for env in envelopes {
             try await broadcast(env)
+        }
+    }
+
+    func markKxComplete() {
+        session.markKxComplete()
+    }
+
+    /// Wait for the next reassembled inbound body (KX server or ciphertext frame).
+    func waitForInbound(timeoutSeconds: TimeInterval) async throws -> Inbound {
+        if let next = inboundCipherQueue.first {
+            inboundCipherQueue.removeFirst()
+            return next
+        }
+        return try await withThrowingTaskGroup(of: Inbound.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Inbound, Error>) in
+                    Task { @MainActor in
+                        self.inboundWaiters.append(cont)
+                    }
+                }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 
@@ -176,7 +227,26 @@ final class RelayAwayClient: ObservableObject {
             ],
             "ref": nextRef(),
         ]
-        try await sendJSON(join)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                    Task { @MainActor in
+                        self.joinContinuation = cont
+                    }
+                }
+            }
+            group.addTask { @MainActor in
+                try await self.sendJSON(join)
+                // Soft wait: if no phx_reply in 5s, proceed (some proxies omit reply).
+                try await Task.sleep(nanoseconds: 5_000_000_000)
+                if let pending = self.joinContinuation {
+                    self.joinContinuation = nil
+                    pending.resume()
+                }
+            }
+            try await group.next()
+            group.cancelAll()
+        }
     }
 
     private func broadcast(_ env: RelayTransport.Envelope) async throws {
@@ -227,8 +297,8 @@ final class RelayAwayClient: ObservableObject {
             } catch {
                 lastError = error.localizedDescription
                 isConnected = false
-                // Reconnect semantics: full re-KX
                 _ = session.resetConnection()
+                failWaiters(error)
                 receiveLoopActive = false
                 break
             }
@@ -241,6 +311,14 @@ final class RelayAwayClient: ObservableObject {
             return
         }
         let event = json["event"] as? String ?? ""
+        if event == "phx_reply" {
+            let status = (json["payload"] as? [String: Any])?["status"] as? String
+            if status == "ok", let pending = joinContinuation {
+                joinContinuation = nil
+                pending.resume()
+            }
+            return
+        }
         if event == "phx_error" {
             lastError = "Realtime channel error"
             return
@@ -260,13 +338,38 @@ final class RelayAwayClient: ObservableObject {
             return
         }
         do {
-            _ = try session.ingest(env)
+            guard let body = try session.ingest(env) else { return }
+            let inbound: Inbound
+            if env.kind == "kx_server" || env.kind == "kx_client" {
+                inbound = .kxServer(body)
+            } else {
+                inbound = .frame(body)
+            }
+            deliver(inbound)
         } catch {
             lastError = error.localizedDescription
             if case RelayTransport.RelayError.staleConn = error {
                 _ = session.resetConnection()
                 isConnected = false
+                failWaiters(error)
             }
+        }
+    }
+
+    private func deliver(_ inbound: Inbound) {
+        if let waiter = inboundWaiters.first {
+            inboundWaiters.removeFirst()
+            waiter.resume(returning: inbound)
+        } else {
+            inboundCipherQueue.append(inbound)
+        }
+    }
+
+    private func failWaiters(_ error: Error) {
+        let waiters = inboundWaiters
+        inboundWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(throwing: error)
         }
     }
 
@@ -275,3 +378,5 @@ final class RelayAwayClient: ObservableObject {
         return try JSONDecoder().decode(RelayTransport.Envelope.self, from: data)
     }
 }
+
+private struct TimeoutError: Error {}

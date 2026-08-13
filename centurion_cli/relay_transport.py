@@ -242,21 +242,42 @@ class RelaySession:
         if not self.session_keys_valid:
             raise RuntimeError("relay session requires re-KX after reconnect")
 
-    def outbound_frame(self, body: bytes, *, expect_response: bool = True) -> list[dict[str, Any]]:
-        """Build Realtime events for one opaque ciphertext frame."""
+    def outbound_frame(
+        self,
+        body: bytes,
+        *,
+        msg_id: str | None = None,
+        expect_response: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Build Realtime events for one opaque ciphertext frame.
+
+        Pass ``msg_id`` to echo a peer request id (response correlation). When
+        omitted, a fresh uuid is minted (typical for unsolicited pushes).
+        """
         self.ensure_ready_for_frames()
-        msg_id = new_message_id()
+        mid = (msg_id or "").strip() or new_message_id()
         if expect_response:
-            self.pending.expect(msg_id)
+            self.pending.expect(mid)
         envs = build_envelopes(
             conn=self.conn,
-            msg_id=msg_id,
+            msg_id=mid,
             kind="frame",
             body=body,
             chunk_bytes=self.chunk_bytes,
             max_reassembled=self.max_reassembled,
         )
         return [e.to_dict() for e in envs]
+
+    def adopt_conn(self, conn: str) -> None:
+        """Align this side's epoch with the peer (Brain presence / first KX)."""
+        conn = (conn or "").strip()
+        if not conn or conn == self.conn:
+            return
+        old = self.conn
+        self.assembler.clear_conn(old)
+        self.pending.clear()
+        self.conn = conn
+        self.session_keys_valid = False
 
     def outbound_kx(self, body: bytes, *, client: bool) -> list[dict[str, Any]]:
         """KX bytes before session keys exist (allowed without mark_kx_complete)."""
@@ -276,11 +297,16 @@ class RelaySession:
         """Ingest one Realtime event.
 
         Returns ``(kind, body_or_none)`` where body is set only when a full
-        message is reassembled. Raises if ``conn`` mismatches (stale epoch).
+        message is reassembled. Raises if ``conn`` mismatches (stale epoch),
+        except the first ``kx_client`` may adopt the peer's conn before keys
+        exist (phone and Brain independently mint epochs until aligned).
         """
         env = raw if isinstance(raw, RelayEnvelope) else RelayEnvelope.from_dict(raw)
         if env.conn != self.conn:
-            raise ValueError("stale relay conn epoch — reconnect and re-KX")
+            if not self.session_keys_valid and env.kind == "kx_client" and env.conn:
+                self.adopt_conn(env.conn)
+            else:
+                raise ValueError("stale relay conn epoch — reconnect and re-KX")
         body = self.assembler.push(env)
         if body is None:
             return env.kind, None

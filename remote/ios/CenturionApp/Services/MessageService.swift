@@ -50,17 +50,70 @@ final class MessageService: ObservableObject {
         self.currentConversation = self.conversations.first
     }
 
-    /// Seed a one-time context note when opening Discuss from Home Pulse.
-    func seedDiscussContext(title: String, detail: String) -> Conversation {
-        let conversation = findOrCreateConversation(for: .standalone(title: title))
+    /// Seed a Discuss thread from Home Pulse and bind a Brain host topic when linked.
+    func seedDiscussContext(
+        title: String,
+        detail: String,
+        topicKind: String = "decision",
+        topicRef: [String: Any]? = nil
+    ) -> Conversation {
+        let kind = topicKind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let context: ConversationContext
+        switch kind {
+        case "decision":
+            context = .decision(id: UUID().uuidString, title: title)
+        case "document":
+            context = .document(id: UUID().uuidString, title: title, missionId: nil)
+        case "mission":
+            context = .mission(id: UUID().uuidString, name: title, subjectName: nil)
+        case "horizon":
+            context = .horizon(layer: title)
+        default:
+            context = .standalone(title: title)
+        }
+        var conversation = findOrCreateConversation(for: context)
         let existing = messages(for: conversation.id)
-        guard existing.isEmpty else { return conversation }
-        let note = Message(
-            conversationId: conversation.id,
-            content: "Context for this Crypto Chat:\n\(detail)",
-            role: .system
-        )
-        appendMessage(note)
+        if existing.isEmpty {
+            let note = Message(
+                conversationId: conversation.id,
+                content: "Context for this Crypto Chat:\n\(detail)",
+                role: .system
+            )
+            appendMessage(note)
+        }
+        if connectionManager.isCryptoChatReady, conversation.hostSessionId == nil {
+            Task {
+                do {
+                    var ref = topicRef ?? ["title": title, "kind": kind]
+                    if ref["title"] == nil { ref["title"] = title }
+                    let hostId = try await connectionManager.createHostSession(
+                        title: title,
+                        topicKind: kind.isEmpty ? "generic" : kind,
+                        topicRef: ref
+                    )
+                    if let idx = conversations.firstIndex(where: { $0.id == conversation.id }) {
+                        conversations[idx].hostSessionId = hostId
+                        persistIfLive()
+                    }
+                    // Align Brain Focus when Discuss opens a mission with an id.
+                    if kind == "mission",
+                       let mid = ref["mission_id"] as? String,
+                       !mid.isEmpty {
+                        var focusExtra: [String: Any] = ["mission_id": mid]
+                        if let tid = ref["target_id"] as? String, !tid.isEmpty {
+                            focusExtra["target_id"] = tid
+                        }
+                        _ = try? await connectionManager.invokeLife(
+                            "life_focus_set",
+                            extra: focusExtra
+                        )
+                    }
+                } catch {
+                    // Local Discuss still works; host topic binds on next send path.
+                }
+            }
+        }
+        currentConversation = conversation
         return conversation
     }
 
@@ -68,7 +121,7 @@ final class MessageService: ObservableObject {
     /// Creates or updates local `Conversation` rows bound by `hostSessionId`.
     @discardableResult
     func syncHostTopicsFromBrain() async -> Int {
-        guard connectionManager.connectionState == .connected else { return 0 }
+        guard connectionManager.isCryptoChatReady else { return 0 }
         do {
             let rows = try await connectionManager.listHostSessions(limit: 50)
             var merged = 0
@@ -120,7 +173,7 @@ final class MessageService: ObservableObject {
     func openHostTopic(_ conversation: Conversation) async -> Conversation {
         currentConversation = conversation
         guard let hostId = conversation.hostSessionId,
-              connectionManager.connectionState == .connected else {
+              connectionManager.isCryptoChatReady else {
             return conversation
         }
         let existing = messages(for: conversation.id)
@@ -213,7 +266,7 @@ final class MessageService: ObservableObject {
 
     /// Persist Discuss metadata on the Brain session once `hostSessionId` is known.
     func ensureHostTopicMetadata(for conversationId: UUID) async {
-        guard connectionManager.connectionState == .connected,
+        guard connectionManager.isCryptoChatReady,
               let idx = conversations.firstIndex(where: { $0.id == conversationId }),
               let hostId = conversations[idx].hostSessionId,
               let kind = conversations[idx].context.hostTopicKind else {
@@ -234,7 +287,7 @@ final class MessageService: ObservableObject {
     func startNewFreeformTopic(title: String = "New topic") async -> Conversation {
         let context = ConversationContext.standalone(title: title)
         var conversation = findOrCreateConversation(for: context)
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             currentConversation = conversation
             return conversation
         }
@@ -265,7 +318,7 @@ final class MessageService: ObservableObject {
             return conversation
         }
         if let hostId = conversations[idx].hostSessionId,
-           connectionManager.connectionState == .connected {
+           connectionManager.isCryptoChatReady {
             do {
                 let saved = try await connectionManager.renameHostSession(
                     sessionId: hostId,
@@ -291,7 +344,7 @@ final class MessageService: ObservableObject {
     /// Delete a host-backed topic (Brain + local).
     func deleteHostTopic(_ conversation: Conversation) async {
         if let hostId = conversation.hostSessionId,
-           connectionManager.connectionState == .connected {
+           connectionManager.isCryptoChatReady {
             try? await connectionManager.deleteHostSession(sessionId: hostId)
         }
         allMessages.removeAll { $0.conversationId == conversation.id }
@@ -377,7 +430,7 @@ final class MessageService: ObservableObject {
         planStore: PlanStore? = nil,
         proposeFirst: Bool = false
     ) async throws -> Conversation {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             throw MessageError.notConnected
         }
 
@@ -520,7 +573,7 @@ final class MessageService: ObservableObject {
         targetId: String?,
         subjectId: String?
     ) async -> String {
-        guard connectionManager.connectionState == .connected else { return userText }
+        guard connectionManager.isCryptoChatReady else { return userText }
         do {
             let payload = try await connectionManager.injectLifeContext(
                 message: userText,
@@ -649,7 +702,7 @@ final class MessageService: ObservableObject {
     }
 
     private func persistIfLive() {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         ConversationStore.shared.save(
             conversations: conversations,
             messages: allMessages

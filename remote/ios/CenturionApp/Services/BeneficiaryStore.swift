@@ -37,7 +37,7 @@ final class BeneficiaryStore: ObservableObject {
     }
 
     func refresh(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
@@ -55,7 +55,7 @@ final class BeneficiaryStore: ObservableObject {
             lastError = "Enter a first name."
             return false
         }
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             lastError = "Link your Sovereign in You to save this."
             return false
         }
@@ -81,7 +81,7 @@ final class BeneficiaryStore: ObservableObject {
             lastError = "Confirm this is a colleague, not a family member."
             return false
         }
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             lastError = "Link your Sovereign in You to send referrals."
             return false
         }

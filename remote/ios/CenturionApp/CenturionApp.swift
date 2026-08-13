@@ -54,29 +54,69 @@ struct CenturionApp: App {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     attemptAutoReconnectIfNeeded(force: true)
+                    prefetchWhenLinked()
                 }
             }
-            .onReceive(services.connectionManager.$connectionState) { state in
-                services.dataMode.update(connectionState: state)
-                if state == .connected {
-                    if !clearedDemoForConnection {
-                        services.messageService.clearDemoData()
-                        services.planStore.clearDemoData()
-                        ConversationStore.shared.restore(into: services.messageService)
-                        clearedDemoForConnection = true
-                    }
-                    Task {
-                        await services.swarmStore.refresh(from: services.connectionManager)
-                        await services.beneficiaryStore.refresh(from: services.connectionManager)
-                        await services.oversightStore.refresh(from: services.connectionManager)
-                        await services.memoryHorizonStore.refresh(from: services.connectionManager)
-                        await services.missionStore.refreshSoul(from: services.connectionManager)
-                        await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
-                    }
-                } else {
-                    clearedDemoForConnection = false
-                }
+            .onReceive(services.connectionManager.$connectionState) { _ in
+                syncLinkedState()
             }
+            .onReceive(services.connectionManager.$transportPreference) { _ in
+                syncLinkedState()
+            }
+            .onReceive(services.connectionManager.relayAway.$isConnected) { _ in
+                syncLinkedState()
+            }
+        }
+    }
+
+    private func syncLinkedState() {
+        let ready = services.connectionManager.isCryptoChatReady
+        services.dataMode.update(isCryptoChatReady: ready)
+        if ready {
+            if !clearedDemoForConnection {
+                services.messageService.clearDemoData()
+                services.planStore.clearDemoData()
+                ConversationStore.shared.restore(into: services.messageService)
+                clearedDemoForConnection = true
+            }
+            prefetchWhenLinked()
+        } else {
+            clearedDemoForConnection = false
+        }
+    }
+
+    /// Speed rule: on foreground / link, refresh lightweight Brain state without blocking the composer.
+    private func prefetchWhenLinked() {
+        guard services.connectionManager.isCryptoChatReady else { return }
+        Task {
+            async let relay: Void = {
+                _ = await services.connectionManager.refreshRemoteRelayStatus()
+            }()
+            async let thinking: Void = {
+                await services.connectionManager.refreshThinkingStatus()
+            }()
+            async let topics: Void = {
+                _ = await services.messageService.syncHostTopicsFromBrain()
+            }()
+            async let swarm: Void = {
+                await services.swarmStore.refresh(from: services.connectionManager)
+            }()
+            async let beneficiary: Void = {
+                await services.beneficiaryStore.refresh(from: services.connectionManager)
+            }()
+            async let oversight: Void = {
+                await services.oversightStore.refresh(from: services.connectionManager)
+            }()
+            async let memory: Void = {
+                await services.memoryHorizonStore.refresh(from: services.connectionManager)
+            }()
+            async let soul: Void = {
+                await services.missionStore.refreshSoul(from: services.connectionManager)
+            }()
+            async let plans: Void = {
+                await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
+            }()
+            _ = await (relay, thinking, topics, swarm, beneficiary, oversight, memory, soul, plans)
         }
     }
 

@@ -61,9 +61,9 @@ struct SwarmConnectSheet: View {
                         Task { await submit() }
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())
-                    .disabled(isBusy || connectionManager.connectionState != .connected)
+                    .disabled(isBusy || !connectionManager.isCryptoChatReady)
 
-                    if connectionManager.connectionState != .connected {
+                    if !connectionManager.isCryptoChatReady {
                         Text("Link your Sovereign in You first.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
@@ -113,7 +113,7 @@ struct SwarmConnectSheet: View {
                         Task { await submitPortalJoin() }
                     }
                     .buttonStyle(CenturionGhostButtonStyle())
-                    .disabled(isBusy || connectionManager.connectionState != .connected)
+                    .disabled(isBusy || !connectionManager.isCryptoChatReady)
                 }
                 .padding(.top, Spacing.xs)
             }

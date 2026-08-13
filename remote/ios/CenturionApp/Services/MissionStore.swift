@@ -223,7 +223,7 @@ final class MissionStore: ObservableObject {
 
     /// Pull host SOUL.md into the local structured document when linked.
     func refreshSoul(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         do {
             let payload = try await connectionManager.fetchSoul()
             if let merged = Self.soulDocument(fromHost: payload) {
@@ -243,7 +243,7 @@ final class MissionStore: ObservableObject {
     /// Push local Soul to the Sovereign after an explicit user confirmation.
     @discardableResult
     func syncSoulToSovereign(connectionManager: ConnectionManager) async -> String? {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             return "Saved on this phone. Link your Sovereign to sync."
         }
         do {
@@ -273,7 +273,7 @@ final class MissionStore: ObservableObject {
 
     /// Pull host LIFE_MISSION.md into the local LifeMission when linked.
     func refreshMission(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         do {
             let payload = try await connectionManager.fetchMission()
             if let merged = Self.lifeMission(fromHost: payload) {
@@ -292,7 +292,7 @@ final class MissionStore: ObservableObject {
     /// Push local Life Mission to the Sovereign (LIFE_MISSION.md + USER.md).
     @discardableResult
     func syncMissionToSovereign(connectionManager: ConnectionManager) async -> String? {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             return "Saved on this phone. Link your Sovereign to sync."
         }
         guard hasMissionStatement else {
@@ -645,7 +645,7 @@ final class MissionStore: ObservableObject {
 
     /// Pull Mission Stack / subjects / streams from Brain via `life_call`.
     func refreshLifeStack(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else { return }
+        guard connectionManager.isCryptoChatReady else { return }
         do {
             let stackPayload = try await connectionManager.fetchLifeStack()
             let rawStack = (stackPayload["stack"] as? [String: Any]) ?? stackPayload
@@ -698,7 +698,7 @@ final class MissionStore: ObservableObject {
     }
 
     func promoteDream(_ dreamId: UUID, connectionManager: ConnectionManager) async -> String? {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             return "Link your Sovereign to promote a dream."
         }
         do {
@@ -714,7 +714,7 @@ final class MissionStore: ObservableObject {
     }
 
     func setPrimaryMission(_ missionId: UUID, connectionManager: ConnectionManager) async -> String? {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             return "Link your Sovereign to set the primary Mission."
         }
         do {

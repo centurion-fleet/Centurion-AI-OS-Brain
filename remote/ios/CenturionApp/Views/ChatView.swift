@@ -84,7 +84,7 @@ struct ChatView: View {
                     .padding(.top, Spacing.xs)
             }
 
-            if connectionManager.connectionState != .connected {
+            if !connectionManager.isCryptoChatReady {
                 offlineBanner
             }
 
@@ -160,7 +160,7 @@ struct ChatView: View {
         }
         .background(ColorTheme.background())
         .task(id: connectionManager.connectionState) {
-            guard connectionManager.connectionState == .connected else { return }
+            guard connectionManager.isCryptoChatReady else { return }
             await connectionManager.refreshThinkingStatus()
         }
         .sheet(isPresented: $showRecoverySheet) {
@@ -220,7 +220,7 @@ struct ChatView: View {
 
                 Spacer()
 
-                if connectionManager.connectionState == .connected {
+                if connectionManager.isCryptoChatReady {
                     Button {
                         Haptics.lightTap()
                         showCollaborationSheet = true
@@ -256,7 +256,7 @@ struct ChatView: View {
                     traySectionHeader("Stream", icon: "bubble.left.and.bubble.right")
                     allChatTrayRow()
 
-                    if connectionManager.connectionState == .connected {
+                    if connectionManager.isCryptoChatReady {
                         Button {
                             Haptics.mediumTap()
                             Task { @MainActor in
@@ -565,7 +565,7 @@ struct ChatView: View {
     private var emptyState: some View {
         VStack {
             Spacer()
-            if connectionManager.connectionState == .connected {
+            if connectionManager.isCryptoChatReady {
                 EmptyState(
                     icon: "lock.shield",
                     title: "Crypto Chat",
@@ -704,7 +704,7 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .focused($isFocused)
-                    .disabled(isSending || connectionManager.connectionState != .connected)
+                    .disabled(isSending || !connectionManager.isCryptoChatReady)
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
                     .background(ColorTheme.chatInput())
@@ -740,11 +740,12 @@ struct ChatView: View {
             .padding(.vertical, Spacing.sm)
 
             if isSending {
-                Text("Waiting on your Centurion — this can take up to a few minutes.")
+                Text(connectionManager.turnActivityHint
+                    ?? "Waiting on your Centurion — this can take up to a few minutes.")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
                     .padding(.horizontal, Spacing.md)
-            } else if connectionManager.connectionState == .connected,
+            } else if connectionManager.isCryptoChatReady,
                       connectionManager.llmHealth.needsAttention {
                 Button {
                     showRecoverySheet = true

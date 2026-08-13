@@ -88,7 +88,7 @@ final class SwarmStore: ObservableObject {
     }
 
     func refresh(from connectionManager: ConnectionManager) async {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             // Keep last-known constellation; label as offline.
             isShowingOfflineCache = !swarms.isEmpty
             return
@@ -110,18 +110,25 @@ final class SwarmStore: ObservableObject {
         UserDefaults.standard.set(mode.rawValue, forKey: digestKey)
     }
 
-    func resolveSignal(_ signalId: String, connectionManager: ConnectionManager? = nil) {
+    func resolveSignal(
+        _ signalId: String,
+        choiceNote: String = "",
+        connectionManager: ConnectionManager? = nil
+    ) {
         guard let index = signals.firstIndex(where: { $0.id == signalId }) else { return }
         let previous = signals[index]
         signals[index].status = .resolved
         refreshPendingCounts()
 
-        guard let connectionManager, connectionManager.connectionState == .connected else {
+        guard let connectionManager, connectionManager.isCryptoChatReady else {
             return
         }
         Task {
             do {
-                _ = try await connectionManager.resolveSwarmSignal(signalId: signalId)
+                _ = try await connectionManager.resolveSwarmSignal(
+                    signalId: signalId,
+                    choiceNote: choiceNote
+                )
                 await refresh(from: connectionManager)
             } catch {
                 await MainActor.run {

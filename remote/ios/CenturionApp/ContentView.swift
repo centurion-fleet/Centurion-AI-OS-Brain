@@ -20,7 +20,7 @@ struct ContentView: View {
 
     /// Badge only for real recovery — not for first-run “not linked yet”.
     private var showYouAttentionBadge: Bool {
-        if connectionManager.connectionState == .connected {
+        if connectionManager.isCryptoChatReady {
             return connectionManager.llmHealth.needsAttention
         }
         if case .error = connectionManager.connectionState {
@@ -36,7 +36,7 @@ struct ContentView: View {
     /// Sum of Home subsection “new” counts for the tab bar badge.
     private var homeAttentionCount: Int {
         PulseBadgeCounts.total(
-            connectionState: connectionManager.connectionState,
+            isCryptoChatReady: connectionManager.isCryptoChatReady,
             showsDemoContent: dataMode.showsDemoContent,
             swarmStore: swarmStore,
             planStore: planStore,

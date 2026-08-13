@@ -73,11 +73,11 @@ Free for Centurion customers. Link your Sovereign for private Crypto Chat, Life 
 
 Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
 
-- There is **no cloud login** and **no demo account**. Pairing is **QR-first**: Sovereign AI Brain shows a QR encoding `token:…@host:9119` (same string can be pasted as fallback). Away-from-home (public hostname or tunnel to TCP 9119) is the supported path; the owner must approve the iPhone on the brain if prompted.
+- There is **no cloud login** and **no demo account**. Pairing is **QR-first on home Wi‑Fi**: Sovereign AI Brain shows a QR encoding `token:…@lan-host:9119` (paste remains a fallback). **Chat from anywhere** (after enable on the Brain) uses Centurion’s outbound relay — the phone never dials a home IP or depends on port-forwarding. The owner must approve the iPhone on the brain if prompted.
 - Camera permission is used **only** to scan that pairing QR (`NSCameraUsageDescription`).
 - Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design. Offline demo chats clear as soon as a live link succeeds.
-- LAN / Bonjour discovery is optional convenience only — do not require same Wi‑Fi for review.
-- **App Review:** Please contact the developer for a time-boxed review pairing window (QR / pairing code + internet-reachable brain via tunnel or public host).- Price: Free. No IAP for core Remote features.
+- LAN / Bonjour discovery is optional convenience only — do not require same Wi‑Fi for review once Chat from anywhere is enabled for the review Brain.
+- **App Review:** Please contact the developer for a time-boxed review pairing window (QR / pairing code + Brain with Chat from anywhere enabled).- Price: Free. No IAP for core Remote features.
 - Encryption: standard TLS for optional Help (Adrian); Crypto Chat uses publicly available algorithms (X25519 + XSalsa20-Poly1305 via libsodium) between the owner’s iPhone and their own Sovereign. `ITSAppUsesNonExemptEncryption = false` (exemption).
 
 ## App Privacy notes (App Store Connect)

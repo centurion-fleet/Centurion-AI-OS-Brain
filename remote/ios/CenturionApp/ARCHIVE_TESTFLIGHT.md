@@ -1,17 +1,17 @@
-# Archive / TestFlight — Sovereign AI Remote 5.1.0
+# Archive / TestFlight — Sovereign AI Remote 5.2.137
 
 Engineering prep for App Store Connect upload (operator runs Archive on Mac).
 
 ## Preconditions
 
 - Xcode with signing team `J6DY26ZGL4` (or your ASC team)
-- Marketing version **5.1.0**, build **28+** (QR pairing + camera string)
-- Brain reachable away-from-home (see `brain/linux/docs/EXPOSE_9119.md`) for review notes
+- Marketing version **5.2.137**, build **30+** (QR pairing + camera string)
+- For Away review: Brain with **Chat from anywhere** enabled (Centurion relay) — not DIY `EXPOSE_9119`
 
 ## Generate + Archive
 
 ```bash
-cd ios/CenturionApp
+cd remote/ios/CenturionApp
 xcodegen generate
 open CenturionApp.xcodeproj
 ```

@@ -321,7 +321,7 @@ struct MissionDiscoveryView: View {
     }
 
     private func shareWithCenturion() {
-        guard connectionManager.connectionState == .connected else {
+        guard connectionManager.isCryptoChatReady else {
             shareStatus = .notConnected
             return
         }
