@@ -177,6 +177,9 @@ async fn handle_connection(
                                     kind: Some(kind).filter(|s| !s.is_empty()),
                                     tool,
                                 },
+                                crate::bridge::BridgeTurnEvent::StreamDelta { text } => {
+                                    RemoteMessage::StreamDelta { id, text }
+                                },
                             };
                             write_message(&mut stream, &session, &push).await?;
                         }

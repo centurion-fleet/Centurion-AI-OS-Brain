@@ -104,7 +104,7 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: Spacing.sm) {
                             let msgs = messageService.allMessages
-                            if msgs.isEmpty {
+                            if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
                                 emptyState
                                     .padding(.top, Spacing.xl)
                             } else {
@@ -113,12 +113,21 @@ struct ChatView: View {
                                         .id(message.id)
                                 }
                             }
+                            if isSending, !connectionManager.streamingAssistantText.isEmpty {
+                                streamingDraftRow(connectionManager.streamingAssistantText)
+                                    .id("streaming-draft")
+                            }
                         }
                         .padding(.horizontal, Spacing.md)
                         .padding(.vertical, Spacing.sm)
                     }
                     .onChange(of: messageService.allMessages.count) { _, _ in
                         scrollToLastInStream(proxy)
+                    }
+                    .onChange(of: connectionManager.streamingAssistantText) { _, _ in
+                        withAnimation(Motion.light) {
+                            proxy.scrollTo("streaming-draft", anchor: .bottom)
+                        }
                     }
                     .onAppear {
                         scrollToLastInStream(proxy)
@@ -131,7 +140,7 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: Spacing.sm) {
                             let msgs = messageService.messages(for: conversation.id)
-                            if msgs.isEmpty {
+                            if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
                                 emptyChatState(context: conversation.context)
                                     .padding(.top, Spacing.xxl)
                             } else {
@@ -140,12 +149,21 @@ struct ChatView: View {
                                         .id(message.id)
                                 }
                             }
+                            if isSending, !connectionManager.streamingAssistantText.isEmpty {
+                                streamingDraftRow(connectionManager.streamingAssistantText)
+                                    .id("streaming-draft")
+                            }
                         }
                         .padding(.horizontal, Spacing.md)
                         .padding(.vertical, Spacing.sm)
                     }
                     .onChange(of: messageService.allMessages.count) { _, _ in
                         scrollToLast(proxy, conversation: conversation)
+                    }
+                    .onChange(of: connectionManager.streamingAssistantText) { _, _ in
+                        withAnimation(Motion.light) {
+                            proxy.scrollTo("streaming-draft", anchor: .bottom)
+                        }
                     }
                     .onAppear {
                         scrollToLast(proxy, conversation: conversation)
@@ -739,7 +757,7 @@ struct ChatView: View {
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
 
-            if isSending {
+            if isSending, connectionManager.streamingAssistantText.isEmpty {
                 Text(connectionManager.turnActivityHint
                     ?? "Waiting on your Centurion — this can take up to a few minutes.")
                     .font(.caption2)
@@ -886,6 +904,32 @@ struct ChatView: View {
     }
 
     // MARK: - Message Row
+
+    private func streamingDraftRow(_ text: String) -> some View {
+        HStack(alignment: .bottom, spacing: Spacing.xs) {
+            ZStack {
+                Circle()
+                    .fill(ColorTheme.accent().opacity(0.15))
+                    .frame(width: 28, height: 28)
+                Circle()
+                    .fill(ColorTheme.accent())
+                    .frame(width: 8, height: 8)
+            }
+            .padding(.bottom, 4)
+
+            Text(text)
+                .font(.system(size: 16))
+                .foregroundColor(ColorTheme.primaryText())
+                .padding(.horizontal, Spacing.sm)
+                .padding(.vertical, Spacing.xs)
+                .background(ColorTheme.mutedText().opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .textSelection(.enabled)
+
+            Spacer(minLength: 48)
+        }
+        .accessibilityLabel("Streaming reply")
+    }
 
     private func messageRow(_ message: Message, showContext: Bool) -> some View {
         let conversation = messageService.conversations.first(where: { $0.id == message.conversationId })

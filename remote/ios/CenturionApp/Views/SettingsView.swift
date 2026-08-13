@@ -475,8 +475,20 @@ struct SettingsView: View {
     private var anywhereRelaySection: some View {
         let enabled = (connectionManager.remoteRelayStatus["enabled"] as? Bool) ?? false
         let online = ((connectionManager.remoteRelayStatus["presence"] as? [String: Any])?["online"] as? Bool) ?? false
+        let wsOk = (connectionManager.remoteRelayStatus["websockets_installed"] as? Bool) ?? true
+        let pipeReady = (connectionManager.remoteRelayStatus["realtime_pipe_ready"] as? Bool) ?? false
+        let presenceError = ((connectionManager.remoteRelayStatus["presence"] as? [String: Any])?["last_error"] as? String)
+        let hint = connectionManager.remoteRelayStatus["hint"] as? String
         let subtitle: String = {
             if anywhereBusy { return "Updating…" }
+            if enabled, !wsOk {
+                return presenceError
+                    ?? hint
+                    ?? "On — but Away needs websockets on the Brain (Check for update)."
+            }
+            if enabled, pipeReady {
+                return "On — Away pipe ready. Home Wi‑Fi still preferred when you’re here."
+            }
             if enabled && online {
                 return "On — Brain presence live. Away uses Centurion cloud (E2E); home Wi‑Fi still preferred."
             }
@@ -497,7 +509,9 @@ struct SettingsView: View {
                         .foregroundColor(ColorTheme.primaryText())
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundColor(ColorTheme.mutedText())
+                        .foregroundColor(
+                            enabled && !wsOk ? ColorTheme.warning() : ColorTheme.mutedText()
+                        )
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()

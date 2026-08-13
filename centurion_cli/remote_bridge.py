@@ -1641,6 +1641,50 @@ def _make_remote_activity_callbacks(
     return tool_progress_callback, status_callback
 
 
+def _make_remote_stream_delta_callback() -> tuple[Any, Any]:
+    """Build stream_delta_callback + flush for live assistant text on Crypto Chat.
+
+    Coalesces tiny provider deltas (~50ms / 32 chars) so Away Realtime is not
+    flooded while still feeling token-streamed on the phone.
+    """
+    import time
+
+    buf: list[str] = []
+    last_emit = [0.0]
+
+    def _flush() -> None:
+        if not buf:
+            return
+        text = "".join(buf)
+        buf.clear()
+        last_emit[0] = time.monotonic()
+        if not text:
+            return
+        _emit_remote_event(
+            {
+                "centurion_event": "stream_delta",
+                "text": text,
+            }
+        )
+
+    def stream_delta_callback(text: Any) -> None:
+        if not _remote_events_enabled():
+            return
+        if text is None:
+            _flush()
+            return
+        chunk = str(text)
+        if not chunk:
+            return
+        buf.append(chunk)
+        now = time.monotonic()
+        pending = sum(len(part) for part in buf)
+        if pending >= 32 or (now - last_emit[0]) >= 0.05:
+            _flush()
+
+    return stream_delta_callback, _flush
+
+
 def _run_agent_quiet(
     text: str,
     *,
@@ -2088,12 +2132,26 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         agent.tool_progress_callback = tool_cb
         agent.status_callback = status_cb
 
-    result = agent.run_conversation(
-        user_message=api_user_message,
-        conversation_history=history or None,
-        task_id=session_id,
-        persist_user_message=text,
-    )
+    stream_flush = None
+    if _remote_events_enabled():
+        stream_cb, stream_flush = _make_remote_stream_delta_callback()
+        agent.stream_delta_callback = stream_cb
+
+    result = None
+    try:
+        result = agent.run_conversation(
+            user_message=api_user_message,
+            conversation_history=history or None,
+            task_id=session_id,
+            persist_user_message=text,
+        )
+    finally:
+        if stream_flush is not None:
+            try:
+                stream_flush()
+            except Exception:
+                pass
+
     if isinstance(result, dict):
         raw = str(result.get("final_response") or result.get("response") or "")
     else:

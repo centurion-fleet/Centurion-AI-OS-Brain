@@ -35,6 +35,10 @@ final class ConnectionManager: ObservableObject {
     @Published var pendingToolApproval: PendingToolApproval?
     /// Honest waiting — short activity hint while a turn is in flight (no PII).
     @Published var turnActivityHint: String?
+    /// Live assistant draft while a turn streams (cleared on final/error).
+    @Published var streamingAssistantText: String = ""
+    private var streamTtftMarked = false
+    private var sendStartedAt: Date?
 
     /// Prefer LAN Crypto Chat when linked; RelayTransport is the away fallback.
     @Published private(set) var transportPreference: TransportPreference = .lanPreferred
@@ -560,6 +564,9 @@ final class ConnectionManager: ObservableObject {
 
         let sendStarted = Date()
         turnActivityHint = "Waiting on your Sovereign…"
+        streamingAssistantText = ""
+        streamTtftMarked = false
+        sendStartedAt = sendStarted
         let responseData: Data
         do {
             responseData = try await withTimeout(seconds: chatTimeoutSeconds) {
@@ -574,14 +581,18 @@ final class ConnectionManager: ObservableObject {
             }
         } catch is TimeoutError {
             turnActivityHint = nil
+            streamingAssistantText = ""
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
             pendingToolApproval = nil
             throw ConnectionError.serverRejected(message)
         }
-        lastTtftOverheadMs = Date().timeIntervalSince(sendStarted) * 1000
+        if !streamTtftMarked {
+            lastTtftOverheadMs = Date().timeIntervalSince(sendStarted) * 1000
+        }
         turnActivityHint = nil
+        streamingAssistantText = ""
         pendingToolApproval = nil
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let responseType = json["type"] as? String else {
@@ -638,7 +649,22 @@ final class ConnectionManager: ObservableObject {
             )
             return
         }
+        if type == "stream_delta" || type == "partial" {
+            let chunk = (push["text"] as? String) ?? (push["delta"] as? String) ?? ""
+            guard !chunk.isEmpty else { return }
+            if !streamTtftMarked {
+                streamTtftMarked = true
+                if let started = sendStartedAt {
+                    lastTtftOverheadMs = Date().timeIntervalSince(started) * 1000
+                }
+                turnActivityHint = nil
+            }
+            streamingAssistantText += chunk
+            return
+        }
         if type == "activity" || type == "tool_progress" || type == "status" {
+            // Prefer live stream text over status chatter once tokens started.
+            if !streamingAssistantText.isEmpty { return }
             let detail = (push["message"] as? String)
                 ?? (push["text"] as? String)
                 ?? (push["line"] as? String)
@@ -915,7 +941,9 @@ final class ConnectionManager: ObservableObject {
                    type == "approval_request"
                     || type == "activity"
                     || type == "tool_progress"
-                    || type == "status" {
+                    || type == "status"
+                    || type == "stream_delta"
+                    || type == "partial" {
                     if let onPush {
                         await onPush(json)
                     }
@@ -2237,7 +2265,9 @@ private actor RemoteIOPipeline {
                 if type == "approval_request"
                     || type == "activity"
                     || type == "tool_progress"
-                    || type == "status" {
+                    || type == "status"
+                    || type == "stream_delta"
+                    || type == "partial" {
                     if let onPush {
                         await onPush(json)
                     }

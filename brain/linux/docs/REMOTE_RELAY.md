@@ -53,6 +53,7 @@ See Help Center: *Local, Remote anywhere, or Telegram — privacy choices*.
 | iPhone Away Crypto Chat (KX + frames + approvals over Realtime) | Done (`RelayAwayClient` + `ConnectionManager` transport mux) |
 | iPhone everyday surfaces gate on `isCryptoChatReady` (LAN or Away) | Done (stores/Settings/Home/Chat/Help) |
 | Mid-turn activity frames Brain→phone (tool/thinking/status) | Done (`BridgeTurnEvent::Activity` + `RemoteMessage::Activity`) |
+| Mid-turn assistant `stream_delta` frames Brain→phone | Done (coalesced deltas + iPhone live draft bubble) |
 | Generic BridgeAction passthrough (desk ops / remote_relay_*) | Done (`centurion-common` / `centurion-remote`) |
 | Help privacy tiers linked (Settings + Unbox) | Done |
 | Live Supabase websocket against production project | Ops: enroll project + set Vercel env; `websockets` ships via `[all]` / `[remote-relay]` |

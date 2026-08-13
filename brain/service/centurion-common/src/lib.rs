@@ -614,6 +614,11 @@ pub enum RemoteMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool: Option<String>,
     },
+    /// Brain → phone: incremental assistant text while the turn is still running.
+    StreamDelta {
+        id: Uuid,
+        text: String,
+    },
     /// Phone → Brain: resolve a pending approval.
     ApprovalRespond {
         id: Uuid,
@@ -892,6 +897,19 @@ mod tests {
         };
         let encoded = rejected.to_json().expect("serialize");
         assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), rejected);
+    }
+
+    #[test]
+    fn stream_delta_roundtrips() {
+        let id = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let msg = RemoteMessage::StreamDelta {
+            id,
+            text: "Hello".to_owned(),
+        };
+        let encoded = msg.to_json().expect("serialize");
+        assert_eq!(RemoteMessage::from_json(&encoded).expect("parse"), msg);
+        let json = String::from_utf8(encoded).expect("utf8");
+        assert!(json.contains(r#""type":"stream_delta""#));
     }
 
     #[test]

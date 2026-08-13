@@ -451,6 +451,25 @@ def test_handle_gateway_status_reads_runtime_state(monkeypatch):
     assert "bridge missing" in by_name["whatsapp"]["status"]
 
 
+
+def test_make_remote_stream_delta_callback_coalesces(monkeypatch):
+    from centurion_cli import remote_bridge as rb
+
+    events = []
+    monkeypatch.setattr(rb, "_remote_events_enabled", lambda: True)
+    monkeypatch.setattr(rb, "_emit_remote_event", lambda event: events.append(event))
+
+    cb, flush = rb._make_remote_stream_delta_callback()
+    cb("Hel")
+    cb("lo")
+    assert events == [] or events[-1]["centurion_event"] == "stream_delta"
+    flush()
+    assert events
+    assert events[-1]["centurion_event"] == "stream_delta"
+    assert "Hello" in "".join(e.get("text", "") for e in events)
+    cb(None)  # end signal — should not crash
+
+
 def test_make_remote_activity_callbacks_off_is_silent(monkeypatch):
     from centurion_cli import remote_bridge as rb
 

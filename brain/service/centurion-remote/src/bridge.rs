@@ -32,6 +32,10 @@ pub enum BridgeTurnEvent {
         kind: String,
         tool: Option<String>,
     },
+    /// Incremental assistant text for live Crypto Chat streaming.
+    StreamDelta {
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -435,6 +439,12 @@ fn turn_event_from_ndjson(value: &Value) -> Option<BridgeTurnEvent> {
                 tool: value_string(value, "tool"),
             })
         }
+        "stream_delta" | "partial" => {
+            let text = value_string(value, "text")
+                .or_else(|| value_string(value, "delta"))
+                .filter(|s| !s.is_empty())?;
+            Some(BridgeTurnEvent::StreamDelta { text })
+        }
         _ => None,
     }
 }
@@ -616,6 +626,15 @@ mod tests {
                 assert_eq!(ev.command, "rm -rf /");
             }
             other => panic!("expected approval, got {other:?}"),
+        }
+
+        let delta = serde_json::json!({
+            "centurion_event": "stream_delta",
+            "text": "Hello"
+        });
+        match turn_event_from_ndjson(&delta).expect("delta") {
+            BridgeTurnEvent::StreamDelta { text } => assert_eq!(text, "Hello"),
+            other => panic!("expected stream delta, got {other:?}"),
         }
     }
 }
