@@ -253,6 +253,47 @@ def _check_s6_supervision(issues: list[str]) -> None:
     )
 
 
+def _check_remote_relay(issues: list[str]) -> None:
+    """Chat from anywhere readiness (optional — only when enabled)."""
+    try:
+        from centurion_cli.config import load_config
+        from centurion_cli import remote_relay_service as rrs
+
+        cfg = (load_config() or {}).get("remote_relay")
+        if not isinstance(cfg, dict) or not cfg.get("enabled"):
+            return
+        _section("Chat from anywhere")
+        status = rrs.status()
+        if status.get("websockets_installed"):
+            check_ok("websockets installed", "(Away Crypto Chat pipe)")
+        else:
+            check_fail(
+                "websockets missing",
+                "(Away needs centurionai-os[remote-relay])",
+            )
+            check_info(
+                f"Run: {_python_install_cmd()} 'centurionai-os[remote-relay]' "
+                "or Brain Settings → Check for update"
+            )
+            issues.append(
+                "Install Away deps: pip install 'centurionai-os[remote-relay]' "
+                "(or Brain Check for update)"
+            )
+        if status.get("supabase_url_configured"):
+            check_ok("Supabase URL configured")
+        else:
+            check_warn("Supabase URL not set", "(enable Anywhere from Brain Settings)")
+        if status.get("realtime_pipe_ready"):
+            check_ok("Away pipe ready", "(presence + websockets)")
+        elif status.get("presence", {}).get("online"):
+            check_warn("Presence online but pipe not ready", status.get("hint") or "")
+        last_error = (status.get("presence") or {}).get("last_error")
+        if last_error:
+            check_warn("Away last error", f"({last_error})")
+    except Exception as exc:
+        check_warn("Chat from anywhere check failed", str(exc))
+
+
 def _check_gateway_service_linger(issues: list[str]) -> None:
     """Warn when a systemd user gateway service will stop after logout.
 
@@ -1070,6 +1111,7 @@ def run_doctor(args):
 
     _check_gateway_service_linger(issues)
     _check_s6_supervision(issues)
+    _check_remote_relay(issues)
 
     if sys.platform != "win32":
         _section("Command Installation")

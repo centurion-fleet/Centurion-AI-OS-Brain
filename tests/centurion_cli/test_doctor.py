@@ -1310,3 +1310,40 @@ class TestDoctorCodexCliHintPlacement:
         minimax_idx = next(i for i, l in enumerate(lines) if "MiniMax OAuth" in l)
         assert self._hint_line() not in lines[minimax_idx - 1]
         assert minimax_idx + 1 >= len(lines) or self._hint_line() not in lines[minimax_idx + 1]
+
+
+def test_check_remote_relay_skips_when_disabled(tmp_path, monkeypatch):
+    from centurion_cli import doctor as doctor_mod
+
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text("remote_relay:\n  enabled: false\n", encoding="utf-8")
+    issues: list[str] = []
+    doctor_mod._check_remote_relay(issues)
+    assert issues == []
+
+
+def test_check_remote_relay_flags_missing_websockets(tmp_path, monkeypatch):
+    from centurion_cli import doctor as doctor_mod
+    from centurion_cli import remote_relay_service as rrs
+
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        "remote_relay:\n  enabled: true\n  supabase_url: https://example.supabase.co\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rrs, "_websockets_installed", lambda: False)
+    monkeypatch.setattr(
+        rrs,
+        "status",
+        lambda: {
+            "enabled": True,
+            "websockets_installed": False,
+            "supabase_url_configured": True,
+            "realtime_pipe_ready": False,
+            "presence": {"online": False, "last_error": "websockets not installed"},
+            "hint": "install remote-relay",
+        },
+    )
+    issues: list[str] = []
+    doctor_mod._check_remote_relay(issues)
+    assert any("remote-relay" in i for i in issues)
