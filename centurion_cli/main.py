@@ -184,8 +184,12 @@ def _resolve_git_update_root() -> Path:
         root = Path(env).expanduser().resolve()
         if (root / ".git").is_dir():
             return root
-        install_script = root / "desktop-native" / "scripts" / "install-user.sh"
+        install_script = root / "brain" / "linux" / "scripts" / "install-user.sh"
         if install_script.is_file():
+            return root
+        # Legacy pre-reorg layout.
+        legacy = root / "desktop-native" / "scripts" / "install-user.sh"
+        if legacy.is_file():
             return root
     return PROJECT_ROOT
 
@@ -8460,8 +8464,11 @@ def _version_newer(candidate: str, installed: str) -> bool:
 
 
 def _read_desktop_native_version(root: Path) -> str | None:
-    """Read workspace package version from ``brain/linux/Cargo.toml``."""
-    cargo = root / "desktop-native" / "Cargo.toml"
+    """Read workspace package version from ``brain/Cargo.toml`` (Brain lockstep)."""
+    cargo = root / "brain" / "Cargo.toml"
+    if not cargo.is_file():
+        # Legacy pre-reorg layout.
+        cargo = root / "desktop-native" / "Cargo.toml"
     if not cargo.is_file():
         return None
     try:
@@ -8605,13 +8612,14 @@ def _screen_rebuild_needed(
         )
 
     binary = _installed_desktop_binary()
-    if binary is not None and (cwd / "desktop-native").is_dir():
+    brain_tree = (cwd / "brain").is_dir() or (cwd / "desktop-native").is_dir()
+    if binary is not None and brain_tree:
         try:
             bin_mtime = binary.stat().st_mtime
         except OSError:
             bin_mtime = 0.0
         log_result = subprocess.run(
-            git_cmd + ["log", "-1", "--format=%ct", "--", "desktop-native"],
+            git_cmd + ["log", "-1", "--format=%ct", "--", "brain", "desktop-native"],
             cwd=cwd,
             capture_output=True,
             text=True,

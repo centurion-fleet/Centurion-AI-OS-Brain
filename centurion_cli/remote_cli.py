@@ -34,8 +34,8 @@ def _run_remote(argv: list[str]) -> int:
         result = subprocess.run(cmd, check=False)
     except FileNotFoundError:
         print(
-            "centurion-remote was not found. Install the desktop-native package "
-            "(see brain/linux/README.md) or put centurion-remote on PATH.",
+            "centurion-remote was not found. Install the Brain package "
+            "(see brain/README.md / brain/linux/README.md) or put centurion-remote on PATH.",
             file=sys.stderr,
         )
         return 1

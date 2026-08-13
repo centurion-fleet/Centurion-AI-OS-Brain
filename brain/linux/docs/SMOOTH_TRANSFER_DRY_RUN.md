@@ -23,9 +23,9 @@ Replace the 2-hour terminal playbook with this checklist.
 
 ```bash
 # On private Linux build host:
-desktop-native/scripts/install-user.sh
-desktop-native/scripts/package-brain-release.sh
-# Upload desktop-native/dist/centurion-brain-*-linux-*.tar.gz via Admin → Releases
+brain/linux/scripts/install-user.sh
+brain/linux/scripts/package-brain-release.sh
+# Upload brain/linux/dist/centurion-brain-*-linux-*.tar.gz via Admin → Releases
 ```
 
 If binaries are not available on this workstation, package on the usual build host, then publish from Admin.

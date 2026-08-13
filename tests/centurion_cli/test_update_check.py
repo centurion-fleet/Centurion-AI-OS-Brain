@@ -269,8 +269,8 @@ def test_resolve_git_update_root_prefers_centurion_ai_repo(tmp_path, monkeypatch
     repo = tmp_path / "checkout"
     repo.mkdir()
     (repo / ".git").mkdir()
-    (repo / "desktop-native" / "scripts").mkdir(parents=True)
-    (repo / "desktop-native" / "scripts" / "install-user.sh").write_text(
+    (repo / "brain" / "linux" / "scripts").mkdir(parents=True)
+    (repo / "brain" / "linux" / "scripts" / "install-user.sh").write_text(
         "#!/bin/bash\n", encoding="utf-8"
     )
     monkeypatch.setattr(main_mod, "PROJECT_ROOT", pip_root)
@@ -329,7 +329,7 @@ def test_cmd_update_check_json_screen_version_stale(tmp_path, monkeypatch, capsy
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / ".git").mkdir()
-    desktop = repo / "desktop-native"
+    desktop = repo / "brain"
     desktop.mkdir()
     (desktop / "Cargo.toml").write_text(
         '[workspace]\nmembers = []\n\n[workspace.package]\nversion = "5.2.5"\n',

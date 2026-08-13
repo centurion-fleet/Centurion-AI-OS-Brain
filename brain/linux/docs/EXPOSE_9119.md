@@ -16,7 +16,7 @@ echo 'brain.yourdomain.com' > ~/.centurion/remote/advertise-host
 
 # Or export once and re-run install (writes the same file + systemd Environment=):
 export CENTURION_REMOTE_ADVERTISE_HOST=brain.yourdomain.com
-desktop-native/scripts/install-user.sh
+brain/linux/scripts/install-user.sh
 ```
 
 `centurion remote pair` (when `--host` omitted) still reads

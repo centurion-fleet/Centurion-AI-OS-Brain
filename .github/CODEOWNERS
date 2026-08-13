@@ -1,0 +1,10 @@
+# Optional ownership hints for multi-platform client trees.
+# (Uncomment / replace GitHub teams when ready.)
+
+# brain/linux/ @centurion/brain-linux
+# brain/macos/ @centurion/brain-macos
+# brain/service/ @centurion/brain-core
+# brain/web-dashboard/ @centurion/brain-core
+# remote/ios/ @centurion/remote-ios
+# remote/android/ @centurion/remote-android
+# shared/ @centurion/brain-core

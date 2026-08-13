@@ -9,7 +9,7 @@ Canonical palette extracted from the sales site [`app/globals.css`](../app/globa
 | Sales website | Already SoT (`:root` CSS variables) |
 | Help center | Same OKLCH variables in `app/globals.css`; keep in sync with this file |
 | iOS Remote | Map `light.*` / `dark.*` hex into `ColorTheme` (`CenturionTheme.swift`) |
-| Linux Desktop | Map into `desktop-native/resources/centurion.css` `@define-color` |
+| Linux Desktop | Map into `brain/linux/resources/centurion.css` `@define-color` |
 
 ## Rules
 

@@ -4,7 +4,7 @@ LAN TCP (:9119) stays untouched. This module owns the Realtime *envelope*:
 chunking, id correlation, and reconnect=re-KX semantics. It does not decrypt
 chat content — body bytes are opaque (secretbox after KX, or raw KX bytes).
 
-See desktop-native/docs/REMOTE_RELAY.md for product architecture.
+See brain/linux/docs/REMOTE_RELAY.md for product architecture.
 """
 
 from __future__ import annotations
