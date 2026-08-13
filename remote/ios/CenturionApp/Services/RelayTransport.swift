@@ -186,11 +186,13 @@ enum RelayTransport {
         case staleConn
         case invalidChunk
         case brainOffline
+        /// Realtime dropped while a turn/approval was in flight — retryable; do not assume approval applied.
+        case turnInterrupted
 
         var errorDescription: String? {
             switch self {
             case .requiresReKx:
-                return "Relay reconnected — run key exchange again, then retry."
+                return "Chat from anywhere reconnected. Send again to continue."
             case .payloadTooLarge:
                 return "That message is too large for Chat from anywhere. Try on home Wi‑Fi."
             case .staleConn:
@@ -199,6 +201,18 @@ enum RelayTransport {
                 return "Relay received a damaged packet. Retry the turn."
             case .brainOffline:
                 return "Your Sovereign is offline. Chat from anywhere needs the Brain online."
+            case .turnInterrupted:
+                return "Link dropped mid-turn. Tap send again — any open approval was cleared on this phone."
+            }
+        }
+
+        /// Away DoD: mid-turn failures must be clearly retryable (not a silent hang).
+        var isRetryableMidTurn: Bool {
+            switch self {
+            case .requiresReKx, .staleConn, .turnInterrupted, .invalidChunk:
+                return true
+            case .payloadTooLarge, .brainOffline:
+                return false
             }
         }
     }

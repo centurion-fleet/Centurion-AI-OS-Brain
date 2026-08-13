@@ -121,6 +121,14 @@ final class ConnectionManager: ObservableObject {
     /// Transport + TTFT overhead markers (Workstream C — no PII).
     private(set) var lastTransportRttMs: Double?
     private(set) var lastTtftOverheadMs: Double?
+    private(set) var lastColdConnectMs: Double?
+    private(set) var lastApprovalAppearMs: Double?
+    /// Rolling soak samples for `python -m centurion_cli.remote_relay_speed` (no PII).
+    private var rttSamplesMs: [Double] = []
+    private var ttftSamplesMs: [Double] = []
+    private var coldConnectSamplesMs: [Double] = []
+    private var approvalAppearSamplesMs: [Double] = []
+    private let maxSpeedSamples = 32
 
     enum ConnectionState: Equatable {
         case disconnected
@@ -580,16 +588,28 @@ final class ConnectionManager: ObservableObject {
                 )
             }
         } catch is TimeoutError {
-            turnActivityHint = nil
-            streamingAssistantText = ""
+            abortInFlightTurn(clearApproval: true)
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
-            pendingToolApproval = nil
+            throw ConnectionError.serverRejected(message)
+        } catch let relay as RelayTransport.RelayError {
+            abortInFlightTurn(clearApproval: true)
+            let message = relay.errorDescription
+                ?? "Chat from anywhere dropped. Retry the turn."
+            let code = relay.isRetryableMidTurn ? "RELAY_RECONNECT" : "RELAY_ERROR"
+            lastLLMError = (message, code, relay.isRetryableMidTurn)
+            if relay.isRetryableMidTurn {
+                // Drop session keys so the next send re-KXs after reconnect.
+                currentSessionKey = nil
+                Task { await self.considerRelayAway() }
+            }
             throw ConnectionError.serverRejected(message)
         }
         if !streamTtftMarked {
-            lastTtftOverheadMs = Date().timeIntervalSince(sendStarted) * 1000
+            let ms = Date().timeIntervalSince(sendStarted) * 1000
+            lastTtftOverheadMs = ms
+            recordSpeedSample(ms, into: &ttftSamplesMs)
         }
         turnActivityHint = nil
         streamingAssistantText = ""
@@ -639,6 +659,11 @@ final class ConnectionManager: ObservableObject {
         guard let type = push["type"] as? String else { return }
         if type == "approval_request" {
             turnActivityHint = "Approval needed"
+            if let started = sendStartedAt {
+                let ms = Date().timeIntervalSince(started) * 1000
+                lastApprovalAppearMs = ms
+                recordSpeedSample(ms, into: &approvalAppearSamplesMs)
+            }
             pendingToolApproval = PendingToolApproval(
                 approvalId: (push["approval_id"] as? String) ?? "",
                 sessionKey: (push["session_key"] as? String) ?? "",
@@ -655,7 +680,9 @@ final class ConnectionManager: ObservableObject {
             if !streamTtftMarked {
                 streamTtftMarked = true
                 if let started = sendStartedAt {
-                    lastTtftOverheadMs = Date().timeIntervalSince(started) * 1000
+                    let ms = Date().timeIntervalSince(started) * 1000
+                    lastTtftOverheadMs = ms
+                    recordSpeedSample(ms, into: &ttftSamplesMs)
                 }
                 turnActivityHint = nil
             }
@@ -826,7 +853,9 @@ final class ConnectionManager: ObservableObject {
             if currentSessionKey == nil || !relayAway.transportSession.sessionKeysValid {
                 try await performRelayKeyExchange()
             }
-            lastTransportRttMs = Date().timeIntervalSince(kxStarted) * 1000
+            let coldMs = Date().timeIntervalSince(kxStarted) * 1000
+            lastColdConnectMs = coldMs
+            recordSpeedSample(coldMs, into: &coldConnectSamplesMs)
             transportPreference = .relayAway
             connectionState = .connected
             startKeepalive()
@@ -1095,17 +1124,41 @@ final class ConnectionManager: ObservableObject {
         title: String,
         topicKind: String,
         topicRef: Any?,
-        messages: [[String: Any]]
+        messages: [[String: Any]],
+        truncated: Bool
     ) {
-        let payload = try await invokeRemote(
-            action: "session_resume",
-            extra: ["session_id": sessionId]
-        )
-        let tip = (payload["session_id"] as? String) ?? sessionId
-        let messages = (payload["messages"] as? [[String: Any]]) ?? []
-        let title = (payload["title"] as? String) ?? ""
-        let topicKind = (payload["topic_kind"] as? String) ?? ""
-        return (tip, title, topicKind, payload["topic_ref"], messages)
+        // Away Realtime frames have a hard encrypted payload ceiling; ask Brain
+        // to cap history and retry smaller if a frame still won't fit.
+        var limit: Int? = isRelayAwayConnected ? 120 : nil
+        var lastError: Error?
+        for _ in 0..<4 {
+            var extra: [String: Any] = ["session_id": sessionId]
+            if let limit {
+                extra["limit"] = limit
+            }
+            do {
+                let payload = try await invokeRemote(
+                    action: "session_resume",
+                    extra: extra
+                )
+                let tip = (payload["session_id"] as? String) ?? sessionId
+                let messages = (payload["messages"] as? [[String: Any]]) ?? []
+                let title = (payload["title"] as? String) ?? ""
+                let topicKind = (payload["topic_kind"] as? String) ?? ""
+                let truncated = (payload["truncated"] as? Bool) ?? false
+                return (tip, title, topicKind, payload["topic_ref"], messages, truncated)
+            } catch RelayTransport.RelayError.payloadTooLarge {
+                lastError = RelayTransport.RelayError.payloadTooLarge
+                if let current = limit {
+                    limit = max(20, current / 2)
+                    continue
+                }
+                throw RelayTransport.RelayError.payloadTooLarge
+            } catch {
+                throw error
+            }
+        }
+        throw lastError ?? RelayTransport.RelayError.payloadTooLarge
     }
 
     func refreshThinkingStatus() async {
@@ -1192,6 +1245,9 @@ final class ConnectionManager: ObservableObject {
     }
 
     func friendlyRemoteError(_ error: Error) -> String {
+        if let relayError = error as? RelayTransport.RelayError {
+            return relayError.errorDescription ?? relayError.localizedDescription
+        }
         if let connectionError = error as? ConnectionError {
             return connectionError.localizedDescription
         }
@@ -1209,6 +1265,57 @@ final class ConnectionManager: ObservableObject {
             }
         }
         return error.localizedDescription
+    }
+
+    /// Clear mid-turn UI so a reconnect never leaves a half-shown approval stuck.
+    private func abortInFlightTurn(clearApproval: Bool) {
+        turnActivityHint = nil
+        streamingAssistantText = ""
+        streamTtftMarked = false
+        sendStartedAt = nil
+        if clearApproval {
+            pendingToolApproval = nil
+        }
+    }
+
+    private func recordSpeedSample(_ ms: Double, into samples: inout [Double]) {
+        guard ms.isFinite, ms >= 0 else { return }
+        samples.append(ms)
+        if samples.count > maxSpeedSamples {
+            samples.removeFirst(samples.count - maxSpeedSamples)
+        }
+    }
+
+    /// Paste into `python -m centurion_cli.remote_relay_speed --away --rtt …` (soak, no PII).
+    func speedSoakExportText(away: Bool = true) -> String {
+        func join(_ values: [Double]) -> String {
+            values.map { String(format: "%.0f", $0) }.joined(separator: ",")
+        }
+        var parts: [String] = ["python -m centurion_cli.remote_relay_speed"]
+        if away { parts.append("--away") }
+        if !rttSamplesMs.isEmpty {
+            parts.append("--rtt \(join(rttSamplesMs))")
+        }
+        if !ttftSamplesMs.isEmpty {
+            parts.append("--ttft \(join(ttftSamplesMs))")
+        }
+        if away, !coldConnectSamplesMs.isEmpty {
+            parts.append("--cold \(join(coldConnectSamplesMs))")
+        }
+        let cmd = parts.joined(separator: " ")
+        var lines = [
+            cmd,
+            "",
+            "last_rtt_ms=\(lastTransportRttMs.map { String(format: "%.0f", $0) } ?? "n/a")",
+            "last_ttft_overhead_ms=\(lastTtftOverheadMs.map { String(format: "%.0f", $0) } ?? "n/a")",
+            "last_cold_connect_ms=\(lastColdConnectMs.map { String(format: "%.0f", $0) } ?? "n/a")",
+            "last_approval_appear_ms=\(lastApprovalAppearMs.map { String(format: "%.0f", $0) } ?? "n/a")",
+            "samples_rtt=\(rttSamplesMs.count) ttft=\(ttftSamplesMs.count) cold=\(coldConnectSamplesMs.count) approval=\(approvalAppearSamplesMs.count)",
+        ]
+        if !approvalAppearSamplesMs.isEmpty {
+            lines.append("approval_appear_ms=\(join(approvalAppearSamplesMs))")
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Load the built-in model list and merge live routing + active model from the Mac.
@@ -2117,6 +2224,9 @@ final class ConnectionManager: ObservableObject {
             try await self.exchangeEncrypted(plaintext: plaintext)
         }
         lastTransportRttMs = Date().timeIntervalSince(pingStarted) * 1000
+        if let ms = lastTransportRttMs {
+            recordSpeedSample(ms, into: &rttSamplesMs)
+        }
         let response = try JSONDecoder().decode(RemoteEnvelope.self, from: responseData)
         if response.type == "error", response.code == "DEVICE_REVOKED" {
             handleDeviceRevoked(

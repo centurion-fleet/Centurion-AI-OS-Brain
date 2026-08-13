@@ -75,10 +75,37 @@ Instrument on device (`lastTransportRttMs` / `lastTtftOverheadMs`) and Brain log
 
 Warm Realtime while Anywhere is enabled; one KX per `conn` epoch; stream frames immediately (no batch-until-complete).
 
+### Soak / speed smoke (no PII)
+
+Evaluate recorded samples against the budgets above (fixture only — does not hit the network):
+
+```bash
+# Green demo (LAN + Away synthetic samples)
+python -m centurion_cli.remote_relay_speed --demo
+
+# Paste device/Brain soak samples (ms, comma-separated)
+python -m centurion_cli.remote_relay_speed --away \
+  --rtt 120,150,180,190 \
+  --ttft 220,310,390 \
+  --cold 1800,2200,2600
+
+# Doctor Away readiness (when Chat from anywhere is enabled)
+centurion doctor
+```
+
+Instrument on device: Settings → Chat from anywhere → **Copy speed soak samples**
+(builds a ready `python -m centurion_cli.remote_relay_speed …` command from rolling RTT / TTFT / cold-connect samples; no PII). Markers: `lastTransportRttMs`, `lastTtftOverheadMs`, `lastColdConnectMs`, `lastApprovalAppearMs`.
+
+Brain: `remote_relay_status` → `websockets_installed`, `realtime_pipe_ready`.
+
+Away history soft-fail: clients pass `limit` on `session_resume`; Brain may return `truncated: true`. Oversize frames surface as clear iPhone copy (home Wi‑Fi), not a silent hang.
+
+Mid-turn reconnect: Realtime drop fails the in-flight turn with retryable copy (`turnInterrupted` / `RELAY_RECONNECT`), clears the phone-side approval sheet, and re-enters Away KX — no silent hang.
+
 ## TestFlight path (LAN topics first)
 
-1. Brain package at tip **5.2.137+** with this branch merged.
-2. iPhone TestFlight build marketing **5.2.137** (lockstep).
+1. Brain package at tip **5.2.140+** with this branch merged.
+2. iPhone TestFlight build marketing **5.2.140** / build **33** (lockstep).
 3. Pair on home Wi‑Fi (Unbox QR) — no home IP typed.
 4. Run **LAN topics DoD** below before claiming topic continuity.
 5. Optionally enable Settings → Anywhere (Desktop) / You → Chat from anywhere (iPhone) for internal relay soak — **do not** use App Store “works anywhere” wording until Away DoD is green.
@@ -101,11 +128,15 @@ Code path for Crypto Chat over Realtime is implemented (Brain splice + iPhone mu
 - [ ] Mid-turn tool approval over Away
 - [ ] Brain offline → clear failure (same honesty as Telegram gateway down)
 - [ ] Reconnect mid-turn → retryable error; no half-delivered approvals
+  (code: `RelayError.turnInterrupted` clears phone approval UI + re-KX)
 - [ ] Chunked history resume >180KB succeeds; oversize soft-fails cleanly
-- [ ] Speed budgets green (see table above) on cellular
+  (code: `session_resume` `limit` + Brain soft size fit + iPhone `payloadTooLarge` copy)
+- [ ] Speed budgets green (see table + soak CLI / iPhone **Copy speed soak samples**) on cellular
 - [ ] Privacy Help article linked from Settings / Unbox
 
 Until this checklist is green, App Store marketing must not claim “works anywhere” as a finished guarantee — review notes already describe the relay product path (not DIY `:9119`).
+
+**P4 unlock:** only after the Away DoD checklist is green on cellular + CGNAT. Do not flip App Store “anywhere” copy in-repo until then.
 
 ## Customer help
 

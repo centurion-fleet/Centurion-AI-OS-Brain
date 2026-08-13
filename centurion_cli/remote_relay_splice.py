@@ -210,6 +210,10 @@ class RelayLanSplice:
             try:
                 events = self.session.outbound_frame(payload, expect_response=False)
                 self.publish(events)
+            except ValueError as exc:
+                # Oversize after LAN encrypt — Away cannot deliver; soft-fail in logs.
+                # Client should use session_resume limit / Brain soft truncate.
+                logger.warning("remote_relay publish LAN frame soft-fail: %s", exc)
             except Exception as exc:
                 logger.warning("remote_relay publish LAN frame failed: %s", exc)
 

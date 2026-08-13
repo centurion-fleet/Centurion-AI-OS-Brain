@@ -214,8 +214,25 @@ final class MessageService: ObservableObject {
                     )
                 )
             }
+            if resumed.truncated {
+                appendMessage(
+                    Message(
+                        conversationId: conversation.id,
+                        content: "Showing recent messages only — full history is available on home Wi‑Fi.",
+                        role: .system
+                    )
+                )
+            }
             return conversations.first(where: { $0.id == conversation.id }) ?? conversation
         } catch {
+            let text = connectionManager.friendlyRemoteError(error)
+            appendMessage(
+                Message(
+                    conversationId: conversation.id,
+                    content: text,
+                    role: .system
+                )
+            )
             return conversation
         }
     }

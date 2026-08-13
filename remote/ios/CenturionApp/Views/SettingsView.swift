@@ -553,6 +553,32 @@ struct SettingsView: View {
             sectionDivider
 
             Button {
+                UIPasteboard.general.string = connectionManager.speedSoakExportText(
+                    away: connectionManager.isRelayAwayConnected
+                        || !connectionManager.prefersLanCryptoChat
+                )
+                anywhereError = nil
+                deskOpsStatus = "Speed soak command copied"
+            } label: {
+                CenturionListRow(
+                    icon: "gauge.with.needle",
+                    title: "Copy speed soak samples",
+                    subtitle: {
+                        let rtt = connectionManager.lastTransportRttMs.map { String(format: "%.0f ms RTT", $0) }
+                        let ttft = connectionManager.lastTtftOverheadMs.map { String(format: "%.0f ms TTFT", $0) }
+                        let bits = [rtt, ttft].compactMap { $0 }
+                        return bits.isEmpty
+                            ? "Ping / chat a few times, then paste into the Brain soak CLI"
+                            : bits.joined(separator: " · ")
+                    }()
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!connectionManager.isCryptoChatReady)
+
+            sectionDivider
+
+            Button {
                 UIApplication.shared.open(CenturionHelp.localRemoteTelegramPrivacy)
             } label: {
                 CenturionListRow(

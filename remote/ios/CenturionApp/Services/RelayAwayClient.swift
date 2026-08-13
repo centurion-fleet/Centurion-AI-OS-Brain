@@ -295,10 +295,11 @@ final class RelayAwayClient: ObservableObject {
                     break
                 }
             } catch {
+                // Mid-turn reconnect: fail waiters with a retryable relay error (not a raw socket message).
                 lastError = error.localizedDescription
                 isConnected = false
                 _ = session.resetConnection()
-                failWaiters(error)
+                failWaiters(RelayTransport.RelayError.turnInterrupted)
                 receiveLoopActive = false
                 break
             }
@@ -351,7 +352,8 @@ final class RelayAwayClient: ObservableObject {
             if case RelayTransport.RelayError.staleConn = error {
                 _ = session.resetConnection()
                 isConnected = false
-                failWaiters(error)
+                // Stale conn epoch mid-turn ⇒ same class as reconnect: retryable, no half UI approval.
+                failWaiters(RelayTransport.RelayError.turnInterrupted)
             }
         }
     }
@@ -379,4 +381,8 @@ final class RelayAwayClient: ObservableObject {
     }
 }
 
-private struct TimeoutError: Error {}
+private struct TimeoutError: Error, LocalizedError {
+    var errorDescription: String? {
+        "Chat from anywhere timed out waiting for your Sovereign. Retry when the link is steady."
+    }
+}

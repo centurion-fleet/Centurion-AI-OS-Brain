@@ -2943,6 +2943,42 @@ def _handle_session_set_topic(request: dict[str, Any], request_id: str) -> dict[
         return _error_response(request_id, action="session_set_topic", exc=exc)
 
 
+def _fit_messages_for_remote_payload(
+    messages: list[Any],
+    *,
+    max_json_chars: int = 700_000,
+) -> tuple[list[Any], bool]:
+    """Keep the newest messages that fit under a JSON size soft ceiling.
+
+    Away Realtime rejects reassembled ciphertext above ~1MiB. Truncating here
+    avoids a silent hang when history is too large to encrypt+publish.
+    """
+    if not messages:
+        return messages, False
+    try:
+        encoded = json.dumps(messages, default=str)
+    except (TypeError, ValueError):
+        return messages, False
+    if len(encoded) <= max_json_chars:
+        return messages, False
+    lo, hi = 1, len(messages)
+    best: list[Any] = messages[-1:]
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        cand = messages[-mid:]
+        try:
+            size = len(json.dumps(cand, default=str))
+        except (TypeError, ValueError):
+            hi = mid - 1
+            continue
+        if size <= max_json_chars:
+            best = cand
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best, True
+
+
 def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     try:
         from centurion_state import SessionDB
@@ -2958,6 +2994,9 @@ def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str
                 "message": "session_id is required.",
                 "retryable": False,
             }
+        # Optional message cap (Away clients pass a limit so Realtime frames stay
+        # under the encrypted payload ceiling; 0 = unlimited before soft size fit).
+        limit = int(request.get("limit") or 0)
         db = SessionDB()
         try:
             tip = db.resolve_resume_session_id(session_id)
@@ -2969,7 +3008,13 @@ def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str
                 db.close()
             except Exception:
                 pass
-        return {
+        truncated = False
+        if limit > 0 and len(messages) > limit:
+            messages = messages[-limit:]
+            truncated = True
+        messages, size_truncated = _fit_messages_for_remote_payload(messages)
+        truncated = truncated or size_truncated
+        payload: dict[str, Any] = {
             "id": request_id,
             "ok": True,
             "action": "session_resume",
@@ -2979,6 +3024,12 @@ def _handle_session_resume(request: dict[str, Any], request_id: str) -> dict[str
             "topic_ref": topic.get("topic_ref"),
             "messages": messages,
         }
+        if truncated:
+            payload["truncated"] = True
+            payload["message"] = (
+                "History truncated for transport size; open on home Wi‑Fi for full transcript."
+            )
+        return payload
     except Exception as exc:
         return _error_response(request_id, action="session_resume", exc=exc)
 
