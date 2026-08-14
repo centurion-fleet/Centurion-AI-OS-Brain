@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>5.2.144</string>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>37</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
@@ -31,10 +31,12 @@
 	<array>
 		<string>_centurion._tcp</string>
 	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Sovereign AI Remote uses the camera only to scan the pairing QR code shown on your Centurion.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Sovereign AI Remote can fill a friend’s name, email, and phone when you refer them for the Family Beneficiary program. Contacts stay on your iPhone unless you submit a referral to your Sovereign.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Sovereign AI Remote needs local network access to find your Sovereign on your Wi‑Fi.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

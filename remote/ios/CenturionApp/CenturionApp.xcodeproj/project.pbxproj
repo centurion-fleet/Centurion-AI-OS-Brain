@@ -15,6 +15,7 @@
 		0C1E0D418522593EB7B25292 /* WelcomeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C10704A5584FA1CFCD17D41 /* WelcomeOnboardingView.swift */; };
 		1277D29ED6C7FA55736F17AB /* RemoteConnectionString.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8321EC5C6440EF1FB9E6C91B /* RemoteConnectionString.swift */; };
 		182C2907150F78B4272607B9 /* MemoryHorizonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1527EDC6D0DA370FC5DFCD9D /* MemoryHorizonView.swift */; };
+		18D5630B8CCB20D188D0FE41 /* ContactPickerRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95C97A0A1DB69C5815C14640 /* ContactPickerRepresentable.swift */; };
 		1B7471D1CFAFF3A79500307C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15334FB4EFAC69D8C25C2EE6 /* SettingsView.swift */; };
 		1D163A7D7423C574013F4E5B /* OversightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C8DB8D0B1481C0A04D1F529 /* OversightStore.swift */; };
 		20A0AA4DC14602E1E56E64AE /* AdrianView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB67ACC37C89A1626725E6 /* AdrianView.swift */; };
@@ -140,6 +141,7 @@
 		8F8DB2BC7DA9C810143F8D7E /* KeyAgreement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyAgreement.swift; sourceTree = "<group>"; };
 		90EC2248318B1574E9C9B9BF /* MemoryHorizonStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryHorizonStore.swift; sourceTree = "<group>"; };
 		93D5DA4EC89EE11C260F6008 /* RelayTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayTransport.swift; sourceTree = "<group>"; };
+		95C97A0A1DB69C5815C14640 /* ContactPickerRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactPickerRepresentable.swift; sourceTree = "<group>"; };
 		960F564AD93186BBE84E3080 /* MissionFullModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissionFullModels.swift; sourceTree = "<group>"; };
 		9D0835E111FF81A234916EE2 /* SoulDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoulDocumentView.swift; sourceTree = "<group>"; };
 		9FA302F28F90FD5E259E3B9C /* CenturionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenturionApp.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				815E8C975CB35A4357AFF0E1 /* ChatView.swift */,
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
 				C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */,
+				95C97A0A1DB69C5815C14640 /* ContactPickerRepresentable.swift */,
 				BCF1F8A14DF5E87B36EF7E7D /* DocumentViewer.swift */,
 				6D351D21059085FAFFF33C37 /* GatewayControlSection.swift */,
 				B7F1CD8E90B2798E117E1F22 /* GetHelpView.swift */,
@@ -414,6 +417,7 @@
 				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
 				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
 				E04CC701C6B56F3DF9ACBA7C /* ConstellationView.swift in Sources */,
+				18D5630B8CCB20D188D0FE41 /* ContactPickerRepresentable.swift in Sources */,
 				776C89C43273562535733334 /* ContentView.swift in Sources */,
 				A3FF784376E55E7F6E7D8E22 /* Conversation.swift in Sources */,
 				2F7E908E2D04623D008C6AD2 /* ConversationStore.swift in Sources */,
@@ -513,6 +517,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 37;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = J6DY26ZGL4;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -526,6 +531,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 5.2.144;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -541,13 +547,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 37;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.2.137;
+				MARKETING_VERSION = 5.2.144;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -589,6 +595,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 37;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = J6DY26ZGL4;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -608,6 +615,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 5.2.144;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -624,13 +632,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 37;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.2.137;
+				MARKETING_VERSION = 5.2.144;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
