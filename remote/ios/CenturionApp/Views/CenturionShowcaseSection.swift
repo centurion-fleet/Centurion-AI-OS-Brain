@@ -123,17 +123,39 @@ private struct ShowcasePillar: View {
 
 struct FamilyBeneficiaryCard: View {
     @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
+    @EnvironmentObject private var connectionManager: ConnectionManager
 
     let onNominate: () -> Void
     let onReferColleague: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            CenturionSectionHeader(title: "Family Beneficiary Program", icon: "gift")
+            HStack(alignment: .firstTextBaseline) {
+                CenturionSectionHeader(title: "Family Beneficiary Program", icon: "gift")
+                Spacer(minLength: 0)
+                if connectionManager.isCryptoChatReady {
+                    Button {
+                        Task { await beneficiaryStore.refresh(from: connectionManager) }
+                    } label: {
+                        if beneficiaryStore.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.body.weight(.medium))
+                                .foregroundColor(ColorTheme.accent())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(beneficiaryStore.isRefreshing)
+                    .accessibilityLabel("Refresh referral status")
+                    .accessibilityHint("Checks your Sovereign for new customer purchases")
+                }
+            }
 
             AtmosphericSurface(showRim: true) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text("Nominate one family member you are earning for. Refer colleagues with name, email, and phone — they sync to marketing from your Sovereign. When a referral becomes a customer (tagged in GHL), it counts toward four purchases for one complimentary Sovereign.")
+                    Text("Nominate one family member you are earning for. Refer friends or colleagues with name, email, and phone from this iPhone — your Sovereign stores the list and syncs marketing. When someone becomes a customer, their row updates and counts toward four purchases for one complimentary Sovereign.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(4)
@@ -156,17 +178,36 @@ struct FamilyBeneficiaryCard: View {
                             .foregroundColor(ColorTheme.error())
                     }
 
+                    referralTrackerHeader
                     colleagueList
 
                     actionButtons
                 }
             }
 
-            Text("Refer colleagues (not family). Pending means referred and waiting for their purchase; Purchased means it counts toward your four. When you earn a complimentary Sovereign, our team will be in touch to fulfill it — this app does not provision hardware automatically.")
+            Text("Refer friends and colleagues — not family members on this list. Waiting means referred; Customer means their purchase credited your fee machine. When you earn a complimentary Sovereign, our team will be in touch — this app does not provision hardware automatically.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .padding(.horizontal, Spacing.xs)
                 .lineSpacing(2)
+        }
+    }
+
+    @ViewBuilder
+    private var referralTrackerHeader: some View {
+        HStack {
+            Text("People you’ve referred")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(ColorTheme.primaryText())
+            Spacer(minLength: 0)
+            if !beneficiaryStore.colleagueReferrals.isEmpty {
+                ShareLink(item: beneficiaryStore.referralShareText) {
+                    Label("Share list", systemImage: "square.and.arrow.up")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(ColorTheme.accent())
+                }
+                .accessibilityHint("Share the names and customer status of your referrals")
+            }
         }
     }
 
@@ -177,7 +218,7 @@ struct FamilyBeneficiaryCard: View {
                 Text("Earning a Sovereign for \(beneficiaryStore.beneficiaryFirstName)")
                     .font(.body.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("\(beneficiaryStore.successfulCount) of \(beneficiaryStore.referralsRequired) successful colleague purchases")
+                Text("\(beneficiaryStore.successfulCount) of \(beneficiaryStore.referralsRequired) customer purchases credited")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -196,7 +237,7 @@ struct FamilyBeneficiaryCard: View {
     @ViewBuilder
     private var colleagueList: some View {
         if beneficiaryStore.colleagueReferrals.isEmpty {
-            Text("No colleague referrals yet.")
+            Text("No referrals yet. Add a friend or colleague to start tracking.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
         } else {
@@ -217,7 +258,7 @@ struct FamilyBeneficiaryCard: View {
             .buttonStyle(CenturionPrimaryButtonStyle())
         } else {
             Button(action: onReferColleague) {
-                Text("Refer a colleague")
+                Text("Refer a friend or colleague")
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
             .disabled(beneficiaryStore.successfulCount >= beneficiaryStore.referralsRequired)
@@ -243,7 +284,7 @@ struct ColleagueProgressBar: View {
                     .frame(height: 8)
             }
         }
-        .accessibilityLabel("Progress: \(successful) of \(required) successful colleague referrals")
+        .accessibilityLabel("Progress: \(successful) of \(required) customer purchases credited")
     }
 }
 
@@ -256,19 +297,36 @@ struct ColleagueReferralRow: View {
                 .foregroundColor(referral.status == .successful ? ColorTheme.success() : ColorTheme.mutedText())
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
-                Text(referral.name)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundColor(ColorTheme.primaryText())
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                    Text(referral.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(ColorTheme.primaryText())
+                    Spacer(minLength: 0)
+                    Text(referral.status.shortLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(referral.status == .successful ? ColorTheme.success() : ColorTheme.mutedText())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(
+                                    referral.status == .successful
+                                        ? ColorTheme.success().opacity(0.15)
+                                        : ColorTheme.border().opacity(0.5)
+                                )
+                        )
+                }
                 Text(referral.contactSummary)
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
                 Text(referral.status.displayLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundColor(referral.status == .successful ? ColorTheme.success() : ColorTheme.mutedText())
+                    .font(.caption2)
+                    .foregroundColor(ColorTheme.mutedText())
             }
-            Spacer(minLength: 0)
         }
         .padding(.vertical, Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(referral.name), \(referral.status.displayLabel), \(referral.contactSummary)")
     }
 }
 
@@ -344,15 +402,26 @@ struct AddColleagueReferralSheet: View {
     @State private var phone = ""
     @State private var nonFamilyAttested = false
     @State private var isSaving = false
+    @State private var showContactPicker = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
                     SheetHeader(
-                        title: "Refer a colleague",
-                        subtitle: "A business contact who may buy their own Sovereign — not a family member."
+                        title: "Refer a friend or colleague",
+                        subtitle: "Capture name, email, and phone. They appear on your tracker so you can see when they become a customer."
                     )
+
+                    Button {
+                        showContactPicker = true
+                    } label: {
+                        Label("Choose from Contacts", systemImage: "person.crop.circle.badge.plus")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CenturionGhostButtonStyle())
+                    .accessibilityHint("Pick a contact to fill name, email, and phone")
 
                     TextField("Name", text: $name)
                         .textFieldStyle(.roundedBorder)
@@ -370,7 +439,7 @@ struct AddColleagueReferralSheet: View {
                         .keyboardType(.phonePad)
 
                     Toggle(isOn: $nonFamilyAttested) {
-                        Text("This is a colleague or business contact, not a family member")
+                        Text("This is a friend or colleague, not a family member")
                             .font(.subheadline)
                             .foregroundColor(ColorTheme.primaryText())
                     }
@@ -393,7 +462,7 @@ struct AddColleagueReferralSheet: View {
                         if isSaving {
                             ProgressView()
                         } else {
-                            Text("Submit referral")
+                            Text("Add to tracker")
                         }
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())
@@ -402,13 +471,25 @@ struct AddColleagueReferralSheet: View {
                 .padding()
             }
             .background(ColorTheme.background())
-            .navigationTitle("Colleague")
+            .navigationTitle("Referral")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .foregroundColor(ColorTheme.accent())
                 }
+            }
+            .sheet(isPresented: $showContactPicker) {
+                ContactPickerRepresentable(
+                    onPick: { pickedName, pickedEmail, pickedPhone in
+                        if !pickedName.isEmpty { name = pickedName }
+                        if !pickedEmail.isEmpty { email = pickedEmail }
+                        if !pickedPhone.isEmpty { phone = pickedPhone }
+                        showContactPicker = false
+                    },
+                    onCancel: { showContactPicker = false }
+                )
+                .ignoresSafeArea()
             }
         }
     }

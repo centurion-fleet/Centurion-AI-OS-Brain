@@ -6,8 +6,15 @@ enum ColleagueReferralStatus: String, Codable {
 
     var displayLabel: String {
         switch self {
-        case .pending: return "Pending — awaiting purchase"
-        case .successful: return "Purchased — counted"
+        case .pending: return "Waiting — not yet a customer"
+        case .successful: return "Customer — credited to you"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .pending: return "Waiting"
+        case .successful: return "Customer"
         }
     }
 }
@@ -21,6 +28,8 @@ struct ColleagueReferral: Identifiable, Codable, Equatable {
     var nonFamilyAttested: Bool
     var status: ColleagueReferralStatus
     var createdAt: String
+    var successfulAt: String?
+    var creditedFrom: String?
 
     var contactSummary: String {
         if !email.isEmpty && !phone.isEmpty {
@@ -29,6 +38,11 @@ struct ColleagueReferral: Identifiable, Codable, Equatable {
         if !email.isEmpty { return email }
         if !phone.isEmpty { return phone }
         return "No contact details"
+    }
+
+    var shareLine: String {
+        "• \(name) — \(status.shortLabel)"
+            + (contactSummary == "No contact details" ? "" : " (\(contactSummary))")
     }
 }
 

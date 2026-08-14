@@ -36,6 +36,26 @@ final class BeneficiaryStore: ObservableObject {
         snapshot.currentCycle.colleagueReferrals
     }
 
+    /// Plain-text list for Share Sheet — names + customer credit status.
+    var referralShareText: String {
+        var lines: [String] = [
+            "Family Beneficiary referrals",
+            "Earning for: \(hasBeneficiary ? beneficiaryFirstName : "(not nominated yet)")",
+            "Progress: \(successfulCount) of \(referralsRequired) customer purchases credited",
+            "",
+        ]
+        if colleagueReferrals.isEmpty {
+            lines.append("No referrals shared yet.")
+        } else {
+            lines.append(contentsOf: colleagueReferrals.map(\.shareLine))
+        }
+        if !snapshot.updatedAt.isEmpty {
+            lines.append("")
+            lines.append("Updated: \(snapshot.updatedAt)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     func refresh(from connectionManager: ConnectionManager) async {
         guard connectionManager.isCryptoChatReady else { return }
         isRefreshing = true

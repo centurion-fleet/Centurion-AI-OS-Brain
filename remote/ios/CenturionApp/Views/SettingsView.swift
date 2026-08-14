@@ -80,6 +80,10 @@ struct SettingsView: View {
                 .padding()
                 .frame(maxWidth: .infinity)
             }
+            .refreshable {
+                guard connectionManager.isCryptoChatReady else { return }
+                await beneficiaryStore.refresh(from: connectionManager)
+            }
         }
         .alert("Reset Identity?", isPresented: $showResetConfirmation) {
             Button("Cancel", role: .cancel) {}

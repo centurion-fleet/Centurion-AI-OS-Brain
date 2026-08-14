@@ -1,12 +1,12 @@
-# Archive / TestFlight — Sovereign AI Remote 5.2.137
+# Archive / TestFlight — Sovereign AI Remote 5.2.142
 
 Engineering prep for App Store Connect upload (operator runs Archive on Mac).
 
 ## Preconditions
 
 - Xcode with signing team `J6DY26ZGL4` (or your ASC team)
-- Marketing version **5.2.137**, build **30+** (QR pairing + camera string)
-- For Away review: Brain with **Chat from anywhere** enabled (Centurion relay) — not DIY `EXPOSE_9119`
+- Marketing version **5.2.142**, build **35** (Family Beneficiary Contacts + tracker)
+- Brain **5.2.141+** with GHL env keys for referral sync (optional for UI-only test)
 
 ## Generate + Archive
 
@@ -22,7 +22,7 @@ In Xcode:
 2. Product → Archive
 3. Organizer → Distribute App → App Store Connect → Upload
 4. Wait for processing; add build to TestFlight internal group
-5. Install on physical iPhone; run [`DEVICE_SMOKE.md`](DEVICE_SMOKE.md) on **cellular** (Scan QR)
+5. Install on physical iPhone; run [`DEVICE_SMOKE.md`](DEVICE_SMOKE.md) and [`TestFlightWhatToTest.md`](TestFlightWhatToTest.md)
 
 ## Review window notes (paste into ASC)
 

@@ -130,7 +130,7 @@ def get_beneficiary_snapshot() -> dict[str, Any]:
 
 
 def _sync_cloud_conversions(state: dict[str, Any]) -> None:
-    """Pull purchase conversions from the sales site into local referral status."""
+    """Pull purchase conversions from GoHighLevel into local referral status."""
     cycle = state.get("current_cycle") or {}
     referrals = cycle.get("colleague_referrals") or []
     pending = [r for r in referrals if isinstance(r, dict) and str(r.get("status")) == "pending"]
