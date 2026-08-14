@@ -2449,6 +2449,20 @@ OPTIONAL_ENV_VARS = {
         "password": True,
         "category": "tool",
     },
+    "GHL_API_KEY": {
+        "description": "GoHighLevel Private Integration token — Family Beneficiary referrals from iPhone Settings sync to GHL for nurture and purchase tracking",
+        "prompt": "GoHighLevel API key",
+        "url": "https://marketplace.gohighlevel.com/",
+        "password": True,
+        "category": "tool",
+    },
+    "GHL_LOCATION_ID": {
+        "description": "GoHighLevel Location (sub-account) ID for Family Beneficiary referral contacts",
+        "prompt": "GoHighLevel Location ID",
+        "url": "https://marketplace.gohighlevel.com/",
+        "password": False,
+        "category": "tool",
+    },
     "FIRECRAWL_API_URL": {
         "description": "Firecrawl API URL for self-hosted instances (optional)",
         "prompt": "Firecrawl API URL (leave empty for cloud)",

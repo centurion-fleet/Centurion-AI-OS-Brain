@@ -133,7 +133,7 @@ struct FamilyBeneficiaryCard: View {
 
             AtmosphericSurface(showRim: true) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text("Nominate one family member you are earning for. Then refer four colleagues who buy their own Sovereign — that earns one complimentary Sovereign for your nominee.")
+                    Text("Nominate one family member you are earning for. Refer colleagues with name, email, and phone — they sync to marketing from your Sovereign. When a referral becomes a customer (tagged in GHL), it counts toward four purchases for one complimentary Sovereign.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(4)

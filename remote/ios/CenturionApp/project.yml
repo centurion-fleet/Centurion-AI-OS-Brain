@@ -38,8 +38,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "5.2.140"
-        CURRENT_PROJECT_VERSION: "33"
+        MARKETING_VERSION: "5.2.141"
+        CURRENT_PROJECT_VERSION: "34"
     info:
       path: Info.plist
       properties:

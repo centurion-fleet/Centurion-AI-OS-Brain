@@ -123,9 +123,36 @@ def _maybe_complete_reward(state: dict[str, Any]) -> bool:
 def get_beneficiary_snapshot() -> dict[str, Any]:
     """Return the Brain-owned beneficiary program snapshot."""
     state = _load_state()
+    _sync_cloud_conversions(state)
     _maybe_complete_reward(state)
     _save_state(state)
     return _snapshot_from_state(state)
+
+
+def _sync_cloud_conversions(state: dict[str, Any]) -> None:
+    """Pull purchase conversions from the sales site into local referral status."""
+    cycle = state.get("current_cycle") or {}
+    referrals = cycle.get("colleague_referrals") or []
+    pending = [r for r in referrals if isinstance(r, dict) and str(r.get("status")) == "pending"]
+    if not pending:
+        return
+    try:
+        from centurion_cli.beneficiary_cloud import fetch_successful_referral_ids
+
+        successful_ids = set(fetch_successful_referral_ids(pending))
+    except Exception:
+        return
+    if not successful_ids:
+        return
+    now = _now_iso()
+    for item in referrals:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id")) in successful_ids and str(item.get("status")) != "successful":
+            item["status"] = "successful"
+            item["successful_at"] = now
+            item["credited_from"] = "ghl"
+
 
 
 def set_family_beneficiary(first_name: str) -> dict[str, Any]:
@@ -188,6 +215,12 @@ def submit_colleague_referral(
     cycle.setdefault("colleague_referrals", []).append(referral)
     _maybe_complete_reward(state)
     _save_state(state)
+    try:
+        from centurion_cli.beneficiary_cloud import push_colleague_referral
+
+        push_colleague_referral(referral)
+    except Exception:
+        pass
     return _snapshot_from_state(state)
 
 
