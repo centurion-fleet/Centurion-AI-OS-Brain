@@ -61,11 +61,11 @@ final class MessageService: ObservableObject {
         let context: ConversationContext
         switch kind {
         case "decision":
-            context = .decision(id: UUID().uuidString, title: title)
+            context = .decision(id: UUID(), title: title)
         case "document":
-            context = .document(id: UUID().uuidString, title: title, missionId: nil)
+            context = .document(id: UUID(), title: title, missionId: nil)
         case "mission":
-            context = .mission(id: UUID().uuidString, name: title, subjectName: nil)
+            context = .mission(id: UUID(), name: title, subjectName: nil)
         case "horizon":
             context = .horizon(layer: title)
         default:
@@ -196,7 +196,7 @@ final class MessageService: ObservableObject {
                 let roleRaw = (raw["role"] as? String) ?? ""
                 let content = (raw["content"] as? String) ?? ""
                 guard !content.isEmpty else { continue }
-                let role: Message.Role
+                let role: MessageRole
                 switch roleRaw {
                 case "assistant": role = .centurion
                 case "user": role = .user
