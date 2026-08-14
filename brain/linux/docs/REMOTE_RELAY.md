@@ -108,11 +108,23 @@ Mid-turn reconnect: Realtime drop fails the in-flight turn with retryable copy (
 
 ## TestFlight path (LAN topics first)
 
-1. Brain package at tip **5.2.140+** with this branch merged.
-2. iPhone TestFlight build marketing **5.2.140** / build **33** (lockstep).
+1. Brain package at tip **5.2.145+** with this branch merged.
+2. iPhone TestFlight build marketing **5.2.145** / build **38** (lockstep).
 3. Pair on home Wi‑Fi (Unbox QR) — no home IP typed.
 4. Run **LAN topics DoD** below before claiming topic continuity.
 5. Optionally enable Settings → Anywhere (Desktop) / You → Chat from anywhere (iPhone) for internal relay soak — **do not** use App Store “works anywhere” wording until Away DoD is green.
+
+### Desk enrollment (ops)
+
+```bash
+# Away deps (Brain venv)
+uv pip install 'centurionai-os[remote-relay]'   # websockets + pynacl
+# Then configure remote_relay.supabase_url + anon/service key (Centurion project)
+# Confirm: python -m centurion_cli.remote_relay_speed --status
+# Expect: websockets_installed=true, supabase_url_configured=true, realtime_pipe_ready when enabled+online
+```
+
+Until `supabase_url` is configured on the production desk, Away DoD cannot go green.
 
 ## LAN topics DoD (ships before away)
 

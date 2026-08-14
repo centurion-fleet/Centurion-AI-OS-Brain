@@ -115,14 +115,14 @@ struct DeferredTabContent<Content: View>: View {
 struct DemoDataBanner: View {
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: "sparkles")
+            Image(systemName: "eye.slash")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.accent())
             VStack(alignment: .leading, spacing: 2) {
-                Text("Sample updates")
+                Text("Not linked to a Brain")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("These are examples until you link your Sovereign in Connect.")
+                Text("Any layout below is demo only — not live Crypto Chat. Open You → Connect to pair.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
             }
@@ -136,7 +136,7 @@ struct DemoDataBanner: View {
                 .stroke(ColorTheme.accent().opacity(0.2), lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sample updates. These are examples until you link your Sovereign in Connect.")
+        .accessibilityLabel("Not linked to a Brain. Demo only — open You, Connect to pair.")
     }
 }
 

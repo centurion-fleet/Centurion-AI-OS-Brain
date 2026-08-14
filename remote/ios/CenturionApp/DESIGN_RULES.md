@@ -267,7 +267,7 @@ Before any release:
 
 - Humans see **Signals** only (decisions, ceremonies) — not handoffs, tool progress, or activity log.
 - Pulse attention setting (in-app only): **Surface decisions in the app when needed** (default) vs **Keep Pulse quieter until I open it**. Does **not** schedule OS push or local notifications in the current ship.
-- Collaboration entry: **Connect another Sovereign** (invite / join). Local “Start collaboration” formation preview is not shipped.
+- Collaboration entry: **Start a collaboration** (local board on this Sovereign). Portal Mission Control connect/invite stays frozen (`MC_FROZEN`) — not offered in the Remote.
 
 ### Brain vs Remote architecture
 
@@ -287,7 +287,7 @@ their mission while out in the world:
 - Decide: open Signals with one clear action.
 - Receive: finished documents/outcomes, readable and shareable.
 - Steer: Discuss with collaboration context carried back to the Brain.
-- Collaborate: invite or join via Connect another Sovereign; Brain owns boards/projects.
+- Collaborate: **Start a collaboration** (local board); portal invite/connect frozen. Brain owns boards.
 
 ### Collaboration isolation
 

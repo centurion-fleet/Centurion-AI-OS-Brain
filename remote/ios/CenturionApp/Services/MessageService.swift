@@ -432,10 +432,10 @@ final class MessageService: ObservableObject {
         return conversation
     }
 
-    /// Call after the view has appeared to seed demo conversations when offline.
+    /// Offline Chat stays empty — do not seed fake threads that feel like a live Brain.
+    /// Home/portfolio may still show labeled demo layout via `DemoDataBanner`.
     func seedInitialData() {
-        guard dataMode.showsDemoContent, conversations.isEmpty else { return }
-        seedSampleData()
+        // Intentionally no-op: first-run Chat must not look linked until Crypto Chat is ready.
     }
 
     /// Send a message in a conversation context. Returns the conversation used.

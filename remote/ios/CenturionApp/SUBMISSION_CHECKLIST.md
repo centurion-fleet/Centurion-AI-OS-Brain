@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.1.0**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.2.145** / build **38**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -8,6 +8,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.1.0**). Complete before App Store
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md
+- [ ] ASC iOS version created as **5.2.145** (not a stale 5.0.1 / 5.1.0 train)
 
 ## Encryption export compliance
 
@@ -22,7 +23,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.1.0**). Complete before App Store
 | Qualify for exemption? | Yes — encryption is limited to authentication / confidentiality using standard algorithms (X25519, XSalsa20-Poly1305 via libsodium) between the owner’s iPhone and their own Sovereign; plus ordinary HTTPS. |
 | Export compliance documentation | Not required if exemption claimed; keep counsel confirmation on file. |
 
-**Decision (shipping default):** Keep `false` (claim **exemption**). Crypto Chat uses standard, publicly available algorithms solely to protect communications between the owner’s iPhone and their own Sovereign (EAR Note 4 class).
+**Decision (shipping default):** Keep `false` (claim **exemption**).
 
 **Before submit:** Have counsel confirm. Record:
 
@@ -36,7 +37,9 @@ ASC path: Exempt / Non-exempt (circle one)
 ## App Privacy / copy alignment
 
 - Listing and keywords: see [`AppStoreDescription.md`](AppStoreDescription.md) (keywords ≤100 characters).
-- Crypto Chat is not Centurion cloud storage.
+- Crypto Chat content is not Centurion cloud storage.
+- Anywhere: E2E content; Centurion cloud may see connection metadata/presence only when Chat from anywhere is enabled.
+- Family & friends referrals: contact info stored on the owner’s Sovereign (optional); disclose in ASC if the feature is used.
 
 ### ASC App Privacy checklist (draft answers)
 
@@ -46,7 +49,7 @@ ASC path: Exempt / Non-exempt (circle one)
 | Product Interaction / diagnostics (connection + thinking health labels) | Yes if Adrian used | Yes | No | Not Crypto Chat content |
 | Other User Content (short mission summary) | Yes if Adrian used | Yes | No | Capped; not full mission dump |
 | Crypto Chat transcripts | No | — | — | On device / Sovereign only |
-| Contact info (beneficiary referral email/phone) | Yes if feature used | Yes | No | Stored on owner’s Sovereign for Family Beneficiary; not sold |
+| Contact info (Family & friends referral email/phone) | Yes if feature used | Yes | No | Stored on owner’s Sovereign for Family Beneficiary; not sold |
 
 ```
 App Privacy answers updated in ASC:
@@ -70,19 +73,22 @@ Capture checklist:
 ## Camera / QR pairing disclosure
 
 - [`NSCameraUsageDescription`](project.yml) — camera used **only** to scan the pairing QR on the Centurion screen.
-- Review notes should mention: pair on home Wi‑Fi via QR; **Chat from anywhere** uses Centurion outbound relay (no customer port-forward). Paste fallback available.
+- Review notes: pair on home Wi‑Fi via QR; **Chat from anywhere** (when enabled on the Brain) uses Centurion outbound relay — no customer port-forward. Paste fallback available.
 
 ## Features intentionally not shipped as unfinished
 
-- Local-only Swarm **formation** UI removed; join / invite via Connect another Sovereign remains.
+- Portal Mission Control connect/invite frozen (`MC_FROZEN`) — Remote offers **Start a collaboration** (local board) only.
 - Digest preference is **in-app attention** only — no OS push / local notification entitlement in this build.
 - Beneficiary complimentary Sovereign fulfillment is **ops** (team contact) — not in-app provisioning.
+- Desk skills / fleet / plugins / Telegram on the phone are **glance** (status only).
 
 ## Privacy manifest
 
 - [`PrivacyInfo.xcprivacy`](PrivacyInfo.xcprivacy) declares `NSPrivacyAccessedAPICategoryUserDefaults` with reason **CA92.1** (same-app access).
-- Tracking: false. Collected-data array left empty in the manifest; complete App Store Connect App Privacy answers to match Adrian optional help (see AppStoreDescription).
+- Tracking: false. Collected-data array left empty in the manifest; complete App Store Connect App Privacy answers to match Adrian optional help and Family referrals (see AppStoreDescription).
 
 ## Device smoke (pre-submit)
 
 See [`DEVICE_SMOKE.md`](DEVICE_SMOKE.md). TestFlight What to Test: [`TestFlightWhatToTest.md`](TestFlightWhatToTest.md).
+
+**Away App Store “works anywhere” wording:** still gated until Away DoD in `brain/linux/docs/REMOTE_RELAY.md` is green on cellular + CGNAT.

@@ -88,7 +88,7 @@ struct WelcomeOnboardingView: View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
                 title: "Link your Centurion",
-                subtitle: "Scan the QR code on your Centurion while you’re on home Wi‑Fi — that pairs Crypto Chat. Later, turn on Chat from anywhere on the Brain so the same app works away from home (no home IP or port-forward). Paste remains a fallback."
+                subtitle: "Scan the QR code on your Centurion while you’re on home Wi‑Fi — that pairs Crypto Chat. After you enable Chat from anywhere on the Brain, the same app can continue Crypto Chat away from home (no home IP or port-forward). Paste remains a fallback."
             )
 
             AtmosphericSurface {

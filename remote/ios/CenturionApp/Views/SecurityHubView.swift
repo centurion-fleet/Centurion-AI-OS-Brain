@@ -74,7 +74,7 @@ struct SecurityHubView: View {
                     .foregroundColor(ColorTheme.primaryText())
                     .multilineTextAlignment(.center)
 
-                Text("Crypto Chat is your private encrypted conversation with your Sovereign — on your network, not a public AI cloud. Public chatbots have nothing like it.")
+                Text("Crypto Chat is your private encrypted conversation with your Sovereign. On home Wi‑Fi it stays on your network. Chat from anywhere keeps message content end-to-end encrypted while Centurion cloud only sees connection metadata — not your words.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .multilineTextAlignment(.center)
@@ -110,12 +110,17 @@ struct SecurityHubView: View {
                 CenturionReassuranceRow(
                     icon: "lock.shield.fill",
                     title: "Crypto Chat",
-                    detail: "End-to-end encrypted talk with your Sovereign on your network — something public AIs simply do not offer."
+                    detail: "End-to-end encrypted talk with your Sovereign — content stays private; public AIs have nothing like it."
                 )
                 CenturionReassuranceRow(
                     icon: "house.fill",
-                    title: "Stays on your network",
-                    detail: "This iPhone links over your private network. No cloud account required for Crypto Chat."
+                    title: "Home Wi‑Fi by default",
+                    detail: "Pair once on your private network. No cloud account required for the home link."
+                )
+                CenturionReassuranceRow(
+                    icon: "iphone.and.arrow.forward",
+                    title: "Chat from anywhere (optional)",
+                    detail: "When enabled on your Sovereign, the phone and Brain dial out through Centurion relay. Message bodies stay E2E encrypted; the cloud sees presence/routing metadata only."
                 )
                 CenturionReassuranceRow(
                     icon: "person.fill.checkmark",
@@ -140,11 +145,11 @@ struct SecurityHubView: View {
 
                 rebukeCard(
                     claim: "\"That's too much of a security risk.\"",
-                    answer: "Typical cloud AI sends your words to a company's servers. Sovereign runs on your computer and talks to your iPhone through Crypto Chat — encrypted on your network, with no phone number and no public cloud account."
+                    answer: "Typical cloud AI sends your words to a company's servers. Sovereign runs on your computer. Home Crypto Chat stays on your network; Chat from anywhere keeps content end-to-end encrypted with only connection metadata on Centurion cloud — not a public chatbot training on your chats."
                 )
                 rebukeCard(
                     claim: "\"It's unsafe — anyone could read it.\"",
-                    answer: "Your Remote link uses modern end-to-end encryption with perfect forward secrecy. There is no routing server collecting who talked to whom. Messages are not sitting in a shared inbox on the public internet."
+                    answer: "Your Remote link uses modern end-to-end encryption with perfect forward secrecy. Message content is not stored in a shared public inbox. On home Wi‑Fi there is no Centurion routing hop; away-from-home uses outbound relay for presence only — not readable transcripts."
                 )
                 rebukeCard(
                     claim: "\"AI will replace our jobs / we can't trust it.\"",
@@ -196,11 +201,11 @@ struct SecurityHubView: View {
                     comparisonTable(
                         headers: ["", "Sovereign", "Signal", "Telegram"],
                         rows: [
-                            ("End-to-end encrypted", .full, .full, .partial),
-                            ("Zero server metadata", .full, .none, .none),
-                            ("Forward secrecy", .full, .full, .none),
-                            ("No cloud dependency", .full, .none, .none),
+                            ("End-to-end encrypted content", .full, .full, .partial),
                             ("No phone number required", .full, .none, .none),
+                            ("Home link without cloud hop", .full, .none, .none),
+                            ("Forward secrecy", .full, .full, .none),
+                            ("Optional away relay (metadata only)", .partial, .none, .none),
                         ]
                     )
                 } else {
@@ -211,10 +216,10 @@ struct SecurityHubView: View {
                         headers: ["", "Sovereign", "Cloud AI"],
                         rows: [
                             ("Runs on your computer", .full, .none),
-                            ("Private network remote", .full, .none),
+                            ("Private Crypto Chat remote", .full, .none),
                             ("No shared public chat cloud", .full, .none),
                             ("You own mission & Soul", .full, .none),
-                            ("Works offline on your LAN", .full, .none),
+                            ("Works on home LAN without relay", .full, .none),
                         ]
                     )
                 }
@@ -346,8 +351,8 @@ struct SecurityHubView: View {
 
                 CenturionReassuranceRow(
                     icon: "house.fill",
-                    title: "Stays on your network",
-                    detail: "Messages travel between your iPhone and your Sovereign — not through a public messaging server."
+                    title: "Home Wi‑Fi link",
+                    detail: "On your network, messages travel between your iPhone and your Sovereign — not through a public messaging inbox."
                 )
                 CenturionReassuranceRow(
                     icon: "lock.fill",
@@ -357,7 +362,7 @@ struct SecurityHubView: View {
                 CenturionReassuranceRow(
                     icon: "person.fill.checkmark",
                     title: "You stay in control",
-                    detail: "No phone number, no social login, no company reading your private Sovereign conversations."
+                    detail: "No phone number and no social login for Crypto Chat. Optional Chat from anywhere uses Centurion relay for presence only — not readable message content."
                 )
             }
         }
@@ -375,7 +380,7 @@ struct SecurityHubView: View {
                             .font(.headline)
                             .foregroundColor(ColorTheme.primaryText())
                         Text(isConnected
-                             ? "Your Sovereign is reachable on your local network."
+                             ? "Your Sovereign is reachable (home Wi‑Fi or Chat from anywhere)."
                              : "Open You to link your Sovereign.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.mutedText())
@@ -402,8 +407,8 @@ struct SecurityHubView: View {
                 )
                 CenturionReassuranceRow(
                     icon: "eye.slash.fill",
-                    title: "No server metadata trail",
-                    detail: "There is no central routing log of who talked to whom on the private link."
+                    title: "Content stays on your side",
+                    detail: "Home Crypto Chat has no Centurion routing hop. Away mode may see connection metadata so the link can find your Sovereign — not your message text."
                 )
                 CenturionReassuranceRow(
                     icon: "checkmark.seal.fill",
@@ -424,7 +429,7 @@ struct SecurityHubView: View {
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(4)
 
-                Text("Discovery uses mDNS on your local network. No central registry.")
+                Text("Discovery uses mDNS on your local network for home pairing. Chat from anywhere uses outbound Centurion relay for presence — not DIY port-forward.")
                     .font(.caption)
                     .foregroundColor(ColorTheme.mutedText())
 

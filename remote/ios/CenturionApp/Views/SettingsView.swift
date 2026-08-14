@@ -330,8 +330,8 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "person.badge.plus",
-                    title: "Connect another Sovereign",
-                    subtitle: "Invite a friend or join a shared collaboration"
+                    title: "Start a collaboration",
+                    subtitle: "Local board on this Sovereign — portal invite not available"
                 )
             }
             .buttonStyle(.plain)
@@ -605,7 +605,7 @@ struct SettingsView: View {
         settingsSection(
             title: "Brain desk",
             icon: "desktopcomputer",
-            footer: "Same controls as Linux Brain Settings — works on home Wi‑Fi and Chat from anywhere."
+            footer: "Status glances from this Brain — not full desk control. Manage skills, fleet, plugins, and Telegram on Linux."
         ) {
             Button {
                 Task { await refreshDeskOpsGlance() }
@@ -613,7 +613,7 @@ struct SettingsView: View {
                 CenturionListRow(
                     icon: "gauge.with.dots.needle.33percent",
                     title: "Ops glance",
-                    subtitle: deskOpsStatus.isEmpty ? "Scheduled jobs & board summary" : deskOpsStatus
+                    subtitle: deskOpsStatus.isEmpty ? "Glance: scheduled jobs & board summary" : deskOpsStatus
                 )
             }
             .buttonStyle(.plain)
@@ -653,8 +653,8 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "wrench.and.screwdriver",
-                    title: "Skills & tools",
-                    subtitle: deskOpsStatus.hasPrefix("Skills:") ? deskOpsStatus : "Snapshot of tools on this Brain"
+                    title: "Skills & tools (glance)",
+                    subtitle: deskOpsStatus.hasPrefix("Skills:") ? deskOpsStatus : "Status only — manage on the desk"
                 )
             }
             .buttonStyle(.plain)
@@ -667,8 +667,8 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "antenna.radiowaves.left.and.right",
-                    title: "Fleet peer",
-                    subtitle: "Status of this Brain on the fleet"
+                    title: "Fleet peer (glance)",
+                    subtitle: "Status only — manage fleet on the desk"
                 )
             }
             .buttonStyle(.plain)
@@ -681,8 +681,8 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "puzzlepiece.extension",
-                    title: "Installed plugins",
-                    subtitle: "List plugins on this Brain"
+                    title: "Installed plugins (glance)",
+                    subtitle: "Status only — install/remove on the desk"
                 )
             }
             .buttonStyle(.plain)
@@ -695,8 +695,8 @@ struct SettingsView: View {
             } label: {
                 CenturionListRow(
                     icon: "paperplane",
-                    title: "Telegram history",
-                    subtitle: "Preview import into Brain sessions"
+                    title: "Telegram history (glance)",
+                    subtitle: "Preview only — import runs on the desk"
                 )
             }
             .buttonStyle(.plain)

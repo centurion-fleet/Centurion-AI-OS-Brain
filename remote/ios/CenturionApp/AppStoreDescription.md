@@ -9,17 +9,17 @@ Sovereign AI Remote
 Your Sovereign in Your Pocket
 
 ## Price
-**Free** — companion app for Centurion customers. A Centurion Sovereign (hardware you own) is required; the app is not useful without a linked Sovereign on your network. No in-app subscription for the Remote itself.
+**Free** — companion app for Centurion customers. A Centurion Sovereign (hardware you own) is required; the app is not useful without a linked Sovereign. No in-app subscription for the Remote itself.
 
 ## Description
 
 **Free for Centurion customers.** Sovereign AI Remote is the iPhone companion to your Sovereign — a private AI that lives on your desk, knows your Life Mission, and helps you live it. Download is free; you need a Centurion Sovereign to use it.
 
-Not a public chatbot. Not a multi-tenant agent marketplace. Your Sovereign belongs to you alone — no shared cloud AI account, no one else’s data mixed into your private counsel. It runs on hardware you own, on your network. This app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
+Not a public chatbot. Not a multi-tenant agent marketplace. Your Sovereign belongs to you alone — no shared cloud AI account, no one else’s data mixed into your private counsel. It runs on hardware you own. This app is how you talk to it through **Crypto Chat** — a private encrypted conversation channel that public AIs simply do not have.
 
 **CRYPTO CHAT**
 
-Crypto Chat is the end-to-end encrypted link between your iPhone and your Sovereign on your network. Your words stay between you and your Sovereign — not routed through a public AI product.
+Crypto Chat is the end-to-end encrypted link between your iPhone and your Sovereign. Pair once on home Wi‑Fi. When you enable **Chat from anywhere** on your Sovereign, the same app continues Crypto Chat away from home over Centurion’s outbound relay — no DIY port-forward and no typing a home IP. Message content stays end-to-end encrypted; Centurion cloud sees connection metadata only.
 
 **LIFE MISSION, SOUL & AUTONOMY**
 
@@ -31,7 +31,11 @@ Choose which thinking service your Sovereign uses (BYOK families). Access codes 
 
 **COLLABORATIONS**
 
-While you are away from the desk, your Sovereigns can work toward your Life Mission. Open Remote to orient, decide when something needs your choice, and receive finished work marked Ready for you — over the same private channel.
+Start a local collaboration board on your Sovereign. Open Remote to orient and decide when something needs your choice — over Crypto Chat.
+
+**FAMILY & FRIENDS REFERRALS**
+
+Optionally share referrals from You → Family & friends referrals. Contact details stay on your Sovereign for Family Beneficiary tracking — not sold by Centurion.
 
 **ADRIAN (OPTIONAL HELP)**
 
@@ -46,7 +50,7 @@ Adrian is an optional online help guide for setup and support. Adrian works via 
 
 **PRIVACY IS THE PRODUCT**
 
-Centurion Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream.
+Centurion Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream. See Help: *Local, Remote anywhere, or Telegram — privacy choices*.
 
 **OWN IT ONCE**
 
@@ -67,22 +71,23 @@ https://www.1human1ai.com
 https://www.1human1ai.com/privacy
 
 ## Promotional Text
-Free for Centurion customers. Link your Sovereign for private Crypto Chat, Life Mission, and collaborations — nothing works without your own Sovereign on your network.
+Free for Centurion customers. Pair on home Wi‑Fi for Crypto Chat; enable Chat from anywhere on your Sovereign to continue away from home. Nothing works without your own Sovereign.
 
 ## App Review Notes (paste into ASC)
 
-Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign.
+Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign. Version **5.2.145**.
 
-- There is **no cloud login** and **no demo account**. Pairing is **QR-first on home Wi‑Fi**: Sovereign AI Brain shows a QR encoding `token:…@lan-host:9119` (paste remains a fallback). **Chat from anywhere** (after enable on the Brain) uses Centurion’s outbound relay — the phone never dials a home IP or depends on port-forwarding. The owner must approve the iPhone on the brain if prompted.
+- There is **no cloud login** and **no demo account**. Pairing is **QR-first on home Wi‑Fi**: Sovereign AI Brain shows a QR encoding `token:…@lan-host:9119` (paste remains a fallback). **Chat from anywhere** (after enable on the Brain) uses Centurion’s outbound relay — the phone never dials a home IP or depends on port-forwarding. Contact the developer for a time-boxed review pairing window (QR + Brain online).
 - Camera permission is used **only** to scan that pairing QR (`NSCameraUsageDescription`).
-- Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design. Offline demo chats clear as soon as a live link succeeds.
-- LAN / Bonjour discovery is optional convenience only — do not require same Wi‑Fi for review once Chat from anywhere is enabled for the review Brain.
-- **App Review:** Please contact the developer for a time-boxed review pairing window (QR / pairing code + Brain with Chat from anywhere enabled).- Price: Free. No IAP for core Remote features.
+- Without a linked Sovereign, core features (Crypto Chat, Thinking Service, Mission sync) are unavailable by design. Unlinked UI shows an explicit **Not linked to a Brain** banner — not live Crypto Chat.
+- Family & friends referrals (optional) store name/email/phone on the owner’s Sovereign for Family Beneficiary — not Centurion marketing lists sold to third parties.
+- Price: Free. No IAP for core Remote features.
 - Encryption: standard TLS for optional Help (Adrian); Crypto Chat uses publicly available algorithms (X25519 + XSalsa20-Poly1305 via libsodium) between the owner’s iPhone and their own Sovereign. `ITSAppUsesNonExemptEncryption = false` (exemption).
 
 ## App Privacy notes (App Store Connect)
 
 Disclose accurately:
 
-- **Crypto Chat:** processed on-device / on the owner’s Sovereign; not sent to Centurion cloud for storage or training.
+- **Crypto Chat:** processed on-device / on the owner’s Sovereign; content not sent to Centurion cloud for storage or training. Away mode may use Centurion relay for presence/routing metadata only.
 - **Adrian (optional):** when used, may send install id, app version, connection/thinking health labels, and a short mission summary (capped) to help.1human1ai.com for support answers only — not Crypto Chat transcripts.
+- **Family & friends referrals (optional):** contact info stored on the owner’s Sovereign; not sold.

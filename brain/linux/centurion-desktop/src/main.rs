@@ -700,8 +700,8 @@ mod linux {
     /// After Get Brain install.sh: confirm data was kept; do not rewrite Soul/Mission.
     fn show_transfer_complete_dialog(parent: &adw::ApplicationWindow) {
         let body = "Your Soul, chats, and settings are still on this machine.\n\n\
-Open Chat to continue where you left off. Android, iOS, and macOS Brain apps \
-are coming soon — Linux is ready now.";
+Open Chat to continue where you left off. Pair Sovereign AI Remote for iPhone \
+with the QR on this desk (same Wi‑Fi). Linux Brain remains the desk product.";
         let dialog = adw::AlertDialog::builder()
             .heading("Transfer complete")
             .body(body)
@@ -976,8 +976,8 @@ For now, sit here and meet your Centurion.";
         container.append(
             &gtk::Label::builder()
                 .label(
-                    "Sovereign AI Remote for iPhone is coming soon. The Brain on this desk is the product; \
-pairing stays available for early testing on the same Wi‑Fi.",
+                    "Pair Sovereign AI Remote for iPhone with the QR on this desk (same Wi‑Fi). \
+The Brain here is the product; the phone is the remote.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -1105,7 +1105,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         devices_section.append(
             &gtk::Label::builder()
                 .label(
-                    "Sovereign AI Remote for iPhone is coming soon. Pairing QR and device approval stay available for early testing — nothing is wrong if no phone is linked yet.",
+                    "Show the pairing QR anytime to link Sovereign AI Remote on the same Wi‑Fi. Approve under Connected Devices below — nothing is wrong if no phone is linked yet.",
                 )
                 .wrap(true)
                 .xalign(0.0)
@@ -1191,7 +1191,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
-                "iPhone app coming soon — show the pairing QR anytime for early testing on the same Wi‑Fi. Approve under Connected Devices below.",
+                "Show the pairing QR anytime to link Sovereign AI Remote on the same Wi‑Fi. Approve under Connected Devices below.",
             )
             .icon_name("network-wireless-symbolic")
             .activatable(true)
@@ -2545,7 +2545,7 @@ pairing stays available for early testing on the same Wi‑Fi.",
 
     fn settings_attention_items() -> Vec<SettingsAttentionItem> {
         // Settings tab "!": thinking unhealthy / unavailable, or a Brain update waiting.
-        // Remotes are not attention-worthy while the iPhone app is unreleased.
+        // Linked remotes are expected; do not badge Settings solely for zero remotes.
         // Prefer the daemon snapshot so the 5s tab-badge poll does not spawn
         // a heavy provider CLI. Older daemons fall back to provider_status,
         // then finally to the CLI.

@@ -78,7 +78,7 @@ struct ChatView: View {
 
     private var chatContent: some View {
         VStack(spacing: 0) {
-            if dataMode.showsDemoContent && !messageService.conversations.isEmpty {
+            if dataMode.showsDemoContent {
                 DemoDataBanner()
                     .padding(.horizontal, Spacing.md)
                     .padding(.top, Spacing.xs)
