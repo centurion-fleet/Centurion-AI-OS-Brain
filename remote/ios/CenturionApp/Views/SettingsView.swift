@@ -51,19 +51,25 @@ struct SettingsView: View {
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                         GatewayControlSection()
+                        FamilyFriendsReferralSection()
                         DisclosureGroup("Why Sovereign is different") {
                             CenturionShowcaseSection()
                         }
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(ColorTheme.primaryText())
                     } else {
-                        CenturionShowcaseSection()
+                        FamilyFriendsReferralSection()
                         DeviceLinkSection(showPairingSheet: $showPairingSheet)
                         ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
                         GatewayControlSection()
                         anywhereRelaySection
                         deskOpsSection
                         brainUpdatesSection
+                        DisclosureGroup("Why Sovereign is different") {
+                            CenturionShowcaseSection()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(ColorTheme.primaryText())
                     }
                     youSection
                     memoryHorizonSection

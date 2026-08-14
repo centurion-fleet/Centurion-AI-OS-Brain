@@ -1,50 +1,24 @@
 import SwiftUI
 
-/// Sales hero + Family Beneficiary Program for the You tab.
+/// Sales hero for the You tab (pillars + privacy compare).
 struct CenturionShowcaseSection: View {
-    @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
     @EnvironmentObject private var connectionManager: ConnectionManager
-
-    @State private var showNominateSheet = false
-    @State private var showAddColleagueSheet = false
     @State private var showPrivacyTrust = false
 
     var body: some View {
-        VStack(spacing: Spacing.lg) {
-            differenceStory
-            FamilyBeneficiaryCard(
-                onNominate: { showNominateSheet = true },
-                onReferColleague: { showAddColleagueSheet = true }
-            )
-        }
-        .sheet(isPresented: $showNominateSheet) {
-            NominateFamilyBeneficiarySheet()
-                .environmentObject(beneficiaryStore)
-                .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showAddColleagueSheet) {
-            AddColleagueReferralSheet()
-                .environmentObject(beneficiaryStore)
-                .environmentObject(connectionManager)
-        }
-        .alert("Sovereign earned", isPresented: $beneficiaryStore.showRewardCelebration) {
-            Button("Nominate next") {
-                beneficiaryStore.dismissRewardCelebration()
-                showNominateSheet = true
+        differenceStory
+            .sheet(isPresented: $showPrivacyTrust) {
+                NavigationStack {
+                    SecurityHubView()
+                        .environmentObject(connectionManager)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showPrivacyTrust = false }
+                                    .foregroundColor(ColorTheme.accent())
+                            }
+                        }
+                }
             }
-            Button("Done", role: .cancel) {
-                beneficiaryStore.dismissRewardCelebration()
-            }
-        } message: {
-            if let name = beneficiaryStore.lastRewardedName {
-                Text("You've earned a complimentary Sovereign for \(name). Our team will be in touch.")
-            } else {
-                Text("You've earned a complimentary family Sovereign. Our team will be in touch.")
-            }
-        }
-        .task(id: connectionManager.connectionState) {
-            await beneficiaryStore.refresh(from: connectionManager)
-        }
     }
 
     private var differenceStory: some View {
@@ -77,17 +51,49 @@ struct CenturionShowcaseSection: View {
             .buttonStyle(.plain)
             .accessibilityHint("Open privacy and trust comparisons")
         }
-        .sheet(isPresented: $showPrivacyTrust) {
-            NavigationStack {
-                SecurityHubView()
-                    .environmentObject(connectionManager)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { showPrivacyTrust = false }
-                                .foregroundColor(ColorTheme.accent())
-                        }
-                    }
+    }
+}
+
+/// Family & friends referral tracker — always visible on the You tab.
+struct FamilyFriendsReferralSection: View {
+    @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
+    @EnvironmentObject private var connectionManager: ConnectionManager
+
+    @State private var showNominateSheet = false
+    @State private var showAddColleagueSheet = false
+
+    var body: some View {
+        FamilyBeneficiaryCard(
+            onNominate: { showNominateSheet = true },
+            onReferColleague: { showAddColleagueSheet = true }
+        )
+        .sheet(isPresented: $showNominateSheet) {
+            NominateFamilyBeneficiarySheet()
+                .environmentObject(beneficiaryStore)
+                .environmentObject(connectionManager)
+        }
+        .sheet(isPresented: $showAddColleagueSheet) {
+            AddColleagueReferralSheet()
+                .environmentObject(beneficiaryStore)
+                .environmentObject(connectionManager)
+        }
+        .alert("Sovereign earned", isPresented: $beneficiaryStore.showRewardCelebration) {
+            Button("Nominate next") {
+                beneficiaryStore.dismissRewardCelebration()
+                showNominateSheet = true
             }
+            Button("Done", role: .cancel) {
+                beneficiaryStore.dismissRewardCelebration()
+            }
+        } message: {
+            if let name = beneficiaryStore.lastRewardedName {
+                Text("You've earned a complimentary Sovereign for \(name). Our team will be in touch.")
+            } else {
+                Text("You've earned a complimentary family Sovereign. Our team will be in touch.")
+            }
+        }
+        .task(id: connectionManager.connectionState) {
+            await beneficiaryStore.refresh(from: connectionManager)
         }
     }
 }
@@ -131,7 +137,7 @@ struct FamilyBeneficiaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                CenturionSectionHeader(title: "Family Beneficiary Program", icon: "gift")
+                CenturionSectionHeader(title: "Family & friends referrals", icon: "gift")
                 Spacer(minLength: 0)
                 if connectionManager.isCryptoChatReady {
                     Button {
@@ -155,10 +161,16 @@ struct FamilyBeneficiaryCard: View {
 
             AtmosphericSurface(showRim: true) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    Text("Nominate one family member you are earning for. Refer friends or colleagues with name, email, and phone from this iPhone — your Sovereign stores the list and syncs marketing. When someone becomes a customer, their row updates and counts toward four purchases for one complimentary Sovereign.")
+                    Text("Nominate one family member you are earning for. Refer friends or colleagues with name, email, and phone — they stay on this tracker so you can see who became a customer and get credit toward four purchases for one complimentary Sovereign.")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                         .lineSpacing(4)
+
+                    if !connectionManager.isCryptoChatReady {
+                        Text("Link your Sovereign above to save referrals and sync status.")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(ColorTheme.accent())
+                    }
 
                     if beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned > 0 {
                         Text("\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned) family Sovereign\(beneficiaryStore.snapshot.lifetimeFamilyCenturionsEarned == 1 ? "" : "s") earned")
@@ -256,18 +268,22 @@ struct FamilyBeneficiaryCard: View {
                 Text("Nominate family beneficiary")
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
+            .disabled(!connectionManager.isCryptoChatReady)
         } else {
             Button(action: onReferColleague) {
                 Text("Refer a friend or colleague")
             }
             .buttonStyle(CenturionPrimaryButtonStyle())
-            .disabled(beneficiaryStore.successfulCount >= beneficiaryStore.referralsRequired)
+            .disabled(
+                !connectionManager.isCryptoChatReady
+                    || beneficiaryStore.successfulCount >= beneficiaryStore.referralsRequired
+            )
 
             Button(action: onNominate) {
                 Text("Change beneficiary")
             }
             .buttonStyle(CenturionGhostButtonStyle())
-            .disabled(!beneficiaryStore.colleagueReferrals.isEmpty)
+            .disabled(!beneficiaryStore.colleagueReferrals.isEmpty || !connectionManager.isCryptoChatReady)
         }
     }
 }
