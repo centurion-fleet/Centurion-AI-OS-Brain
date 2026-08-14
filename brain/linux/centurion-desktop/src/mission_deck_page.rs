@@ -36,7 +36,7 @@ pub fn resolve_mission_deck_dir() -> Option<PathBuf> {
             list.push(home.join(".local/share/centurion/mission-deck"));
         }
         if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
-            list.push(PathBuf::from(repo).join("brain/web-dashboard"));
+            list.push(PathBuf::from(&repo).join("brain/web-dashboard"));
             // Legacy checkout layout (pre client-folder reorg).
             list.push(PathBuf::from(repo).join("web-dashboard"));
         }
