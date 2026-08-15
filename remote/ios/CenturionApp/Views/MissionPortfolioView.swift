@@ -20,7 +20,7 @@ enum PulseCategory: String, CaseIterable {
     var displayTitle: String {
         switch self {
         case .live: return "Working on now"
-        case .plans: return "Plans"
+        case .plans: return "Missions"
         case .wins: return "Finished"
         case .outputs: return "Documents"
         case .decisions: return "Needs your choice"
@@ -128,7 +128,7 @@ struct MissionPortfolioView: View {
     }
 
     var body: some View {
-        TabPageChrome(title: "Home") {
+        TabPageChrome(title: "Focus") {
             CenturionPillNav(
                 items: PulseCategory.allCases,
                 selection: $selectedCategory,
@@ -1091,7 +1091,7 @@ struct MissionPortfolioView: View {
         }
     }
 
-    // MARK: - Plans — Reviewable proposals
+    // MARK: - Missions — Reviewable proposals
 
     private var plansSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -1101,10 +1101,10 @@ struct MissionPortfolioView: View {
                 && planStore.templates.isEmpty {
                 EmptyState(
                     icon: "list.clipboard",
-                    title: "No plans yet",
+                    title: "No missions yet",
                     message: connectionManager.isCryptoChatReady
                         ? "Use Propose first in Chat, or start from a template below when available."
-                        : "Link your Sovereign to review plans here."
+                        : "Link your Sovereign to review missions here."
                 )
             }
 
@@ -1320,7 +1320,7 @@ struct MissionPortfolioView: View {
                         )
                     }
                 } label: {
-                    Text("Review this plan")
+                    Text("Review this mission")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(ColorTheme.accent())
                 }

@@ -93,7 +93,7 @@ impl PulseCategory {
     fn title(self) -> &'static str {
         match self {
             Self::Live => "Working on now",
-            Self::Plans => "Plans",
+            Self::Plans => "Missions",
             Self::Wins => "Finished",
             Self::Outputs => "Documents",
             Self::Decisions => "Needs your choice",
@@ -641,12 +641,12 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
             DecisionItem {
                 id: format!("plan:{plan_id}"),
                 title: if title.is_empty() {
-                    "Proposed plan".to_owned()
+                    "Proposed mission".to_owned()
                 } else {
                     title
                 },
                 context: if summary.is_empty() {
-                    "Review this plan before your Sovereign continues.".to_owned()
+                    "Review this on Focus before your Sovereign continues.".to_owned()
                 } else {
                     summary
                 },
@@ -3982,16 +3982,16 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                         let on_ask2 = hooks.on_ask_about.clone();
                         let mission_text = data.mission.statement.clone();
                         category_body.append(&empty_cta_box(
-                            "Nothing in motion right now. Start with a plan or talk through your mission.",
-                            "Propose a plan",
+                            "Nothing in motion right now. Start from Missions or talk through your Life Mission.",
+                            "Propose first",
                             move || {
                                 on_ask(
                                     DiscussTopic::Generic {
-                                        title: "Propose a plan".to_owned(),
+                                        title: "Propose first".to_owned(),
                                         kind: "plan".to_owned(),
                                         detail: String::new(),
                                     },
-                                    "Propose a plan for what we should work on next. Outline the goal, steps, and what you need from me before acting."
+                                    "Propose the next piece of mission work. Outline the goal, steps, and what you need from me before acting."
                                         .to_owned(),
                                 );
                             },
@@ -4051,16 +4051,16 @@ What should we focus on next?"
                     if pending.is_empty() && active.is_empty() && done.is_empty() {
                         let on_ask = hooks.on_ask_about.clone();
                         category_body.append(&empty_cta_box(
-                            "No plans yet. Ask your Sovereign to propose one, or discuss the mission first.",
-                            "Propose a plan",
+                            "No missions yet. Ask your Sovereign to propose one, or discuss the Life Mission first.",
+                            "Propose first",
                             move || {
                                 on_ask(
                                     DiscussTopic::Generic {
-                                        title: "Propose a plan".to_owned(),
+                                        title: "Propose first".to_owned(),
                                         kind: "plan".to_owned(),
                                         detail: String::new(),
                                     },
-                                    "Propose a plan for what we should work on next. Outline the goal, steps, and what you need from me before acting."
+                                    "Propose the next piece of mission work. Outline the goal, steps, and what you need from me before acting."
                                         .to_owned(),
                                 );
                             },

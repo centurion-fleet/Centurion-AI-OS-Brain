@@ -27,7 +27,7 @@ struct SoulDocumentView: View {
                             Text("Plans before consequential work")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(ColorTheme.primaryText())
-                            Text("Standing rule: “\(PlanArtifact.proposeFirstStandingRule)” — use Propose first in Chat, then Proceed on Home.")
+                            Text("Standing rule: “\(PlanArtifact.proposeFirstStandingRule)” — use Propose first in Chat, then Proceed on Focus.")
                                 .font(.caption)
                                 .foregroundColor(ColorTheme.mutedText())
                                 .lineSpacing(3)

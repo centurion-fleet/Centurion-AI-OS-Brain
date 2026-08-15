@@ -1856,7 +1856,7 @@ Life mission: {mission_line}\n\
 Commitment: {title}\n\
 Description: {desc}\n\
 Commitment ID: {id}\n\
-Active on Home: {active}\n\n\
+Active on Focus: {active}\n\n\
 The user is discussing or revising this living commitment. You may suggest renames, \
 clearer descriptions, or deactivating it. If you apply a change the user agrees to, \
 end your reply with a fenced block exactly like this (omit fields you are not changing):\n\n\
@@ -6151,7 +6151,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             thread::spawn(move || {
                                 let result = match choice.as_str() {
                                     "save_plan" => persist_proposal_as_plan(&proposal).map(|_| {
-                                        "Saved as a Plan on Home (Needs your choice).".to_owned()
+                                        "Saved on Focus under Missions (Needs your choice).".to_owned()
                                     }),
                                     "add_targets" => {
                                         persist_proposal_as_targets(&proposal).map(|n| {
@@ -6171,7 +6171,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                                             &proposal.summary,
                                         );
                                         format!(
-                                            "Saved Plan on Home and added {n} target{} to the Target Sequence.",
+                                            "Saved on Focus under Missions and added {n} target{} to the Target Sequence.",
                                             if n == 1 { "" } else { "s" }
                                         )
                                     }),
@@ -7188,12 +7188,12 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                         let _ = put_plan_artifact(plan);
                                     });
                                     if display.trim().is_empty() {
-                                        display = "I've drafted a plan for your review on Home — open Plans, Needs your choice, or Documents when you're ready.".to_owned();
-                                    } else if !display.to_lowercase().contains("home")
-                                        && !display.to_lowercase().contains("plan")
+                                        display = "I've drafted this for your review on Focus — open Missions, Needs your choice, or Documents when you're ready.".to_owned();
+                                    } else if !display.to_lowercase().contains("focus")
+                                        && !display.to_lowercase().contains("mission")
                                     {
                                         display.push_str(
-                                            "\n\nYou can review this plan on Home under Plans, Needs your choice, or Documents.",
+                                            "\n\nYou can review this on Focus under Missions, Needs your choice, or Documents.",
                                         );
                                     }
                                 } else if applying_plan_update {

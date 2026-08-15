@@ -720,7 +720,7 @@ with the QR on this desk (same Wi‑Fi). Linux Brain remains the desk product.";
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
 keeps your data here, and stays on your mission.\n\n\
-Chat is the conversation. Focus is the command center: mission stack, plans, and decisions. \
+Chat is the conversation. Focus is the command center: mission stack, Missions, and decisions. \
 Settings is how you shape Soul, memory, and thinking.\n\n\
 An iPhone remote is optional later — only when you want the Brain in your pocket. \
 For now, sit here and meet your Centurion.";

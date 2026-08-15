@@ -184,7 +184,7 @@ struct PlanReviewView: View {
                     .ignoresSafeArea()
             }
         )
-        .navigationTitle("Review this plan")
+        .navigationTitle("Review this mission")
         .navigationBarTitleDisplayMode(.inline)
     }
 

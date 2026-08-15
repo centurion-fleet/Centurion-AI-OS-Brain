@@ -297,7 +297,7 @@ struct SettingsView: View {
         settingsSection(
             title: "Collaborations",
             icon: "circle.hexagongrid.fill",
-            footer: "Collaborations live on Home as orbs — not a separate tab. You're notified only when a choice is needed."
+            footer: "Collaborations live on Focus as orbs — not a separate tab. You're notified only when a choice is needed."
         ) {
             Button {
                 showCollaborations = true

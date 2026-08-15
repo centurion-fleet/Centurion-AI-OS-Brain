@@ -77,15 +77,15 @@ Every screen answers: *Why am I here? What can I do next?*
 |------|---------|------------------|
 | **Mission** | The **human** — life purpose, active commitments, story/values/context | Mission screen, Mission Discovery, Pulse banner |
 | **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Sovereign's Soul screen, Shape Your Sovereign flow |
-| **Plan** | A **reviewable proposal** from your Sovereign before consequential work — not life Mission | Chat “Propose first”, Home **Plans** / Needs your choice / Documents, Plan review |
+| **Plan** | A **reviewable proposal** from your Sovereign before consequential work. Shown on Focus as **Missions** (synced from Brain). Distinct from Life Mission (purpose). | Chat “Propose first”, Focus **Missions** / Needs your choice / Documents, Plan review |
 | **Memory Horizon** | **How Centurion remembers** — Hot Cache, Session Recall, Vault (not life purpose) | You → Memory Horizon; Desktop Settings |
 
-Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces. Never call an agent plan a “Mission.” Never call Memory Horizon “Mission” — Mission is purpose; Memory Horizon is recall layers. Hot Cache fill is a **software budget**, not appliance RAM; Session Recall / Vault grow with use and share **disk on your Sovereign**.
+Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces. Life Mission is purpose (Mission Stack). The Focus **Missions** pill is the reviewable work queue that syncs with Brain. Never call Memory Horizon “Mission” — Memory Horizon is recall layers. Hot Cache fill is a **software budget**, not appliance RAM; Session Recall / Vault grow with use and share **disk on your Sovereign**.
 
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.
 - **Max 1** decision per screen for first-run flows.
-- **Three tabs** — Chat, Home, You. Prefer progressive disclosure over more tabs. Link, thinking, privacy, and Family Beneficiary Program live under You.
+- **Three tabs** — Chat, Focus, You. Prefer progressive disclosure over more tabs. Link, thinking, privacy, and Family Beneficiary Program live under You.
 
 ### Emotional tone
 - Warm, direct, respectful — like a trusted advisor, not a startup landing page.
@@ -110,7 +110,7 @@ Use `MainTabChrome` on all **four** main tabs with **`CompactBrandHeader`** (app
 
 | Context | Header |
 |---------|--------|
-| Main tabs (Chat, Home, You) | `CompactBrandHeader` via `MainTabChrome` |
+| Main tabs (Chat, Focus, You) | `CompactBrandHeader` via `MainTabChrome` |
 | Secondary screens (Mission, Soul, Memory Horizon, Get Help, Adrian, Privacy & Trust, Discovery, …) | `FullBrandHeader` |
 | Sheets / modals | `SheetHeader` or navigation title only — no full brand |
 
@@ -348,13 +348,13 @@ Two orb families share `OrbDesign` tokens in `DesignSystem.swift`:
 ### Mission Orb states
 
 - **Unset mission** — seed constellation dots; lower mist; invite Discovery.
-- **Set mission** — brighter core; tether line to collaboration row on Home hero.
+- **Set mission** — brighter core; tether line to collaboration row on Focus hero.
 
 ### Ship gate (orbs)
 
 - [ ] All orb motion respects Reduce Motion
 - [ ] No red for collaboration attention
-- [ ] Mission Orb appears above collaboration constellation on Home when swarms exist
+- [ ] Mission Orb appears above collaboration constellation on Focus when swarms exist
 - [ ] VoiceOver describes mission/collaboration state without internal pulse names
 
 ---

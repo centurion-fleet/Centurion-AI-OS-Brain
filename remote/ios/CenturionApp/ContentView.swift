@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main application entry — three tabs: Chat, Home, You.
+/// Main application entry — three tabs: Chat, Focus, You.
 /// Only the selected tab is built (lazy) so launch stays fast.
 struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
 
-    // Same last-seen keys as Home subsection pills — clearing a pill updates the tab badge.
+    // Same last-seen keys as Focus subsection pills — clearing a pill updates the tab badge.
     @AppStorage("pulse_note_plans") private var lastSeenPlans: TimeInterval = 0
     @AppStorage("pulse_note_wins") private var lastSeenWins: TimeInterval = 0
     @AppStorage("pulse_note_outputs") private var lastSeenOutputs: TimeInterval = 0
@@ -64,7 +64,7 @@ struct ContentView: View {
                 MissionPortfolioView()
             }
             .tabItem {
-                Label("Home", systemImage: "waveform.path.ecg")
+                Label("Focus", systemImage: "waveform.path.ecg")
             }
             .badge(homeAttentionCount)
             .tag(1)
@@ -95,7 +95,7 @@ struct ContentView: View {
         }
     }
 
-    /// Maps pre-3-tab indices: Connect(0)→You(2), Chat(1)→0, Home(2)→1, You(3)→2.
+    /// Maps pre-3-tab indices: Connect(0)→You(2), Chat(1)→0, Focus(2)→1, You(3)→2.
     private func remapLegacyTab(_ tab: Int) -> Int {
         switch tab {
         case 0: return 2

@@ -338,7 +338,7 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
     func asDecisionItem() -> DecisionItem {
         DecisionItem(
             id: id,
-            title: title.isEmpty ? "Review this plan" : title,
+            title: title.isEmpty ? "Review this mission" : title,
             context: decisionContext,
             options: Self.reviewOptions,
             generatedBy: "Your Sovereign",

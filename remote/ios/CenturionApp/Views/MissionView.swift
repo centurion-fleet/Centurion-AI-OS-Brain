@@ -193,7 +193,7 @@ struct MissionView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Active Commitments", icon: "target")
 
-            Text("Living commitments your Sovereign helps you fulfill. Turn on the ones to prioritize on Home, or tap the chat bubble to discuss and refine them.")
+            Text("Living commitments your Sovereign helps you fulfill. Turn on the ones to prioritize on Focus, or tap the chat bubble to discuss and refine them.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
                 .lineSpacing(5)
@@ -212,7 +212,7 @@ struct MissionView: View {
             }
 
             if !missionStore.activeTargets.isEmpty {
-                Text("\(missionStore.activeTargets.count) commitment\(missionStore.activeTargets.count == 1 ? "" : "s") active on Home")
+                Text("\(missionStore.activeTargets.count) commitment\(missionStore.activeTargets.count == 1 ? "" : "s") active on Focus")
                     .font(.caption)
                     .foregroundColor(ColorTheme.accent().opacity(0.8))
                     .italic()

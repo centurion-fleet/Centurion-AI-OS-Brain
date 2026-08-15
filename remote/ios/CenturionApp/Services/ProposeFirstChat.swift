@@ -2,7 +2,7 @@ import Foundation
 
 /// Framing and parsing for Chat “Propose first” turns on Sovereign Remote.
 /// Host is instructed to draft a plan only (no irreversible action) and return
-/// a structured `plan-artifact` fence the phone can render on Home.
+/// a structured `plan-artifact` fence the phone can render on Focus.
 enum ProposeFirstChat {
     static let artifactFence = "plan-artifact"
 

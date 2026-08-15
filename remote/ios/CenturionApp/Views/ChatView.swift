@@ -24,7 +24,7 @@ struct ChatView: View {
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
     @State private var showCollaborationSheet = false
-    /// Chat = typed reply (not voice). Propose first = draft a plan and stop for Home review.
+    /// Chat = typed reply (not voice). Propose first = draft work and stop for Focus review.
     @State private var proposeFirst = false
     @FocusState private var isFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -609,13 +609,13 @@ struct ChatView: View {
         let message: String
         if case .commitment = context {
             message = """
-            Ask to rename this commitment, sharpen its description, or turn it off on Home. \
+            Ask to rename this commitment, sharpen its description, or turn it off on Focus. \
             When your Sovereign applies a change, it updates here automatically.
             """
         } else if case .plan = context {
             message = """
-            Continue this plan anytime — refine steps, ask questions, or decide what to do next. \
-            When your Sovereign updates the plan, Home stays in sync.
+            Continue this anytime — refine steps, ask questions, or decide what to do next. \
+            When your Sovereign updates it, Focus stays in sync.
             """
         } else {
             message = "Messages here appear in the full chat stream too."
