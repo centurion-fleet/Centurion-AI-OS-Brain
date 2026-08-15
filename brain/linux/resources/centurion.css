@@ -1,26 +1,41 @@
-/* Centurion Brain — Amber Horizon
-   Unified dark chrome so Chat, Missions (WebView), and Settings feel like one product.
-   Mission Deck React UI owns the Missions pane; these tokens theme native GTK chrome. */
+/* Centurion Brain — warm paper & bronze (www.1human1ai.com, Aug 2026).
+   Unified chrome so Chat, Missions (WebView), and Settings feel like one product.
+   Bronze is a spotlight (active nav, primary CTA, presence) — not wallpaper.
+   Mission Deck React UI owns the Missions pane; these tokens theme native GTK chrome.
 
-@define-color centurion_canvas #1a1410;
-@define-color centurion_surface #221c17;
-@define-color centurion_ink #f5efe6;
-@define-color centurion_border rgba(255, 255, 255, 0.10);
-@define-color centurion_muted rgba(245, 239, 230, 0.55);
-@define-color centurion_dim rgba(245, 239, 230, 0.35);
-@define-color centurion_interactive #ff9f1c;
-@define-color centurion_interactive_soft #ffd700;
-@define-color centurion_warm #ff9f1c;
-@define-color centurion_warm_soft #ffb347;
-@define-color centurion_attention #ff6b4a;
-@define-color centurion_attention_soft #ff9a80;
+   Light tokens live in the prefers-color-scheme block below. The app still
+   ForceDark at startup, so that block is unused until ForceDark is lifted. */
+
+@define-color centurion_bg #110C09;
+@define-color centurion_surface #1A1512;
+@define-color centurion_surface_elevated #231E1B;
+@define-color centurion_fg #F1EEE7;
+@define-color centurion_fg_muted #968D86;
+@define-color centurion_border #37322E;
+@define-color centurion_accent #D3CDBF;
+@define-color centurion_accent_bright #F1EEE7;
+
+/* Aliases — existing class rules keep their token names. */
+@define-color centurion_canvas #110C09;
+@define-color centurion_ink #F1EEE7;
+@define-color centurion_muted #968D86;
+@define-color centurion_dim #968D86;
+@define-color centurion_interactive #D3CDBF;
+@define-color centurion_interactive_soft #F1EEE7;
+@define-color centurion_warm #D3CDBF;
+@define-color centurion_warm_soft #D3CDBF;
+@define-color centurion_attention #D3CDBF;
+@define-color centurion_attention_soft #968D86;
 @define-color centurion_glass rgba(255, 255, 255, 0.03);
 
+/* Enforce brand accent over the GNOME system accent. */
+@define-color accent_color #D3CDBF;
+@define-color accent_bg_color #D3CDBF;
+@define-color accent_fg_color #110C09;
+
 window {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, alpha(@centurion_warm, 0.16), transparent),
-    @centurion_canvas;
-  color: @centurion_ink;
+  background: @centurion_bg;
+  color: @centurion_fg;
 }
 
 headerbar,
@@ -53,8 +68,8 @@ toolbarview > headerbar {
 }
 
 button.suggested-action {
-  background: linear-gradient(90deg, @centurion_interactive, @centurion_interactive_soft);
-  color: @centurion_canvas;
+  background: @centurion_accent;
+  color: @centurion_bg;
   border-radius: 999px;
   font-weight: 600;
   border: none;
@@ -254,7 +269,7 @@ stackswitcher button {
 .centurion-tab:checked {
   background: alpha(@centurion_interactive, 0.2);
   border: 1px solid alpha(@centurion_interactive, 0.35);
-  box-shadow: 0 0 20px alpha(@centurion_interactive, 0.12);
+  box-shadow: none;
 }
 
 .centurion-tab-title {
@@ -343,26 +358,26 @@ stackswitcher button {
   color: @centurion_interactive_soft;
 }
 
-/* Plan: cooler blue-tinted active (distinct from Chat / Focus amber). */
+/* Plan: surface + border weight (no second hue). */
 button.centurion-chat-intent-plan:checked {
-  background: alpha(#6ea8fe, 0.18);
-  border-color: alpha(#6ea8fe, 0.55);
-  color: #cfe2ff;
+  background: @centurion_surface_elevated;
+  border-color: @centurion_border;
+  color: @centurion_fg;
 }
 
-/* Focus: amber #ff9f1c active state. */
+/* Focus: bronze spotlight. */
 button.centurion-chat-intent-focus:checked {
-  background: alpha(#ff9f1c, 0.32);
-  border-color: #ff9f1c;
-  color: #ffb347;
-  box-shadow: 0 0 0 1px alpha(#ff9f1c, 0.35);
+  background: alpha(@centurion_accent, 0.22);
+  border-color: @centurion_accent;
+  color: @centurion_accent_bright;
+  box-shadow: none;
 }
 
 .centurion-chat-focus-banner {
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid alpha(#ff9f1c, 0.45);
-  background: alpha(#ff9f1c, 0.14);
+  border: 1px solid alpha(@centurion_accent, 0.45);
+  background: alpha(@centurion_accent, 0.12);
   color: @centurion_ink;
 }
 
@@ -371,21 +386,21 @@ button.centurion-chat-focus-open {
   padding: 4px 12px;
   font-size: 12px;
   font-weight: 600;
-  background: alpha(#ff9f1c, 0.22);
-  border: 1px solid alpha(#ff9f1c, 0.55);
-  color: #ffb347;
+  background: alpha(@centurion_accent, 0.18);
+  border: 1px solid alpha(@centurion_accent, 0.55);
+  color: @centurion_accent_bright;
 }
 
 button.centurion-chat-focus-open:hover {
-  background: alpha(#ff9f1c, 0.35);
+  background: alpha(@centurion_accent, 0.28);
 }
 
 .centurion-chat-focus-pulse {
   border-radius: 999px;
   min-width: 8px;
   min-height: 8px;
-  background: #ff9f1c;
-  box-shadow: 0 0 8px alpha(#ff9f1c, 0.85);
+  background: @centurion_accent;
+  box-shadow: none;
 }
 
 .centurion-chat-attach-btn {
@@ -504,4 +519,42 @@ entry {
 
 .centurion-home-discuss {
   color: @centurion_warm_soft;
+}
+
+.accent {
+  color: @centurion_accent;
+}
+
+progressbar > trough > progress,
+progressbar progress {
+  background: @centurion_accent;
+  background-color: @centurion_accent;
+}
+
+button.destructive-action {
+  color: @centurion_fg;
+}
+
+@media (prefers-color-scheme: light) {
+  @define-color centurion_bg #FAFAF9;
+  @define-color centurion_surface #F3F2EE;
+  @define-color centurion_surface_elevated #FFFFFF;
+  @define-color centurion_fg #080503;
+  @define-color centurion_fg_muted #5E534A;
+  @define-color centurion_border #DAD7D0;
+  @define-color centurion_accent #433830;
+  @define-color centurion_accent_bright #080503;
+  @define-color centurion_canvas #FAFAF9;
+  @define-color centurion_ink #080503;
+  @define-color centurion_muted #5E534A;
+  @define-color centurion_dim #5E534A;
+  @define-color centurion_interactive #433830;
+  @define-color centurion_interactive_soft #080503;
+  @define-color centurion_warm #433830;
+  @define-color centurion_warm_soft #433830;
+  @define-color centurion_attention #433830;
+  @define-color centurion_attention_soft #5E534A;
+  @define-color accent_color #433830;
+  @define-color accent_bg_color #433830;
+  @define-color accent_fg_color #F1EEE7;
 }

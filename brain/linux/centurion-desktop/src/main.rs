@@ -319,7 +319,7 @@ mod linux {
     }
 
     fn load_brand_css() {
-        // Amber Horizon — force dark so Chat / Settings match Mission Deck.
+        // Paper & bronze — force dark so Chat / Settings match Mission Deck.
         adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
 
         let provider = gtk::CssProvider::new();
