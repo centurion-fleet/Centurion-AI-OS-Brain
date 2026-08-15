@@ -147,13 +147,17 @@ struct DemoDataBanner: View {
 enum OrbDesign {
     // MARK: Colors
 
-    static let humanGold = Color(red: 0.92, green: 0.78, blue: 0.45)
-    static let atmosphereTeal = Color(red: 0.22, green: 0.58, blue: 0.56)
-    static let agedBronze = Color(red: 0.55, green: 0.42, blue: 0.28)
-    static let pearlHighlight = Color(red: 1.0, green: 0.96, blue: 0.88)
+    static let humanGold = ColorTheme.accent()
+    static let atmosphereTeal = ColorTheme.atmosphereTeal()
+    static let agedBronze = ColorTheme.accent()
+    static let pearlHighlight = ColorTheme.pearlHighlight()
 
     static func centurionAccent(index: Int) -> Color {
-        let palette = [ColorTheme.accent(), atmosphereTeal, Color(red: 0.62, green: 0.48, blue: 0.82)]
+        let palette = [
+            ColorTheme.accent(),
+            ColorTheme.accent().opacity(0.72),
+            ColorTheme.mutedText(),
+        ]
         return palette[index % palette.count]
     }
 

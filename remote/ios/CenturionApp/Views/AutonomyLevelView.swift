@@ -97,7 +97,7 @@ struct AutonomyLevelView: View {
                 if let error = oversightStore.lastError {
                     Text(error)
                         .font(.caption)
-                        .foregroundColor(.red.opacity(0.85))
+                        .foregroundColor(ColorTheme.error().opacity(0.85))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

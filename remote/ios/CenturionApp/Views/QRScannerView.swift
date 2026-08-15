@@ -39,7 +39,7 @@ struct QRScannerView: View {
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(ColorTheme.warning())
                         .multilineTextAlignment(.center)
                         .padding(.top, 8)
                         .padding(.horizontal, 24)

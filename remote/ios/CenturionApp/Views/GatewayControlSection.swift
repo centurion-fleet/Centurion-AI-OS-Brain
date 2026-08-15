@@ -72,7 +72,7 @@ struct GatewayControlSection: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(ColorTheme.error())
             }
             if let infoMessage {
                 Text(infoMessage)

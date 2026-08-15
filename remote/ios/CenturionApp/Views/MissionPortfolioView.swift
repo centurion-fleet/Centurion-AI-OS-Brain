@@ -763,7 +763,7 @@ struct MissionPortfolioView: View {
                         if isPast {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(ColorTheme.onAccent())
                         } else {
                             Image(systemName: phase.icon)
                                 .font(.system(size: 10))
@@ -799,8 +799,8 @@ struct MissionPortfolioView: View {
             Image(systemName: agent.status.icon)
                 .font(.caption)
                 .foregroundColor(agent.status == .active ? ColorTheme.accent()
-                               : agent.status == .completed ? .green
-                               : agent.status == .error ? .red
+                               : agent.status == .completed ? ColorTheme.success()
+                               : agent.status == .error ? ColorTheme.error()
                                : ColorTheme.mutedText())
 
             VStack(alignment: .leading, spacing: 1) {
@@ -866,7 +866,7 @@ struct MissionPortfolioView: View {
 
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
-                    .foregroundColor(.green)
+                    .foregroundColor(ColorTheme.success())
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(loop.summary)
@@ -928,7 +928,7 @@ struct MissionPortfolioView: View {
                 Text(loop.impact)
                     .font(.system(size: 9))
             }
-            .foregroundColor(.green)
+            .foregroundColor(ColorTheme.success())
 
             // Sub-agent contributions
             if !loop.subAgentSummary.isEmpty {
@@ -951,7 +951,7 @@ struct MissionPortfolioView: View {
         .cardStyle()
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.green.opacity(0.15), lineWidth: 0.5)
+                .stroke(ColorTheme.success().opacity(0.15), lineWidth: 0.5)
         )
     }
 
@@ -1227,17 +1227,17 @@ struct MissionPortfolioView: View {
             HStack(spacing: Spacing.xs) {
                 Image(systemName: "hand.raised.fill")
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .foregroundColor(ColorTheme.warning())
                 Text("Needs Your Decision")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()
                 Text("\(decisions.count)")
                     .font(.caption)
-                    .foregroundColor(.orange)
+                    .foregroundColor(ColorTheme.warning())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.1))
+                    .background(ColorTheme.warning().opacity(0.1))
                     .clipShape(Capsule())
             }
 
@@ -1359,15 +1359,15 @@ struct MissionPortfolioView: View {
         .cardStyle()
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.orange.opacity(0.15), lineWidth: 0.5)
+                .stroke(ColorTheme.warning().opacity(0.15), lineWidth: 0.5)
         )
     }
 
     private func urgencyBadge(_ urgency: DecisionItem.Urgency) -> some View {
         let color: Color = {
             switch urgency {
-            case .now: return .red
-            case .today: return .orange
+            case .now: return ColorTheme.error()
+            case .today: return ColorTheme.warning()
             case .thisWeek: return ColorTheme.accent()
             case .whenever: return ColorTheme.mutedText()
             }
@@ -1464,9 +1464,9 @@ struct MissionPortfolioView: View {
 
     private func thoughtTypeColor(_ type: CenturionThought.ThoughtType) -> Color {
         switch type {
-        case .alert: return .orange
+        case .alert: return ColorTheme.warning()
         case .insight: return ColorTheme.accent()
-        case .progress: return .green
+        case .progress: return ColorTheme.success()
         case .suggestion: return ColorTheme.accent()
         case .question: return ColorTheme.mutedText()
         case .win: return ColorTheme.accent()

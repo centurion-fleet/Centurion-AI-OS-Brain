@@ -38,7 +38,7 @@ struct ThinkingRecoverySheet: View {
                         } label: {
                             if isWorking {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(ColorTheme.onAccent())
                             } else {
                                 Text("Restore last working setup")
                             }

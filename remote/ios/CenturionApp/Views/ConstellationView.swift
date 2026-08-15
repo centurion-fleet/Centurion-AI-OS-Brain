@@ -211,17 +211,13 @@ struct ConstellationView: View {
         } label: {
             Text(title)
                 .font(.caption.weight(.semibold))
-                .foregroundColor(active ? .white : ColorTheme.primaryText())
+                .foregroundColor(active ? ColorTheme.onAccent() : ColorTheme.primaryText())
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
                     Group {
                         if active {
-                            LinearGradient(
-                                colors: [ColorTheme.accent(), ColorTheme.dimAccent()],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            ColorTheme.accent()
                         } else {
                             ColorTheme.surface()
                         }

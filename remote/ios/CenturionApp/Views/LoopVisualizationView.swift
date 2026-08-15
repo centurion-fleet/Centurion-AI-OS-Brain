@@ -15,9 +15,9 @@ struct LoopVisualizationView: View {
 
     private let agentColors: [Color] = [
         ColorTheme.accent(),
-        Color(red: 0.3, green: 0.85, blue: 0.6),
-        Color(red: 0.6, green: 0.4, blue: 1.0),
-        Color(red: 1.0, green: 0.6, blue: 0.2),
+        ColorTheme.accent().opacity(0.72),
+        ColorTheme.mutedText(),
+        ColorTheme.accent().opacity(0.45),
     ]
 
     init(activity: LiveActivity) {
@@ -119,9 +119,9 @@ struct LoopVisualizationView: View {
     private var phaseColor: Color {
         switch activity.phase {
         case .discovering: return ColorTheme.accent()
-        case .planning: return Color(red: 0.6, green: 0.4, blue: 1.0)
+        case .planning: return ColorTheme.mutedText()
         case .executing: return ColorTheme.accent()
-        case .verifying: return .green
+        case .verifying: return ColorTheme.success()
         case .idle: return ColorTheme.mutedText()
         }
     }
@@ -191,7 +191,7 @@ private struct AgentNode: View {
 
                 // Status dot
                 Circle()
-                    .fill(status == .active ? color : (status == .completed ? .green : color.opacity(0.3)))
+                    .fill(status == .active ? color : (status == .completed ? ColorTheme.success() : color.opacity(0.3)))
                     .frame(width: 8, height: 8)
 
                 // Name label

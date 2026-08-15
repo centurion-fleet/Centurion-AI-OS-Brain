@@ -200,7 +200,7 @@ struct PlanReviewView: View {
                 Text("Discuss")
                     .font(.subheadline.weight(.semibold))
             }
-            .foregroundColor(.white)
+            .foregroundColor(ColorTheme.onAccent())
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
             .background(ColorTheme.accent())

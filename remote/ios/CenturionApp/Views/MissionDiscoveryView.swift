@@ -463,7 +463,7 @@ struct MissionSummaryView: View {
                         HStack {
                             if isSharing {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(ColorTheme.onAccent())
                             }
                             Text("Share With My Sovereign")
                         }

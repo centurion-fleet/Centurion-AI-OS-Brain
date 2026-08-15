@@ -38,7 +38,7 @@ struct MissionStackView: View {
                                     )
                                 }
                             }
-                            .tint(.orange)
+                            .tint(ColorTheme.warning())
                         }
                     }
                 }
@@ -50,11 +50,11 @@ struct MissionStackView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(dream.title)
                                 .font(.body.weight(.semibold))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(ColorTheme.primaryText())
                             if !dream.description.isEmpty {
                                 Text(dream.description)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(ColorTheme.mutedText())
                             }
                         }
                         .swipeActions(edge: .trailing) {
@@ -66,7 +66,7 @@ struct MissionStackView: View {
                                     )
                                 }
                             }
-                            .tint(.blue)
+                            .tint(ColorTheme.accent())
                         }
                     }
                 }
@@ -84,7 +84,7 @@ struct MissionStackView: View {
                 Section {
                     Text(statusMessage)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ColorTheme.mutedText())
                 }
             }
         }
@@ -122,23 +122,23 @@ struct MissionStackView: View {
             HStack {
                 Text(mission.title.isEmpty ? mission.statement : mission.title)
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(ColorTheme.primaryText())
                 Spacer()
                 if let badge {
                     Text(badge)
                         .font(.caption2.weight(.bold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.orange.opacity(0.2)))
+                        .background(Capsule().fill(ColorTheme.accent().opacity(0.2)))
                 }
             }
             Text(mission.phase.label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ColorTheme.mutedText())
             if let focus = mission.focusTarget {
                 Text("Focus · \(focus.title)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ColorTheme.mutedText())
             }
             ProgressView(
                 value: Double(mission.completedTargetCount),
@@ -179,7 +179,7 @@ struct MissionDetailView: View {
                             Text(thought.summary)
                             Text(thought.activityType)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(ColorTheme.mutedText())
                         }
                     }
                 }
@@ -193,7 +193,7 @@ struct MissionDetailView: View {
                             if !decision.chosen.isEmpty {
                                 Text("Chose: \(decision.chosen)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(ColorTheme.mutedText())
                             }
                         }
                     }
@@ -241,19 +241,19 @@ struct MissionDetailView: View {
                     } label: {
                         HStack {
                             Image(systemName: target.focusTarget ? "scope" : statusIcon(target.status))
-                                .foregroundStyle(target.focusTarget ? Color.orange : Color.secondary)
+                                .foregroundStyle(target.focusTarget ? ColorTheme.accent() : ColorTheme.mutedText())
                             VStack(alignment: .leading) {
                                 Text("\(target.sequenceNumber). \(target.title)")
                                 if !target.description.isEmpty {
                                     Text(target.description)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(ColorTheme.mutedText())
                                 }
                             }
                             Spacer()
                             Image(systemName: "bubble.left")
                                 .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(ColorTheme.mutedText().opacity(0.7))
                         }
                     }
                     .buttonStyle(.plain)

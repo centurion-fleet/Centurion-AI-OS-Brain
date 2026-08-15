@@ -78,7 +78,7 @@ struct FullBrandHeader: View {
             }
             VStack(spacing: 4) {
                 Text("Sovereign AI Remote")
-                    .font(.title2.weight(.semibold))
+                    .font(.system(.title2, design: .serif).weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
                 Text("by Centurion")
                     .font(.subheadline.weight(.medium))
@@ -324,17 +324,11 @@ struct CenturionPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundColor(.white)
+            .foregroundColor(ColorTheme.onAccent())
             .frame(maxWidth: .infinity)
             .padding(.vertical, Spacing.sm + 2)
             .padding(.horizontal, Spacing.lg)
-            .background(
-                LinearGradient(
-                    colors: [ColorTheme.accent(), ColorTheme.dimAccent()],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .background(ColorTheme.accent())
             .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(Motion.light, value: configuration.isPressed)
@@ -513,24 +507,20 @@ struct CenturionPillNav<Item: Hashable>: View {
                 if count > 0 {
                     Text("\(count)")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(ColorTheme.onAccent())
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(ColorTheme.accent())
                         .clipShape(Capsule())
                 }
             }
-            .foregroundColor(isSelected ? .white : ColorTheme.primaryText())
+            .foregroundColor(isSelected ? ColorTheme.onAccent() : ColorTheme.primaryText())
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xs)
             .background(
                 Group {
                     if isSelected {
-                        LinearGradient(
-                            colors: [ColorTheme.accent(), ColorTheme.dimAccent()],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                        ColorTheme.accent()
                     } else {
                         ColorTheme.surface()
                     }

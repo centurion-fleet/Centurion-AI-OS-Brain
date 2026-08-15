@@ -307,9 +307,9 @@ enum ThinkingFamilyStatus: Equatable {
         switch self {
         case .active: return ColorTheme.accent()
         case .connecting: return ColorTheme.accent()
-        case .ready: return Color(red: 0.22, green: 0.58, blue: 0.40)
+        case .ready: return ColorTheme.success()
         case .needsAccess: return ColorTheme.mutedText()
-        case .unreachable: return Color(red: 0.75, green: 0.35, blue: 0.28)
+        case .unreachable: return ColorTheme.error()
         case .unknown: return ColorTheme.mutedText()
         }
     }
