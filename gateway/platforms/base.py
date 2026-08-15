@@ -34,6 +34,44 @@ _AUDIO_EXTS = frozenset({'.ogg', '.opus', '.mp3', '.wav', '.m4a', '.flac'})
 _TELEGRAM_AUDIO_ATTACHMENT_EXTS = frozenset({'.mp3', '.m4a'})
 _TELEGRAM_VOICE_EXTS = frozenset({'.ogg', '.opus'})
 
+# Single source of truth for file extensions the gateway will deliver
+# natively (inline media, voice/audio, or document attachments). Used by
+# extract_media_tags() (explicit MEDIA:<path> tags), extract_local_files()
+# (bare absolute-path detection), and gateway/run.py (tool-result MEDIA:
+# scanning). Keeping one list prevents the "MEDIA:/path/file.md shows as
+# visible text" class of bugs where the tag regex and the bare-path regex
+# drift apart.
+_MEDIA_EXTS = frozenset({
+    # Images (embed inline)
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.svg',
+    # Video (embed inline where supported)
+    '.mp4', '.mov', '.avi', '.mkv', '.webm',
+    # Audio (delivered as voice/audio where supported)
+    '.mp3', '.wav', '.ogg', '.m4a', '.flac', '.opus',
+    # Documents (uploaded as file attachments)
+    '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md', '.markdown',
+    # Spreadsheets / data
+    '.xlsx', '.xls', '.ods', '.csv', '.tsv', '.json', '.xml', '.yaml', '.yml',
+    # Presentations
+    '.pptx', '.ppt', '.odp', '.key',
+    # Archives
+    '.zip', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.7z', '.rar',
+    # Web / rendered output
+    '.html', '.htm',
+    # Mobile / executable payloads
+    '.apk', '.ipa',
+})
+
+# Regex alternation fragment (no leading dot) built from _MEDIA_EXTS.
+# e.g. 'png|jpe?g|gif|webp|...|md|markdown|...'. Sorted by length so the
+# longest extensions match first (jpe?g is handled explicitly below).
+_MEDIA_EXT_ALTERNATION = '|'.join(
+    sorted(
+        (e.lstrip('.') for e in _MEDIA_EXTS),
+        key=lambda e: (-len(e), e),
+    )
+)
+
 
 def _platform_name(platform) -> str:
     """Normalize a Platform enum / raw string into a lowercase name."""
@@ -2411,9 +2449,14 @@ class BasePlatformAdapter(ABC):
         cleaned = cleaned.replace("[[as_document]]", "")
         
         # Extract MEDIA:<path> tags, allowing optional whitespace after the colon
-        # and quoted/backticked paths for LLM-formatted outputs.
+        # and quoted/backticked paths for LLM-formatted outputs. The extension
+        # list is shared with extract_local_files() (_MEDIA_EXTS) so every
+        # deliverable type (including .md/.json/.yaml/etc.) works via MEDIA:
+        # tags AND bare paths — a MEDIA: tag that fails to match here is NOT
+        # stripped from user-visible text, so a stale narrow list would leak
+        # "MEDIA:/path/file" into the chat.
         media_pattern = re.compile(
-            r'''[`"']?MEDIA:\s*(?P<path>`[^`\n]+`|"[^"\n]+"|'[^'\n]+'|(?:~/|/)\S+(?:[^\S\n]+\S+)*?\.(?:png|jpe?g|gif|webp|mp4|mov|avi|mkv|webm|ogg|opus|mp3|wav|m4a|flac|epub|pdf|zip|rar|7z|docx?|xlsx?|pptx?|txt|csv|apk|ipa)(?=[\s`"',;:)\]}]|$))[`"']?'''
+            r'''[`"']?MEDIA:\s*(?P<path>`[^`\n]+`|"[^"\n]+"|'[^'\n]+'|(?:~/|/)\S+(?:[^\S\n]+\S+)*?\.(?:''' + _MEDIA_EXT_ALTERNATION + r''')(?=[\s`"',;:)\]}]|$))[`"']?'''
         )
         for match in media_pattern.finditer(content):
             path = match.group("path").strip()
@@ -2455,24 +2498,7 @@ class BasePlatformAdapter(ABC):
             Tuple of (list of expanded file paths, cleaned text with the
             raw path strings removed).
         """
-        _LOCAL_MEDIA_EXTS = (
-            # Images (embed inline)
-            '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.svg',
-            # Video (embed inline where supported)
-            '.mp4', '.mov', '.avi', '.mkv', '.webm',
-            # Audio (delivered as voice/audio where supported)
-            '.mp3', '.wav', '.ogg', '.m4a', '.flac',
-            # Documents (uploaded as file attachments)
-            '.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.md',
-            # Spreadsheets / data
-            '.xlsx', '.xls', '.ods', '.csv', '.tsv', '.json', '.xml', '.yaml', '.yml',
-            # Presentations
-            '.pptx', '.ppt', '.odp', '.key',
-            # Archives
-            '.zip', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.7z', '.rar',
-            # Web / rendered output
-            '.html', '.htm',
-        )
+        _LOCAL_MEDIA_EXTS = _MEDIA_EXTS
         ext_part = '|'.join(e.lstrip('.') for e in _LOCAL_MEDIA_EXTS)
 
         # (?<![/:\w.]) prevents matching inside URLs (e.g. https://…/img.png)

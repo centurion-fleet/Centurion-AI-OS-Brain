@@ -330,6 +330,46 @@ class TestExtractMedia:
         assert media == [("/tmp/Jane Doe/speech.flac", False)]
         assert cleaned == ""
 
+    def test_media_tag_supports_document_extensions_md(self):
+        """Regression: MEDIA: tags with .md files must be extracted AND
+        stripped from visible text. The old regex whitelist (png|jpg|...|
+        csv|apk|ipa) omitted .md (and .json/.yaml/.html/etc.), so the tag
+        failed to match and leaked as visible text in the chat."""
+        content = ("Here is the document:\\n"
+                   "MEDIA:/home/user/docs/cursor-brain-remote-ui-alignment.md")
+        media, cleaned = BasePlatformAdapter.extract_media(content)
+        assert media == [("/home/user/docs/cursor-brain-remote-ui-alignment.md", False)]
+        assert "MEDIA:" not in cleaned
+        assert "Here is the document" in cleaned
+
+    def test_media_tag_supports_document_extensions_json_yaml_html(self):
+        """Same regression for other document/data extensions that were
+        missing from the old MEDIA: regex whitelist."""
+        for ext, path in [
+            (".json", "/tmp/data.json"),
+            (".yaml", "/tmp/config.yaml"),
+            (".html", "/tmp/report.html"),
+            (".tsv", "/tmp/table.tsv"),
+            (".xlsx", "/tmp/ledger.xlsx"),
+            (".tar.gz", "/tmp/archive.tar.gz"),
+            (".markdown", "/tmp/notes.markdown"),
+        ]:
+            media, cleaned = BasePlatformAdapter.extract_media(f"MEDIA:{path}")
+            assert media == [(path, False)], f"{ext} not extracted: {media}"
+            assert cleaned == "", f"{ext} leaked into cleaned text: {cleaned!r}"
+
+    def test_media_tag_supports_document_extensions_zip_pptx(self):
+        """Archives and presentations via MEDIA: tags."""
+        for ext, path in [
+            (".zip", "/tmp/bundle.zip"),
+            (".pptx", "/tmp/deck.pptx"),
+            (".docx", "/tmp/report.docx"),
+            (".pdf", "/tmp/whitepaper.pdf"),
+        ]:
+            media, cleaned = BasePlatformAdapter.extract_media(f"MEDIA:{path}")
+            assert media == [(path, False)], f"{ext} not extracted: {media}"
+            assert cleaned == "", f"{ext} leaked into cleaned text: {cleaned!r}"
+
     def test_as_document_directive_stripped_from_cleaned_text(self):
         """[[as_document]] is a routing directive — strip it from
         user-visible text just like [[audio_as_voice]]. Callers detect the

@@ -983,6 +983,7 @@ from gateway.platforms.base import (
     EphemeralReply,
     MessageEvent,
     MessageType,
+    _MEDIA_EXT_ALTERNATION,
     _reply_anchor_for_event,
     merge_pending_message_event,
 )
@@ -16740,10 +16741,7 @@ class GatewayRunner:
                     _hc = _hm.get("content", "")
                     if "MEDIA:" in _hc:
                         _TOOL_MEDIA_RE = re.compile(
-                            r'MEDIA:((?:/|~\/)\S+\.(?:png|jpe?g|gif|webp|'
-                            r'mp4|mov|avi|mkv|webm|ogg|opus|mp3|wav|m4a|'
-                            r'flac|epub|pdf|zip|rar|7z|docx?|xlsx?|pptx?|'
-                            r'txt|csv|apk|ipa))',
+                            r'MEDIA:((?:/|~\/)\S+\.(?:' + _MEDIA_EXT_ALTERNATION + r'))',
                             re.IGNORECASE
                         )
                         for _match in _TOOL_MEDIA_RE.finditer(_hc):
@@ -17046,10 +17044,7 @@ class GatewayRunner:
                         content = msg.get("content", "")
                         if "MEDIA:" in content:
                             _TOOL_MEDIA_RE = re.compile(
-                                r'MEDIA:((?:/|~\/)\S+\.(?:png|jpe?g|gif|webp|'
-                                r'mp4|mov|avi|mkv|webm|ogg|opus|mp3|wav|m4a|'
-                                r'flac|epub|pdf|zip|rar|7z|docx?|xlsx?|pptx?|'
-                                r'txt|csv|apk|ipa))',
+                                r'MEDIA:((?:/|~\/)\S+\.(?:' + _MEDIA_EXT_ALTERNATION + r'))',
                                 re.IGNORECASE
                             )
                             for match in _TOOL_MEDIA_RE.finditer(content):
