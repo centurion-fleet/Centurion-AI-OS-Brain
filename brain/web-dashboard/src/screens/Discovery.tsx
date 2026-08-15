@@ -325,7 +325,7 @@ function PrimaryButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="mt-8 w-full rounded-full bg-amber-gradient py-3.5 text-sm font-semibold text-canvas shadow-amber transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-8 w-full rounded-full bg-accent py-3.5 text-sm font-semibold text-[var(--on-accent)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>

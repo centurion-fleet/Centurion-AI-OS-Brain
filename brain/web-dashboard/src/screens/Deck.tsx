@@ -163,7 +163,7 @@ export function Deck() {
           </p>
           <Link
             to="/discovery"
-            className="mt-8 inline-flex rounded-full bg-amber-gradient px-6 py-3 text-sm font-semibold text-canvas shadow-amber transition hover:brightness-110"
+            className="mt-8 inline-flex rounded-full bg-accent px-6 py-3 text-sm font-semibold text-[var(--on-accent)] transition hover:brightness-110"
           >
             Begin Discovery
           </Link>

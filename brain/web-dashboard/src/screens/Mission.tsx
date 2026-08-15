@@ -327,7 +327,7 @@ export function Mission() {
           ) : null}
           <button
             type="button"
-            className="mt-3 rounded-full bg-amber-gradient px-4 py-1.5 text-xs font-semibold text-canvas shadow-amber"
+            className="mt-3 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-[var(--on-accent)]"
             onClick={() => {
               document
                 .getElementById(`decision-${attentionDecision.id}`)
@@ -490,7 +490,7 @@ export function Mission() {
               type="button"
               disabled={logBusy}
               onClick={() => void submitDecision()}
-              className="rounded-full bg-amber-gradient px-5 py-2 text-sm font-semibold text-canvas shadow-amber disabled:opacity-50"
+              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
             >
               {logBusy ? "Saving…" : "Save decision"}
             </button>
@@ -541,7 +541,7 @@ export function Mission() {
                     onClick={() => discussDecision(d)}
                     className={
                       spotlight
-                        ? "shrink-0 rounded-full bg-amber-gradient px-2.5 py-1.5 text-sm font-semibold text-canvas shadow-amber"
+                        ? "shrink-0 rounded-full bg-accent px-2.5 py-1.5 text-sm font-semibold text-[var(--on-accent)]"
                         : "shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
                     }
                   >
@@ -659,7 +659,7 @@ export function Mission() {
               type="button"
               disabled={docBusy}
               onClick={() => void submitDocument()}
-              className="rounded-full bg-amber-gradient px-5 py-2 text-sm font-semibold text-canvas shadow-amber disabled:opacity-50"
+              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
             >
               {docBusy ? "Saving…" : "Save document"}
             </button>

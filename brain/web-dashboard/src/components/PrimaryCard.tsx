@@ -78,9 +78,6 @@ export const PrimaryCard = memo(function PrimaryCard({
       }
       className={shell}
     >
-      {!hero && (
-        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-amber-glow/20 blur-3xl transition-opacity group-hover:opacity-80" />
-      )}
       <div className="relative">
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
@@ -129,7 +126,7 @@ export const PrimaryCard = memo(function PrimaryCard({
             type="button"
             onClick={onOpen}
             onPointerDown={() => onPrefetch?.()}
-            className="rounded-full bg-amber-gradient px-5 py-2.5 text-sm font-semibold text-canvas shadow-amber-sm transition hover:brightness-110"
+            className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[var(--on-accent)] transition hover:brightness-110"
           >
             Open mission
           </button>

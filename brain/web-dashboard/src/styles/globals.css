@@ -11,14 +11,36 @@
 
 :root {
   color-scheme: dark;
-  --canvas: #1a1410;
-  --surface: #221c17;
-  --amber-glow: #ff9f1c;
-  --amber-bright: #ffd700;
+  --canvas: #110c09;
+  --surface: #1a1512;
+  --card: #1a1512;
+  --accent: #d3cdbf;
+  --accent-bright: #f1eee7;
+  --accent-muted: rgba(211, 205, 191, 0.15);
+  --on-accent: #110c09;
+  --border: #37322e;
+  --muted: #968d86;
+  --ink: #f1eee7;
   --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --ink: #f5efe6;
-  --ink-muted: rgba(245, 239, 230, 0.55);
+  --glass-hover: rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --canvas: #fafaf9;
+    --surface: #f3f2ee;
+    --card: #ffffff;
+    --accent: #433830;
+    --accent-bright: #080503;
+    --accent-muted: rgba(67, 56, 48, 0.12);
+    --on-accent: #f1eee7;
+    --border: #dad7d0;
+    --muted: #5e534a;
+    --ink: #080503;
+    --glass: rgba(8, 5, 3, 0.03);
+    --glass-hover: rgba(8, 5, 3, 0.06);
+  }
 }
 
 * {
@@ -41,48 +63,29 @@ body {
   overflow-x: hidden;
 }
 
-/* Ambient horizon glow behind the deck — one atmospheric plane */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(ellipse 90% 55% at 50% -18%, rgba(255, 159, 28, 0.2), transparent 55%),
-    radial-gradient(ellipse 45% 30% at 92% 88%, rgba(255, 215, 0, 0.06), transparent);
-}
-
 #root {
   position: relative;
   z-index: 1;
 }
 
 @layer components {
-  /* Solid surface — default for non-interactive stacks (cheap in WebKit). */
   .surface {
-    background: rgba(34, 28, 23, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--surface);
+    border: 1px solid var(--border);
   }
 
-  /* Glass only on elevated interactive heroes — lighter blur than before. */
   .glass {
-    background: rgba(255, 255, 255, 0.035);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--glass);
+    border: 1px solid var(--border);
   }
 
   .glass-strong {
-    background: rgba(34, 28, 23, 0.72);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--surface);
+    border: 1px solid var(--border);
   }
 
   .amber-bar {
-    background: linear-gradient(90deg, #ff9f1c, #ffd700);
-    box-shadow: 0 0 16px rgba(255, 159, 28, 0.45);
+    background: var(--accent);
   }
 
   .hide-scrollbar {
@@ -99,13 +102,12 @@ body::before {
     height: 0.375rem;
     width: 0.375rem;
     border-radius: 9999px;
-    background: #ff9f1c;
-    box-shadow: 0 0 12px rgba(255, 159, 28, 0.45);
+    background: var(--accent);
     animation: pulse-soft 2.4s ease-in-out infinite;
   }
 
   .live-dot-off {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--muted);
     box-shadow: none;
     animation: none;
     opacity: 0.5;
@@ -126,7 +128,11 @@ body::before {
   }
 }
 
-/* Selection */
 ::selection {
-  background: rgba(255, 159, 28, 0.35);
+  background: var(--accent-muted);
+}
+
+h1,
+h2 {
+  font-family: "Instrument Serif", Georgia, serif;
 }
