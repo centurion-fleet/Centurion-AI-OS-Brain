@@ -1,6 +1,6 @@
 # Sovereign AI Remote — device smoke checklist
 
-Run on a physical iPhone with Brain **5.2.145+**. **Pair once on home Wi‑Fi**, then
+Run on a physical iPhone with Brain **5.2.147+**. **Pair once on home Wi‑Fi**, then
 validate Away on **cellular** only after Brain `remote_relay_status` shows
 `websockets_installed` + `realtime_pipe_ready` and Chat from anywhere is enabled.
 
@@ -10,7 +10,7 @@ Power-user tunnel/`EXPOSE_9119.md` is **not** the App Store Away path.
 
 - [ ] `xcodegen generate` then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.2.145** / build **38+**
+- [ ] Display name: **Sovereign AI Remote**; version **5.2.147** / build **39+**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 - [ ] Camera permission string present (`NSCameraUsageDescription` — QR only)
 

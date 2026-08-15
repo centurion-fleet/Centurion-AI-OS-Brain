@@ -1,6 +1,12 @@
-# Sovereign AI Remote — TestFlight What to Test (build 38)
+# Sovereign AI Remote — TestFlight What to Test (build 39)
 
-**iOS App Version 5.2.145** (not 5.0.1). Build **38**.
+**iOS App Version 5.2.147** (not 5.0.1). Build **39**.
+
+## Paper & bronze (5.2.147)
+
+- Light: warm paper (`#FAFAF9`) + bronze accent (`#433830`) — no blue tabs.
+- Dark: warm near-black (`#110C09`) + pale bronze PulseDot (`#D3CDBF`).
+- One bright accent per screen (avatar / active / primary CTA).
 
 ## Find Family & friends referrals
 
