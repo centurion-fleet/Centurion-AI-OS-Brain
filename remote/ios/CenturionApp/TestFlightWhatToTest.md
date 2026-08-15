@@ -1,6 +1,11 @@
-# Sovereign AI Remote — TestFlight What to Test (build 39)
+# Sovereign AI Remote — TestFlight What to Test (build 40)
 
-**iOS App Version 5.2.147** (not 5.0.1). Build **39**.
+**iOS App Version 5.2.148** (not 5.0.1). Build **40**.
+
+## Focus / Missions (5.2.148)
+
+- Middle tab is **Focus** (not Home).
+- Pulse pill is **Missions** (not Plans). Same reviewable work as Brain.
 
 ## Paper & bronze (5.2.147)
 

@@ -2,37 +2,51 @@
 
 ## Apps list icon
 
-After a processed build is **selected** on version **5.0.2** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
+After a processed build is **selected** on version **5.2.148** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
 
 ## App Store icon (1024×1024)
 
 Source: [`../Assets.xcassets/AppIcon.appiconset/`](../Assets.xcassets/AppIcon.appiconset/)  
 Export: [`AppStoreIcon-1024.png`](AppStoreIcon-1024.png) (RGB, no alpha, full-bleed).
 
-## Required captures (iPhone 6.7")
+## Required captures (iPhone 6.5")
 
-Capture on device or Simulator (iPhone 15/16 Pro Max). Do **not** upload HTML mockups.
+App Store Connect for this listing currently accepts **6.5-inch** portrait sizes only:
 
-| File | Screen |
-|------|--------|
-| `iphone-67-01-home.png` | Home / Pulse — calm Live surface with brand |
-| `iphone-67-02-chat.png` | Crypto Chat — conversation with Sovereign (no secrets) |
-| `iphone-67-03-memory-horizon.png` | You → Memory Horizon — three cards with fill bars |
-| `iphone-67-04-mission-or-soul.png` | You → Mission or Soul |
-| `iphone-67-05-privacy.png` | Connect — **Scan QR** primary (paste secondary); Privacy & Trust OK as alternate |
+- **1284 × 2778** (use this set)
+- **1242 × 2688** (older 6.5")
 
-Optional: Brain-side QR pairing screen for support docs (not ASC phone slot).
+Do not upload 1290 × 2796 (6.9") unless Media Manager shows a 6.9-inch slot.
 
-### Capture helper (Simulator)
+| File | Size | Screen |
+|------|------|--------|
+| `iphone-65-01-focus.png` | 1284×2778 | Focus — Missions pill |
+| `iphone-65-02-chat.png` | 1284×2778 | Crypto Chat |
+| `iphone-65-03-memory-horizon.png` | 1284×2778 | Memory Horizon |
+| `iphone-65-04-mission.png` | 1284×2778 | Life Mission |
+| `iphone-65-05-connect.png` | 1284×2778 | Connect — Scan QR |
 
 ```bash
-# Boot a 6.7" simulator, install Release build, then for each screen:
-xcrun simctl io booted screenshot ios/CenturionApp/AppStore/iphone-67-0N-NAME.png
+SIZE=6.5 bash remote/ios/CenturionApp/AppStore/export-screenshots.sh
 ```
+
+Preview the storyboard in a browser: `remote/ios/CenturionApp/AppStoreScreenshots.html`.
+
+### Device capture (optional, closer to review)
+
+If App Review wants pixel-identical chrome, capture on iPhone 15/16 Pro Max (or Simulator) from build **40** / **5.2.148**:
+
+```bash
+xcrun simctl io booted screenshot remote/ios/CenturionApp/AppStore/iphone-69-0N-NAME.png
+```
+
+Do **not** upload HTML. Upload the PNGs. Do **not** upload `RoutingAppCoverage.geojson` — this is not a routing app.
+
+iPad screenshots are not required (iPhone, portrait).
 
 ## Status
 
-- [ ] Build selected on **iOS 5.1.0** (build 28+)
-- [ ] Screenshots captured for 6.7" (operator — five PNGs above, include QR Connect)
-- [ ] Screenshots uploaded to App Store Connect
-- [ ] Listing preview reviewed
+- [ ] Build selected on **iOS 5.2.148** (build **40**)
+- [ ] 6.5" PNGs generated (or recaptured from device)
+- [ ] Screenshots uploaded to App Store Connect Media Manager (6.5-inch, 1284×2778)
+- [ ] Listing preview reviewed (language: Focus / Missions, not Home / Plans)

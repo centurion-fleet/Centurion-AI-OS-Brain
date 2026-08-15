@@ -1,14 +1,14 @@
-# Archive / TestFlight — Sovereign AI Remote 5.2.147
+# Archive / TestFlight — Sovereign AI Remote 5.2.148
 
 ## Version (do not ship under 5.0.1)
 
-- Marketing / ASC iOS App Version: **5.2.147**
-- Build: **39**
+- Marketing / ASC iOS App Version: **5.2.148**
+- Build: **40**
 - Bundle ID: `com.centurion.ios` (adamId `6789119835`)
 
 If App Store Connect still shows an old train (e.g. **5.0.1**), create a new
-iOS version **5.2.147** under App Store → iOS App → (+) before distributing,
-or select the **5.2.147** build under TestFlight → iOS Builds after processing.
+iOS version **5.2.148** under App Store → iOS App → (+) before distributing,
+or select the **5.2.148** build under TestFlight → iOS Builds after processing.
 
 ## Generate + Archive
 
@@ -18,6 +18,6 @@ xcodegen generate
 open CenturionApp.xcodeproj
 ```
 
-Confirm Xcode → Target CenturionApp → General → Version **5.2.147**, Build **39**.
+Confirm Xcode → Target CenturionApp → General → Version **5.2.148**, Build **40**.
 
 Then: Product → Archive → Distribute App → App Store Connect → Upload.

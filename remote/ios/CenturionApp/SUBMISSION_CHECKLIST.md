@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.2.147** / build **39**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.2.148** / build **40**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -8,7 +8,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.2.147** / build **39**). Complete
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md
-- [ ] ASC iOS version created as **5.2.147** (not a stale 5.0.1 / 5.1.0 train)
+- [ ] ASC iOS version created as **5.2.148** (not a stale 5.0.1 / 5.1.0 train)
 
 ## Encryption export compliance
 
@@ -59,16 +59,16 @@ By:
 
 ## Screenshots
 
-Required device sizes must be real PNGs under [`AppStore/`](AppStore/) (not only HTML mockups). See [`AppStore/SCREENSHOTS.md`](AppStore/SCREENSHOTS.md).
+Required device size is **iPhone 6.9"** (1290×2796 accepted). Real PNGs live under [`AppStore/`](AppStore/) — see [`AppStore/SCREENSHOTS.md`](AppStore/SCREENSHOTS.md).
 
 Capture checklist:
 
-- [ ] `iphone-67-01-home.png` — Home / Pulse
-- [ ] `iphone-67-02-chat.png` — Crypto Chat
-- [ ] `iphone-67-03-memory-horizon.png` — Memory Horizon
-- [ ] `iphone-67-04-mission-or-soul.png` — Mission or Soul
-- [ ] `iphone-67-05-privacy.png` — Link / Connect (prefer **Scan QR** surface)
-- [ ] Uploaded to ASC Media Manager (6.7")
+- [ ] `iphone-65-01-focus.png` — Focus / Missions (1284×2778)
+- [ ] `iphone-65-02-chat.png` — Crypto Chat
+- [ ] `iphone-65-03-memory-horizon.png` — Memory Horizon
+- [ ] `iphone-65-04-mission.png` — Life Mission
+- [ ] `iphone-65-05-connect.png` — Link / Connect (**Scan QR**)
+- [ ] Uploaded to ASC Media Manager (**6.5-inch**, 1284×2778)
 
 ## Camera / QR pairing disclosure
 
