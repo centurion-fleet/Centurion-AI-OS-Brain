@@ -1,6 +1,11 @@
-# Sovereign AI Remote — TestFlight What to Test (build 40)
+# Sovereign AI Remote — TestFlight What to Test (build 41)
 
-**iOS App Version 5.2.148** (not 5.0.1). Build **40**.
+**iOS App Version 5.2.149** (not 5.0.1). Build **41**.
+
+## Crypto Chat (5.2.149)
+
+- Pair, stay on Chat, send one `Hi`. Expect a spoken reply (not a hang on “Waiting on your Sovereign”).
+- Do not open Focus until that reply lands.
 
 ## Focus / Missions (5.2.148)
 

@@ -2,7 +2,7 @@
 
 ## Apps list icon
 
-After a processed build is **selected** on version **5.2.148** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
+After a processed build is **selected** on version **5.2.149** and **Saved**, ASC copies the 1024 marketing icon from the binary. Hard-refresh Apps if the list lags the version page.
 
 ## App Store icon (1024×1024)
 
@@ -34,7 +34,7 @@ Preview the storyboard in a browser: `remote/ios/CenturionApp/AppStoreScreenshot
 
 ### Device capture (optional, closer to review)
 
-If App Review wants pixel-identical chrome, capture on iPhone 15/16 Pro Max (or Simulator) from build **40** / **5.2.148**:
+If App Review wants pixel-identical chrome, capture on iPhone 15/16 Pro Max (or Simulator) from build **41** / **5.2.149**:
 
 ```bash
 xcrun simctl io booted screenshot remote/ios/CenturionApp/AppStore/iphone-69-0N-NAME.png
@@ -46,7 +46,7 @@ iPad screenshots are not required (iPhone, portrait).
 
 ## Status
 
-- [ ] Build selected on **iOS 5.2.148** (build **40**)
+- [ ] Build selected on **iOS 5.2.149** (build **41**)
 - [ ] 6.5" PNGs generated (or recaptured from device)
 - [ ] Screenshots uploaded to App Store Connect Media Manager (6.5-inch, 1284×2778)
 - [ ] Listing preview reviewed (language: Focus / Missions, not Home / Plans)
