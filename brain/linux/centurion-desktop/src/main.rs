@@ -1316,7 +1316,7 @@ The Brain here is the product; the phone is the remote.",
             .description("Privacy, channels, Chat from anywhere, and desk ops")
             .build();
         let oversight_row = adw::ActionRow::builder()
-            .title("Reporting & Oversight")
+            .title("Reporting &amp; Oversight")
             .subtitle("Report cadence and confirmation preferences")
             .icon_name("eye-open-negative-filled-symbolic")
             .build();
@@ -1325,7 +1325,7 @@ The Brain here is the product; the phone is the remote.",
         oversight_row.add_suffix(&oversight_button);
         privacy_group.add(&oversight_row);
         let privacy_row = adw::ActionRow::builder()
-            .title("Privacy & Trust")
+            .title("Privacy &amp; Trust")
             .subtitle("What stays on this computer, and how partnership works")
             .icon_name("security-high-symbolic")
             .activatable(true)
@@ -1492,7 +1492,7 @@ The Brain here is the product; the phone is the remote.",
         plugins_row.add_suffix(&plugins_button);
         privacy_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
-            .title("Scheduled & board")
+            .title("Scheduled &amp; board")
             .subtitle("View only — next cron jobs and board glance.")
             .icon_name("view-list-symbolic")
             .build();
@@ -1519,11 +1519,11 @@ The Brain here is the product; the phone is the remote.",
         settings.append(&devices_section);
 
         let account_group = adw::PreferencesGroup::builder()
-            .title("Account & help")
+            .title("Account &amp; help")
             .description("Skills, license, family program, and support")
             .build();
         let skills_row = adw::ActionRow::builder()
-            .title("Skills & tools")
+            .title("Skills &amp; tools")
             .subtitle("Self-built trusted · hub is inspiration only")
             .icon_name("applications-engineering-symbolic")
             .build();
@@ -4841,7 +4841,7 @@ Being · Continuity\n\
         content.append(&list);
 
         let dialog = adw::AlertDialog::builder()
-            .heading("Reporting & Oversight")
+            .heading("Reporting &amp; Oversight")
             .close_response("cancel")
             .extra_child(&content)
             .build();
@@ -6318,7 +6318,7 @@ Messages to this account now route into your Centurion conversation."
             None => ("Could not reach the bridge.".to_owned(), true),
         };
         let dialog = adw::AlertDialog::builder()
-            .heading("Skills & tools")
+            .heading("Skills &amp; tools")
             .body(&body)
             .close_response("close")
             .default_response("create")
@@ -6859,7 +6859,7 @@ Schedule work with cron or kanban; this glance stays in Settings, not Focus."
             None => "Could not reach the ops bridge.".to_owned(),
         };
         let dialog = adw::AlertDialog::builder()
-            .heading("Scheduled & board")
+            .heading("Scheduled &amp; board")
             .body(&body)
             .close_response("close")
             .build();

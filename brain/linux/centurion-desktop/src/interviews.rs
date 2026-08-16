@@ -540,7 +540,7 @@ unless you choose to share something with support.\n\n\
 If something feels unsafe about AI in general: Centurion is built as a 1:1 companion under your oversight, \
 not an autonomous agent that acts without you.";
     let dialog = adw::AlertDialog::builder()
-        .heading("Privacy & Trust")
+        .heading("Privacy &amp; Trust")
         .body(body)
         .close_response("close")
         .build();
