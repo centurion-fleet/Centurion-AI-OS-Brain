@@ -336,6 +336,13 @@ stackswitcher button {
   spacing: 6px;
 }
 
+/* Touch-visible mode caption — not Adwaita dim-label (too faint on kiosk). */
+.centurion-mode-teach {
+  color: @centurion_fg_muted;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
 .centurion-chat-pill {
   border-radius: 999px;
   padding: 6px 12px;

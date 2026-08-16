@@ -177,10 +177,6 @@ struct ChatView: View {
             inputBar
         }
         .background(ColorTheme.background())
-        .task(id: connectionManager.connectionState) {
-            guard connectionManager.isCryptoChatReady else { return }
-            await connectionManager.refreshThinkingStatus()
-        }
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(initialMessage: sendError ?? "Your Sovereign's thinking service needs attention.")
                 .environmentObject(connectionManager)
@@ -509,7 +505,7 @@ struct ChatView: View {
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.mutedText())
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Not linked")
+                        Text("Pair your Brain to begin")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(ColorTheme.primaryText())
                         Text("Open You to scan the pairing QR and start Crypto Chat.")
@@ -529,7 +525,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.xs)
-        .accessibilityLabel("Not linked. Open You to scan the pairing QR.")
+        .accessibilityLabel("Pair your Brain to begin. Open You to scan the pairing QR.")
     }
 
     private func llmErrorBanner(_ message: String) -> some View {
@@ -592,9 +588,9 @@ struct ChatView: View {
             } else {
                 EmptyState(
                     icon: "lock.shield",
-                    title: "Crypto Chat",
-                    message: "Link your Centurion in You to start Crypto Chat — a private encrypted conversation public AIs do not offer.",
-                    actionTitle: "Link Centurion",
+                    title: "Pair your Brain to begin",
+                    message: "Open You and scan the pairing QR to start Crypto Chat — a private encrypted conversation public AIs do not offer.",
+                    actionTitle: "Open You",
                     action: {
                         NotificationCenter.default.post(name: .centurionSelectTab, object: 2)
                     }

@@ -21,6 +21,7 @@ enum PulseBadgeCounts {
         if isCryptoChatReady {
             return PulseFeedMapper.map(from: swarmStore, planStore: planStore)
         }
+        #if DEBUG
         if showsDemoContent {
             planStore.seedPreviewIfNeeded(showsDemoContent: true)
             return PulseFeedMapper.Feed(
@@ -31,6 +32,9 @@ enum PulseBadgeCounts {
                 thoughts: CenturionThought.preview()
             )
         }
+        #else
+        _ = showsDemoContent
+        #endif
         return PulseFeedMapper.Feed(
             liveActivity: nil,
             wins: [],

@@ -26,6 +26,7 @@ class RemoteConnector:
     base_url: str = ""
     best_for: str = ""
     creative_kind: str = ""  # image_gen | video_gen | tts
+    signup_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -41,6 +42,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="OPENAI_API_KEY",
         base_url="https://api.openai.com/v1",
         best_for="Quick answers and lightweight tasks",
+        signup_url="https://platform.openai.com/api-keys",
     ),
     RemoteConnector(
         id="openai-terra",
@@ -51,6 +53,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="OPENAI_API_KEY",
         base_url="https://api.openai.com/v1",
         best_for="Code, refactoring, and planning",
+        signup_url="https://platform.openai.com/api-keys",
     ),
     RemoteConnector(
         id="openai-sol-pro",
@@ -61,6 +64,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="OPENAI_API_KEY",
         base_url="https://api.openai.com/v1",
         best_for="Deep analysis and long documents",
+        signup_url="https://platform.openai.com/api-keys",
     ),
     RemoteConnector(
         id="anthropic-sonnet-5",
@@ -71,6 +75,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="ANTHROPIC_API_KEY",
         base_url="https://api.anthropic.com",
         best_for="Writing, email drafts, and copy",
+        signup_url="https://console.anthropic.com/settings/keys",
     ),
     RemoteConnector(
         id="anthropic-opus-4-8",
@@ -81,6 +86,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="ANTHROPIC_API_KEY",
         base_url="https://api.anthropic.com",
         best_for="Legal review, research, and complex reasoning",
+        signup_url="https://console.anthropic.com/settings/keys",
     ),
     RemoteConnector(
         id="gemini-3-5-flash",
@@ -91,6 +97,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="GEMINI_API_KEY",
         base_url="https://generativelanguage.googleapis.com",
         best_for="Fast multimodal reasoning",
+        signup_url="https://aistudio.google.com/apikey",
     ),
     RemoteConnector(
         id="deepseek-v4-pro",
@@ -101,6 +108,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="DEEPSEEK_API_KEY",
         base_url="https://api.deepseek.com",
         best_for="Cost-effective coding and analysis",
+        signup_url="https://platform.deepseek.com/api_keys",
     ),
     RemoteConnector(
         id="xai-grok-4-5",
@@ -111,6 +119,7 @@ _CATALOG: tuple[RemoteConnector, ...] = (
         key_env="XAI_API_KEY",
         base_url="https://api.x.ai/v1",
         best_for="Real-time knowledge and direct answers",
+        signup_url="https://console.x.ai/",
     ),
     RemoteConnector(
         id="openai-dalle-3",

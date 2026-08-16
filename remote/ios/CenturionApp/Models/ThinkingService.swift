@@ -40,8 +40,8 @@ enum LLMHealthState: Equatable {
 
     var needsAttention: Bool {
         switch self {
-        case .healthy: return false
-        default: return true
+        case .healthy, .unknown: return false
+        case .degraded, .broken: return true
         }
     }
 }

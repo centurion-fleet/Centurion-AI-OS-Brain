@@ -152,6 +152,7 @@ struct MissionPortfolioView: View {
         .task {
             await reloadPulseFeed()
             await missionStore.refreshLifeStack(from: connectionManager)
+            await planStore.refreshFromHost(connectionManager: connectionManager)
         }
         .onChange(of: connectionManager.connectionState) { _, _ in
             Task { await reloadPulseFeed(forceRefresh: true) }
@@ -373,12 +374,20 @@ struct MissionPortfolioView: View {
             }
             applyPulseFromSwarmStore()
         } else if dataMode.showsDemoContent {
+            #if DEBUG
             planStore.seedPreviewIfNeeded(showsDemoContent: true)
             liveActivity = LiveActivity.preview()
             completedLoops = CompletedLoop.preview()
             decisions = DecisionItem.preview()
             outputs = CenturionOutput.preview()
             thoughts = CenturionThought.preview()
+            #else
+            liveActivity = nil
+            completedLoops = []
+            decisions = []
+            outputs = []
+            thoughts = []
+            #endif
         } else {
             liveActivity = nil
             completedLoops = []

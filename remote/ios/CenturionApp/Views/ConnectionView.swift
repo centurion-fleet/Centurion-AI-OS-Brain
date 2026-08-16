@@ -99,10 +99,6 @@ struct ConnectionView: View {
             isPositive: !connectionManager.llmHealth.needsAttention,
             accessibilityLabel: "Thinking service, \(connectionManager.thinkingServiceHeadline). \(connectionManager.thinkingServiceSubtitle)"
         )
-        .task {
-            await connectionManager.refreshThinkingStatus()
-            await connectionManager.refreshRoutingMode()
-        }
     }
 
     @ViewBuilder
@@ -428,8 +424,6 @@ struct ThinkingServiceSection: View {
                             accessibilityLabel: "Thinking service, \(connectionManager.thinkingServiceHeadline). \(connectionManager.thinkingServiceSubtitle)"
                         )
                         .task(id: connectionManager.connectionState) {
-                            await connectionManager.refreshThinkingStatus()
-                            await connectionManager.refreshRoutingMode()
                             _ = await connectionManager.fetchRemoteModelCatalog()
                         }
 

@@ -753,6 +753,15 @@ fn intent_label(intent: ChatIntent) -> &'static str {
     }
 }
 
+fn intent_teach(intent: ChatIntent) -> &'static str {
+    match intent {
+        ChatIntent::Chat => "Chat — typed conversation, no extra framing.",
+        ChatIntent::Plan => "Plan — ask for a structured proposal this turn.",
+        ChatIntent::Focus => "Focus — centre every reply on your Primary Life Mission.",
+        ChatIntent::Research => "Research — evidence-backed; loads research skills.",
+    }
+}
+
 #[derive(Clone, Debug)]
 struct PrimaryFocusContext {
     id: String,
@@ -5399,6 +5408,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
+    let mode_teach = gtk::Label::builder()
+        .label(intent_teach(ChatIntent::Chat))
+        .xalign(0.0)
+        .wrap(true)
+        .max_width_chars(56)
+        .css_classes(["centurion-mode-teach"])
+        .build();
+
     // Generation guard so a stale async banner resolve cannot overwrite a newer one.
     let focus_banner_gen = Rc::new(Cell::new(0u64));
 
@@ -5411,11 +5428,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let active_discuss = active_discuss.clone();
         let apply_focus_banner = apply_focus_banner.clone();
         let focus_banner_gen = focus_banner_gen.clone();
+        let mode_teach = mode_teach.clone();
         move |selected: ChatIntent| {
             chat_pill.set_active(selected == ChatIntent::Chat);
             plan_pill.set_active(selected == ChatIntent::Plan);
             focus_pill.set_active(selected == ChatIntent::Focus);
             research_pill.set_active(selected == ChatIntent::Research);
+            mode_teach.set_label(intent_teach(selected));
             if selected == ChatIntent::Focus {
                 let discuss = active_discuss.borrow().clone();
                 let from_discuss = matches!(
@@ -5480,12 +5499,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     mode_wrap.set_halign(gtk::Align::Start);
     mode_wrap.set_hexpand(true);
     mode_wrap.append(&mode_row);
-    let mode_teach = gtk::Label::builder()
-        .label("Chat = talk · Plan = proposal this turn · Focus = Primary mission · Research = evidence")
-        .css_classes(["dim-label"])
-        .xalign(0.0)
-        .wrap(true)
-        .build();
     mode_wrap.append(&mode_teach);
 
     let model_btn = gtk::MenuButton::builder()

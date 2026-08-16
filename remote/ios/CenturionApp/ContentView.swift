@@ -81,9 +81,10 @@ struct ContentView: View {
         .tint(ColorTheme.accent())
         .onReceive(NotificationCenter.default.publisher(for: .centurionSelectTab)) { notification in
             if let tab = notification.object as? Int {
-                selectedTab = remapLegacyTab(tab)
+                selectedTab = min(max(tab, 0), 2)
             }
         }
+        #if DEBUG
         .task(priority: .utility) {
             try? await Task.sleep(for: .milliseconds(400))
             await MainActor.run {
@@ -93,16 +94,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    /// Maps pre-3-tab indices: Connect(0)→You(2), Chat(1)→0, Focus(2)→1, You(3)→2.
-    private func remapLegacyTab(_ tab: Int) -> Int {
-        switch tab {
-        case 0: return 2
-        case 1: return 0
-        case 2: return 1
-        case 3: return 2
-        default: return min(max(tab, 0), 2)
-        }
+        #endif
     }
 }

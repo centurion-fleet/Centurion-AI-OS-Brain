@@ -76,6 +76,34 @@ export function TargetSequence({
     statement: missionStatement,
   };
 
+  if (ordered.length === 0) {
+    return (
+      <div className="surface rounded-2xl px-4 py-8 text-center">
+        <p className="text-sm text-ink-dim">
+          No targets yet. Discuss this mission in Chat to lock a sequence.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            const w = window as Window & {
+              centurionDiscuss?: (p: Record<string, unknown>) => void;
+            };
+            if (typeof w.centurionDiscuss !== "function") return;
+            w.centurionDiscuss({
+              id: mission.id,
+              title: mission.title,
+              statement: mission.statement || "",
+              kickoff: `Let's lock a target sequence for: ${mission.title}`,
+            });
+          }}
+          className="mt-4 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-4 py-2 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+        >
+          Discuss in Chat
+        </button>
+      </div>
+    );
+  }
+
   async function toggleComplete(t: MissionTarget) {
     if (busyId) return;
     const nextStatus: TargetStatus =

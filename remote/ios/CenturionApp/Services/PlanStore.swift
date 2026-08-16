@@ -111,8 +111,12 @@ final class PlanStore: ObservableObject {
     }
 
     func seedPreviewIfNeeded(showsDemoContent: Bool) {
+        #if DEBUG
         guard showsDemoContent, plans.isEmpty else { return }
         upsert(PlanArtifact.preview())
+        #else
+        _ = showsDemoContent
+        #endif
     }
 
     /// Pull host plans + templates when connected.

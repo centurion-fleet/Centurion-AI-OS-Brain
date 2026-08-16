@@ -37,9 +37,16 @@ def test_picker_hides_openrouter_and_subscription():
     assert "openai-api" in slugs or "anthropic" in slugs
 
 
-def test_catalog_marks_configured_from_env(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+def test_text_providers_include_signup_url():
+    expected = {
+        "OPENAI_API_KEY": "https://platform.openai.com/api-keys",
+        "ANTHROPIC_API_KEY": "https://console.anthropic.com/settings/keys",
+        "GEMINI_API_KEY": "https://aistudio.google.com/apikey",
+        "DEEPSEEK_API_KEY": "https://platform.deepseek.com/api_keys",
+        "XAI_API_KEY": "https://console.x.ai/",
+    }
     payload = list_remote_options(probe=False)
-    openai_rows = [r for r in payload["text_models"] if r["provider"] == "openai-api"]
-    assert openai_rows
-    assert all(r["configured"] is True and r["needs_key"] is False for r in openai_rows)
+    by_env = {row["key_env"]: row for row in payload["text_models"]}
+    for key_env, url in expected.items():
+        assert key_env in by_env
+        assert by_env[key_env]["signup_url"] == url

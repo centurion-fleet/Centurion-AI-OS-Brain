@@ -72,7 +72,7 @@ def handle_request(
     if action == "chat":
         return _handle_chat(request, request_id=request_id, run_agent=run_agent)
     if action == "provider_status":
-        return _handle_provider_status(request_id)
+        return _handle_provider_status(request, request_id)
     if action == "provider_options":
         return _handle_provider_options(request_id)
     if action == "provider_validate":
@@ -467,9 +467,19 @@ def _handle_chat(
         )
 
 
-def _handle_provider_status(request_id: str) -> dict[str, Any]:
+def _parse_skip_probe(request: dict[str, Any], *, default: bool = True) -> bool:
+    skip_probe = request.get("skip_probe", default)
+    if isinstance(skip_probe, str):
+        return skip_probe.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(skip_probe)
+
+
+def _handle_provider_status(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
     try:
-        status = get_status(probe=True)
+        skip_probe = _parse_skip_probe(request, default=True)
+        status = get_status(probe=not skip_probe)
         payload = status.to_dict()
         # Keep the flag but omit the snapshot — remote frames stay small on iPhone.
         payload.pop("last_good", None)
@@ -490,11 +500,7 @@ def _handle_settings_snapshot(
     try:
         from centurion_cli.life_missions import get_data_version
 
-        skip_probe = request.get("skip_probe", True)
-        if isinstance(skip_probe, str):
-            skip_probe = skip_probe.strip().lower() in {"1", "true", "yes", "on"}
-        else:
-            skip_probe = bool(skip_probe)
+        skip_probe = _parse_skip_probe(request, default=True)
 
         thinking = get_status(probe=not skip_probe).to_dict()
         thinking.pop("last_good", None)

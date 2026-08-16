@@ -197,8 +197,25 @@ struct RemoteModelCatalog: Codable, Equatable {
             configured: false,
             needsKey: true,
             active: false,
-            healthy: nil
+            healthy: nil,
+            signupURL: signupURLString(for: keyEnv)
         )
+    }
+
+    static func signupURL(forKeyEnv keyEnv: String) -> URL? {
+        guard let raw = signupURLString(for: keyEnv) else { return nil }
+        return URL(string: raw)
+    }
+
+    private static func signupURLString(for keyEnv: String) -> String? {
+        switch keyEnv {
+        case "OPENAI_API_KEY": return "https://platform.openai.com/api-keys"
+        case "ANTHROPIC_API_KEY": return "https://console.anthropic.com/settings/keys"
+        case "GEMINI_API_KEY", "GOOGLE_API_KEY": return "https://aistudio.google.com/apikey"
+        case "DEEPSEEK_API_KEY": return "https://platform.deepseek.com/api_keys"
+        case "XAI_API_KEY": return "https://console.x.ai/"
+        default: return nil
+        }
     }
 }
 
@@ -216,6 +233,7 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
     let needsKey: Bool
     let active: Bool
     let healthy: Bool?
+    let signupURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -231,6 +249,7 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
         case needsKey = "needs_key"
         case active
         case healthy
+        case signupURL = "signup_url"
     }
 
     var statusLabel: String {
@@ -255,7 +274,8 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
             configured: configured,
             needsKey: needsKey,
             active: active,
-            healthy: healthy
+            healthy: healthy,
+            signupURL: signupURL
         )
     }
 
@@ -277,7 +297,8 @@ struct RemoteConnectorRow: Codable, Equatable, Identifiable {
             configured: knownConfigured,
             needsKey: !knownConfigured,
             active: isActive,
-            healthy: nil
+            healthy: nil,
+            signupURL: signupURL
         )
     }
 }
@@ -337,6 +358,13 @@ struct ThinkingServiceFamily: Identifiable, Equatable {
 
     var preferredConnector: RemoteConnectorRow {
         activeConnector ?? connectors.first!
+    }
+
+    var signupURL: URL? {
+        if let raw = connectors.first?.signupURL, let url = URL(string: raw), !raw.isEmpty {
+            return url
+        }
+        return RemoteModelCatalog.signupURL(forKeyEnv: keyEnv)
     }
 
     var summary: String {

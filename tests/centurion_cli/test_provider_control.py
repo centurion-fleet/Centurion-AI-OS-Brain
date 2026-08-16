@@ -169,18 +169,65 @@ def test_remote_bridge_structured_chat_error():
 
 
 def test_remote_bridge_provider_status(monkeypatch):
-    monkeypatch.setattr(
-        "centurion_cli.remote_bridge.get_status",
-        lambda **_kw: pc.ProviderStatus(
+    seen = {}
+
+    def _status(*, probe=True):
+        seen["probe"] = probe
+        return pc.ProviderStatus(
             provider="openrouter",
             model="anthropic/claude-sonnet-4",
             health="ok",
-            health_message="Thinking service is reachable.",
-        ),
-    )
+            health_message="Configured (not probed)." if not probe else "Thinking service is reachable.",
+        )
+
+    monkeypatch.setattr("centurion_cli.remote_bridge.get_status", _status)
     response = handle_request({"id": "s1", "action": "provider_status"})
     assert response["ok"] is True
     assert response["status"]["provider"] == "openrouter"
+    assert seen["probe"] is False
+
+
+def test_remote_bridge_provider_status_skip_probe_default(monkeypatch):
+    seen = {}
+
+    def _status(*, probe=True):
+        seen["probe"] = probe
+        return pc.ProviderStatus(provider="anthropic", model="claude-sonnet-4-6")
+
+    monkeypatch.setattr("centurion_cli.remote_bridge.get_status", _status)
+    handle_request({"id": "s2", "action": "provider_status", "skip_probe": True})
+    assert seen["probe"] is False
+
+
+def test_remote_bridge_provider_status_force_probe(monkeypatch):
+    seen = {}
+
+    def _status(*, probe=True):
+        seen["probe"] = probe
+        return pc.ProviderStatus(provider="anthropic", model="claude-sonnet-4-6")
+
+    monkeypatch.setattr("centurion_cli.remote_bridge.get_status", _status)
+    handle_request({"id": "s3", "action": "provider_status", "skip_probe": False})
+    assert seen["probe"] is True
+
+
+def test_provider_status_skip_probe_does_not_call_probe_provider(monkeypatch, centurion_home):
+    (centurion_home / "config.yaml").write_text(
+        "model:\n  provider: anthropic\n  default: claude-sonnet-4-6\n",
+        encoding="utf-8",
+    )
+    seen = {"n": 0}
+
+    def _probe(**_kwargs):
+        seen["n"] += 1
+        return True, "reachable", 1
+
+    monkeypatch.setattr(pc, "probe_provider", _probe)
+    response = handle_request({"id": "s4", "action": "provider_status"})
+    assert response["ok"] is True
+    assert seen["n"] == 0
+    assert response["status"]["health"] == "ok"
+    assert "not probed" in response["status"]["health_message"].lower()
 
 
 def test_remote_bridge_lkg_auto_recovery(monkeypatch):

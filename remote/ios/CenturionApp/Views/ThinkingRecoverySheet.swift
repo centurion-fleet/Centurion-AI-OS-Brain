@@ -87,7 +87,7 @@ struct ThinkingRecoverySheet: View {
             }
         )
         .task {
-            await connectionManager.refreshThinkingStatus()
+            await connectionManager.refreshThinkingStatus(forceProbe: true)
         }
         .sheet(isPresented: $showGetHelp) {
             GetHelpView()

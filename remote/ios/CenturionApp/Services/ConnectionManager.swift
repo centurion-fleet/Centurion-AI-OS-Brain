@@ -589,6 +589,7 @@ final class ConnectionManager: ObservableObject {
             }
         } catch is TimeoutError {
             abortInFlightTurn(clearApproval: true)
+            poisonPipelineAndReconnect()
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
             llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
@@ -1161,10 +1162,13 @@ final class ConnectionManager: ObservableObject {
         throw lastError ?? RelayTransport.RelayError.payloadTooLarge
     }
 
-    func refreshThinkingStatus() async {
+    func refreshThinkingStatus(forceProbe: Bool = false) async {
         guard isCryptoChatReady else { return }
         do {
-            let payload = try await invokeRemote(action: "provider_status")
+            let payload = try await invokeRemote(
+                action: "provider_status",
+                extra: ["skip_probe": !forceProbe]
+            )
             if let statusData = try? JSONSerialization.data(withJSONObject: payload["status"] ?? [:]),
                let status = try? JSONDecoder().decode(ThinkingServiceStatus.self, from: statusData) {
                 thinkingStatus = status
@@ -1323,8 +1327,18 @@ final class ConnectionManager: ObservableObject {
     /// infer configured key families from the host thinking status.
     func loadFallbackThinkingCatalog() async -> RemoteModelCatalog {
         thinkingCatalogUsedFallback = true
-        await refreshThinkingStatus()
-        await refreshRoutingMode()
+        let catalog = bundledCatalogFromKnownStatus()
+        remoteCatalog = catalog
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshThinkingStatus()
+            await self.refreshRoutingMode()
+            self.remoteCatalog = self.bundledCatalogFromKnownStatus()
+        }
+        return catalog
+    }
+
+    private func bundledCatalogFromKnownStatus() -> RemoteModelCatalog {
         let activeID: String?
         var configuredKeyEnvs = Set<String>()
         if let status = thinkingStatus, !status.model.isEmpty {
@@ -1341,13 +1355,11 @@ final class ConnectionManager: ObservableObject {
                 }
             }
         }
-        let catalog = RemoteModelCatalog.bundled(
+        return RemoteModelCatalog.bundled(
             activeConnectorId: activeID,
             routingMode: routingMode,
             configuredKeyEnvs: configuredKeyEnvs
         )
-        remoteCatalog = catalog
-        return catalog
     }
 
     private func humanReadableModelName(_ model: String) -> String {
@@ -1870,8 +1882,16 @@ final class ConnectionManager: ObservableObject {
         }
         let plaintext = try JSONSerialization.data(withJSONObject: body)
 
-        let responseData = try await withTimeout(seconds: timeoutSeconds) {
-            try await self.exchangeEncrypted(plaintext: plaintext)
+        let responseData: Data
+        do {
+            responseData = try await withTimeout(seconds: timeoutSeconds) {
+                try await self.exchangeEncrypted(plaintext: plaintext)
+            }
+        } catch is TimeoutError {
+            poisonPipelineAndReconnect()
+            throw ConnectionError.serverRejected(
+                "Your Sovereign took too long to respond. Reconnecting…"
+            )
         }
 
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
@@ -2027,6 +2047,17 @@ final class ConnectionManager: ObservableObject {
         activeConnectionTarget = nil
         markDiscoveredDevicesDisconnected()
         connectionState = .error(message)
+    }
+
+    /// A timed-out receive does not cancel NWConnection.receive — drop the
+    /// socket so later RPCs (chat, catalog) are not queued behind a dead frame.
+    private func poisonPipelineAndReconnect() {
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
+        connection?.cancel()
+        connection = nil
+        currentSessionKey = nil
+        reconnect()
     }
 
     private func performKeyExchange() {
@@ -2220,8 +2251,16 @@ final class ConnectionManager: ObservableObject {
         let plaintext = try JSONEncoder().encode(request)
         let pingStarted = Date()
 
-        let responseData = try await withTimeout(seconds: 15) {
-            try await self.exchangeEncrypted(plaintext: plaintext)
+        let responseData: Data
+        do {
+            responseData = try await withTimeout(seconds: 15) {
+                try await self.exchangeEncrypted(plaintext: plaintext)
+            }
+        } catch is TimeoutError {
+            poisonPipelineAndReconnect()
+            throw ConnectionError.serverRejected(
+                "Your Sovereign took too long to respond. Reconnecting…"
+            )
         }
         lastTransportRttMs = Date().timeIntervalSince(pingStarted) * 1000
         if let ms = lastTransportRttMs {

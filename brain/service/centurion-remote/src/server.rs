@@ -253,10 +253,14 @@ async fn handle_connection(
                 };
                 chat_response
             }
-            RemoteMessage::ProviderStatus { id } => {
+            RemoteMessage::ProviderStatus { id, skip_probe } => {
                 match state
                     .bridge
-                    .invoke(&id.to_string(), "provider_status", serde_json::json!({}))
+                    .invoke(
+                        &id.to_string(),
+                        "provider_status",
+                        serde_json::json!({ "skip_probe": skip_probe.unwrap_or(true) }),
+                    )
                     .await
                 {
                     Ok(payload) => RemoteMessage::ProviderStatusResponse {

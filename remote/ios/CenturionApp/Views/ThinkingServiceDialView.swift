@@ -71,7 +71,12 @@ struct ThinkingServiceDialView: View {
                     .accessibilityLabel("Add thinking service")
                 }
             }
-            .task { await loadCatalog() }
+            .task {
+                if catalog == nil {
+                    catalog = connectionManager.remoteCatalog ?? .bundled()
+                }
+                await loadCatalog()
+            }
             .sheet(item: $wizardLaunch) { launch in
                 ThinkingServiceWizardView(
                     launch: launch,
@@ -727,6 +732,13 @@ struct ThinkingServiceWizardView: View {
                     .padding()
                     .background(ColorTheme.surface())
                     .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                if let url = selectedFamily?.signupURL {
+                    Link("Get a key", destination: url)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(ColorTheme.accent())
+                        .accessibilityLabel("Get a key")
+                        .accessibilityHint("Opens the provider website to create an access code")
+                }
             }
 
         case .pickService:

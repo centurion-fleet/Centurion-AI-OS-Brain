@@ -113,10 +113,13 @@ struct CenturionApp: App {
             async let soul: Void = {
                 await services.missionStore.refreshSoul(from: services.connectionManager)
             }()
+            async let life: Void = {
+                await services.missionStore.refreshLifeStack(from: services.connectionManager)
+            }()
             async let plans: Void = {
                 await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
             }()
-            _ = await (relay, thinking, topics, swarm, beneficiary, oversight, memory, soul, plans)
+            _ = await (relay, thinking, topics, swarm, beneficiary, oversight, memory, soul, life, plans)
         }
     }
 

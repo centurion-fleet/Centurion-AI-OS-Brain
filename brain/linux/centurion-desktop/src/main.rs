@@ -212,6 +212,7 @@ mod linux {
         display_name: String,
         needs_key: bool,
         best_for: String,
+        signup_url: String,
     }
 
     #[derive(Debug, Deserialize)]
@@ -1149,11 +1150,11 @@ The Brain here is the product; the phone is the remote.",
         let smooth_transfer_install = is_smooth_transfer_install();
         let installed_version = installed_version();
         let updates_group = adw::PreferencesGroup::builder()
-            .title("Updates")
+            .title("Status")
             .description(if smooth_transfer_install {
                 "Installed from a Get Brain download — newer versions arrive through your portal"
             } else {
-                "Keep this Brain current — check or install the latest version first"
+                "This Brain, updates, and pairing"
             })
             .build();
         let update_row = adw::ActionRow::builder()
@@ -1199,22 +1200,12 @@ The Brain here is the product; the phone is the remote.",
         updates_group.add(&pairing_settings_row);
         settings.append(&updates_group);
 
-        // Each section is its own PreferencesGroup so headings stay attached to
-        // their rows (a flat list made middle headers look empty).
-        settings.append(
-            &gtk::Label::builder()
-                .label("Status")
-                .css_classes(["title-2"])
-                .xalign(0.0)
-                .margin_top(8)
-                .build(),
-        );
         settings.append(&status_card);
 
-        // --- Everyday: thinking, you, mission, memory, privacy, focus ---
+        // --- Everyday: thinking, you, mission, memory ---
         let thinking_group = adw::PreferencesGroup::builder()
-            .title("Thinking")
-            .description("How your Centurion thinks on this Brain")
+            .title("Everyday")
+            .description("How your Centurion thinks, who you are, and what you're building toward")
             .build();
         let thinking_settings_row = adw::ActionRow::builder()
             .title("How your Centurion thinks")
@@ -1246,12 +1237,7 @@ The Brain here is the product; the phone is the remote.",
             .icon_name("view-list-symbolic")
             .build();
         thinking_group.add(&backup_thinking_row);
-        settings.append(&thinking_group);
 
-        let you_group = adw::PreferencesGroup::builder()
-            .title("You")
-            .description("Autonomy, story, and your Sovereign's personality")
-            .build();
         let autonomy_row = adw::ActionRow::builder()
             .title("Autonomy Level")
             .subtitle("Balanced (default) — follow with light interpretation")
@@ -1260,7 +1246,7 @@ The Brain here is the product; the phone is the remote.",
         let autonomy_button = gtk::Button::with_label("Adjust");
         autonomy_button.set_valign(gtk::Align::Center);
         autonomy_row.add_suffix(&autonomy_button);
-        you_group.add(&autonomy_row);
+        thinking_group.add(&autonomy_row);
         let about_you_row = adw::ActionRow::builder()
             .title("About You")
             .subtitle("Story, values, and challenges for your Sovereign")
@@ -1269,7 +1255,7 @@ The Brain here is the product; the phone is the remote.",
         let about_you_button = gtk::Button::with_label("Interview");
         about_you_button.set_valign(gtk::Align::Center);
         about_you_row.add_suffix(&about_you_button);
-        you_group.add(&about_you_row);
+        thinking_group.add(&about_you_row);
         let soul_row = adw::ActionRow::builder()
             .title("Your Sovereign's Soul")
             .subtitle("Personality and rules for your Centurion")
@@ -1282,13 +1268,8 @@ The Brain here is the product; the phone is the remote.",
         soul_button.set_valign(gtk::Align::Center);
         soul_row.add_suffix(&soul_shape_button);
         soul_row.add_suffix(&soul_button);
-        you_group.add(&soul_row);
-        settings.append(&you_group);
+        thinking_group.add(&soul_row);
 
-        let mission_group = adw::PreferencesGroup::builder()
-            .title("Focus & Mission")
-            .description("What you're building toward — edited here, shown on Focus")
-            .build();
         let life_mission_row = adw::ActionRow::builder()
             .title("Life Mission")
             .subtitle("What you're building toward — shown on Focus; edit here.")
@@ -1297,7 +1278,7 @@ The Brain here is the product; the phone is the remote.",
         let life_mission_edit_button = gtk::Button::with_label("Edit");
         life_mission_edit_button.set_valign(gtk::Align::Center);
         life_mission_row.add_suffix(&life_mission_edit_button);
-        mission_group.add(&life_mission_row);
+        thinking_group.add(&life_mission_row);
         let mission_stack_row = adw::ActionRow::builder()
             .title("Mission Stack")
             .subtitle("Primary, supporting, dreams — open the Focus tab")
@@ -1307,7 +1288,7 @@ The Brain here is the product; the phone is the remote.",
         mission_stack_button.set_valign(gtk::Align::Center);
         mission_stack_button.add_css_class("suggested-action");
         mission_stack_row.add_suffix(&mission_stack_button);
-        mission_group.add(&mission_stack_row);
+        thinking_group.add(&mission_stack_row);
         let mission_discover_row = adw::ActionRow::builder()
             .title("Mission Discovery")
             .subtitle("Ceremonial interview to set your Life Mission")
@@ -1317,13 +1298,8 @@ The Brain here is the product; the phone is the remote.",
         mission_discover_button.add_css_class("suggested-action");
         mission_discover_button.set_valign(gtk::Align::Center);
         mission_discover_row.add_suffix(&mission_discover_button);
-        mission_group.add(&mission_discover_row);
-        settings.append(&mission_group);
+        thinking_group.add(&mission_discover_row);
 
-        let memory_group = adw::PreferencesGroup::builder()
-            .title("Memory")
-            .description("How your Centurion remembers across sessions")
-            .build();
         let memory_horizon_row = adw::ActionRow::builder()
             .title("Memory Horizon")
             .subtitle("How your Centurion remembers — Hot Cache, Session Recall, Vault")
@@ -1332,12 +1308,12 @@ The Brain here is the product; the phone is the remote.",
         let memory_horizon_button = gtk::Button::with_label("View");
         memory_horizon_button.set_valign(gtk::Align::Center);
         memory_horizon_row.add_suffix(&memory_horizon_button);
-        memory_group.add(&memory_horizon_row);
-        settings.append(&memory_group);
+        thinking_group.add(&memory_horizon_row);
+        settings.append(&thinking_group);
 
         let privacy_group = adw::PreferencesGroup::builder()
-            .title("Privacy & Oversight")
-            .description("Reporting cadence, confirmation, and what stays on this computer")
+            .title("This computer")
+            .description("Privacy, channels, Chat from anywhere, and desk ops")
             .build();
         let oversight_row = adw::ActionRow::builder()
             .title("Reporting & Oversight")
@@ -1355,12 +1331,7 @@ The Brain here is the product; the phone is the remote.",
             .activatable(true)
             .build();
         privacy_group.add(&privacy_row);
-        settings.append(&privacy_group);
 
-        let focus_attention_group = adw::PreferencesGroup::builder()
-            .title("Focus Attention")
-            .description("Where Centurion should take you when something needs you")
-            .build();
         let pulse_pref_row = adw::ActionRow::builder()
             .title("Prefer Focus on decisions")
             .subtitle("Open Focus when something needs your attention")
@@ -1369,18 +1340,11 @@ The Brain here is the product; the phone is the remote.",
         let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
         pulse_pref_switch.set_active(load_decision_first_pref());
         pulse_pref_row.add_suffix(&pulse_pref_switch);
-        focus_attention_group.add(&pulse_pref_row);
+        privacy_group.add(&pulse_pref_row);
         // Orphaned vs Mission Deck routing — hide from customer Settings.
-        focus_attention_group.set_visible(false);
-        settings.append(&focus_attention_group);
+        pulse_pref_row.set_visible(false);
 
         // --- Messaging & research ---
-        let gateway_group = adw::PreferencesGroup::builder()
-            .title("Channels")
-            .description(
-                "Connect Telegram, Centurion Remote, and WhatsApp so your Centurion meets you where you already chat.",
-            )
-            .build();
         let gateway_row = adw::ActionRow::builder()
             .title("Gateway")
             .subtitle("Checking…")
@@ -1395,21 +1359,13 @@ The Brain here is the product; the phone is the remote.",
         gateway_row.add_suffix(&gateway_start_btn);
         gateway_row.add_suffix(&gateway_stop_btn);
         gateway_row.add_suffix(&gateway_restart_btn);
-        gateway_group.add(&gateway_row);
-        settings.append(&gateway_group);
+        privacy_group.add(&gateway_row);
         let gateway_platform_list = gtk::ListBox::new();
         gateway_platform_list.add_css_class("boxed-list");
         gateway_platform_list.set_margin_start(32);
         gateway_platform_list.set_margin_end(32);
         gateway_platform_list.set_margin_bottom(8);
-        settings.append(&gateway_platform_list);
 
-        let anywhere_group = adw::PreferencesGroup::builder()
-            .title("Chat from anywhere")
-            .description(
-                "When you leave home Wi‑Fi, the same App Store iPhone reaches this Brain through Centurion’s cloud (end-to-end encrypted). Home LAN Crypto Chat stays preferred when you’re on the same network.",
-            )
-            .build();
         let anywhere_row = adw::ActionRow::builder()
             .title("Anywhere")
             .subtitle("Checking…")
@@ -1417,8 +1373,7 @@ The Brain here is the product; the phone is the remote.",
             .build();
         let anywhere_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
         anywhere_row.add_suffix(&anywhere_switch);
-        anywhere_group.add(&anywhere_row);
-        settings.append(&anywhere_group);
+        privacy_group.add(&anywhere_row);
 
         // Refresh Anywhere switch off the UI thread.
         {
@@ -1501,7 +1456,7 @@ The Brain here is the product; the phone is the remote.",
         }
 
         let research_group = adw::PreferencesGroup::builder()
-            .title("Research tools")
+            .title("Research")
             .description("Optional keys that help Centurion search and scrape the web")
             .build();
         let firecrawl_row = adw::ActionRow::builder()
@@ -1517,12 +1472,7 @@ The Brain here is the product; the phone is the remote.",
         firecrawl_button.set_valign(gtk::Align::Center);
         firecrawl_row.add_suffix(&firecrawl_button);
         research_group.add(&firecrawl_row);
-        settings.append(&research_group);
 
-        let desk_group = adw::PreferencesGroup::builder()
-            .title("Desk ops")
-            .description("Fleet, plugins, schedules, and local collaboration boards")
-            .build();
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
             .subtitle("Reach another Centurion on your network (shared FLEET_AUTH_TOKEN).")
@@ -1531,7 +1481,7 @@ The Brain here is the product; the phone is the remote.",
         let fleet_peer_button = gtk::Button::with_label("Configure");
         fleet_peer_button.set_valign(gtk::Align::Center);
         fleet_peer_row.add_suffix(&fleet_peer_button);
-        desk_group.add(&fleet_peer_row);
+        privacy_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
             .subtitle("View only — agent plugins already on this Brain.")
@@ -1540,7 +1490,7 @@ The Brain here is the product; the phone is the remote.",
         let plugins_button = gtk::Button::with_label("View");
         plugins_button.set_valign(gtk::Align::Center);
         plugins_row.add_suffix(&plugins_button);
-        desk_group.add(&plugins_row);
+        privacy_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
             .title("Scheduled & board")
             .subtitle("View only — next cron jobs and board glance.")
@@ -1549,7 +1499,7 @@ The Brain here is the product; the phone is the remote.",
         let ops_button = gtk::Button::with_label("View");
         ops_button.set_valign(gtk::Align::Center);
         ops_row.add_suffix(&ops_button);
-        desk_group.add(&ops_row);
+        privacy_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
             .subtitle(
@@ -1561,14 +1511,16 @@ The Brain here is the product; the phone is the remote.",
         collab_connect_button.add_css_class("suggested-action");
         collab_connect_button.set_valign(gtk::Align::Center);
         collab_connect_row.add_suffix(&collab_connect_button);
-        desk_group.add(&collab_connect_row);
-        settings.append(&desk_group);
+        privacy_group.add(&collab_connect_row);
+        settings.append(&privacy_group);
+        settings.append(&gateway_platform_list);
+        settings.append(&research_group);
 
         settings.append(&devices_section);
 
         let account_group = adw::PreferencesGroup::builder()
-            .title("Account")
-            .description("Skills, license, and family program")
+            .title("Account & help")
+            .description("Skills, license, family program, and support")
             .build();
         let skills_row = adw::ActionRow::builder()
             .title("Skills & tools")
@@ -1601,12 +1553,7 @@ The Brain here is the product; the phone is the remote.",
         beneficiary_row.add_suffix(&beneficiary_button);
         beneficiary_row.set_visible(false);
         account_group.add(&beneficiary_row);
-        settings.append(&account_group);
 
-        let transition_group = adw::PreferencesGroup::builder()
-            .title("Transition")
-            .description("One-time moves from earlier Centurion setups")
-            .build();
         let telegram_history_row = adw::ActionRow::builder()
             .title("Bring over Telegram history")
             .subtitle(
@@ -1617,13 +1564,8 @@ The Brain here is the product; the phone is the remote.",
         let telegram_bring_button = gtk::Button::with_label("Bring over");
         telegram_bring_button.set_valign(gtk::Align::Center);
         telegram_history_row.add_suffix(&telegram_bring_button);
-        transition_group.add(&telegram_history_row);
-        settings.append(&transition_group);
+        account_group.add(&telegram_history_row);
 
-        let support_group = adw::PreferencesGroup::builder()
-            .title("Support Tools")
-            .description("Health checks and help for your advisor")
-            .build();
         let support_health_row = adw::ActionRow::builder()
             .title("Run Health Check")
             .subtitle("Check thinking service and configuration")
@@ -1665,11 +1607,11 @@ The Brain here is the product; the phone is the remote.",
         support_lookup_row.add_suffix(&lookup_button);
         fix_thinking_row.add_suffix(&fix_thinking_button);
         auto_fix_row.add_suffix(&auto_fix_button);
-        support_group.add(&support_health_row);
-        support_group.add(&fix_thinking_row);
-        support_group.add(&auto_fix_row);
-        support_group.add(&support_bundle_row);
-        support_group.add(&support_lookup_row);
+        account_group.add(&support_health_row);
+        account_group.add(&fix_thinking_row);
+        account_group.add(&auto_fix_row);
+        account_group.add(&support_bundle_row);
+        account_group.add(&support_lookup_row);
 
         let adrian_row = adw::ActionRow::builder()
             .title("Talk to Adrian")
@@ -1679,8 +1621,8 @@ The Brain here is the product; the phone is the remote.",
         let adrian_button = gtk::Button::with_label("Open");
         adrian_button.set_valign(gtk::Align::Center);
         adrian_row.add_suffix(&adrian_button);
-        support_group.add(&adrian_row);
-        settings.append(&support_group);
+        account_group.add(&adrian_row);
+        settings.append(&account_group);
 
         // ScrolledWindow only scrolls if the child keeps its natural height.
         // vexpand/fill on the child clips content instead of scrolling (Brain
@@ -7033,29 +6975,7 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
             })
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|entry| {
-                let id = entry.get("id")?.as_str()?.to_owned();
-                let display_name = entry
-                    .get("display_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(id.as_str())
-                    .to_owned();
-                let needs_key = entry
-                    .get("needs_key")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                let best_for = entry
-                    .get("best_for")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_owned();
-                Some(ThinkingConnectorOption {
-                    id,
-                    display_name,
-                    needs_key,
-                    best_for,
-                })
-            })
+            .filter_map(|entry| thinking_connector_from_row(&entry))
             .collect();
 
         if connectors.is_empty() {
@@ -7101,15 +7021,26 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
             .label("Access code")
             .xalign(0.0)
             .build();
+        let get_key = gtk::LinkButton::with_label("", "Get a key");
+        get_key.set_halign(gtk::Align::Start);
+        get_key.set_visible(false);
 
         let update_hint = {
             let hint = hint.clone();
             let key_entry = key_entry.clone();
+            let get_key = get_key.clone();
             let connectors = connectors.clone();
             Rc::new(move |selected: u32| {
                 let Some(connector) = connectors.get(selected as usize) else {
                     return;
                 };
+                if connector.signup_url.is_empty() {
+                    get_key.set_visible(false);
+                } else {
+                    get_key.set_uri(&connector.signup_url);
+                    get_key.set_label("Get a key");
+                    get_key.set_visible(true);
+                }
                 if connector.needs_key {
                     key_entry.set_placeholder_text(Some(
                         "Access code from your thinking-service account",
@@ -7178,6 +7109,7 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
         extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
         extra.append(&service_drop);
         extra.append(&hint);
+        extra.append(&get_key);
         extra.append(&key_label);
         extra.append(&key_entry);
         extra.append(&error_label);
@@ -7323,6 +7255,56 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
     }
 
     const FIRECRAWL_KEY_URL: &str = "https://www.firecrawl.dev/";
+
+    fn thinking_signup_url(provider: &str, key_env: &str, catalog_url: &str) -> String {
+        let catalog = catalog_url.trim();
+        if !catalog.is_empty() {
+            return catalog.to_owned();
+        }
+        match key_env {
+            "OPENAI_API_KEY" => "https://platform.openai.com/api-keys".to_owned(),
+            "ANTHROPIC_API_KEY" => "https://console.anthropic.com/settings/keys".to_owned(),
+            "GEMINI_API_KEY" | "GOOGLE_API_KEY" => "https://aistudio.google.com/apikey".to_owned(),
+            "DEEPSEEK_API_KEY" => "https://platform.deepseek.com/api_keys".to_owned(),
+            "XAI_API_KEY" => "https://console.x.ai/".to_owned(),
+            _ => match provider {
+                "openai-api" | "openai" => "https://platform.openai.com/api-keys".to_owned(),
+                "anthropic" => "https://console.anthropic.com/settings/keys".to_owned(),
+                "gemini" | "google" => "https://aistudio.google.com/apikey".to_owned(),
+                "deepseek" => "https://platform.deepseek.com/api_keys".to_owned(),
+                "xai" => "https://console.x.ai/".to_owned(),
+                _ => String::new(),
+            },
+        }
+    }
+
+    fn thinking_connector_from_row(row: &serde_json::Value) -> Option<ThinkingConnectorOption> {
+        let id = row.get("id")?.as_str()?.to_owned();
+        let display_name = row
+            .get("display_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(id.as_str())
+            .to_owned();
+        let needs_key = row
+            .get("needs_key")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let best_for = row
+            .get("best_for")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let provider = row.get("provider").and_then(|v| v.as_str()).unwrap_or("");
+        let key_env = row.get("key_env").and_then(|v| v.as_str()).unwrap_or("");
+        let catalog_url = row.get("signup_url").and_then(|v| v.as_str()).unwrap_or("");
+        Some(ThinkingConnectorOption {
+            id,
+            display_name,
+            needs_key,
+            best_for,
+            signup_url: thinking_signup_url(provider, key_env, catalog_url),
+        })
+    }
 
     fn show_firecrawl_key_dialog(
         parent: &adw::ApplicationWindow,
@@ -7507,29 +7489,7 @@ The key stays in ~/.centurion/.env on this machine only.",
             })
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|row| {
-                let id = row.get("id")?.as_str()?.to_owned();
-                let display_name = row
-                    .get("display_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(id.as_str())
-                    .to_owned();
-                let needs_key = row
-                    .get("needs_key")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                let best_for = row
-                    .get("best_for")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_owned();
-                Some(ThinkingConnectorOption {
-                    id,
-                    display_name,
-                    needs_key,
-                    best_for,
-                })
-            })
+            .filter_map(|row| thinking_connector_from_row(&row))
             .collect();
 
         if connectors.is_empty() {
@@ -7577,15 +7537,26 @@ The key stays in ~/.centurion/.env on this machine only.",
             .label("Access code")
             .xalign(0.0)
             .build();
+        let get_key = gtk::LinkButton::with_label("", "Get a key");
+        get_key.set_halign(gtk::Align::Start);
+        get_key.set_visible(false);
 
         let update_hint = {
             let hint = hint.clone();
             let key_entry = key_entry.clone();
+            let get_key = get_key.clone();
             let connectors = connectors.clone();
             Rc::new(move |selected: u32| {
                 let Some(connector) = connectors.get(selected as usize) else {
                     return;
                 };
+                if connector.signup_url.is_empty() {
+                    get_key.set_visible(false);
+                } else {
+                    get_key.set_uri(&connector.signup_url);
+                    get_key.set_label("Get a key");
+                    get_key.set_visible(true);
+                }
                 if connector.needs_key {
                     key_entry.set_placeholder_text(
                         Some("Access code from your thinking-service account"),
@@ -7644,6 +7615,7 @@ The key stays in ~/.centurion/.env on this machine only.",
         extra.append(&gtk::Label::builder().label("Service").xalign(0.0).build());
         extra.append(&service_drop);
         extra.append(&hint);
+        extra.append(&get_key);
         extra.append(&key_label);
         extra.append(&key_entry);
         extra.append(&error_label);
