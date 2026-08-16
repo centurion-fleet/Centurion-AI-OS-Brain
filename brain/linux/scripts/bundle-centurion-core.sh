@@ -28,9 +28,8 @@ tar -C "${ROOT}" \
   --exclude='brain/target' \
   --exclude='brain/linux/dist' \
   --exclude='brain/dist' \
-  --exclude='desktop' \
   --exclude='desktop-native' \
-  --exclude='web-dashboard' \
+  --exclude='./web-dashboard' \
   --exclude='brain/ci-artifact' \
   --exclude='ui-tui/node_modules' \
   --exclude='website' \
