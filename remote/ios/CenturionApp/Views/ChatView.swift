@@ -89,7 +89,12 @@ struct ChatView: View {
             }
 
             if let sendError {
-                llmErrorBanner(sendError)
+                if connectionManager.llmHealth.needsAttention,
+                   !Self.looksLikePipeWait(sendError) {
+                    llmErrorBanner(sendError)
+                } else {
+                    errorBanner(sendError)
+                }
             }
 
             if showTray {
@@ -537,7 +542,7 @@ struct ChatView: View {
                     Image(systemName: "exclamationmark.circle")
                         .font(.subheadline)
                         .foregroundColor(ColorTheme.error())
-                    Text("Your Sovereign is having trouble thinking right now. Tap to fix.")
+                    Text(message)
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(ColorTheme.primaryText())
                         .multilineTextAlignment(.leading)
@@ -553,7 +558,7 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
         .padding(.top, Spacing.xs)
-        .accessibilityLabel("Your Sovereign is having trouble thinking right now. Tap to fix.")
+        .accessibilityLabel(message)
         .accessibilityHint("Opens the Fix Thinking Service screen")
     }
 
@@ -718,7 +723,7 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .focused($isFocused)
-                    .disabled(isSending || !connectionManager.isCryptoChatReady)
+                    .disabled(!connectionManager.isCryptoChatReady)
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
                     .background(ColorTheme.chatInput())
@@ -730,11 +735,17 @@ struct ChatView: View {
                     .animation(Motion.light, value: isFocused)
 
                     if isSending {
-                        ProgressView()
-                            .tint(ColorTheme.accent())
-                            .scaleEffect(0.8)
-                            .frame(width: 40, height: 40)
-                            .accessibilityLabel("Waiting for your Sovereign")
+                        Button {
+                            Haptics.lightTap()
+                            connectionManager.cancelInFlightChat()
+                            isSending = false
+                            sendError = "Stopped. Send Hi again when Device link is green."
+                        } label: {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(ColorTheme.warning())
+                        }
+                        .accessibilityLabel("Stop waiting")
                     } else {
                         Button(action: sendMessage) {
                             Image(systemName: "arrow.up.circle.fill")
@@ -755,11 +766,12 @@ struct ChatView: View {
 
             if isSending, connectionManager.streamingAssistantText.isEmpty {
                 Text(connectionManager.turnActivityHint
-                    ?? "Waiting on your Centurion — this can take up to a few minutes.")
+                    ?? "Waiting on your Centurion. Tap stop if this hangs — a reply can take up to a few minutes.")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
                     .padding(.horizontal, Spacing.md)
-            } else if connectionManager.isCryptoChatReady,
+            } else if sendError == nil,
+                      connectionManager.isCryptoChatReady,
                       connectionManager.llmHealth.needsAttention {
                 Button {
                     showRecoverySheet = true
@@ -833,6 +845,14 @@ struct ChatView: View {
     }
 
     // MARK: - Actions
+
+    private static func looksLikePipeWait(_ message: String) -> Bool {
+        let lowered = message.lowercased()
+        return lowered.contains("too long")
+            || lowered.contains("reconnecting")
+            || lowered.contains("stopped")
+            || lowered.contains("chat is still waiting")
+    }
 
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespaces)

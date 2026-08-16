@@ -80,6 +80,28 @@ struct MissionStackView: View {
                 }
             }
 
+            if missionStore.stack.primary == nil,
+               missionStore.stack.supporting.isEmpty,
+               missionStore.stack.dreams.isEmpty,
+               missionStore.subjects.isEmpty {
+                Section {
+                    if connectionManager.isRemoteTurnInFlight {
+                        Text("Linked — Chat is using the line. Pull to refresh when Chat finishes.")
+                    } else if let error = missionStore.lifeSyncError {
+                        Text("Linked, but this stack didn't load from your Centurion. Pull to retry.")
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(ColorTheme.mutedText())
+                    } else if missionStore.lifeSyncedWithSovereign {
+                        Text("Linked. Your Centurion has no Primary, Supporting, or Dreams missions yet.")
+                    } else if connectionManager.isCryptoChatReady {
+                        Text("Loading Mission Stack from your Centurion…")
+                    } else {
+                        Text("Link your Sovereign to load Mission Stack.")
+                    }
+                }
+            }
+
             if let statusMessage {
                 Section {
                     Text(statusMessage)
@@ -90,6 +112,7 @@ struct MissionStackView: View {
         }
         .navigationTitle("Mission Stack")
         .task {
+            guard !connectionManager.isRemoteTurnInFlight else { return }
             await missionStore.refreshLifeStack(from: connectionManager)
         }
         .refreshable {

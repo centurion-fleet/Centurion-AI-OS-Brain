@@ -85,42 +85,10 @@ struct CenturionApp: App {
         }
     }
 
-    /// Speed rule: on foreground / link, refresh lightweight Brain state without blocking the composer.
+    /// Do not prefetch Brain data on link — each RPC is a cold Python spawn
+    /// on the same pipe as Chat. Focus loads on pull-to-refresh; Chat is first.
     private func prefetchWhenLinked() {
-        guard services.connectionManager.isCryptoChatReady else { return }
-        Task {
-            async let relay: Void = {
-                _ = await services.connectionManager.refreshRemoteRelayStatus()
-            }()
-            async let thinking: Void = {
-                await services.connectionManager.refreshThinkingStatus()
-            }()
-            async let topics: Void = {
-                _ = await services.messageService.syncHostTopicsFromBrain()
-            }()
-            async let swarm: Void = {
-                await services.swarmStore.refresh(from: services.connectionManager)
-            }()
-            async let beneficiary: Void = {
-                await services.beneficiaryStore.refresh(from: services.connectionManager)
-            }()
-            async let oversight: Void = {
-                await services.oversightStore.refresh(from: services.connectionManager)
-            }()
-            async let memory: Void = {
-                await services.memoryHorizonStore.refresh(from: services.connectionManager)
-            }()
-            async let soul: Void = {
-                await services.missionStore.refreshSoul(from: services.connectionManager)
-            }()
-            async let life: Void = {
-                await services.missionStore.refreshLifeStack(from: services.connectionManager)
-            }()
-            async let plans: Void = {
-                await services.planStore.refreshFromHost(connectionManager: services.connectionManager)
-            }()
-            _ = await (relay, thinking, topics, swarm, beneficiary, oversight, memory, soul, life, plans)
-        }
+        // Intentionally empty.
     }
 
     private func attemptAutoReconnectIfNeeded(force: Bool = false) {

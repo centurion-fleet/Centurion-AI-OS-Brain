@@ -58,6 +58,7 @@ final class BeneficiaryStore: ObservableObject {
 
     func refresh(from connectionManager: ConnectionManager) async {
         guard connectionManager.isCryptoChatReady else { return }
+        if connectionManager.isRemoteTurnInFlight { return }
         isRefreshing = true
         defer { isRefreshing = false }
         do {

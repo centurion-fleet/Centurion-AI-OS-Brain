@@ -150,12 +150,13 @@ struct MissionPortfolioView: View {
             }
         }
         .task {
-            await reloadPulseFeed()
-            await missionStore.refreshLifeStack(from: connectionManager)
-            await planStore.refreshFromHost(connectionManager: connectionManager)
+            isDataLoaded = true
+        }
+        .refreshable {
+            await syncFocusFromBrain(forceRefresh: true)
         }
         .onChange(of: connectionManager.connectionState) { _, _ in
-            Task { await reloadPulseFeed(forceRefresh: true) }
+            Task { await reloadPulseFeed(forceRefresh: false) }
         }
         .onChange(of: swarmStore.activities.count) { _, _ in
             if connectionManager.isCryptoChatReady {
@@ -234,6 +235,8 @@ struct MissionPortfolioView: View {
                 if dataMode.showsDemoContent {
                     DemoDataBanner()
                 }
+
+                brainSyncBanner
 
                 SwarmConstellationHero(
                     hasMission: missionStore.hasMissionStatement,
@@ -367,9 +370,57 @@ struct MissionPortfolioView: View {
         chatTarget = ChatSheetTarget(context: conversation.context)
     }
 
+    private func syncFocusFromBrain(forceRefresh: Bool = false) async {
+        if connectionManager.isCryptoChatReady, connectionManager.isRemoteTurnInFlight {
+            isDataLoaded = true
+            return
+        }
+        await reloadPulseFeed(forceRefresh: forceRefresh)
+        await missionStore.refreshLifeStack(from: connectionManager)
+        await planStore.refreshFromHost(connectionManager: connectionManager)
+    }
+
+    @ViewBuilder
+    private var brainSyncBanner: some View {
+        if !connectionManager.isCryptoChatReady {
+            EmptyView()
+        } else if connectionManager.isRemoteTurnInFlight {
+            Text("Linked — Chat is using the line. Stop or wait, then pull to refresh Focus.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let error = missionStore.lifeSyncError {
+            Button {
+                Task { await syncFocusFromBrain(forceRefresh: true) }
+            } label: {
+                Text("Linked, but Focus couldn't load from your Centurion. Tap to retry.")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(ColorTheme.warning())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Retry loading Focus from your Centurion")
+            .accessibilityHint(error)
+        } else if missionStore.lifeSyncedWithSovereign,
+                  missionStore.stack.primary == nil,
+                  missionStore.stack.supporting.isEmpty,
+                  missionStore.stack.dreams.isEmpty,
+                  planStore.plans.isEmpty {
+            Text("Linked to your Centurion. Focus is empty because the Brain has no missions yet — not because the link failed.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
+            Text("Linked. Pull down to load missions from your Centurion — do this after Chat replies, not while Hi is spinning.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private func reloadPulseFeed(forceRefresh: Bool = false) async {
         if connectionManager.isCryptoChatReady {
-            if forceRefresh || !isDataLoaded {
+            if forceRefresh {
                 await swarmStore.refresh(from: connectionManager)
             }
             applyPulseFromSwarmStore()
@@ -584,6 +635,32 @@ struct MissionPortfolioView: View {
 
     // MARK: - Mission Statement
 
+    private var missionHeadline: String {
+        if !missionStore.mission.statement.isEmpty {
+            return missionStore.mission.statement
+        }
+        if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
+            return "Couldn't load missions from your Centurion"
+        }
+        if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
+            return "Loading missions from your Centurion…"
+        }
+        return "Discover what matters in your life"
+    }
+
+    private var missionSubtitle: String {
+        if missionStore.hasMissionStatement {
+            return "Tap to view your mission and commitments"
+        }
+        if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
+            return "Tap to retry. Chat can wait behind a stuck Brain call — reopen Focus after a moment."
+        }
+        if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
+            return "Waiting on your Centurion"
+        }
+        return "Tap to reflect on your life mission"
+    }
+
     private var missionStatement: some View {
         VStack(spacing: 6) {
             HStack {
@@ -598,9 +675,7 @@ struct MissionPortfolioView: View {
                     .foregroundColor(ColorTheme.mutedText())
             }
 
-            Text(missionStore.mission.statement.isEmpty
-                 ? "Discover what matters in your life"
-                 : missionStore.mission.statement)
+            Text(missionHeadline)
                 .font(Typography.editorialTitle)
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.leading)
@@ -619,9 +694,7 @@ struct MissionPortfolioView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Spacing.xs)
 
-            Text(missionStore.hasMissionStatement
-                 ? "Tap to view your mission and commitments"
-                 : "Tap to reflect on your life mission")
+            Text(missionSubtitle)
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .italic()

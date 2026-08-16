@@ -38,10 +38,25 @@ enum LLMHealthState: Equatable {
         }
     }
 
+    /// True only for a missing/invalid thinking setup — not a slow reply or a dropped pipe.
     var needsAttention: Bool {
         switch self {
-        case .healthy, .unknown: return false
-        case .degraded, .broken: return true
+        case .broken(_, let code, _):
+            return Self.isThinkingSetupProblem(code)
+        case .healthy, .unknown, .degraded:
+            return false
+        }
+    }
+
+    static func isThinkingSetupProblem(_ code: String?) -> Bool {
+        switch code {
+        case "LLM_AUTH_MISSING",
+             "LLM_AUTH_INVALID",
+             "LLM_CONFIG_INVALID",
+             "LLM_MODEL_INVALID":
+            return true
+        default:
+            return false
         }
     }
 }

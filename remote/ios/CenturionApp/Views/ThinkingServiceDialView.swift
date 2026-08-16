@@ -106,7 +106,7 @@ struct ThinkingServiceDialView: View {
             Text("Turn the dial to choose how your Centurion thinks.")
                 .font(.system(size: 15, weight: .medium, design: .serif))
                 .foregroundColor(ColorTheme.primaryText())
-            Text("Access codes stay on your Centurion — never on this iPhone.")
+            Text("Your Centurion already has a thinking service. This dial only changes it — you do not need to add a key if Chat works on the Brain.")
                 .font(.subheadline)
                 .foregroundColor(ColorTheme.mutedText())
         }
@@ -642,7 +642,6 @@ struct ThinkingServiceWizardView: View {
                         .foregroundColor(ColorTheme.error())
                 }
                 Spacer(minLength: 0)
-                bottomActions
             }
             .padding()
             .background(ColorTheme.background())
@@ -652,6 +651,18 @@ struct ThinkingServiceWizardView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .disabled(isBusy && step == .connecting)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if step == .enterCode {
+                    Button(launch.mode == .update ? "Save and continue" : "Save on Sovereign") {
+                        Task { await saveCodeAndContinue() }
+                    }
+                    .buttonStyle(CenturionPrimaryButtonStyle())
+                    .disabled(isBusy)
+                    .padding(.horizontal)
+                    .padding(.bottom, Spacing.sm)
+                    .background(ColorTheme.background())
                 }
             }
         }
@@ -726,12 +737,35 @@ struct ThinkingServiceWizardView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(ColorTheme.accent())
                 }
-                SecureField("Access code", text: $accessCode)
+                TextField("Access code (visible so you can confirm paste)", text: $accessCode)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .textContentType(.none)
+                    .keyboardType(.asciiCapable)
+                    .submitLabel(.done)
                     .padding()
                     .background(ColorTheme.surface())
                     .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+                    .accessibilityLabel("Access code")
+                if !accessCode.isEmpty {
+                    Text("\(accessCode.trimmingCharacters(in: .whitespacesAndNewlines).count) characters in the box")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+                PasteButton(payloadType: String.self) { strings in
+                    let clip = strings
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .first { !$0.isEmpty } ?? ""
+                    if clip.isEmpty {
+                        errorMessage = "Clipboard has no text. Copy the DeepSeek key as text, then tap Paste."
+                        return
+                    }
+                    accessCode = clip
+                    errorMessage = nil
+                }
+                .buttonBorderShape(.roundedRectangle)
+                .labelStyle(.titleAndIcon)
+                .tint(ColorTheme.accent())
                 if let url = selectedFamily?.signupURL {
                     Link("Get a key", destination: url)
                         .font(.subheadline.weight(.medium))
@@ -786,23 +820,14 @@ struct ThinkingServiceWizardView: View {
         }
     }
 
-    @ViewBuilder
-    private var bottomActions: some View {
-        switch step {
-        case .enterCode:
-            Button(launch.mode == .update ? "Save and continue" : "Save on Sovereign") {
-                Task { await saveCodeAndContinue() }
-            }
-            .buttonStyle(CenturionPrimaryButtonStyle())
-            .disabled(accessCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isBusy)
-
-        case .pickFamily, .pickService, .connecting:
-            EmptyView()
-        }
-    }
-
     private func saveCodeAndContinue() async {
+        let trimmed = accessCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let family = selectedFamily else { return }
+        guard !trimmed.isEmpty else {
+            errorMessage = "The code is not in the box yet. Copy the key, tap Paste from clipboard, then Save."
+            Haptics.error()
+            return
+        }
         isBusy = true
         errorMessage = nil
         defer { isBusy = false }
@@ -814,7 +839,7 @@ struct ThinkingServiceWizardView: View {
         }
         let result = await connectionManager.saveRemoteAPIKey(
             connectorId: connector.id,
-            key: accessCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            key: trimmed
         )
         guard result.ok else {
             errorMessage = result.message

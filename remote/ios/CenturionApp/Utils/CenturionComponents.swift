@@ -321,6 +321,8 @@ extension View {
 // MARK: - Buttons
 
 struct CenturionPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
@@ -328,9 +330,9 @@ struct CenturionPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Spacing.sm + 2)
             .padding(.horizontal, Spacing.lg)
-            .background(ColorTheme.accent())
+            .background(ColorTheme.accent().opacity(isEnabled ? 1 : 0.4))
             .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
             .animation(Motion.light, value: configuration.isPressed)
     }
 }

@@ -2101,6 +2101,14 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
     display_name = _remote_display_name()
     history = _scrub_foreign_identity_history(history, display_name)
     identity_ephemeral = _remote_identity_ephemeral(display_name)
+    if _remote_events_enabled():
+        _emit_remote_event(
+            {
+                "centurion_event": "activity",
+                "kind": "status",
+                "message": "Starting your Centurion…",
+            }
+        )
     api_user_message = (
         f"[Identity for this reply: your name is {display_name}. "
         f"{display_name} is a Centurion of Centurion Fleet. "
@@ -2108,9 +2116,8 @@ def _run_remote_agent_turn(text: str, *, session_id: str | None = None) -> str:
         f"{text}"
     )
 
-    # Brain Chat shares CENTURION_HOME with Telegram/gateway — load hot-cache
-    # memory + providers so existing customers keep continuity. Vault prefetch
-    # stays config-gated inside agent init.
+    # Same warm-daemon path as Desktop Chat. skip_memory stays false so
+    # phone and desk share continuity once the socket is used.
     agent = AIAgent(
         api_key=runtime.get("api_key"),
         base_url=runtime.get("base_url"),

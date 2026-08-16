@@ -138,6 +138,13 @@ async fn handle_connection(
                     bytes = text.len(),
                     "iPhone chat request received"
                 );
+                let starting = RemoteMessage::Activity {
+                    id,
+                    message: "Starting your Centurion…".to_owned(),
+                    kind: Some("status".to_owned()),
+                    tool: None,
+                };
+                write_message(&mut stream, &session, &starting).await?;
                 let request_id = id.to_string();
                 let (event_tx, mut event_rx) = mpsc::channel(32);
                 let (approval_tx, approval_rx) = mpsc::channel(8);

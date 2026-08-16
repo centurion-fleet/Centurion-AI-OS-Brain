@@ -39,6 +39,8 @@ final class ConnectionManager: ObservableObject {
     @Published var streamingAssistantText: String = ""
     private var streamTtftMarked = false
     private var sendStartedAt: Date?
+    /// True while Chat is waiting on the Brain — Focus must not pile RPCs on the same pipe.
+    @Published private(set) var isRemoteTurnInFlight = false
 
     /// Prefer LAN Crypto Chat when linked; RelayTransport is the away fallback.
     @Published private(set) var transportPreference: TransportPreference = .lanPreferred
@@ -575,6 +577,16 @@ final class ConnectionManager: ObservableObject {
         streamingAssistantText = ""
         streamTtftMarked = false
         sendStartedAt = sendStarted
+        isRemoteTurnInFlight = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard let self else { return }
+            guard self.isRemoteTurnInFlight, self.sendStartedAt == sendStarted else { return }
+            guard self.streamingAssistantText.isEmpty else { return }
+            if self.turnActivityHint == "Waiting on your Sovereign…" {
+                self.turnActivityHint = "Still starting on your Sovereign. Stay on Chat — do not open Focus."
+            }
+        }
         let responseData: Data
         do {
             responseData = try await withTimeout(seconds: chatTimeoutSeconds) {
@@ -592,7 +604,6 @@ final class ConnectionManager: ObservableObject {
             poisonPipelineAndReconnect()
             let message = "Your Sovereign is taking too long to respond. Try again in a moment."
             lastLLMError = (message, "LLM_UNAVAILABLE", true)
-            llmHealth = .broken(message, code: "LLM_UNAVAILABLE", retryable: true)
             throw ConnectionError.serverRejected(message)
         } catch let relay as RelayTransport.RelayError {
             abortInFlightTurn(clearApproval: true)
@@ -606,6 +617,12 @@ final class ConnectionManager: ObservableObject {
                 Task { await self.considerRelayAway() }
             }
             throw ConnectionError.serverRejected(message)
+        } catch {
+            abortInFlightTurn(clearApproval: true)
+            if Self.isDroppedSocket(error) {
+                poisonPipelineAndReconnect()
+            }
+            throw error
         }
         if !streamTtftMarked {
             let ms = Date().timeIntervalSince(sendStarted) * 1000
@@ -615,6 +632,8 @@ final class ConnectionManager: ObservableObject {
         turnActivityHint = nil
         streamingAssistantText = ""
         pendingToolApproval = nil
+        sendStartedAt = nil
+        isRemoteTurnInFlight = false
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let responseType = json["type"] as? String else {
             throw ConnectionError.invalidResponse
@@ -649,7 +668,9 @@ final class ConnectionManager: ObservableObject {
                 ?? "Your Sovereign could not complete that request."
             let retryable = json["retryable"] as? Bool ?? true
             lastLLMError = (message, code, retryable)
-            llmHealth = .broken(message, code: code, retryable: retryable)
+            if LLMHealthState.isThinkingSetupProblem(code) {
+                llmHealth = .broken(message, code: code, retryable: retryable)
+            }
             throw ConnectionError.serverRejected(message)
         }
         throw ConnectionError.invalidResponse
@@ -1164,6 +1185,7 @@ final class ConnectionManager: ObservableObject {
 
     func refreshThinkingStatus(forceProbe: Bool = false) async {
         guard isCryptoChatReady else { return }
+        if isRemoteTurnInFlight, !forceProbe { return }
         do {
             let payload = try await invokeRemote(
                 action: "provider_status",
@@ -1172,13 +1194,22 @@ final class ConnectionManager: ObservableObject {
             if let statusData = try? JSONSerialization.data(withJSONObject: payload["status"] ?? [:]),
                let status = try? JSONDecoder().decode(ThinkingServiceStatus.self, from: statusData) {
                 thinkingStatus = status
+                if thinkingCatalogUsedFallback || remoteCatalog == nil {
+                    remoteCatalog = bundledCatalogFromKnownStatus()
+                }
                 switch status.health {
                 case "ok":
                     llmHealth = .healthy
                 case "degraded":
                     llmHealth = .degraded(status.healthMessage)
+                case "broken":
+                    llmHealth = .broken(
+                        status.healthMessage,
+                        code: "LLM_CONFIG_INVALID",
+                        retryable: true
+                    )
                 default:
-                    llmHealth = .broken(status.healthMessage, code: nil, retryable: true)
+                    llmHealth = .unknown
                 }
             }
         } catch {
@@ -1200,6 +1231,9 @@ final class ConnectionManager: ObservableObject {
 
     /// User-facing name for the active LLM (not the Sovereign device name).
     var thinkingServiceHeadline: String {
+        if isRemoteTurnInFlight, llmHealth == .unknown {
+            return "Waiting on Chat"
+        }
         if routingMode == "phoenix", lastRoutedDisplayName?.isEmpty != false {
             return "Auto-select"
         }
@@ -1211,6 +1245,9 @@ final class ConnectionManager: ObservableObject {
 
     /// Secondary line under the thinking-service headline.
     var thinkingServiceSubtitle: String {
+        if isRemoteTurnInFlight, llmHealth == .unknown {
+            return "Status waits until Chat finishes — the link is up."
+        }
         if routingMode == "phoenix" {
             if let routed = lastRoutedDisplayName, !routed.isEmpty {
                 return "Auto-select · last used \(routed)"
@@ -1226,7 +1263,9 @@ final class ConnectionManager: ObservableObject {
         case .healthy:
             return "Your Sovereign can answer messages."
         case .unknown:
-            return "Checking with your Sovereign…"
+            return isCryptoChatReady
+                ? "Link is up. Thinking status has not come back yet."
+                : "Checking with your Sovereign…"
         default:
             return "Your Sovereign may not be able to reply right now."
         }
@@ -1271,15 +1310,39 @@ final class ConnectionManager: ObservableObject {
         return error.localizedDescription
     }
 
+    private static func isDroppedSocket(_ error: Error) -> Bool {
+        if let connectionError = error as? ConnectionError {
+            if case .connectionClosed = connectionError { return true }
+        }
+        if let nwError = error as? NWError {
+            if case .posix(.ECONNABORTED) = nwError { return true }
+            if case .posix(.ECONNRESET) = nwError { return true }
+        }
+        let ns = error as NSError
+        if ns.domain == "Network.NWError" || ns.domain.contains("NWError") {
+            return ns.code == Int(POSIXErrorCode.ECONNABORTED.rawValue)
+                || ns.code == Int(POSIXErrorCode.ECONNRESET.rawValue)
+        }
+        return false
+    }
+
     /// Clear mid-turn UI so a reconnect never leaves a half-shown approval stuck.
     private func abortInFlightTurn(clearApproval: Bool) {
         turnActivityHint = nil
         streamingAssistantText = ""
         streamTtftMarked = false
         sendStartedAt = nil
+        isRemoteTurnInFlight = false
         if clearApproval {
             pendingToolApproval = nil
         }
+    }
+
+    /// User tapped Stop — drop the wedged receive so Chat can send again.
+    func cancelInFlightChat() {
+        abortInFlightTurn(clearApproval: true)
+        lastLLMError = nil
+        poisonPipelineAndReconnect()
     }
 
     private func recordSpeedSample(_ ms: Double, into samples: inout [Double]) {
@@ -1339,22 +1402,34 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func bundledCatalogFromKnownStatus() -> RemoteModelCatalog {
-        let activeID: String?
+        let bundled = RemoteModelCatalog.bundled()
         var configuredKeyEnvs = Set<String>()
-        if let status = thinkingStatus, !status.model.isEmpty {
-            activeID = RemoteModelCatalog.connectorID(provider: status.provider, model: status.model)
-            if let activeID,
-               let row = RemoteModelCatalog.bundled().allConnectors.first(where: { $0.id == activeID }) {
-                configuredKeyEnvs.insert(row.keyEnv)
-            }
-        } else {
-            activeID = remoteCatalog?.activeConnectorId
-            if let previous = remoteCatalog {
-                for row in previous.allConnectors where row.configured {
+        var activeID: String?
+
+        if let status = thinkingStatus {
+            let provider = status.provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let model = status.model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !provider.isEmpty {
+                let matches = bundled.allConnectors.filter { row in
+                    row.provider.lowercased() == provider
+                        || row.provider.lowercased().hasPrefix(provider)
+                        || provider.hasPrefix(row.provider.lowercased())
+                }
+                for row in matches {
                     configuredKeyEnvs.insert(row.keyEnv)
                 }
+                activeID = matches.first { $0.model.lowercased() == model }?.id
+                    ?? matches.first?.id
             }
         }
+
+        if configuredKeyEnvs.isEmpty, let previous = remoteCatalog {
+            activeID = activeID ?? previous.activeConnectorId
+            for row in previous.allConnectors where row.configured {
+                configuredKeyEnvs.insert(row.keyEnv)
+            }
+        }
+
         return RemoteModelCatalog.bundled(
             activeConnectorId: activeID,
             routingMode: routingMode,
@@ -1779,6 +1854,9 @@ final class ConnectionManager: ObservableObject {
     }
 
     func fetchRemoteModelCatalog() async -> RemoteModelCatalog {
+        if isRemoteTurnInFlight {
+            return remoteCatalog ?? bundledCatalogFromKnownStatus()
+        }
         do {
             let payload = try await invokeRemote(action: "remote_model_catalog")
             guard let catalogData = payload["catalog"] as? [String: Any] else {
@@ -1866,7 +1944,7 @@ final class ConnectionManager: ObservableObject {
     private func invokeRemote(
         action: String,
         extra: [String: Any] = [:],
-        timeoutSeconds: TimeInterval = 30
+        timeoutSeconds: TimeInterval = 90
     ) async throws -> [String: Any] {
         guard currentSessionKey != nil, isCryptoChatReady else {
             throw ConnectionError.notConnected
@@ -1888,6 +1966,11 @@ final class ConnectionManager: ObservableObject {
                 try await self.exchangeEncrypted(plaintext: plaintext)
             }
         } catch is TimeoutError {
+            if isRemoteTurnInFlight {
+                throw ConnectionError.serverRejected(
+                    "Chat is still waiting on your Centurion. Try this again when Chat finishes."
+                )
+            }
             poisonPipelineAndReconnect()
             throw ConnectionError.serverRejected(
                 "Your Sovereign took too long to respond. Reconnecting…"
@@ -2037,6 +2120,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleConnectionLoss(_ message: String) {
+        abortInFlightTurn(clearApproval: true)
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2052,6 +2136,7 @@ final class ConnectionManager: ObservableObject {
     /// A timed-out receive does not cancel NWConnection.receive — drop the
     /// socket so later RPCs (chat, catalog) are not queued behind a dead frame.
     private func poisonPipelineAndReconnect() {
+        abortInFlightTurn(clearApproval: true)
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2206,7 +2291,6 @@ final class ConnectionManager: ObservableObject {
         // Keep Bonjour browsing alive while linked — cancelling the browser can drop
         // NWConnections that were opened via a Bonjour service endpoint.
         startKeepalive()
-        Task { await refreshThinkingStatus() }
     }
 
     private func handleDeviceRevoked(_ message: String) {
@@ -2226,6 +2310,7 @@ final class ConnectionManager: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard let self, self.connectionState == .connected else { return }
+                if self.isRemoteTurnInFlight { continue }
                 do {
                     try await self.sendPing()
                 } catch {

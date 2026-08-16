@@ -16,6 +16,7 @@ final class MissionStore: ObservableObject {
     @Published private(set) var decisions: [DecisionRecord] = []
     @Published private(set) var thoughts: [ThoughtEntry] = []
     @Published private(set) var lifeSyncedWithSovereign = false
+    @Published private(set) var lifeSyncError: String?
 
     private static let missionKey = "centurion.lifeMission.v1"
     private static let soulKey = "centurion.soulDocument.v1"
@@ -646,6 +647,7 @@ final class MissionStore: ObservableObject {
     /// Pull Mission Stack / subjects / streams from Brain via `life_call`.
     func refreshLifeStack(from connectionManager: ConnectionManager) async {
         guard connectionManager.isCryptoChatReady else { return }
+        if connectionManager.isRemoteTurnInFlight { return }
         do {
             let stackPayload = try await connectionManager.fetchLifeStack()
             let rawStack = (stackPayload["stack"] as? [String: Any]) ?? stackPayload
@@ -672,6 +674,7 @@ final class MissionStore: ObservableObject {
                 thoughts = decoded
             }
             lifeSyncedWithSovereign = true
+            lifeSyncError = nil
             if let primary = stack.primary {
                 var updated = LifeMission(
                     id: primary.id,
@@ -693,7 +696,8 @@ final class MissionStore: ObservableObject {
                 missionSyncedWithSovereign = true
             }
         } catch {
-            // Offline — keep cache
+            lifeSyncedWithSovereign = false
+            lifeSyncError = error.localizedDescription
         }
     }
 

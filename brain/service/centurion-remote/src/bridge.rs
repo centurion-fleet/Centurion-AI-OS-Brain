@@ -4,8 +4,10 @@ use serde_json::Value;
 use std::io;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -108,7 +110,7 @@ impl PythonBridge {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct BridgeRequest<'a> {
     id: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -137,6 +139,7 @@ impl AgentBridge for PythonBridge {
         if let Some(inject) = life_inject {
             extra.insert("life_inject".to_owned(), inject);
         }
+        extra.insert("events".to_owned(), Value::Bool(true));
         let events = event_tx.is_some();
         let response = self
             .run_bridge_chat(
@@ -203,8 +206,219 @@ impl AgentBridge for PythonBridge {
     }
 }
 
+struct WarmDaemonState {
+    child: Option<tokio::process::Child>,
+}
+
+fn warm_daemon_state() -> &'static tokio::sync::Mutex<WarmDaemonState> {
+    static STATE: OnceLock<tokio::sync::Mutex<WarmDaemonState>> = OnceLock::new();
+    STATE.get_or_init(|| tokio::sync::Mutex::new(WarmDaemonState { child: None }))
+}
+
 impl PythonBridge {
+    fn bridge_socket_path() -> PathBuf {
+        if let Ok(path) = std::env::var("CENTURION_BRIDGE_SOCKET") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed);
+            }
+        }
+        let home = std::env::var("CENTURION_HOME").unwrap_or_else(|_| {
+            let fallback = std::env::var("HOME").unwrap_or_default();
+            format!("{fallback}/.centurion")
+        });
+        PathBuf::from(home).join("run").join("bridge.sock")
+    }
+
+    async fn socket_is_ready() -> bool {
+        let path = Self::bridge_socket_path();
+        matches!(
+            timeout(Duration::from_millis(200), UnixStream::connect(&path)).await,
+            Ok(Ok(_))
+        )
+    }
+
+    async fn wait_until_ready(limit: Duration) -> Result<(), BridgeError> {
+        let start = tokio::time::Instant::now();
+        while start.elapsed() < limit {
+            if Self::socket_is_ready().await {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(80)).await;
+        }
+        if Self::socket_is_ready().await {
+            Ok(())
+        } else {
+            Err(BridgeError::Write(io::Error::new(
+                io::ErrorKind::NotFound,
+                "warm Centurion daemon did not become ready",
+            )))
+        }
+    }
+
+    async fn connect_warm_socket() -> Result<UnixStream, BridgeError> {
+        let path = Self::bridge_socket_path();
+        timeout(Duration::from_millis(800), UnixStream::connect(&path))
+            .await
+            .map_err(|_| {
+                BridgeError::Write(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "warm bridge socket not ready",
+                ))
+            })?
+            .map_err(BridgeError::Write)
+    }
+
+    /// Start or reuse `$CENTURION_HOME/run/bridge.sock` — the same warm
+    /// process Desktop Chat already uses. Do not recycle a live listener;
+    /// GTK Brain may already own it.
+    pub async fn ensure_warm_daemon(&self) -> Result<(), BridgeError> {
+        if Self::socket_is_ready().await {
+            return Ok(());
+        }
+        let mut state = warm_daemon_state().lock().await;
+        if Self::socket_is_ready().await {
+            return Ok(());
+        }
+        if let Some(child) = state.child.as_mut() {
+            match child.try_wait() {
+                Ok(None) => {
+                    drop(state);
+                    return Self::wait_until_ready(Duration::from_secs(12)).await;
+                }
+                _ => state.child = None,
+            }
+        }
+
+        let path = Self::bridge_socket_path();
+        if let Some(parent) = path.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        if path.exists() && !Self::socket_is_ready().await {
+            let _ = tokio::fs::remove_file(&path).await;
+        }
+        if Self::socket_is_ready().await {
+            return Ok(());
+        }
+
+        let socket = path.to_string_lossy().into_owned();
+        let mut command = Command::new(&self.python);
+        command
+            .args([
+                "-m",
+                "centurion_cli.remote_bridge",
+                "--serve",
+                "--socket",
+                &socket,
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(false);
+        if let Ok(home) = std::env::var("CENTURION_HOME") {
+            command.env("CENTURION_HOME", &home);
+        }
+        command.env("CENTURION_BRIDGE_SOCKET", &path);
+        if let Some(cwd) = bridge_working_directory() {
+            command.current_dir(cwd);
+        }
+        tracing::info!(socket = %path.display(), "starting warm Centurion daemon for iPhone Chat");
+        let child = command.spawn().map_err(BridgeError::Spawn)?;
+        state.child = Some(child);
+        drop(state);
+        Self::wait_until_ready(Duration::from_secs(12)).await
+    }
+
+    /// Same warm daemon Desktop Chat uses (`$CENTURION_HOME/run/bridge.sock`).
+    async fn run_via_warm_socket(
+        &self,
+        request: BridgeRequest<'_>,
+        events: bool,
+        event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
+        mut approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
+    ) -> Result<Value, BridgeError> {
+        let stream = Self::connect_warm_socket().await?;
+        let request_bytes = serialize_bridge_request_line(&request)?;
+        let (reader, mut writer) = stream.into_split();
+        writer.write_all(&request_bytes).await.map_err(BridgeError::Write)?;
+        if !events {
+            writer.shutdown().await.map_err(BridgeError::Write)?;
+        }
+        let mut lines = BufReader::new(reader).lines();
+        let mut final_response: Option<Value> = None;
+        timeout(BRIDGE_TIMEOUT, async {
+            loop {
+                tokio::select! {
+                    biased;
+                    decision = async {
+                        match approval_rx.as_mut() {
+                            Some(rx) => rx.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        if let Some(decision) = decision {
+                            let payload = serde_json::json!({
+                                "action": "approval_respond",
+                                "session_key": decision.session_key,
+                                "choice": decision.choice,
+                                "all": decision.resolve_all,
+                            });
+                            let mut line = serde_json::to_vec(&payload)
+                                .map_err(BridgeError::InvalidResponse)?;
+                            line.push(b'\n');
+                            writer.write_all(&line).await.map_err(BridgeError::Write)?;
+                            writer.flush().await.map_err(BridgeError::Write)?;
+                        }
+                    }
+                    line = lines.next_line() => {
+                        let line = line.map_err(BridgeError::Wait)?;
+                        let Some(line) = line else {
+                            break;
+                        };
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        let value: Value = serde_json::from_str(trimmed)
+                            .map_err(BridgeError::InvalidResponse)?;
+                        if value.get("centurion_event").is_some() {
+                            if let Some(tx) = &event_tx {
+                                if let Some(event) = turn_event_from_ndjson(&value) {
+                                    let _ = tx.send(event).await;
+                                }
+                            }
+                            continue;
+                        }
+                        if events {
+                            if is_bridge_chat_final(&value) {
+                                final_response = Some(value);
+                                break;
+                            }
+                        } else {
+                            final_response = Some(value);
+                            break;
+                        }
+                    }
+                }
+            }
+            final_response.ok_or_else(|| {
+                BridgeError::InvalidResponse(serde_json::Error::io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "warm bridge closed without a JSON response",
+                )))
+            })
+        })
+        .await
+        .map_err(|_| BridgeError::Timeout(BRIDGE_TIMEOUT.as_secs()))?
+    }
+
     async fn run_bridge(&self, request: BridgeRequest<'_>) -> Result<Value, BridgeError> {
+        if self.ensure_warm_daemon().await.is_ok() {
+            return self
+                .run_via_warm_socket(request, false, None, None)
+                .await;
+        }
+        tracing::warn!("warm Centurion daemon unavailable; starting a one-shot core");
         let mut command = Command::new(&self.python);
         command
             .args(["-m", "centurion_cli.remote_bridge"])
@@ -251,6 +465,12 @@ impl PythonBridge {
         event_tx: Option<mpsc::Sender<BridgeTurnEvent>>,
         mut approval_rx: Option<mpsc::Receiver<BridgeApprovalDecision>>,
     ) -> Result<Value, BridgeError> {
+        if self.ensure_warm_daemon().await.is_ok() {
+            return self
+                .run_via_warm_socket(request, events, event_tx, approval_rx)
+                .await;
+        }
+        tracing::warn!("warm Centurion daemon unavailable; starting a one-shot core for Chat");
         let mut command = Command::new(&self.python);
         command
             .args(["-m", "centurion_cli.remote_bridge"])
@@ -567,6 +787,18 @@ mod tests {
         assert!(response.get("oversight").is_some());
         assert!(response.get("plans").is_some());
         assert_eq!(response_message(&response), "");
+    }
+
+    #[test]
+    fn default_bridge_socket_path_is_under_run() {
+        let path = PythonBridge::bridge_socket_path();
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("bridge.sock"));
+        assert!(
+            path.components()
+                .any(|c| c.as_os_str() == "run"),
+            "expected run/bridge.sock, got {}",
+            path.display()
+        );
     }
 
     #[test]

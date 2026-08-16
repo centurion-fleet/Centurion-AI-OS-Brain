@@ -342,7 +342,15 @@ async fn serve(
     let bridge: Arc<dyn AgentBridge> = if echo {
         Arc::new(EchoBridge)
     } else {
-        Arc::new(PythonBridge::new(&python))
+        let python_bridge = PythonBridge::new(&python);
+        let warmer = python_bridge.clone();
+        tokio::spawn(async move {
+            match warmer.ensure_warm_daemon().await {
+                Ok(()) => tracing::info!("warm Centurion daemon is ready for iPhone Chat"),
+                Err(error) => tracing::warn!("warm Centurion daemon not ready yet: {error}"),
+            }
+        });
+        Arc::new(python_bridge)
     };
 
     info!(
