@@ -183,10 +183,7 @@ export function Deck() {
             />
           ) : (
             <div className="mt-10 text-ink-muted">
-              No primary mission crowned yet.{" "}
-              <Link to="/discovery" className="text-amber-soft underline">
-                Discover one
-              </Link>
+              No primary mission crowned yet.
             </div>
           )}
 
@@ -216,9 +213,11 @@ export function Deck() {
           </div>
         )}
         <div className="flex justify-center gap-6 text-sm text-ink-dim">
-          <Link to="/discovery" className="hover:text-amber-soft">
-            Discovery
-          </Link>
+          {empty && (
+            <Link to="/discovery" className="hover:text-amber-soft">
+              Discovery
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setFindOpen((o) => !o)}

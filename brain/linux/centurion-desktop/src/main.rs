@@ -157,6 +157,61 @@ mod linux {
         }
     }
 
+    fn you_page_box() -> gtk::Box {
+        let page = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        page.set_margin_top(32);
+        page.set_margin_start(32);
+        page.set_margin_end(32);
+        page.set_margin_bottom(32);
+        page.set_vexpand(false);
+        page.set_hexpand(true);
+        page.set_valign(gtk::Align::Start);
+        page
+    }
+
+    fn you_scroll_page(
+        title: &str,
+        tag: &str,
+        child: &impl gtk::prelude::IsA<gtk::Widget>,
+        show_back: bool,
+    ) -> adw::NavigationPage {
+        let scroll = gtk::ScrolledWindow::builder()
+            .child(child)
+            .vexpand(true)
+            .hexpand(true)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .kinetic_scrolling(true)
+            .overlay_scrolling(false)
+            .min_content_height(240)
+            .build();
+        let toolbar = adw::ToolbarView::new();
+        if show_back {
+            let header = adw::HeaderBar::new();
+            header.set_show_end_title_buttons(false);
+            header.set_show_start_title_buttons(false);
+            toolbar.add_top_bar(&header);
+        }
+        toolbar.set_content(Some(&scroll));
+        adw::NavigationPage::with_tag(&toolbar, title, tag)
+    }
+
+    fn you_hub_link(title: &str, subtitle: &str, icon: &str) -> adw::ActionRow {
+        adw::ActionRow::builder()
+            .title(title)
+            .subtitle(subtitle)
+            .icon_name(icon)
+            .activatable(true)
+            .build()
+    }
+
+    fn bind_you_link(row: &adw::ActionRow, nav: &adw::NavigationView, tag: &'static str) {
+        let nav = nav.clone();
+        row.connect_activate(move |_| {
+            nav.push_by_tag(tag);
+        });
+    }
+
     #[derive(Default)]
     struct RemoteSupervisor {
         child: Option<Child>,
@@ -1132,7 +1187,7 @@ The Brain here is the product; the phone is the remote.",
         settings.set_margin_bottom(32);
         settings.append(
             &gtk::Label::builder()
-                .label("Settings")
+                .label("You")
                 .css_classes(["title-1"])
                 .xalign(0.0)
                 .build(),
@@ -1314,10 +1369,6 @@ The Brain here is the product; the phone is the remote.",
         memory_horizon_row.add_suffix(&memory_horizon_button);
         sovereign_group.add(&memory_horizon_row);
         settings.append(&you_group);
-        settings.append(&sovereign_group);
-        settings.append(&connect_group);
-        settings.append(&status_card);
-        settings.append(&devices_section);
 
         let collaborations_group = adw::PreferencesGroup::builder()
             .title("Collaborations")
@@ -1379,8 +1430,6 @@ The Brain here is the product; the phone is the remote.",
         this_brain_group.add(&gateway_row);
         let gateway_platform_list = gtk::ListBox::new();
         gateway_platform_list.add_css_class("boxed-list");
-        gateway_platform_list.set_margin_start(32);
-        gateway_platform_list.set_margin_end(32);
         gateway_platform_list.set_margin_bottom(8);
 
         let anywhere_row = adw::ActionRow::builder()
@@ -1631,30 +1680,119 @@ The Brain here is the product; the phone is the remote.",
         adrian_button.set_valign(gtk::Align::Center);
         adrian_row.add_suffix(&adrian_button);
         help_group.add(&adrian_row);
-        settings.append(&this_brain_group);
-        settings.append(&gateway_platform_list);
-        settings.append(&collaborations_group);
-        settings.append(&family_group);
-        settings.append(&privacy_group);
-        settings.append(&help_group);
 
-        // ScrolledWindow only scrolls if the child keeps its natural height.
-        // vexpand/fill on the child clips content instead of scrolling (Brain
-        // touch screens then look like Settings just "ends" mid-row).
+        let hub_menu = adw::PreferencesGroup::builder().build();
+        let sovereign_link = you_hub_link(
+            "Your Sovereign",
+            "Thinking, memory, reporting",
+            "preferences-system-symbolic",
+        );
+        let collab_link = you_hub_link(
+            "Collaborations",
+            "Shared work boards on this Brain",
+            "system-users-symbolic",
+        );
+        let family_hub_row = you_hub_link(
+            "Family &amp; friends",
+            "Nominate family and track colleague referrals",
+            "avatar-default-symbolic",
+        );
+        family_hub_row.set_visible(false);
+        let connect_link = you_hub_link(
+            "Connect",
+            "Pairing, devices, and link status",
+            "network-wireless-symbolic",
+        );
+        let this_brain_link = you_hub_link(
+            "This Brain",
+            "Gateway, updates, desk",
+            "video-display-symbolic",
+        );
+        let privacy_link = you_hub_link(
+            "Privacy &amp; Trust",
+            "What stays on this computer",
+            "security-high-symbolic",
+        );
+        let help_link = you_hub_link(
+            "Help &amp; about",
+            "Health checks, support, Talk to Adrian",
+            "dialog-information-symbolic",
+        );
+        hub_menu.add(&sovereign_link);
+        hub_menu.add(&collab_link);
+        hub_menu.add(&family_hub_row);
+        hub_menu.add(&connect_link);
+        hub_menu.add(&this_brain_link);
+        hub_menu.add(&privacy_link);
+        hub_menu.add(&help_link);
+        settings.append(&hub_menu);
+
+        let sovereign_page = you_page_box();
+        sovereign_page.append(&sovereign_group);
+        let connect_page = you_page_box();
+        connect_page.append(&connect_group);
+        connect_page.append(&status_card);
+        connect_page.append(&devices_section);
+        let this_brain_page = you_page_box();
+        this_brain_page.append(&this_brain_group);
+        this_brain_page.append(&gateway_platform_list);
+        let collab_page = you_page_box();
+        collab_page.append(&collaborations_group);
+        let family_page = you_page_box();
+        family_page.append(&family_group);
+        let privacy_page = you_page_box();
+        privacy_page.append(&privacy_group);
+        let help_page = you_page_box();
+        help_page.append(&help_group);
+
         settings.set_vexpand(false);
         settings.set_hexpand(true);
         settings.set_valign(gtk::Align::Start);
 
-        let settings_scroll = gtk::ScrolledWindow::builder()
-            .child(&settings)
-            .vexpand(true)
-            .hexpand(true)
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vscrollbar_policy(gtk::PolicyType::Automatic)
-            .kinetic_scrolling(true)
-            .overlay_scrolling(false) // always show a scrollbar so scroll is discoverable on touch
-            .min_content_height(240)
-            .build();
+        let you_nav = adw::NavigationView::new();
+        you_nav.set_vexpand(true);
+        you_nav.set_hexpand(true);
+        you_nav.add(&you_scroll_page("You", "hub", &settings, false));
+        you_nav.add(&you_scroll_page(
+            "Your Sovereign",
+            "sovereign",
+            &sovereign_page,
+            true,
+        ));
+        you_nav.add(&you_scroll_page(
+            "Collaborations",
+            "collaborations",
+            &collab_page,
+            true,
+        ));
+        you_nav.add(&you_scroll_page(
+            "Family & friends",
+            "family",
+            &family_page,
+            true,
+        ));
+        you_nav.add(&you_scroll_page("Connect", "connect", &connect_page, true));
+        you_nav.add(&you_scroll_page(
+            "This Brain",
+            "this-brain",
+            &this_brain_page,
+            true,
+        ));
+        you_nav.add(&you_scroll_page(
+            "Privacy & Trust",
+            "privacy",
+            &privacy_page,
+            true,
+        ));
+        you_nav.add(&you_scroll_page("Help & about", "help", &help_page, true));
+        bind_you_link(&sovereign_link, &you_nav, "sovereign");
+        bind_you_link(&collab_link, &you_nav, "collaborations");
+        bind_you_link(&family_hub_row, &you_nav, "family");
+        bind_you_link(&connect_link, &you_nav, "connect");
+        bind_you_link(&this_brain_link, &you_nav, "this-brain");
+        bind_you_link(&privacy_link, &you_nav, "privacy");
+        bind_you_link(&help_link, &you_nav, "help");
+        let settings_scroll = you_nav;
 
         let (chat, chat_handle) = build_chat_page();
 
@@ -1695,7 +1833,7 @@ The Brain here is the product; the phone is the remote.",
 
         stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&home, Some("missions"), "Focus");
-        stack.add_titled(&settings_scroll, Some("settings"), "Settings");
+        stack.add_titled(&settings_scroll, Some("settings"), "You");
         stack.set_visible_child_name("chat");
         chat.set_vexpand(true);
         home.set_vexpand(true);
@@ -1704,7 +1842,7 @@ The Brain here is the product; the phone is the remote.",
 
         let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
             &stack,
-            &[("chat", "Chat"), ("missions", "Focus"), ("settings", "Settings")],
+            &[("chat", "Chat"), ("missions", "Focus"), ("settings", "You")],
         );
 
         let refresh_settings_attention_ui = {
@@ -1856,6 +1994,7 @@ The Brain here is the product; the phone is the remote.",
             license_row: license_row.clone(),
             beneficiary_row: beneficiary_row.clone(),
             family_group: family_group.clone(),
+            family_hub_row: family_hub_row.clone(),
             firecrawl_row: firecrawl_row.clone(),
             firecrawl_button: firecrawl_button.clone(),
         };
@@ -3758,6 +3897,7 @@ fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_jso
         license_row: adw::ActionRow,
         beneficiary_row: adw::ActionRow,
         family_group: adw::PreferencesGroup,
+        family_hub_row: adw::ActionRow,
         firecrawl_row: adw::ActionRow,
         firecrawl_button: gtk::Button,
     }
@@ -4012,6 +4152,7 @@ fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_jso
         rows.license_row.set_visible(fill.license_visible);
         rows.beneficiary_row.set_visible(fill.beneficiary_visible);
         rows.family_group.set_visible(fill.beneficiary_visible);
+        rows.family_hub_row.set_visible(fill.beneficiary_visible);
         rows.firecrawl_row.set_subtitle(&fill.firecrawl_line);
         rows.firecrawl_button.set_label(if fill.firecrawl_configured {
             "Update"

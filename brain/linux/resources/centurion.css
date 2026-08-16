@@ -107,6 +107,40 @@ button.link {
   margin-right: 16px;
 }
 
+.centurion-chat-topic-row {
+  min-height: 28px;
+}
+
+.centurion-chat-topic-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: alpha(@centurion_accent, 0.12);
+  color: @centurion_muted;
+}
+
+.centurion-chat-streaming-draft {
+  margin-left: 0;
+}
+
+.centurion-chat-streaming-dot {
+  border-radius: 999px;
+  min-width: 10px;
+  min-height: 10px;
+  background: @centurion_accent;
+}
+
+.centurion-chat-streaming-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: alpha(@centurion_muted, 0.10);
+  color: @centurion_ink;
+}
+
+.centurion-chat-wait-hint {
+  font-size: 11px;
+  color: @centurion_muted;
+}
+
 .centurion-chat-text {
   font-size: 15px;
   line-height: 1.5;
@@ -162,11 +196,16 @@ button.link {
 }
 
 .centurion-chat-activity {
-  padding: 8px 12px;
-  border-radius: 10px;
-  margin: 2px 16px 0 16px;
-  background: alpha(@centurion_warm, 0.07);
-  border: 1px solid alpha(@centurion_warm, 0.14);
+  padding: 8px 16px 4px 16px;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+}
+
+.centurion-chat-typing {
+  font-size: 0.92em;
+  color: @centurion_muted;
 }
 
 .centurion-chat-activity-line {

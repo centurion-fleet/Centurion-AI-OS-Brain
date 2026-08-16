@@ -3321,11 +3321,16 @@ fn show_mission_detail_dialog(
     dialog.present(Some(&window));
 }
 
+fn life_setup_has_content(mission: &MissionInfo) -> bool {
+    !mission.statement.trim().is_empty() || !mission.targets.is_empty()
+}
+
 fn rebuild_mission_stack_section(
     stack_box: &gtk::Box,
     parent: &gtk::Box,
     on_ask: Rc<dyn Fn(DiscussTopic, String)>,
     on_refresh: Rc<dyn Fn()>,
+    life_mission: &MissionInfo,
 ) {
     clear_box(stack_box);
     stack_box.append(
@@ -3374,9 +3379,11 @@ fn rebuild_mission_stack_section(
             false,
         ));
     } else {
-        stack_box.append(&empty_label(
-            "No Primary Mission yet — use Settings → Mission Discovery to set one.",
-        ));
+        stack_box.append(&empty_label(if life_setup_has_content(life_mission) {
+            "No Primary Mission on the stack yet."
+        } else {
+            "No Primary Mission yet — use You → Mission Discovery to set one."
+        }));
     }
 
     let supporting = stack
@@ -3836,6 +3843,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                 &container,
                 hooks.on_ask_about.clone(),
                 refresh_stack,
+                &data.mission,
             );
 
             clear_box(&commitments);

@@ -630,7 +630,7 @@ wheels = [
 
 [[package]]
 name = "centurionai-os"
-version = "5.2.151"
+version = "5.2.152"
 source = { editable = "." }
 dependencies = [
     { name = "croniter" },

@@ -2,6 +2,9 @@
 //!
 //! Drives the local Centurion agent via `centurion_cli.remote_bridge`
 //! (same path as iPhone Crypto Chat), with mid-turn tool approvals.
+//! Layout matches the iPhone Remote: slim topic chrome, transcript first,
+//! live reply draft in the stream, approval then composer, quiet wait caption
+//! under the input. Thinking tokens stay off-screen.
 
 use adw::prelude::*;
 use gtk4 as gtk;
@@ -30,11 +33,12 @@ enum ChatRole {
 struct ChatMessage {
     role: ChatRole,
     content: String,
-    /// Frozen activity trail for System rows after a turn (Cursor-like work history).
+    /// Unused on new turns — thinking is not shown in Chat.
     activity: Option<ActivityArchive>,
 }
 
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 struct ActivityArchive {
     summary: String,
     thinking: String,
@@ -61,6 +65,8 @@ struct ActivityEvent {
 enum WorkerEvent {
     Approval(ApprovalRequest),
     Activity(ActivityEvent),
+    /// Live assistant tokens (`stream_delta`) — shown as a draft bubble.
+    StreamDelta(String),
     /// Focus context the worker resolved for this turn, so the UI can repaint
     /// the Focus banner without a bridge call of its own.
     FocusResolved(Option<PrimaryFocusContext>),
@@ -3706,6 +3712,18 @@ fn run_chat_turn(
             }
             continue;
         }
+        if event_name == "stream_delta" || event_name == "partial" {
+            let chunk = value
+                .get("text")
+                .and_then(|v| v.as_str())
+                .or_else(|| value.get("delta").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_owned();
+            if !chunk.is_empty() {
+                let _ = event_tx.send(WorkerEvent::StreamDelta(chunk));
+            }
+            continue;
+        }
         if event_name == "approval_request" {
             let request = ApprovalRequest {
                 approval_id: value
@@ -3843,6 +3861,21 @@ fn is_desktop_chat_final(value: &Value) -> bool {
     ok && has_text && (action.is_empty() || action == "chat")
 }
 
+/// One quiet caption under the composer — never a thinking dump.
+fn one_line_hint(text: &str) -> String {
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("Waiting on your Centurion…");
+    const MAX: usize = 88;
+    if line.chars().count() > MAX {
+        format!("{}…", line.chars().take(MAX).collect::<String>())
+    } else {
+        line.to_owned()
+    }
+}
+
 fn is_noisy_activity_line(line: &str) -> bool {
     let sample = line.trim();
     if sample.is_empty() {
@@ -3966,6 +3999,7 @@ fn build_tool_card(title: &str, detail: &str) -> gtk::Box {
     card
 }
 
+#[allow(dead_code)]
 fn build_archived_activity_widget(archive: &ActivityArchive) -> gtk::Box {
     let card = gtk::Box::new(gtk::Orientation::Vertical, 6);
     card.add_css_class("centurion-chat-activity");
@@ -4499,29 +4533,6 @@ fn schedule_scroll_to_latest(
     }
 }
 
-/// Single coalesced scroll for high-frequency activity events (tools/thinking).
-fn schedule_scroll_coalesced(
-    pending: &Rc<Cell<bool>>,
-    message_scroll: &gtk::ScrolledWindow,
-    follow_bottom: &Rc<Cell<bool>>,
-    programmatic: &Rc<Cell<bool>>,
-) {
-    if !follow_bottom.get() || pending.get() {
-        return;
-    }
-    pending.set(true);
-    let pending = pending.clone();
-    let message_scroll = message_scroll.clone();
-    let follow_bottom = follow_bottom.clone();
-    let programmatic = programmatic.clone();
-    glib::timeout_add_local_once(Duration::from_millis(50), move || {
-        pending.set(false);
-        if follow_bottom.get() {
-            scroll_chat_to_latest(&message_scroll, &programmatic);
-        }
-    });
-}
-
 fn wire_follow_bottom_scroll(
     message_scroll: &gtk::ScrolledWindow,
     follow_bottom: Rc<Cell<bool>>,
@@ -4664,29 +4675,34 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     // Never block window build on soul_get — paint "Centurion" then fill async.
     let assistant_name = Rc::new(RefCell::new("Centurion".to_owned()));
 
-    let top = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    top.set_margin_top(12);
+    // Slim topic row — iPhone Conversations trigger analog. The sidebar
+    // already lists topics; this chip is the current one.
+    let top = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    top.add_css_class("centurion-chat-topic-row");
+    top.set_margin_top(8);
     top.set_margin_start(16);
     top.set_margin_end(16);
-    top.set_margin_bottom(8);
+    top.set_margin_bottom(4);
     top.set_vexpand(false);
-    let title = gtk::Label::builder()
-        .label(&format!("Chat with {}", assistant_name.borrow()))
-        .css_classes(["title-1"])
-        .xalign(0.0)
-        .build();
-    top.append(&title);
+    top.set_hexpand(true);
+    top.append(
+        &gtk::Image::from_icon_name("user-available-symbolic"),
+    );
     top.append(
         &gtk::Label::builder()
-            .label(
-                "Local chat on this brain — pick a past conversation on the left, \
-                 or start a new one. Soul and Memory Horizon load with each answer.",
-            )
-            .wrap(true)
+            .label("Chat")
+            .css_classes(["caption-heading"])
             .xalign(0.0)
-            .css_classes(["dim-label"])
             .build(),
     );
+    let title = gtk::Label::builder()
+        .label(&format!("Chat with {}", assistant_name.borrow()))
+        .css_classes(["caption", "centurion-chat-topic-chip"])
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
+    top.append(&title);
     chat_column.append(&top);
 
     let messages: Rc<RefCell<Vec<ChatMessage>>> = Rc::new(RefCell::new(Vec::new()));
@@ -4770,51 +4786,54 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     message_list.set_vexpand(false);
     let message_store = message_store;
 
-    let activity_card = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    activity_card.add_css_class("centurion-chat-activity");
-    activity_card.set_margin_top(0);
-    activity_card.set_hexpand(true);
-    activity_card.set_visible(false);
-    let activity_title = gtk::Label::builder()
-        .label("Working…")
-        .xalign(0.0)
-        .css_classes(["caption-heading"])
-        .build();
-    activity_card.append(&activity_title);
-    let thinking_label = gtk::Label::builder()
+    // Live reply draft — iPhone streamingDraftRow. Tokens land here; thinking does not.
+    let streaming_draft = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    streaming_draft.add_css_class("centurion-chat-streaming-draft");
+    streaming_draft.set_hexpand(true);
+    streaming_draft.set_visible(false);
+    streaming_draft.set_margin_start(16);
+    streaming_draft.set_margin_end(48);
+    streaming_draft.set_margin_top(4);
+    streaming_draft.set_margin_bottom(8);
+    let draft_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    draft_dot.add_css_class("centurion-chat-streaming-dot");
+    draft_dot.set_valign(gtk::Align::End);
+    draft_dot.set_margin_bottom(6);
+    draft_dot.set_size_request(10, 10);
+    streaming_draft.append(&draft_dot);
+    let draft_bubble = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    draft_bubble.add_css_class("centurion-chat-streaming-bubble");
+    draft_bubble.set_hexpand(true);
+    let draft_label = gtk::Label::builder()
         .label("")
         .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
         .xalign(0.0)
-        .css_classes(["dim-label"])
         .selectable(true)
+        .css_classes(["centurion-chat-text"])
         .build();
-    let thinking_expander = gtk::Expander::builder()
-        .label("Thinking")
-        .expanded(true)
-        .build();
-    thinking_expander.set_child(Some(&thinking_label));
-    thinking_expander.set_visible(false);
-    activity_card.append(&thinking_expander);
-    let activity_more_label = gtk::Label::builder()
-        .label("")
+    draft_bubble.append(&draft_label);
+    streaming_draft.append(&draft_bubble);
+    let stream_draft_text = Rc::new(RefCell::new(String::new()));
+
+    let wait_hint = gtk::Label::builder()
+        .label("Waiting on your Centurion…")
+        .wrap(true)
         .xalign(0.0)
-        .css_classes(["dim-label"])
+        .css_classes(["dim-label", "caption", "centurion-chat-wait-hint"])
         .visible(false)
         .build();
-    activity_card.append(&activity_more_label);
-    let activity_tools = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    activity_card.append(&activity_tools);
 
     let transcript_spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_spacer.add_css_class("centurion-chat-transcript-spacer");
     transcript_spacer.set_size_request(-1, TRANSCRIPT_SPACER_PX);
     transcript_spacer.set_hexpand(true);
 
-    // Cursor-style: bubbles + live Activity share one scroll surface; composer stays fixed below.
+    // Transcript fills the page. Streaming draft sits in the stream, not above the composer.
     let transcript_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_box.set_hexpand(true);
     transcript_box.append(&message_list);
-    transcript_box.append(&activity_card);
+    transcript_box.append(&streaming_draft);
     transcript_box.append(&transcript_spacer);
 
     let message_scroll = gtk::ScrolledWindow::builder()
@@ -4827,7 +4846,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     message_scroll.set_child(Some(&transcript_box));
     let follow_bottom = Rc::new(Cell::new(true));
     let programmatic_scroll = Rc::new(Cell::new(false));
-    let activity_scroll_pending = Rc::new(Cell::new(false));
     wire_follow_bottom_scroll(
         &message_scroll,
         follow_bottom.clone(),
@@ -4874,59 +4892,30 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     // + Send wrappers — those break Fedora 44 / glib-rs 0.22 Brain rebuilds.
     chat_column.append(&scroll_overlay);
 
-    let activity_tool_count = Rc::new(Cell::new(0usize));
-    let activity_has_thinking = Rc::new(Cell::new(false));
-    let activity_thinking_text = Rc::new(RefCell::new(String::new()));
-    let activity_tool_lines = Rc::new(RefCell::new(Vec::<String>::new()));
-
-    let clear_activity_box = {
-        let activity_tools = activity_tools.clone();
-        Rc::new(move || {
-            while let Some(child) = activity_tools.first_child() {
-                activity_tools.remove(&child);
-            }
-        })
-    };
-
     let reset_activity: Rc<dyn Fn()> = Rc::new({
-        let activity_card = activity_card.clone();
-        let activity_title = activity_title.clone();
-        let thinking_expander = thinking_expander.clone();
-        let thinking_label = thinking_label.clone();
-        let activity_more_label = activity_more_label.clone();
-        let clear_activity_box = clear_activity_box.clone();
-        let activity_tool_count = activity_tool_count.clone();
-        let activity_has_thinking = activity_has_thinking.clone();
-        let activity_thinking_text = activity_thinking_text.clone();
-        let activity_tool_lines = activity_tool_lines.clone();
+        let streaming_draft = streaming_draft.clone();
+        let draft_label = draft_label.clone();
+        let stream_draft_text = stream_draft_text.clone();
+        let wait_hint = wait_hint.clone();
         move || {
-            clear_activity_box();
-            thinking_label.set_label("");
-            thinking_expander.set_label(Some("Thinking"));
-            thinking_expander.set_visible(false);
-            thinking_expander.set_expanded(true);
-            activity_more_label.set_label("");
-            activity_more_label.set_visible(false);
-            activity_title.set_label("Working…");
-            activity_tool_count.set(0);
-            activity_has_thinking.set(false);
-            activity_thinking_text.borrow_mut().clear();
-            activity_tool_lines.borrow_mut().clear();
-            activity_card.set_visible(false);
+            stream_draft_text.borrow_mut().clear();
+            draft_label.set_label("");
+            streaming_draft.set_visible(false);
+            wait_hint.set_label("Waiting on your Centurion…");
+            wait_hint.set_visible(false);
         }
     });
 
     let show_activity_working: Rc<dyn Fn()> = Rc::new({
         let reset_activity = reset_activity.clone();
-        let activity_card = activity_card.clone();
-        let activity_title = activity_title.clone();
+        let wait_hint = wait_hint.clone();
         let follow_bottom = follow_bottom.clone();
         let message_scroll = message_scroll.clone();
         let programmatic_scroll = programmatic_scroll.clone();
         move || {
             reset_activity();
-            activity_title.set_label("Working…");
-            activity_card.set_visible(true);
+            wait_hint.set_label("Waiting on your Centurion…");
+            wait_hint.set_visible(true);
             follow_bottom.set(true);
             schedule_scroll_to_latest(
                 &message_scroll,
@@ -4937,48 +4926,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     });
 
     let apply_activity: Rc<dyn Fn(ActivityEvent)> = Rc::new({
-        let activity_card = activity_card.clone();
-        let activity_title = activity_title.clone();
-        let thinking_expander = thinking_expander.clone();
-        let thinking_label = thinking_label.clone();
-        let activity_more_label = activity_more_label.clone();
-        let activity_tools = activity_tools.clone();
-        let activity_tool_count = activity_tool_count.clone();
-        let activity_has_thinking = activity_has_thinking.clone();
-        let activity_thinking_text = activity_thinking_text.clone();
-        let activity_tool_lines = activity_tool_lines.clone();
-        let follow_bottom = follow_bottom.clone();
-        let message_scroll = message_scroll.clone();
-        let programmatic_scroll = programmatic_scroll.clone();
-        let activity_scroll_pending = activity_scroll_pending.clone();
+        let wait_hint = wait_hint.clone();
+        let stream_draft_text = stream_draft_text.clone();
         move |event: ActivityEvent| {
-            let mut needs_scroll = false;
+            // Prefer live reply text over status chatter once tokens started.
+            if !stream_draft_text.borrow().is_empty() {
+                return;
+            }
             match event.kind.as_str() {
                 "thinking" => {
-                    let text = if event.text.is_empty() {
-                        event.line.clone()
-                    } else {
-                        event.text.clone()
-                    };
-                    if text.trim().is_empty() || is_noisy_activity_line(&text) {
-                        return;
-                    }
-                    activity_card.set_visible(true);
-                    thinking_label.set_label(&text);
-                    thinking_expander.set_label(Some("Thinking"));
-                    thinking_expander.set_visible(true);
-                    thinking_expander.set_expanded(true);
-                    activity_has_thinking.set(true);
-                    *activity_thinking_text.borrow_mut() = text;
-                    activity_title.set_label("Thinking…");
-                    // Label-only updates — skip scroll churn when already following.
+                    // Never dump thinking into Chat — quiet wait only.
+                    wait_hint.set_label("Waiting on your Centurion…");
+                    wait_hint.set_visible(true);
                 }
                 "tool" => {
-                    let title = if event.tool.trim().is_empty() {
-                        event.line.lines().next().unwrap_or("Tool").to_owned()
-                    } else {
-                        humanize_tool_name(&event.tool)
-                    };
                     let detail = if event.line.is_empty() {
                         event.text.clone()
                     } else {
@@ -4987,53 +4948,11 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     if is_noisy_activity_line(&detail) {
                         return;
                     }
-                    // Cap oversized terminal bodies in the live card.
-                    let detail = if event.tool.to_ascii_lowercase().contains("terminal")
-                        && detail.len() > 400
-                    {
-                        format!("{}…", &detail[..397])
-                    } else {
-                        detail
-                    };
-                    activity_card.set_visible(true);
-                    let archive_line = if detail.trim().is_empty() || detail == title {
-                        title.clone()
-                    } else {
-                        format!("{title}\n{detail}")
-                    };
-                    activity_tool_lines.borrow_mut().push(archive_line);
-                    const MAX_LIVE_TOOL_CARDS: usize = 8;
-                    let previous_count = activity_tool_count.get();
-                    if previous_count >= MAX_LIVE_TOOL_CARDS {
-                        if let Some(oldest) = activity_tools.first_child() {
-                            activity_tools.remove(&oldest);
-                        }
-                        let hidden = previous_count + 1 - MAX_LIVE_TOOL_CARDS;
-                        activity_more_label.set_label(&format!("+{hidden} more"));
-                        activity_more_label.set_visible(true);
-                    }
-                    activity_tools.append(&build_tool_card(&title, &detail));
-                    activity_tool_count.set(previous_count.saturating_add(1));
-                    activity_title.set_label(&humanize_activity_title(&event.tool, &detail));
-                    needs_scroll = true;
-                }
-                "status" => {
-                    let line = if event.line.is_empty() {
-                        event.text.clone()
-                    } else {
-                        event.line.clone()
-                    };
-                    if line.trim().is_empty() || is_noisy_activity_line(&line) {
-                        return;
-                    }
-                    // Lifecycle crumbs update the title only — no Status cards.
-                    activity_card.set_visible(true);
-                    let title = if line.len() > 80 {
-                        "Working…".to_owned()
-                    } else {
-                        line.trim().to_owned()
-                    };
-                    activity_title.set_label(&title);
+                    wait_hint.set_label(&one_line_hint(&humanize_activity_title(
+                        &event.tool,
+                        &detail,
+                    )));
+                    wait_hint.set_visible(true);
                 }
                 _ => {
                     let line = if event.line.is_empty() {
@@ -5044,61 +4963,35 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                     if line.trim().is_empty() || is_noisy_activity_line(&line) {
                         return;
                     }
-                    activity_card.set_visible(true);
-                    activity_title.set_label("Working…");
+                    wait_hint.set_label(&one_line_hint(&line));
+                    wait_hint.set_visible(true);
                 }
-            }
-            if needs_scroll {
-                schedule_scroll_coalesced(
-                    &activity_scroll_pending,
-                    &message_scroll,
-                    &follow_bottom,
-                    &programmatic_scroll,
-                );
             }
         }
     });
 
-    // Freeze the live activity card on Done so thinking stays readable in the
-    // scroll surface until the next turn replaces it (show_activity_working).
-    // Also return an ActivityArchive for persisting into the message stream.
-    let finish_activity_summary: Rc<dyn Fn() -> Option<ActivityArchive>> = Rc::new({
-        let activity_card = activity_card.clone();
-        let activity_title = activity_title.clone();
-        let thinking_expander = thinking_expander.clone();
-        let activity_tool_count = activity_tool_count.clone();
-        let activity_has_thinking = activity_has_thinking.clone();
-        let activity_thinking_text = activity_thinking_text.clone();
-        let activity_tool_lines = activity_tool_lines.clone();
-        move || {
-            let tools = activity_tool_count.get();
-            let thinking = activity_has_thinking.get();
-            if tools == 0 && !thinking {
-                activity_card.set_visible(false);
-                return None;
+    let apply_stream_delta: Rc<dyn Fn(String)> = Rc::new({
+        let streaming_draft = streaming_draft.clone();
+        let draft_label = draft_label.clone();
+        let stream_draft_text = stream_draft_text.clone();
+        let wait_hint = wait_hint.clone();
+        let follow_bottom = follow_bottom.clone();
+        let message_scroll = message_scroll.clone();
+        let programmatic_scroll = programmatic_scroll.clone();
+        move |chunk: String| {
+            if chunk.is_empty() {
+                return;
             }
-            let mut parts = Vec::new();
-            if thinking {
-                parts.push("thinking".to_owned());
-            }
-            if tools == 1 {
-                parts.push("1 tool".to_owned());
-            } else if tools > 1 {
-                parts.push(format!("{tools} tools"));
-            }
-            let summary = format!("Worked with {}.", parts.join(" · "));
-            activity_title.set_label(&summary);
-            if thinking {
-                thinking_expander.set_label(Some("Thought briefly"));
-                thinking_expander.set_expanded(false);
-                thinking_expander.set_visible(true);
-            }
-            activity_card.set_visible(true);
-            Some(ActivityArchive {
-                summary,
-                thinking: activity_thinking_text.borrow().clone(),
-                tool_lines: activity_tool_lines.borrow().clone(),
-            })
+            stream_draft_text.borrow_mut().push_str(&chunk);
+            draft_label.set_label(stream_draft_text.borrow().as_str());
+            wait_hint.set_visible(false);
+            streaming_draft.set_visible(true);
+            follow_bottom.set(true);
+            schedule_scroll_to_latest(
+                &message_scroll,
+                &follow_bottom,
+                &programmatic_scroll,
+            );
         }
     });
 
@@ -5217,7 +5110,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     ));
     error_row.append(&error_label);
     error_row.append(&fix_thinking_button);
-    bottom.append(&error_row);
+    error_row.set_margin_top(4);
+    chat_column.insert_child_after(&error_row, Some(&top));
 
     let active_discuss: Rc<RefCell<Option<DiscussTopic>>> = Rc::new(RefCell::new(None));
     // Soul name: fill after first paint — never during build_window.
@@ -5256,7 +5150,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     }
     context_bar.append(&context_banner);
     context_bar.append(&clear_context);
-    bottom.append(&context_bar);
+    chat_column.insert_child_after(&context_bar, Some(&error_row));
 
     let on_fix_thinking: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     {
@@ -5313,7 +5207,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         &gtk::Image::from_icon_name("find-location-symbolic"),
     );
     let focus_banner_label = gtk::Label::builder()
-        .label("No Primary Mission set yet — want to discover one?")
+        .label("No Primary Mission on Focus yet.")
         .wrap(true)
         .xalign(0.0)
         .hexpand(true)
@@ -5401,8 +5295,8 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                 focus_banner.set_visible(true);
             }
             None => {
-                focus_banner_label.set_label("No Primary Mission set yet — want to discover one?");
-                focus_open_btn.set_label("Discover mission");
+                focus_banner_label.set_label("No Primary Mission on Focus yet.");
+                focus_open_btn.set_label("Open Focus");
                 focus_banner.set_visible(true);
             }
         }
@@ -5709,6 +5603,10 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     toolbar.append(&stop_button);
     toolbar.append(&sending_spinner);
     bottom.append(&toolbar);
+    wait_hint.set_margin_start(16);
+    wait_hint.set_margin_end(16);
+    wait_hint.set_margin_bottom(10);
+    bottom.append(&wait_hint);
     chat_column.append(&bottom);
 
     let refresh_queue_strip_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
@@ -5736,10 +5634,9 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let items = message_queue.borrow().clone();
             let n = items.len();
             let busy = *is_sending.borrow();
-            strip_stop.set_visible(busy);
+            strip_stop.set_visible(busy && n > 0);
             if n == 0 {
-                queue_label.set_label(if busy { "Working…" } else { "Queued" });
-                queue_strip.set_visible(busy);
+                queue_strip.set_visible(false);
                 return;
             }
             queue_label.set_label(&format!(
@@ -6918,7 +6815,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let active_discuss = active_discuss.clone();
         let show_activity_working = show_activity_working.clone();
         let apply_activity = apply_activity.clone();
-        let finish_activity_summary = finish_activity_summary.clone();
         let turn_cancel = turn_cancel.clone();
         let show_proposal_choices = show_proposal_choices.clone();
         let keep_proposal_context = keep_proposal_context.clone();
@@ -7109,7 +7005,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let pending_approval_tx = pending_approval_tx.clone();
             let follow_bottom = follow_bottom.clone();
             let apply_activity = apply_activity.clone();
-            let finish_activity_summary = finish_activity_summary.clone();
+            let apply_stream_delta = apply_stream_delta.clone();
             let show_proposal_choices = show_proposal_choices.clone();
             let discuss_topic_for_done = discuss_topic.clone();
             let message_queue = message_queue.clone();
@@ -7133,6 +7029,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                     match event_rx.try_recv() {
                         Ok(WorkerEvent::Approval(request)) => show_approval(request),
                         Ok(WorkerEvent::Activity(event)) => apply_activity(event),
+                        Ok(WorkerEvent::StreamDelta(chunk)) => apply_stream_delta(chunk),
                         Ok(WorkerEvent::FocusResolved(resolved)) => {
                             // Supersede any in-flight banner resolve from the pills.
                             focus_banner_gen_for_turn
@@ -7157,7 +7054,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
-                        let summary = finish_activity_summary();
+                        reset_activity();
                         match result {
                             Ok(turn) => {
                                 save_session_id(&turn.session_id);
@@ -7222,14 +7119,6 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                         let _ = apply_commitment_update_from_response(&raw, &cid);
                                     });
                                 }
-                                if let Some(archive) = summary {
-                                    messages.borrow_mut().push(ChatMessage {
-                                        role: ChatRole::System,
-                                        content: archive.summary.clone(),
-                                        activity: Some(archive),
-                                    });
-                                    reset_activity();
-                                }
                                 messages.borrow_mut().push(ChatMessage {
                                     role: ChatRole::Assistant,
                                     content: display,
@@ -7241,14 +7130,6 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                             }
                             Err(err) => {
                                 if err == "Stopped." {
-                                    if let Some(archive) = summary {
-                                        messages.borrow_mut().push(ChatMessage {
-                                            role: ChatRole::System,
-                                            content: archive.summary.clone(),
-                                            activity: Some(archive),
-                                        });
-                                        reset_activity();
-                                    }
                                     messages.borrow_mut().push(ChatMessage {
                                         role: ChatRole::System,
                                         content: "Stopped.".to_owned(),
@@ -7257,7 +7138,6 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                     follow_bottom.set(true);
                                     append_messages();
                                 } else {
-                                    let _ = summary;
                                     set_error(Some(err));
                                 }
                             }
@@ -7291,7 +7171,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                         set_sending(false);
                         clear_approval();
                         *pending_approval_tx.borrow_mut() = None;
-                        let _ = finish_activity_summary();
+                        reset_activity();
                         set_error(Some(
                             "Centurion connection dropped before a reply arrived.".to_owned(),
                         ));
