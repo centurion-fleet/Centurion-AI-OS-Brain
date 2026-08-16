@@ -54,7 +54,7 @@ struct CenturionShowcaseSection: View {
     }
 }
 
-/// Family & friends referral tracker — always visible on the You tab.
+/// Family & friends referral tracker — You → Family & friends (lower in the hub).
 struct FamilyFriendsReferralSection: View {
     @EnvironmentObject private var beneficiaryStore: BeneficiaryStore
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -167,7 +167,7 @@ struct FamilyBeneficiaryCard: View {
                         .lineSpacing(4)
 
                     if !connectionManager.isCryptoChatReady {
-                        Text("Link your Sovereign above to save referrals and sync status.")
+                        Text("Connect to your Brain above to save referrals and sync status.")
                             .font(.caption.weight(.medium))
                             .foregroundColor(ColorTheme.accent())
                     }

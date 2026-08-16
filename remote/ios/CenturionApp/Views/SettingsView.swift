@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// You tab — sales hero, personal hub, link, thinking, mission, collaborations, privacy, support, prefs.
+/// You tab — shared map with Brain Settings (same labels, same order):
+/// You → Your Sovereign → Collaborations → Family & friends →
+/// Connect → This Brain → Privacy & Trust → Help & about.
 struct SettingsView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var missionStore: MissionStore
@@ -46,41 +48,21 @@ struct SettingsView: View {
         TabPageChrome(title: "You") {
             ScrollView {
                 VStack(spacing: Spacing.lg) {
+                    if connectionManager.isCryptoChatReady && connectionManager.llmHealth.needsAttention {
+                        thinkingAttentionBanner
+                    }
                     if !connectionManager.isCryptoChatReady {
                         linkHeroSection
-                        DeviceLinkSection(showPairingSheet: $showPairingSheet)
-                        ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
-                        GatewayControlSection()
-                        FamilyFriendsReferralSection()
-                        DisclosureGroup("Why Sovereign is different") {
-                            CenturionShowcaseSection()
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(ColorTheme.primaryText())
-                    } else {
-                        FamilyFriendsReferralSection()
-                        DeviceLinkSection(showPairingSheet: $showPairingSheet)
-                        ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
-                        GatewayControlSection()
-                        anywhereRelaySection
-                        deskOpsSection
-                        brainUpdatesSection
+                    }
+                    youSection
+                    youHubMenu
+                    if !connectionManager.isCryptoChatReady {
                         DisclosureGroup("Why Sovereign is different") {
                             CenturionShowcaseSection()
                         }
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(ColorTheme.primaryText())
                     }
-                    youSection
-                    memoryHorizonSection
-                    reportingOversightSection
-                    collaborationsSection
-                    privacySection
-                    supportSection
-                    identitySection
-                    appearanceSection
-                    aboutSection
-                    resetSection
                 }
                 .frame(maxWidth: 428)
                 .padding()
@@ -200,19 +182,170 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Hub
+
+    private var thinkingAttentionBanner: some View {
+        NavigationLink {
+            YouSettingsPage(title: "Your Sovereign") {
+                ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                memoryHorizonSection
+                reportingOversightSection
+            }
+        } label: {
+            AtmosphericSurface(elevated: true) {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(ColorTheme.error())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Thinking needs attention")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ColorTheme.primaryText())
+                        Text("Open Your Sovereign to fix it")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(ColorTheme.mutedText())
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var youHubMenu: some View {
+        AtmosphericSurface {
+            VStack(spacing: Spacing.sm) {
+                hubLink(icon: "brain.head.profile", title: "Your Sovereign", subtitle: sovereignHubSubtitle) {
+                    YouSettingsPage(title: "Your Sovereign") {
+                        ThinkingServiceSection(showRecoverySheet: $showRecoverySheet)
+                        memoryHorizonSection
+                        reportingOversightSection
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "circle.hexagongrid.fill", title: "Collaborations", subtitle: collaborationsHubSubtitle) {
+                    YouSettingsPage(title: "Collaborations") {
+                        collaborationsSection
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "person.2.fill", title: "Family & friends", subtitle: familyHubSubtitle) {
+                    YouSettingsPage(title: "Family & friends") {
+                        FamilyFriendsReferralSection()
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "antenna.radiowaves.left.and.right", title: "Connect", subtitle: connectHubSubtitle) {
+                    YouSettingsPage(title: "Connect") {
+                        DeviceLinkSection(showPairingSheet: $showPairingSheet)
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "desktopcomputer", title: "This Brain", subtitle: "Gateway, updates, desk") {
+                    YouSettingsPage(title: "This Brain") {
+                        GatewayControlSection()
+                        if connectionManager.isCryptoChatReady {
+                            anywhereRelaySection
+                            deskOpsSection
+                            brainUpdatesSection
+                        }
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "lock.shield", title: "Privacy & Trust", subtitle: "What stays private") {
+                    YouSettingsPage(title: "Privacy & Trust") {
+                        privacySection
+                    }
+                }
+
+                sectionDivider
+
+                hubLink(icon: "lifepreserver", title: "Help & about", subtitle: "Get Help, Adrian, appearance") {
+                    YouSettingsPage(title: "Help & about") {
+                        supportSection
+                        appearanceSection
+                        identitySection
+                        aboutSection
+                        resetSection
+                    }
+                }
+            }
+        }
+    }
+
+    private var connectHubSubtitle: String {
+        if connectionManager.isRelayAwayConnected {
+            return "Linked · Away"
+        }
+        if connectionManager.isCryptoChatReady {
+            let badge = connectionManager.linkPathBadge
+            return badge.isEmpty ? "Linked" : "Linked · \(badge)"
+        }
+        return "Not linked"
+    }
+
+    private var sovereignHubSubtitle: String {
+        if connectionManager.llmHealth.needsAttention {
+            return "Thinking needs attention"
+        }
+        if connectionManager.isCryptoChatReady {
+            return connectionManager.thinkingServiceHeadline
+        }
+        return "Thinking, memory, reporting"
+    }
+
+    private var collaborationsHubSubtitle: String {
+        let count = swarmStore.heroSwarms.count
+        if count == 1 { return "1 active" }
+        return "\(count) active"
+    }
+
+    private var familyHubSubtitle: String {
+        if beneficiaryStore.hasBeneficiary {
+            return beneficiaryStore.beneficiaryFirstName
+        }
+        return "Nominate family"
+    }
+
+    private func hubLink<Dest: View>(
+        icon: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder destination: () -> Dest
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            CenturionListRow(icon: icon, title: title, subtitle: subtitle)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Sections
 
     private var linkHeroSection: some View {
         AtmosphericSurface(elevated: true) {
             VStack(alignment: .leading, spacing: Spacing.md) {
-                Text("Link your Centurion")
+                Text("Connect to your Brain")
                     .font(.title3.weight(.semibold))
                     .foregroundColor(ColorTheme.primaryText())
-                Text("Paste a pairing code from Sovereign AI Brain on your computer. That unlocks Crypto Chat and Thinking Service on this iPhone.")
+                Text("Start pairing to scan the QR on Sovereign AI Brain. That unlocks Crypto Chat on this iPhone.")
                     .font(.subheadline)
                     .foregroundColor(ColorTheme.mutedText())
                     .lineSpacing(3)
-                Button("Paste pairing code") {
+                Button("Start pairing") {
                     showPairingSheet = true
                     Haptics.lightTap()
                 }
@@ -980,6 +1113,39 @@ struct SettingsView: View {
             trailing()
         }
         .padding(.vertical, Spacing.xs)
+    }
+}
+
+// MARK: - Subpage chrome
+
+private struct YouSettingsPage<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.lg) {
+                content
+            }
+            .frame(maxWidth: 428)
+            .padding()
+            .frame(maxWidth: .infinity)
+        }
+        .background(
+            ZStack {
+                ColorTheme.background()
+                ColorTheme.atmosphericVeil()
+                    .ignoresSafeArea()
+            }
+        )
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
     }
 }
 

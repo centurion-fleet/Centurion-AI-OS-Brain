@@ -78,14 +78,14 @@ Every screen answers: *Why am I here? What can I do next?*
 | **Mission** | The **human** — life purpose, active commitments, story/values/context | Mission screen, Mission Discovery, Pulse banner |
 | **Soul** | The **Centurion** — AI personality, tone, rules (maps to desktop `SOUL.md`) | Your Sovereign's Soul screen, Shape Your Sovereign flow |
 | **Plan** | A **reviewable proposal** from your Sovereign before consequential work. Shown on Focus as **Missions** (synced from Brain). Distinct from Life Mission (purpose). | Chat “Propose first”, Focus **Missions** / Needs your choice / Documents, Plan review |
-| **Memory Horizon** | **How Centurion remembers** — Hot Cache, Session Recall, Vault (not life purpose) | You → Memory Horizon; Desktop Settings |
+| **Memory Horizon** | **How Centurion remembers** — Hot Cache, Session Recall, Vault (not life purpose) | You → Your Sovereign → Memory Horizon; Desktop Settings → Your Sovereign |
 
 Never ask "what is your mission?" in Soul flows. Never describe human story/values in Soul surfaces. Life Mission is purpose (Mission Stack). The Focus **Missions** pill is the reviewable work queue that syncs with Brain. Never call Memory Horizon “Mission” — Memory Horizon is recall layers. Hot Cache fill is a **software budget**, not appliance RAM; Session Recall / Vault grow with use and share **disk on your Sovereign**.
 
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.
 - **Max 1** decision per screen for first-run flows.
-- **Three tabs** — Chat, Focus, You. Prefer progressive disclosure over more tabs. Link, thinking, privacy, and Family Beneficiary Program live under You.
+- **Three tabs** — Chat, Focus, You. Prefer progressive disclosure over more tabs. Pairing, thinking, privacy, and Family & friends live under You, behind sub-menus.
 
 ### Emotional tone
 - Warm, direct, respectful — like a trusted advisor, not a startup landing page.
@@ -136,9 +136,9 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 |-----|---------------------|-----------------|
 | Chat | Talk with your Sovereign | Conversations, calm messaging |
 | Home | What your Sovereign is doing | Human outcomes, not agent topology |
-| You | Sales story + personal hub | Family Beneficiary Program, link, thinking, mission, privacy, collaborations |
+| You | Personal hub | You first (Mission, Soul, Autonomy), then Your Sovereign, Collaborations, Family & friends, Connect, This Brain, Privacy & Trust, Help & about |
 
-**Connect is not a tab.** Device link, thinking service, and pairing live under **You → Your link** and **How Your Sovereign Thinks**.
+**Connect is not a tab.** Mission, Soul, and Autonomy open at the top of **You**. Pairing lives under **You → Connect**. Thinking, memory, and reporting live under **You → Your Sovereign**. Family & friends is lower in the same list.
 
 **Privacy is not a separate tab.** Full privacy comparison lives under **You → Privacy & Trust** (`SecurityHubView`).
 
@@ -157,7 +157,7 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 ### Progressive disclosure
 - **Layer 1 (default):** Outcome + one action.
 - **Layer 2 (tap):** Context and options.
-- **Layer 3 (You → Privacy & Trust / Settings):** Technical truth and comparison tables for the curious — and for clients who need to answer "AI is unsafe" pushback.
+- **Layer 3 (You → Privacy & Trust):** Technical truth and comparison tables for the curious — and for clients who need to answer "AI is unsafe" pushback.
 
 ---
 

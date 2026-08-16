@@ -1143,18 +1143,23 @@ The Brain here is the product; the phone is the remote.",
         settings_attention_banner.set_visible(false);
         settings.append(&settings_attention_banner);
 
-        // --- #1: Updates (primary CTA when a build is waiting) ---
+        // Shared map with iPhone You: You → Your Sovereign → Connect → This Brain →
+        // Collaborations → Family & friends → Privacy & Trust → Help & about.
         // Smooth Transfer (Get Brain) installs have no checkout to update or
         // rebuild from — updates arrive via the portal. Keep the row (it shows
         // the installed version) but drop the Check/Rebuild controls.
         let smooth_transfer_install = is_smooth_transfer_install();
         let installed_version = installed_version();
-        let updates_group = adw::PreferencesGroup::builder()
-            .title("Status")
+        let connect_group = adw::PreferencesGroup::builder()
+            .title("Connect")
+            .description("Pair Sovereign AI Remote on the same Wi‑Fi")
+            .build();
+        let this_brain_group = adw::PreferencesGroup::builder()
+            .title("This Brain")
             .description(if smooth_transfer_install {
                 "Installed from a Get Brain download — newer versions arrive through your portal"
             } else {
-                "This Brain, updates, and pairing"
+                "Updates, gateway, Anywhere, and desk tools"
             })
             .build();
         let update_row = adw::ActionRow::builder()
@@ -1188,7 +1193,6 @@ The Brain here is the product; the phone is the remote.",
         }
         update_row.add_suffix(&rebuild_screen_button);
         update_row.add_suffix(&update_check_button);
-        updates_group.add(&update_row);
         let pairing_settings_row = adw::ActionRow::builder()
             .title("Remote pairing")
             .subtitle(
@@ -1197,15 +1201,16 @@ The Brain here is the product; the phone is the remote.",
             .icon_name("network-wireless-symbolic")
             .activatable(true)
             .build();
-        updates_group.add(&pairing_settings_row);
-        settings.append(&updates_group);
+        connect_group.add(&pairing_settings_row);
 
-        settings.append(&status_card);
-
-        // --- Everyday: thinking, you, mission, memory ---
-        let thinking_group = adw::PreferencesGroup::builder()
-            .title("Everyday")
-            .description("How your Centurion thinks, who you are, and what you're building toward")
+        // --- You: person, mission, soul ---
+        let you_group = adw::PreferencesGroup::builder()
+            .title("You")
+            .description("Life Mission, Soul, and how much freedom your Centurion has")
+            .build();
+        let sovereign_group = adw::PreferencesGroup::builder()
+            .title("Your Sovereign")
+            .description("How your Centurion thinks, remembers, and reports back")
             .build();
         let thinking_settings_row = adw::ActionRow::builder()
             .title("How your Centurion thinks")
@@ -1230,23 +1235,23 @@ The Brain here is the product; the phone is the remote.",
         change_thinking_button.set_valign(gtk::Align::Center);
         thinking_settings_row.add_suffix(&restore_thinking_button);
         thinking_settings_row.add_suffix(&change_thinking_button);
-        thinking_group.add(&thinking_settings_row);
+        sovereign_group.add(&thinking_settings_row);
         let backup_thinking_row = adw::ActionRow::builder()
             .title("Backup Thinking Services")
             .subtitle("No backup thinking services configured.")
             .icon_name("view-list-symbolic")
             .build();
-        thinking_group.add(&backup_thinking_row);
+        sovereign_group.add(&backup_thinking_row);
 
-        let autonomy_row = adw::ActionRow::builder()
-            .title("Autonomy Level")
-            .subtitle("Balanced (default) — follow with light interpretation")
-            .icon_name("preferences-desktop-symbolic")
+        let life_mission_row = adw::ActionRow::builder()
+            .title("Life Mission")
+            .subtitle("What you're building toward — shown on Focus; edit here.")
+            .icon_name("emblem-favorite-symbolic")
             .build();
-        let autonomy_button = gtk::Button::with_label("Adjust");
-        autonomy_button.set_valign(gtk::Align::Center);
-        autonomy_row.add_suffix(&autonomy_button);
-        thinking_group.add(&autonomy_row);
+        let life_mission_edit_button = gtk::Button::with_label("Edit");
+        life_mission_edit_button.set_valign(gtk::Align::Center);
+        life_mission_row.add_suffix(&life_mission_edit_button);
+        you_group.add(&life_mission_row);
         let about_you_row = adw::ActionRow::builder()
             .title("About You")
             .subtitle("Story, values, and challenges for your Sovereign")
@@ -1255,7 +1260,7 @@ The Brain here is the product; the phone is the remote.",
         let about_you_button = gtk::Button::with_label("Interview");
         about_you_button.set_valign(gtk::Align::Center);
         about_you_row.add_suffix(&about_you_button);
-        thinking_group.add(&about_you_row);
+        you_group.add(&about_you_row);
         let soul_row = adw::ActionRow::builder()
             .title("Your Sovereign's Soul")
             .subtitle("Personality and rules for your Centurion")
@@ -1268,17 +1273,16 @@ The Brain here is the product; the phone is the remote.",
         soul_button.set_valign(gtk::Align::Center);
         soul_row.add_suffix(&soul_shape_button);
         soul_row.add_suffix(&soul_button);
-        thinking_group.add(&soul_row);
-
-        let life_mission_row = adw::ActionRow::builder()
-            .title("Life Mission")
-            .subtitle("What you're building toward — shown on Focus; edit here.")
-            .icon_name("emblem-favorite-symbolic")
+        you_group.add(&soul_row);
+        let autonomy_row = adw::ActionRow::builder()
+            .title("Autonomy Level")
+            .subtitle("Balanced (default) — follow with light interpretation")
+            .icon_name("preferences-desktop-symbolic")
             .build();
-        let life_mission_edit_button = gtk::Button::with_label("Edit");
-        life_mission_edit_button.set_valign(gtk::Align::Center);
-        life_mission_row.add_suffix(&life_mission_edit_button);
-        thinking_group.add(&life_mission_row);
+        let autonomy_button = gtk::Button::with_label("Adjust");
+        autonomy_button.set_valign(gtk::Align::Center);
+        autonomy_row.add_suffix(&autonomy_button);
+        you_group.add(&autonomy_row);
         let mission_stack_row = adw::ActionRow::builder()
             .title("Mission Stack")
             .subtitle("Primary, supporting, dreams — open the Focus tab")
@@ -1288,7 +1292,7 @@ The Brain here is the product; the phone is the remote.",
         mission_stack_button.set_valign(gtk::Align::Center);
         mission_stack_button.add_css_class("suggested-action");
         mission_stack_row.add_suffix(&mission_stack_button);
-        thinking_group.add(&mission_stack_row);
+        you_group.add(&mission_stack_row);
         let mission_discover_row = adw::ActionRow::builder()
             .title("Mission Discovery")
             .subtitle("Ceremonial interview to set your Life Mission")
@@ -1298,7 +1302,7 @@ The Brain here is the product; the phone is the remote.",
         mission_discover_button.add_css_class("suggested-action");
         mission_discover_button.set_valign(gtk::Align::Center);
         mission_discover_row.add_suffix(&mission_discover_button);
-        thinking_group.add(&mission_discover_row);
+        you_group.add(&mission_discover_row);
 
         let memory_horizon_row = adw::ActionRow::builder()
             .title("Memory Horizon")
@@ -1308,12 +1312,25 @@ The Brain here is the product; the phone is the remote.",
         let memory_horizon_button = gtk::Button::with_label("View");
         memory_horizon_button.set_valign(gtk::Align::Center);
         memory_horizon_row.add_suffix(&memory_horizon_button);
-        thinking_group.add(&memory_horizon_row);
-        settings.append(&thinking_group);
+        sovereign_group.add(&memory_horizon_row);
+        settings.append(&you_group);
+        settings.append(&sovereign_group);
+        settings.append(&connect_group);
+        settings.append(&status_card);
+        settings.append(&devices_section);
 
+        let collaborations_group = adw::PreferencesGroup::builder()
+            .title("Collaborations")
+            .description("Shared work boards on this Brain")
+            .build();
+        let family_group = adw::PreferencesGroup::builder()
+            .title("Family &amp; friends")
+            .description("Nominate family and track colleague referrals")
+            .build();
+        family_group.set_visible(false);
         let privacy_group = adw::PreferencesGroup::builder()
-            .title("This computer")
-            .description("Privacy, channels, Chat from anywhere, and desk ops")
+            .title("Privacy &amp; Trust")
+            .description("What stays on this computer, and how partnership works")
             .build();
         let oversight_row = adw::ActionRow::builder()
             .title("Reporting &amp; Oversight")
@@ -1323,7 +1340,7 @@ The Brain here is the product; the phone is the remote.",
         let oversight_button = gtk::Button::with_label("Adjust");
         oversight_button.set_valign(gtk::Align::Center);
         oversight_row.add_suffix(&oversight_button);
-        privacy_group.add(&oversight_row);
+        sovereign_group.add(&oversight_row);
         let privacy_row = adw::ActionRow::builder()
             .title("Privacy &amp; Trust")
             .subtitle("What stays on this computer, and how partnership works")
@@ -1359,7 +1376,7 @@ The Brain here is the product; the phone is the remote.",
         gateway_row.add_suffix(&gateway_start_btn);
         gateway_row.add_suffix(&gateway_stop_btn);
         gateway_row.add_suffix(&gateway_restart_btn);
-        privacy_group.add(&gateway_row);
+        this_brain_group.add(&gateway_row);
         let gateway_platform_list = gtk::ListBox::new();
         gateway_platform_list.add_css_class("boxed-list");
         gateway_platform_list.set_margin_start(32);
@@ -1373,7 +1390,7 @@ The Brain here is the product; the phone is the remote.",
             .build();
         let anywhere_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
         anywhere_row.add_suffix(&anywhere_switch);
-        privacy_group.add(&anywhere_row);
+        this_brain_group.add(&anywhere_row);
 
         // Refresh Anywhere switch off the UI thread.
         {
@@ -1455,10 +1472,6 @@ The Brain here is the product; the phone is the remote.",
             });
         }
 
-        let research_group = adw::PreferencesGroup::builder()
-            .title("Research")
-            .description("Optional keys that help Centurion search and scrape the web")
-            .build();
         let firecrawl_row = adw::ActionRow::builder()
             .title("Firecrawl")
             .subtitle("Checking…")
@@ -1471,7 +1484,7 @@ The Brain here is the product; the phone is the remote.",
         firecrawl_button.add_css_class("suggested-action");
         firecrawl_button.set_valign(gtk::Align::Center);
         firecrawl_row.add_suffix(&firecrawl_button);
-        research_group.add(&firecrawl_row);
+        this_brain_group.add(&firecrawl_row);
 
         let fleet_peer_row = adw::ActionRow::builder()
             .title("Fleet peer")
@@ -1481,7 +1494,7 @@ The Brain here is the product; the phone is the remote.",
         let fleet_peer_button = gtk::Button::with_label("Configure");
         fleet_peer_button.set_valign(gtk::Align::Center);
         fleet_peer_row.add_suffix(&fleet_peer_button);
-        privacy_group.add(&fleet_peer_row);
+        this_brain_group.add(&fleet_peer_row);
         let plugins_row = adw::ActionRow::builder()
             .title("Installed plugins")
             .subtitle("View only — agent plugins already on this Brain.")
@@ -1490,7 +1503,7 @@ The Brain here is the product; the phone is the remote.",
         let plugins_button = gtk::Button::with_label("View");
         plugins_button.set_valign(gtk::Align::Center);
         plugins_row.add_suffix(&plugins_button);
-        privacy_group.add(&plugins_row);
+        this_brain_group.add(&plugins_row);
         let ops_row = adw::ActionRow::builder()
             .title("Scheduled &amp; board")
             .subtitle("View only — next cron jobs and board glance.")
@@ -1499,7 +1512,7 @@ The Brain here is the product; the phone is the remote.",
         let ops_button = gtk::Button::with_label("View");
         ops_button.set_valign(gtk::Align::Center);
         ops_row.add_suffix(&ops_button);
-        privacy_group.add(&ops_row);
+        this_brain_group.add(&ops_row);
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
             .subtitle(
@@ -1511,16 +1524,11 @@ The Brain here is the product; the phone is the remote.",
         collab_connect_button.add_css_class("suggested-action");
         collab_connect_button.set_valign(gtk::Align::Center);
         collab_connect_row.add_suffix(&collab_connect_button);
-        privacy_group.add(&collab_connect_row);
-        settings.append(&privacy_group);
-        settings.append(&gateway_platform_list);
-        settings.append(&research_group);
+        collaborations_group.add(&collab_connect_row);
 
-        settings.append(&devices_section);
-
-        let account_group = adw::PreferencesGroup::builder()
-            .title("Account &amp; help")
-            .description("Skills, license, family program, and support")
+        let help_group = adw::PreferencesGroup::builder()
+            .title("Help &amp; about")
+            .description("Health checks, support codes, and Talk to Adrian")
             .build();
         let skills_row = adw::ActionRow::builder()
             .title("Skills &amp; tools")
@@ -1530,7 +1538,7 @@ The Brain here is the product; the phone is the remote.",
         let skills_button = gtk::Button::with_label("Open");
         skills_button.set_valign(gtk::Align::Center);
         skills_row.add_suffix(&skills_button);
-        account_group.add(&skills_row);
+        this_brain_group.add(&skills_row);
         let license_row = adw::ActionRow::builder()
             .title("License")
             .subtitle("Product entitlement for this Brain")
@@ -1542,7 +1550,7 @@ The Brain here is the product; the phone is the remote.",
         // Entitlement is a bridge round-trip — stay hidden until the deferred
         // Settings fill answers, so build_window never blocks on it.
         license_row.set_visible(false);
-        account_group.add(&license_row);
+        this_brain_group.add(&license_row);
         let beneficiary_row = adw::ActionRow::builder()
             .title("Family Beneficiary")
             .subtitle("Nominate family and track colleague referrals")
@@ -1552,7 +1560,7 @@ The Brain here is the product; the phone is the remote.",
         beneficiary_button.set_valign(gtk::Align::Center);
         beneficiary_row.add_suffix(&beneficiary_button);
         beneficiary_row.set_visible(false);
-        account_group.add(&beneficiary_row);
+        family_group.add(&beneficiary_row);
 
         let telegram_history_row = adw::ActionRow::builder()
             .title("Bring over Telegram history")
@@ -1564,7 +1572,8 @@ The Brain here is the product; the phone is the remote.",
         let telegram_bring_button = gtk::Button::with_label("Bring over");
         telegram_bring_button.set_valign(gtk::Align::Center);
         telegram_history_row.add_suffix(&telegram_bring_button);
-        account_group.add(&telegram_history_row);
+        this_brain_group.add(&telegram_history_row);
+        this_brain_group.add(&update_row);
 
         let support_health_row = adw::ActionRow::builder()
             .title("Run Health Check")
@@ -1607,11 +1616,11 @@ The Brain here is the product; the phone is the remote.",
         support_lookup_row.add_suffix(&lookup_button);
         fix_thinking_row.add_suffix(&fix_thinking_button);
         auto_fix_row.add_suffix(&auto_fix_button);
-        account_group.add(&support_health_row);
-        account_group.add(&fix_thinking_row);
-        account_group.add(&auto_fix_row);
-        account_group.add(&support_bundle_row);
-        account_group.add(&support_lookup_row);
+        help_group.add(&support_health_row);
+        help_group.add(&fix_thinking_row);
+        help_group.add(&auto_fix_row);
+        help_group.add(&support_bundle_row);
+        help_group.add(&support_lookup_row);
 
         let adrian_row = adw::ActionRow::builder()
             .title("Talk to Adrian")
@@ -1621,8 +1630,13 @@ The Brain here is the product; the phone is the remote.",
         let adrian_button = gtk::Button::with_label("Open");
         adrian_button.set_valign(gtk::Align::Center);
         adrian_row.add_suffix(&adrian_button);
-        account_group.add(&adrian_row);
-        settings.append(&account_group);
+        help_group.add(&adrian_row);
+        settings.append(&this_brain_group);
+        settings.append(&gateway_platform_list);
+        settings.append(&collaborations_group);
+        settings.append(&family_group);
+        settings.append(&privacy_group);
+        settings.append(&help_group);
 
         // ScrolledWindow only scrolls if the child keeps its natural height.
         // vexpand/fill on the child clips content instead of scrolling (Brain
@@ -1841,6 +1855,7 @@ The Brain here is the product; the phone is the remote.",
             oversight_row: oversight_row.clone(),
             license_row: license_row.clone(),
             beneficiary_row: beneficiary_row.clone(),
+            family_group: family_group.clone(),
             firecrawl_row: firecrawl_row.clone(),
             firecrawl_button: firecrawl_button.clone(),
         };
@@ -3742,6 +3757,7 @@ fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_jso
         oversight_row: adw::ActionRow,
         license_row: adw::ActionRow,
         beneficiary_row: adw::ActionRow,
+        family_group: adw::PreferencesGroup,
         firecrawl_row: adw::ActionRow,
         firecrawl_button: gtk::Button,
     }
@@ -3995,6 +4011,7 @@ fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_jso
         }
         rows.license_row.set_visible(fill.license_visible);
         rows.beneficiary_row.set_visible(fill.beneficiary_visible);
+        rows.family_group.set_visible(fill.beneficiary_visible);
         rows.firecrawl_row.set_subtitle(&fill.firecrawl_line);
         rows.firecrawl_button.set_label(if fill.firecrawl_configured {
             "Update"
