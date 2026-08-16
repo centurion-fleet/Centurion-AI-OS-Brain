@@ -91,7 +91,6 @@ button.link {
   background: alpha(@centurion_interactive, 0.16);
   border: 1px solid alpha(@centurion_interactive, 0.22);
   color: @centurion_ink;
-  max-width: 520px;
 }
 
 .centurion-adrian-bot,
@@ -101,7 +100,6 @@ button.link {
   background: transparent;
   border: none;
   color: @centurion_ink;
-  max-width: 720px;
 }
 
 .centurion-chat-bubble {
@@ -161,7 +159,6 @@ button.link {
   border-radius: 12px;
   background: transparent;
   color: @centurion_muted;
-  max-width: 640px;
 }
 
 .centurion-chat-activity {
@@ -246,7 +243,6 @@ stackswitcher button {
 }
 
 .centurion-tab-bar {
-  spacing: 6px;
   padding: 2px;
 }
 
@@ -328,13 +324,9 @@ stackswitcher button {
   background: alpha(#fff, 0.035);
 }
 
-.centurion-chat-toolbar {
-  spacing: 8px;
-}
 
-.centurion-chat-intents {
-  spacing: 6px;
-}
+
+
 
 /* Touch-visible mode caption — not Adwaita dim-label (too faint on kiosk). */
 .centurion-mode-teach {
@@ -455,7 +447,6 @@ button.centurion-chat-focus-open:hover {
 }
 
 .centurion-chat-attachments {
-  spacing: 6px;
 }
 
 .centurion-chat-attach-chip {
