@@ -26,7 +26,11 @@ tar -C "${ROOT}" \
   --exclude='venv' \
   --exclude='node_modules' \
   --exclude='brain/target' \
+  --exclude='brain/linux/dist' \
   --exclude='brain/dist' \
+  --exclude='desktop' \
+  --exclude='desktop-native' \
+  --exclude='web-dashboard' \
   --exclude='brain/ci-artifact' \
   --exclude='ui-tui/node_modules' \
   --exclude='website' \
