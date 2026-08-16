@@ -85,10 +85,22 @@ struct CenturionApp: App {
         }
     }
 
-    /// Do not prefetch Brain data on link — each RPC is a cold Python spawn
-    /// on the same pipe as Chat. Focus loads on pull-to-refresh; Chat is first.
+    /// After pairing, load missions on the Crypto Chat line before the composer unlocks.
     private func prefetchWhenLinked() {
-        // Intentionally empty.
+        let connectionManager = services.connectionManager
+        guard connectionManager.isCryptoChatReady else { return }
+        if !connectionManager.isHydratingAfterLink, !connectionManager.didHydrateAfterLink {
+            connectionManager.beginPostLinkHydration()
+        }
+        guard let generation = connectionManager.claimHydrationFetch() else { return }
+        Task { @MainActor in
+            await services.missionStore.refreshLifeStack(from: connectionManager)
+            if connectionManager.linkHydrationGeneration == generation,
+               connectionManager.isCryptoChatReady {
+                await services.planStore.refreshFromHost(connectionManager: connectionManager)
+            }
+            connectionManager.endPostLinkHydration(generation: generation)
+        }
     }
 
     private func attemptAutoReconnectIfNeeded(force: Bool = false) {

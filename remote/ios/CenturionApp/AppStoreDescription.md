@@ -75,7 +75,7 @@ Free for Centurion customers. Pair on home Wi‑Fi for Crypto Chat; enable Chat 
 
 ## App Review Notes (paste into ASC)
 
-Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign. Version **5.2.149**.
+Sovereign AI Remote is a **free** companion for **Centurion customers** who already own (or are provisioning) a Centurion Sovereign. Version **5.2.150**.
 
 - There is **no cloud login** and **no demo account**. Pairing is **QR-first on home Wi‑Fi**: Sovereign AI Brain shows a QR encoding `token:…@lan-host:9119` (paste remains a fallback). **Chat from anywhere** (after enable on the Brain) uses Centurion’s outbound relay — the phone never dials a home IP or depends on port-forwarding. Contact the developer for a time-boxed review pairing window (QR + Brain online).
 - Camera permission is used **only** to scan that pairing QR (`NSCameraUsageDescription`).

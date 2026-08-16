@@ -86,6 +86,8 @@ struct ChatView: View {
 
             if !connectionManager.isCryptoChatReady {
                 offlineBanner
+            } else if connectionManager.isHydratingAfterLink {
+                hydratingBanner
             }
 
             if let sendError {
@@ -109,7 +111,11 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: Spacing.sm) {
                             let msgs = messageService.allMessages
-                            if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
+                            if connectionManager.isHydratingAfterLink {
+                                hydratingChatNotice
+                                    .padding(.top, Spacing.xl)
+                                    .id("hydrating-notice")
+                            } else if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
                                 emptyState
                                     .padding(.top, Spacing.xl)
                             } else {
@@ -145,7 +151,11 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: Spacing.sm) {
                             let msgs = messageService.messages(for: conversation.id)
-                            if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
+                            if connectionManager.isHydratingAfterLink {
+                                hydratingChatNotice
+                                    .padding(.top, Spacing.xxl)
+                                    .id("hydrating-notice")
+                            } else if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
                                 emptyChatState(context: conversation.context)
                                     .padding(.top, Spacing.xxl)
                             } else {
@@ -203,7 +213,7 @@ struct ChatView: View {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
                 showTray.toggle()
             }
-            if opening {
+            if opening, !connectionManager.isHydratingAfterLink {
                 Task { @MainActor in
                     _ = await messageService.syncHostTopicsFromBrain()
                 }
@@ -254,7 +264,8 @@ struct ChatView: View {
                     StatusDot(
                         isConnected: true,
                         isEncrypted: connectionManager.isChannelEncrypted,
-                        needsAttention: connectionManager.llmHealth.needsAttention
+                        needsAttention: !connectionManager.isHydratingAfterLink
+                            && connectionManager.llmHealth.needsAttention
                     )
                 }
             }
@@ -402,18 +413,32 @@ struct ChatView: View {
 
     private var allChatHeader: some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: "lock.shield.fill")
-                .font(.caption)
-                .foregroundColor(ColorTheme.success())
-            Text("Crypto Chat · All messages")
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
-                .lineLimit(1)
+            if connectionManager.isHydratingAfterLink {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(ColorTheme.accent())
+                Text("Loading mission data. Please wait.")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(1)
+            } else {
+                Image(systemName: "lock.shield.fill")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.success())
+                Text("Crypto Chat · All messages")
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .lineLimit(1)
+            }
             Spacer()
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.sm)
-        .background(ColorTheme.success().opacity(0.05))
+        .background(
+            connectionManager.isHydratingAfterLink
+                ? ColorTheme.accent().opacity(0.06)
+                : ColorTheme.success().opacity(0.05)
+        )
     }
 
     private func trayRow(_ conversation: Conversation) -> some View {
@@ -499,6 +524,39 @@ struct ChatView: View {
     }
 
     // MARK: - Status Banners
+
+    private var hydratingBanner: some View {
+        AtmosphericSurface {
+            HStack(alignment: .top, spacing: Spacing.sm) {
+                ProgressView()
+                    .tint(ColorTheme.accent())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Loading mission data. Please wait.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(ColorTheme.primaryText())
+                    Text("Chat opens once your missions are on this phone. Stay here — don’t send Hi yet.")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.mutedText())
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.xs)
+        .accessibilityLabel("Loading mission data. Please wait.")
+    }
+
+    private var hydratingChatNotice: some View {
+        EmptyState(
+            icon: "hourglass",
+            title: "Loading mission data",
+            message: "Please wait. Chat will open when your missions are on this phone."
+        )
+        .frame(maxWidth: 428)
+    }
 
     private var offlineBanner: some View {
         Button {
@@ -711,7 +769,9 @@ struct ChatView: View {
             AtmosphericSurface(elevated: true) {
                 HStack(spacing: Spacing.sm) {
                     TextField(
-                        selectedConversation != nil
+                        connectionManager.isHydratingAfterLink
+                            ? "Loading mission data. Please wait…"
+                            : selectedConversation != nil
                             ? (proposeFirst
                                 ? "Ask for a plan about \(selectedConversation!.displayTitle)…"
                                 : "Message about \(selectedConversation!.displayTitle)…")
@@ -723,7 +783,7 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 16))
                     .focused($isFocused)
-                    .disabled(!connectionManager.isCryptoChatReady)
+                    .disabled(!connectionManager.isChatComposerReady)
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
                     .background(ColorTheme.chatInput())
@@ -756,7 +816,10 @@ struct ChatView: View {
                                     : ColorTheme.accent()
                                 )
                         }
-                        .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(
+                            connectionManager.isHydratingAfterLink
+                                || messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                        )
                         .animation(Motion.light, value: messageText)
                     }
                 }
@@ -771,7 +834,7 @@ struct ChatView: View {
                     .foregroundColor(ColorTheme.mutedText())
                     .padding(.horizontal, Spacing.md)
             } else if sendError == nil,
-                      connectionManager.isCryptoChatReady,
+                      connectionManager.isChatComposerReady,
                       connectionManager.llmHealth.needsAttention {
                 Button {
                     showRecoverySheet = true
@@ -852,11 +915,13 @@ struct ChatView: View {
             || lowered.contains("reconnecting")
             || lowered.contains("stopped")
             || lowered.contains("chat is still waiting")
+            || lowered.contains("loading mission data")
     }
 
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
+        guard connectionManager.isChatComposerReady else { return }
 
         sendError = nil
         lastFailedMessage = text

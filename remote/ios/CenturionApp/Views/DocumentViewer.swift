@@ -161,10 +161,8 @@ struct DocumentViewer: View {
                 blocks.append(ContentBlock(type: .bullet, text: text, level: 0))
             } else if trimmed.allSatisfy({ $0 == "-" || $0 == "=" || $0 == "*" }) {
                 blocks.append(ContentBlock(type: .divider, text: "", level: 0))
-            } else if let match = trimmed.firstMatch(of: Regex("^(\\d+)\\.\\s+(.*)")) {
-                let num = Int(trimmed.prefix(while: { $0.isNumber })) ?? 0
-                let text = String(trimmed.dropFirst("\(num). ".count))
-                blocks.append(ContentBlock(type: .numbered(num), text: text, level: 0))
+            } else if let numbered = numberedListItem(trimmed) {
+                blocks.append(ContentBlock(type: .numbered(numbered.num), text: numbered.text, level: 0))
             } else {
                 blocks.append(ContentBlock(type: .paragraph, text: trimmed, level: 0))
             }
@@ -175,6 +173,18 @@ struct DocumentViewer: View {
         }
 
         return blocks
+    }
+
+    /// `"1. Step"` → `(1, "Step")`. Avoids throwing `Regex` in this View builder path.
+    private func numberedListItem(_ line: String) -> (num: Int, text: String)? {
+        let digits = line.prefix(while: { $0.isNumber })
+        guard !digits.isEmpty,
+              let num = Int(digits),
+              line.dropFirst(digits.count).hasPrefix(". ") else {
+            return nil
+        }
+        let text = String(line.dropFirst(digits.count + 2))
+        return (num, text)
     }
 
     @ViewBuilder

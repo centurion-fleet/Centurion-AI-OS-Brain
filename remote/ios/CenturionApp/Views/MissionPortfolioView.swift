@@ -371,6 +371,10 @@ struct MissionPortfolioView: View {
     }
 
     private func syncFocusFromBrain(forceRefresh: Bool = false) async {
+        if connectionManager.isCryptoChatReady, connectionManager.isHydratingAfterLink {
+            isDataLoaded = true
+            return
+        }
         if connectionManager.isCryptoChatReady, connectionManager.isRemoteTurnInFlight {
             isDataLoaded = true
             return
@@ -384,6 +388,11 @@ struct MissionPortfolioView: View {
     private var brainSyncBanner: some View {
         if !connectionManager.isCryptoChatReady {
             EmptyView()
+        } else if connectionManager.isHydratingAfterLink {
+            Text("Loading mission data from your Centurion. Please wait — Chat opens when that’s done.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .leading)
         } else if connectionManager.isRemoteTurnInFlight {
             Text("Linked — Chat is using the line. Stop or wait, then pull to refresh Focus.")
                 .font(.caption)
@@ -411,7 +420,7 @@ struct MissionPortfolioView: View {
                 .foregroundColor(ColorTheme.mutedText())
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
-            Text("Linked. Pull down to load missions from your Centurion — do this after Chat replies, not while Hi is spinning.")
+            Text("Linked. Pull down to load missions from your Centurion.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -639,6 +648,9 @@ struct MissionPortfolioView: View {
         if !missionStore.mission.statement.isEmpty {
             return missionStore.mission.statement
         }
+        if connectionManager.isHydratingAfterLink {
+            return "Loading missions from your Centurion…"
+        }
         if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
             return "Couldn't load missions from your Centurion"
         }
@@ -651,6 +663,9 @@ struct MissionPortfolioView: View {
     private var missionSubtitle: String {
         if missionStore.hasMissionStatement {
             return "Tap to view your mission and commitments"
+        }
+        if connectionManager.isHydratingAfterLink {
+            return "Please wait — Chat opens when mission data is on this phone."
         }
         if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
             return "Tap to retry. Chat can wait behind a stuck Brain call — reopen Focus after a moment."

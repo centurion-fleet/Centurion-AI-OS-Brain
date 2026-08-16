@@ -1,11 +1,12 @@
-# Sovereign AI Remote — TestFlight What to Test (build 41)
+# Sovereign AI Remote — TestFlight What to Test (build 42)
 
-**iOS App Version 5.2.149** (not 5.0.1). Build **41**.
+**iOS App Version 5.2.150** (not 5.0.1). Build **42**.
 
-## Crypto Chat (5.2.149)
+## Crypto Chat (5.2.150)
 
-- Pair, stay on Chat, send one `Hi`. Expect a spoken reply (not a hang on “Waiting on your Sovereign”).
-- Do not open Focus until that reply lands.
+- Pair on home Wi‑Fi. Chat should say **Loading mission data. Please wait.** and keep the composer locked until that finishes.
+- Then stay on Chat and send one `Hi`. Expect a spoken reply (not a hang on “Waiting on your Sovereign”).
+- Do not open Focus until that reply lands. Green lock during the wait is pairing, not Chat ready.
 
 ## Focus / Missions (5.2.148)
 

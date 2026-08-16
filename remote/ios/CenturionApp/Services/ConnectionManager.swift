@@ -41,6 +41,23 @@ final class ConnectionManager: ObservableObject {
     private var sendStartedAt: Date?
     /// True while Chat is waiting on the Brain — Focus must not pile RPCs on the same pipe.
     @Published private(set) var isRemoteTurnInFlight = false
+    /// True while post-pair mission/plan RPCs own the pipe — Chat composer stays locked.
+    @Published private(set) var isHydratingAfterLink = false
+    /// True after this link already finished (or skipped) mission hydrate. Reset on disconnect.
+    @Published private(set) var didHydrateAfterLink = false
+    /// Invalidates an in-flight hydrate if the socket drops mid-load.
+    private(set) var linkHydrationGeneration = 0
+    private var hydrationFetchStarted = false
+
+    /// Side RPCs (keepalive, thinking, beneficiaries) must wait for Chat *and* hydrate.
+    var isPipeBusyForSideTraffic: Bool {
+        isRemoteTurnInFlight || isHydratingAfterLink
+    }
+
+    /// Composer may send only when Crypto Chat is up and mission hydrate has finished.
+    var isChatComposerReady: Bool {
+        isCryptoChatReady && !isHydratingAfterLink
+    }
 
     /// Prefer LAN Crypto Chat when linked; RelayTransport is the away fallback.
     @Published private(set) var transportPreference: TransportPreference = .lanPreferred
@@ -408,6 +425,8 @@ final class ConnectionManager: ObservableObject {
 
     /// Tears the socket down without wiping pairing context (approval retry).
     private func softTearDown(clearPending: Bool) {
+        abortInFlightTurn(clearApproval: true)
+        resetPostLinkHydration()
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
         keepaliveTask?.cancel()
@@ -556,6 +575,9 @@ final class ConnectionManager: ObservableObject {
     ) async throws -> (text: String, sessionId: String?) {
         guard currentSessionKey != nil, isCryptoChatReady else {
             throw ConnectionError.notConnected
+        }
+        guard !isHydratingAfterLink else {
+            throw ConnectionError.hydrating
         }
 
         let requestID = UUID()
@@ -880,6 +902,7 @@ final class ConnectionManager: ObservableObject {
             recordSpeedSample(coldMs, into: &coldConnectSamplesMs)
             transportPreference = .relayAway
             connectionState = .connected
+            beginPostLinkHydration()
             startKeepalive()
             Task { await refreshThinkingStatus() }
         } catch {
@@ -1185,7 +1208,7 @@ final class ConnectionManager: ObservableObject {
 
     func refreshThinkingStatus(forceProbe: Bool = false) async {
         guard isCryptoChatReady else { return }
-        if isRemoteTurnInFlight, !forceProbe { return }
+        if isPipeBusyForSideTraffic, !forceProbe { return }
         do {
             let payload = try await invokeRemote(
                 action: "provider_status",
@@ -1219,6 +1242,7 @@ final class ConnectionManager: ObservableObject {
 
     func refreshRoutingMode() async {
         guard connectionState == .connected else { return }
+        if isPipeBusyForSideTraffic { return }
         do {
             let payload = try await invokeRemote(action: "remote_routing_mode")
             if let mode = payload["routing_mode"] as? String, !mode.isEmpty {
@@ -1231,6 +1255,9 @@ final class ConnectionManager: ObservableObject {
 
     /// User-facing name for the active LLM (not the Sovereign device name).
     var thinkingServiceHeadline: String {
+        if isHydratingAfterLink {
+            return "Loading missions"
+        }
         if isRemoteTurnInFlight, llmHealth == .unknown {
             return "Waiting on Chat"
         }
@@ -1245,6 +1272,9 @@ final class ConnectionManager: ObservableObject {
 
     /// Secondary line under the thinking-service headline.
     var thinkingServiceSubtitle: String {
+        if isHydratingAfterLink {
+            return "Mission data is loading. Chat opens when that’s done."
+        }
         if isRemoteTurnInFlight, llmHealth == .unknown {
             return "Status waits until Chat finishes — the link is up."
         }
@@ -1336,6 +1366,39 @@ final class ConnectionManager: ObservableObject {
         if clearApproval {
             pendingToolApproval = nil
         }
+    }
+
+    /// Lock Chat immediately after KX so keepalive/thinking cannot beat mission load.
+    @discardableResult
+    func beginPostLinkHydration() -> Int {
+        if isHydratingAfterLink { return linkHydrationGeneration }
+        linkHydrationGeneration += 1
+        isHydratingAfterLink = true
+        didHydrateAfterLink = false
+        hydrationFetchStarted = false
+        return linkHydrationGeneration
+    }
+
+    /// One caller may run the mission RPCs for this link.
+    func claimHydrationFetch() -> Int? {
+        guard isHydratingAfterLink, !didHydrateAfterLink, !hydrationFetchStarted else { return nil }
+        hydrationFetchStarted = true
+        return linkHydrationGeneration
+    }
+
+    /// Unlock Chat after mission hydrate (success or fail). No-op if the link dropped.
+    func endPostLinkHydration(generation: Int) {
+        guard generation == linkHydrationGeneration else { return }
+        isHydratingAfterLink = false
+        didHydrateAfterLink = true
+        hydrationFetchStarted = false
+    }
+
+    private func resetPostLinkHydration() {
+        linkHydrationGeneration += 1
+        isHydratingAfterLink = false
+        didHydrateAfterLink = false
+        hydrationFetchStarted = false
     }
 
     /// User tapped Stop — drop the wedged receive so Chat can send again.
@@ -1854,7 +1917,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func fetchRemoteModelCatalog() async -> RemoteModelCatalog {
-        if isRemoteTurnInFlight {
+        if isPipeBusyForSideTraffic {
             return remoteCatalog ?? bundledCatalogFromKnownStatus()
         }
         do {
@@ -1969,6 +2032,11 @@ final class ConnectionManager: ObservableObject {
             if isRemoteTurnInFlight {
                 throw ConnectionError.serverRejected(
                     "Chat is still waiting on your Centurion. Try this again when Chat finishes."
+                )
+            }
+            if isHydratingAfterLink {
+                throw ConnectionError.serverRejected(
+                    "Mission data is still loading. Chat will open when that’s done."
                 )
             }
             poisonPipelineAndReconnect()
@@ -2121,6 +2189,7 @@ final class ConnectionManager: ObservableObject {
 
     private func handleConnectionLoss(_ message: String) {
         abortInFlightTurn(clearApproval: true)
+        resetPostLinkHydration()
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2137,6 +2206,7 @@ final class ConnectionManager: ObservableObject {
     /// socket so later RPCs (chat, catalog) are not queued behind a dead frame.
     private func poisonPipelineAndReconnect() {
         abortInFlightTurn(clearApproval: true)
+        resetPostLinkHydration()
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2288,12 +2358,14 @@ final class ConnectionManager: ObservableObject {
         }
         connectionState = .connected
         activeConnectionTarget = nil
+        beginPostLinkHydration()
         // Keep Bonjour browsing alive while linked — cancelling the browser can drop
         // NWConnections that were opened via a Bonjour service endpoint.
         startKeepalive()
     }
 
     private func handleDeviceRevoked(_ message: String) {
+        resetPostLinkHydration()
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2310,7 +2382,7 @@ final class ConnectionManager: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard let self, self.connectionState == .connected else { return }
-                if self.isRemoteTurnInFlight { continue }
+                if self.isPipeBusyForSideTraffic { continue }
                 do {
                     try await self.sendPing()
                 } catch {
@@ -2369,6 +2441,7 @@ final class ConnectionManager: ObservableObject {
 
     private func failConnection(_ message: String) {
         clearConnectionTimeout()
+        resetPostLinkHydration()
         keepaliveTask?.cancel()
         keepaliveTask = nil
         connection?.cancel()
@@ -2756,6 +2829,7 @@ enum ConnectionError: Error, LocalizedError {
     case connectionClosed
     case invalidResponse
     case messageTooLarge
+    case hydrating
     case serverRejected(String)
 
     var errorDescription: String? {
@@ -2766,6 +2840,8 @@ enum ConnectionError: Error, LocalizedError {
         case .invalidResponse: return "Your Sovereign sent an invalid response"
         case .messageTooLarge:
             return "Your Sovereign sent a response that was too large. Restart centurion-remote on your Mac, then try again."
+        case .hydrating:
+            return "Loading mission data. Please wait — Chat opens when that’s done."
         case .serverRejected(let message): return message
         }
     }

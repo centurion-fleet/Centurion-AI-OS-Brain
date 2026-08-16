@@ -122,6 +122,7 @@ final class PlanStore: ObservableObject {
     /// Pull host plans + templates when connected.
     func refreshFromHost(connectionManager: ConnectionManager) async {
         guard connectionManager.isCryptoChatReady else { return }
+        if connectionManager.isRemoteTurnInFlight { return }
         do {
             let remotePlans = try await connectionManager.fetchPlans(status: "all")
             if !remotePlans.isEmpty {

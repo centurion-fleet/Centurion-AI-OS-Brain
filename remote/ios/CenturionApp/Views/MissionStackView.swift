@@ -85,7 +85,9 @@ struct MissionStackView: View {
                missionStore.stack.dreams.isEmpty,
                missionStore.subjects.isEmpty {
                 Section {
-                    if connectionManager.isRemoteTurnInFlight {
+                    if connectionManager.isHydratingAfterLink {
+                        Text("Loading mission data. Please wait — Chat opens when that’s done.")
+                    } else if connectionManager.isRemoteTurnInFlight {
                         Text("Linked — Chat is using the line. Pull to refresh when Chat finishes.")
                     } else if let error = missionStore.lifeSyncError {
                         Text("Linked, but this stack didn't load from your Centurion. Pull to retry.")
@@ -112,7 +114,7 @@ struct MissionStackView: View {
         }
         .navigationTitle("Mission Stack")
         .task {
-            guard !connectionManager.isRemoteTurnInFlight else { return }
+            guard !connectionManager.isPipeBusyForSideTraffic else { return }
             await missionStore.refreshLifeStack(from: connectionManager)
         }
         .refreshable {
