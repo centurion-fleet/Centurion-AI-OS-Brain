@@ -2388,7 +2388,10 @@ final class ConnectionManager: ObservableObject {
                 try await Task.sleep(for: .seconds(seconds))
                 throw TimeoutError()
             }
-            let result = try await group.next()!
+            guard let result = try await group.next() else {
+                group.cancelAll()
+                throw TimeoutError()
+            }
             group.cancelAll()
             return result
         }

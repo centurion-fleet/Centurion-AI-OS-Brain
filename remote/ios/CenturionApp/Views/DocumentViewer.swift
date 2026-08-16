@@ -161,7 +161,7 @@ struct DocumentViewer: View {
                 blocks.append(ContentBlock(type: .bullet, text: text, level: 0))
             } else if trimmed.allSatisfy({ $0 == "-" || $0 == "=" || $0 == "*" }) {
                 blocks.append(ContentBlock(type: .divider, text: "", level: 0))
-            } else if let match = trimmed.firstMatch(of: try! Regex("^(\\d+)\\.\\s+(.*)")) {
+            } else if let match = trimmed.firstMatch(of: Regex("^(\\d+)\\.\\s+(.*)")) {
                 let num = Int(trimmed.prefix(while: { $0.isNumber })) ?? 0
                 let text = String(trimmed.dropFirst("\(num). ".count))
                 blocks.append(ContentBlock(type: .numbered(num), text: text, level: 0))

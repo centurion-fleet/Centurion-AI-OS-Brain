@@ -356,8 +356,8 @@ struct ThinkingServiceFamily: Identifiable, Equatable {
         connectors.first(where: \.active)
     }
 
-    var preferredConnector: RemoteConnectorRow {
-        activeConnector ?? connectors.first!
+    var preferredConnector: RemoteConnectorRow? {
+        activeConnector ?? connectors.first
     }
 
     var signupURL: URL? {

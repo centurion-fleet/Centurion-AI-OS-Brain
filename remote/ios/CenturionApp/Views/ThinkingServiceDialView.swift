@@ -315,8 +315,8 @@ struct ThinkingServiceDialView: View {
             wizardLaunch = ThinkingServiceWizardLaunch(mode: .add, family: family)
             return
         }
-        if family.connectors.count == 1 {
-            await applyConnector(family.preferredConnector, familyID: family.id, isCreative: family.category == "creative")
+        if family.connectors.count == 1, let connector = family.preferredConnector {
+            await applyConnector(connector, familyID: family.id, isCreative: family.category == "creative")
             return
         }
         if family.activeConnector != nil {
@@ -807,7 +807,11 @@ struct ThinkingServiceWizardView: View {
         errorMessage = nil
         defer { isBusy = false }
 
-        let connector = family.preferredConnector
+        guard let connector = family.preferredConnector else {
+            errorMessage = "No thinking service is configured for this family."
+            Haptics.error()
+            return
+        }
         let result = await connectionManager.saveRemoteAPIKey(
             connectorId: connector.id,
             key: accessCode.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -828,7 +832,11 @@ struct ThinkingServiceWizardView: View {
                 step = .pickService
                 return
             }
-            await finishWithConnector(updated.preferredConnector)
+            if let preferred = updated.preferredConnector {
+                await finishWithConnector(preferred)
+            } else {
+                await finishWithConnector(connector)
+            }
         } else {
             await finishWithConnector(connector)
         }
