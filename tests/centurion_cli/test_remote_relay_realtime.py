@@ -67,6 +67,38 @@ def test_handle_inbound_single_chunk():
     assert client.handle_inbound_event(events[0]) == b"ok"
 
 
+def test_push_presence_uses_control_plane(tmp_path, monkeypatch):
+    import centurion_cli.remote_relay_realtime as rrt
+    import centurion_cli.remote_relay_service as svc
+
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / ".centurion"))
+    (tmp_path / ".centurion").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        rrt,
+        "_cfg",
+        lambda: {
+            "enabled": True,
+            "install_id": "brain_test",
+            "control_base": "https://1human1ai.com",
+        },
+    )
+    calls: list[tuple] = []
+
+    def fake(method, path, *, body=None, timeout=15.0):
+        calls.append((method, path, body))
+        return {"ok": True}
+
+    monkeypatch.setattr(svc, "_control_request", fake)
+    assert rrt.push_presence(online=True, conn_epoch="epoch-1") is True
+    assert calls
+    method, path, body = calls[0]
+    assert method == "POST"
+    assert path == "/api/remote-relay/presence"
+    assert body["install_id"] == "brain_test"
+    assert body["online"] is True
+    assert body["conn_epoch"] == "epoch-1"
+
+
 def test_encode_outbound_requires_kx():
     session = RelaySession()
     # Force module session

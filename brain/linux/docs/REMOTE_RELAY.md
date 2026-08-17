@@ -45,10 +45,13 @@ See Help Center: *Local, Remote anywhere, or Telegram — privacy choices*.
 | Envelope + chunking + id-demux (`centurion_cli/relay_transport.py` + iOS `RelayTransport.swift`) | Done |
 | Brain control (`remote_relay_service` + bridge `remote_relay_*`) | Done |
 | Supabase schema + RLS | Done (`remote-relay-supabase.sql`) |
-| Vercel enable/pair/revoke/health | Done — scaffold in `cloud/remote-relay/`; staged to sales site `app/api/remote-relay/` |
+| Vercel health + public url/anon | Done — `GET /api/remote-relay/health` (no service role) |
+| Vercel enable (customer Brain, no admin token) | Done — `POST /api/remote-relay/enable` |
+| Vercel presence GET/POST (service role) | Done — `install_id` is the capability |
 | iPhone prefer-LAN / You → Anywhere toggle | Done |
-| Desktop Settings → Chat from anywhere | Done |
-| Brain outbound presence + Realtime client | Done (`remote_relay_realtime.py` singleton pump) |
+| Desktop Settings → Chat from anywhere | Done (enable fail-closed shows cloud error) |
+| Brain enroll on Settings → Anywhere On | Done (`enable()` fetches health, POSTs enable, starts Realtime) |
+| Brain outbound presence + Realtime client | Done (`push_presence` via Vercel, not anon REST) |
 | Brain Realtime → localhost `:9119` Crypto Chat splice | Done (`remote_relay_splice.py`) |
 | iPhone Away Crypto Chat (KX + frames + approvals over Realtime) | Done (`RelayAwayClient` + `ConnectionManager` transport mux) |
 | iPhone everyday surfaces gate on `isCryptoChatReady` (LAN or Away) | Done (stores/Settings/Home/Chat/Help) |
@@ -108,23 +111,26 @@ Mid-turn reconnect: Realtime drop fails the in-flight turn with retryable copy (
 
 ## TestFlight path (LAN topics first)
 
-1. Brain package at tip **5.3.0** with this branch merged.
-2. iPhone TestFlight build marketing **5.3.0** / build **45** (lockstep).
+1. Brain package at tip **5.3.6** with this branch merged.
+2. iPhone TestFlight build marketing **5.3.6** / build **51** (lockstep).
 3. Pair on home Wi‑Fi (Unbox QR) — no home IP typed.
 4. Run **LAN topics DoD** below before claiming topic continuity.
 5. Optionally enable Settings → Anywhere (Desktop) / You → Chat from anywhere (iPhone) for internal relay soak — **do not** use App Store “works anywhere” wording until Away DoD is green.
 
 ### Desk enrollment (ops)
 
+Default `remote_relay.control_base` is `https://1human1ai.com`. Settings → Anywhere **On** fetches health (public url + anon), POSTs enable, then publishes presence.
+
 ```bash
-# Away deps (Brain venv)
-uv pip install 'centurionai-os[remote-relay]'   # websockets + pynacl
-# Then configure remote_relay.supabase_url + anon/service key (Centurion project)
-# Confirm: python -m centurion_cli.remote_relay_speed --status
-# Expect: websockets_installed=true, supabase_url_configured=true, realtime_pipe_ready when enabled+online
+# Confirm schema is applied: brain/linux/docs/remote-relay-supabase.sql
+# Vercel env: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+# Deploy sales-site app/api/remote-relay/* to 1human1ai.com
+# Then on the desk: Settings → Anywhere On
+python -m centurion_cli.remote_relay_speed --status
+# Expect: supabase_url_configured=true and realtime_pipe_ready when online
 ```
 
-Until `supabase_url` is configured on the production desk, Away DoD cannot go green.
+Until cellular soak is green, Away DoD stays unchecked. Listing copy can stay as written once the pipe actually works on the desk.
 
 ## LAN topics DoD (ships before away)
 

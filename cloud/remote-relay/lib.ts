@@ -6,9 +6,10 @@
  * Supabase Realtime carries opaque E2E envelopes (see REMOTE_RELAY.md).
  *
  * Env (Vercel):
- *   SUPABASE_URL
+ *   NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL)
+ *   NEXT_PUBLIC_SUPABASE_ANON_KEY
  *   SUPABASE_SERVICE_ROLE_KEY
- *   REMOTE_RELAY_ADMIN_TOKEN  (optional shared secret for Brain enable calls)
+ *   REMOTE_RELAY_ADMIN_TOKEN  (optional; pair/revoke only — not enable)
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -32,6 +33,15 @@ export function supabaseUrl(): string {
 
 export function supabaseServiceKey(): string {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+}
+
+/** Public anon / publishable key — safe to return to Brain and App Store iPhone. */
+export function supabaseAnonKey(): string {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    ""
+  ).trim();
 }
 
 export function requireSupabase(): { url: string; key: string } {

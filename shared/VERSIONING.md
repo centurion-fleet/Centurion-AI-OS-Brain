@@ -9,6 +9,6 @@ All customer-facing products share the same **5.x.y** and release together.
 | Brain (Rust workspace) | `brain/Cargo.toml` → `workspace.package.version` |
 | Centurion Remote (iOS) | `remote/ios/CenturionApp/project.yml` → `MARKETING_VERSION` |
 | Desktop Tauri (archived) | `archive/desktop-tauri/` — not shipping |
-| Sales / Help sites | external repos — must match OS tip **5.3.5** |
+| Sales / Help sites | external repos — must match OS tip **5.3.6** |
 
 Before any release tag: bump every row that still ships to the same **5.x.y**.

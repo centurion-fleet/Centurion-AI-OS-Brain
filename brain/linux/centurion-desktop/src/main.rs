@@ -3914,6 +3914,10 @@ The Brain here is the product; the phone is the remote.",
             .and_then(|v| v.get("hint"))
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty());
+        let url_configured = resp
+            .and_then(|v| v.get("supabase_url_configured"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let subtitle = if enabled && !ws_ok {
             last_error
                 .or(hint)
@@ -3923,6 +3927,10 @@ The Brain here is the product; the phone is the remote.",
             "On — Away pipe ready (home Wi‑Fi still preferred when nearby)".to_owned()
         } else if enabled && online {
             "On — Brain presence live on Centurion cloud".to_owned()
+        } else if enabled && !url_configured {
+            last_error
+                .unwrap_or("On — Centurion cloud did not return Realtime endpoints")
+                .to_owned()
         } else if enabled {
             last_error
                 .unwrap_or("On — waiting for relay presence")

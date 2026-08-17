@@ -1814,6 +1814,8 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "supabase_url": "",
         "supabase_anon_key": "",
+        # Vercel control plane (health / enable / presence). Public anon only.
+        "control_base": "https://1human1ai.com",
         # Install id registered with Vercel enable API (stable per Brain install).
         "install_id": "",
         # Channel prefix — full channel is f"brain:{install_id}".

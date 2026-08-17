@@ -818,10 +818,8 @@ final class ConnectionManager: ObservableObject {
             // Cache cloud endpoints from Brain for away reconnect without LAN.
             if let url = payload["supabase_url"] as? String, !url.isEmpty,
                let key = payload["supabase_anon_key"] as? String, !key.isEmpty {
-                relayAway.configure(supabaseURL: url, anonKey: key)
-            } else if let url = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseURL"),
-                      !url.isEmpty {
-                // Already configured on device
+                let control = payload["control_base"] as? String
+                relayAway.configure(supabaseURL: url, anonKey: key, controlBase: control)
             }
             if let installId = payload["install_id"] as? String, !installId.isEmpty {
                 UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")
@@ -1043,10 +1041,21 @@ final class ConnectionManager: ObservableObject {
         if let supabaseUrl, !supabaseUrl.isEmpty { extra["supabase_url"] = supabaseUrl }
         if let anonKey, !anonKey.isEmpty { extra["supabase_anon_key"] = anonKey }
         let payload = try await invokeRemote(action: "remote_relay_enable", extra: extra)
+        if let ok = payload["ok"] as? Bool, ok == false {
+            throw ConnectionError.serverRejected(
+                (payload["message"] as? String)
+                    ?? (payload["error"] as? String)
+                    ?? "Could not enable Chat from anywhere."
+            )
+        }
         remoteRelayStatus = payload
         if let url = payload["supabase_url"] as? String, !url.isEmpty,
            let key = payload["supabase_anon_key"] as? String, !key.isEmpty {
-            relayAway.configure(supabaseURL: url, anonKey: key)
+            relayAway.configure(
+                supabaseURL: url,
+                anonKey: key,
+                controlBase: payload["control_base"] as? String
+            )
         }
         if let installId = payload["install_id"] as? String, !installId.isEmpty {
             UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")

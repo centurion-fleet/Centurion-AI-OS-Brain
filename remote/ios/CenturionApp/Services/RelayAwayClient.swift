@@ -30,68 +30,71 @@ final class RelayAwayClient: ObservableObject {
     /// Bundled Centurion cloud endpoints (same App Store binary for every customer).
     /// Overridable via UserDefaults for staging.
     enum Cloud {
+        static let productionControlBase = "https://1human1ai.com"
+        static let productionSupabaseURL = "https://ypbzwsjklvrxfknsvrfo.supabase.co"
+        /// Public anon / publishable key (same class as NEXT_PUBLIC_SUPABASE_ANON_KEY).
+        static let productionSupabaseAnonKey = "sb_publishable_T6Z_f-JaQv8fZz8j7YHPLA_P-Xk9vfU"
+
         static var supabaseURL: String {
-            UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseURL")
-                ?? ""
+            let stored = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseURL") ?? ""
+            if !stored.isEmpty { return stored }
+            return productionSupabaseURL
         }
 
         static var supabaseAnonKey: String {
-            UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseAnonKey")
-                ?? ""
+            let stored = UserDefaults.standard.string(forKey: "centurion.remoteRelay.supabaseAnonKey") ?? ""
+            if !stored.isEmpty { return stored }
+            return productionSupabaseAnonKey
         }
 
         static var controlBaseURL: URL {
             if let raw = UserDefaults.standard.string(forKey: "centurion.remoteRelay.controlBase"),
-               let url = URL(string: raw) {
+               let url = URL(string: raw), !raw.isEmpty {
                 return url
             }
-            return URL(string: "https://1human1ai.com")!
+            return URL(string: productionControlBase)!
         }
     }
 
     var transportSession: RelayTransport.Session { session }
 
-    func configure(supabaseURL: String, anonKey: String) {
+    func configure(supabaseURL: String, anonKey: String, controlBase: String? = nil) {
         UserDefaults.standard.set(supabaseURL, forKey: "centurion.remoteRelay.supabaseURL")
         UserDefaults.standard.set(anonKey, forKey: "centurion.remoteRelay.supabaseAnonKey")
+        if let controlBase, !controlBase.isEmpty {
+            UserDefaults.standard.set(controlBase, forKey: "centurion.remoteRelay.controlBase")
+        }
     }
 
-    /// Poll Brain presence via control plane / Supabase REST when away.
+    /// Poll Brain presence via the Vercel control plane when away.
     func refreshPresence(installId: String) async {
-        let base = Cloud.supabaseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let key = Cloud.supabaseAnonKey
-        guard !base.isEmpty, !key.isEmpty, !installId.isEmpty else {
+        guard !installId.isEmpty else {
             brainOnline = false
             brainConnEpoch = nil
             return
         }
-        guard let installURL = URL(
-            string: "\(base)/rest/v1/remote_brain_installs?install_id=eq.\(installId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? installId)&select=id"
-        ) else {
+        var comps = URLComponents(
+            url: Cloud.controlBaseURL.appendingPathComponent("api/remote-relay/presence"),
+            resolvingAgainstBaseURL: false
+        )
+        comps?.queryItems = [URLQueryItem(name: "install_id", value: installId)]
+        guard let url = comps?.url else {
+            brainOnline = false
             return
         }
-        var req = URLRequest(url: installURL)
-        req.setValue(key, forHTTPHeaderField: "apikey")
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        var req = URLRequest(url: url)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
-            guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  let brainId = rows.first?["id"] as? String else {
+            let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+            if let ok = obj["ok"] as? Bool, ok == false {
                 brainOnline = false
+                lastError = (obj["error"] as? String) ?? (obj["message"] as? String)
                 return
             }
-            guard let presenceURL = URL(
-                string: "\(base)/rest/v1/remote_brain_presence?brain_id=eq.\(brainId)&select=online,conn_epoch"
-            ) else {
-                return
-            }
-            var preq = URLRequest(url: presenceURL)
-            preq.setValue(key, forHTTPHeaderField: "apikey")
-            preq.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            let (pdata, _) = try await URLSession.shared.data(for: preq)
-            let prows = try JSONSerialization.jsonObject(with: pdata) as? [[String: Any]] ?? []
-            brainOnline = (prows.first?["online"] as? Bool) ?? false
-            brainConnEpoch = prows.first?["conn_epoch"] as? String
+            brainOnline = (obj["online"] as? Bool) ?? false
+            brainConnEpoch = obj["conn_epoch"] as? String
+            lastError = nil
         } catch {
             brainOnline = false
             lastError = error.localizedDescription

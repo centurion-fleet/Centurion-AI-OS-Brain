@@ -1,6 +1,12 @@
-# Sovereign AI Remote — TestFlight What to Test (build 50)
+# Sovereign AI Remote — TestFlight What to Test (build 51)
 
-**iOS App Version 5.3.5** (not 5.0.1 / 5.2.x / 5.3.4). Build **50**. Pair against Brain **5.3.5**.
+**iOS App Version 5.3.6** (not 5.0.1 / 5.2.x / 5.3.5). Build **51**. Pair against Brain **5.3.6**.
+
+## 5.3.6
+
+- **Chat from anywhere enrolls with Centurion cloud.** Settings → Anywhere On fetches health, registers this Brain, and publishes presence. Pair on home Wi‑Fi first; Away uses 1human1ai.com + Supabase Realtime when LAN is gone.
+- If enable cannot reach the cloud, GTK and iPhone show the error instead of a silent “On — waiting”.
+- Cellular soak still required before Away DoD is green (`REMOTE_RELAY.md`).
 
 ## 5.3.5
 

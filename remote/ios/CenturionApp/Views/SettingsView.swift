@@ -619,6 +619,7 @@ struct SettingsView: View {
         let online = ((connectionManager.remoteRelayStatus["presence"] as? [String: Any])?["online"] as? Bool) ?? false
         let wsOk = (connectionManager.remoteRelayStatus["websockets_installed"] as? Bool) ?? true
         let pipeReady = (connectionManager.remoteRelayStatus["realtime_pipe_ready"] as? Bool) ?? false
+        let urlConfigured = (connectionManager.remoteRelayStatus["supabase_url_configured"] as? Bool) ?? false
         let presenceError = ((connectionManager.remoteRelayStatus["presence"] as? [String: Any])?["last_error"] as? String)
         let hint = connectionManager.remoteRelayStatus["hint"] as? String
         let subtitle: String = {
@@ -633,6 +634,13 @@ struct SettingsView: View {
             }
             if enabled && online {
                 return "On — Brain presence live. Away uses Centurion cloud (E2E); home Wi‑Fi still preferred."
+            }
+            if enabled, !urlConfigured {
+                return presenceError
+                    ?? "On — Centurion cloud did not return Realtime endpoints"
+            }
+            if enabled, let presenceError, !presenceError.isEmpty {
+                return presenceError
             }
             if enabled {
                 return "On — waiting for Brain presence on the relay"

@@ -16,9 +16,7 @@ import json
 import logging
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import Any, Callable
 
 from centurion_cli.remote_relay_service import (
@@ -61,69 +59,39 @@ def relay_topic(install_id: str | None = None) -> str:
 
 
 def push_presence(*, online: bool, conn_epoch: str | None = None) -> bool:
-    """POST/PATCH presence via Supabase REST."""
+    """POST presence via the Vercel control plane (service role lives there)."""
+    from centurion_cli.remote_relay_service import (
+        _control_request,
+        control_base,
+        ensure_install_id,
+    )
+
     cfg = _cfg()
-    if not cfg.get("enabled"):
+    if online and not cfg.get("enabled"):
         return False
-    base = str(cfg.get("supabase_url") or "").rstrip("/")
-    key = str(cfg.get("supabase_anon_key") or cfg.get("supabase_service_key") or "").strip()
-    if not base or not key:
-        logger.info("remote_relay presence skipped — supabase_url/key not configured")
-        return False
-    install_id = ensure_install_id()
+    install_id = str(cfg.get("install_id") or "").strip() or ensure_install_id()
+    epoch = conn_epoch or get_relay_session().conn
     try:
-        brain_id = _lookup_brain_id(base, key, install_id)
-        if not brain_id:
-            return False
-        epoch = conn_epoch or get_relay_session().conn
-        body = json.dumps(
-            {
-                "brain_id": brain_id,
-                "online": online,
+        result = _control_request(
+            "POST",
+            "/api/remote-relay/presence",
+            body={
+                "install_id": install_id,
+                "online": bool(online),
                 "conn_epoch": epoch,
-            }
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            f"{base}/rest/v1/remote_brain_presence?on_conflict=brain_id",
-            data=body,
-            method="POST",
-            headers={
-                "apikey": key,
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "Prefer": "resolution=merge-duplicates",
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return 200 <= getattr(resp, "status", 200) < 300
+        if not result.get("ok"):
+            logger.warning(
+                "remote_relay presence push failed (%s): %s",
+                control_base(),
+                result.get("error") or result.get("message") or "unknown",
+            )
+            return False
+        return True
     except Exception as exc:
         logger.warning("remote_relay presence push failed: %s", exc)
         return False
-
-
-def _lookup_brain_id(base: str, key: str, install_id: str) -> str | None:
-    url = (
-        f"{base}/rest/v1/remote_brain_installs"
-        f"?install_id=eq.{urllib.request.quote(install_id)}&select=id"
-    )
-    req = urllib.request.Request(
-        url,
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-        },
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            rows = json.loads(resp.read().decode("utf-8"))
-            if isinstance(rows, list) and rows:
-                return str(rows[0].get("id") or "") or None
-    except urllib.error.HTTPError as exc:
-        logger.warning("remote_relay install lookup failed: %s", exc)
-    except Exception as exc:
-        logger.warning("remote_relay install lookup error: %s", exc)
-    return None
 
 
 class RelayRealtimeClient:

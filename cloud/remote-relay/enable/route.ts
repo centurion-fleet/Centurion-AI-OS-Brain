@@ -2,14 +2,16 @@
  * POST /api/remote-relay/enable
  * Body: { install_id: string, display_name?: string }
  * Registers / updates a Brain install and sets relay_enabled=true.
+ *
+ * Customer Brains call this from Settings → Anywhere. install_id is the
+ * capability — do not require REMOTE_RELAY_ADMIN_TOKEN here (pair/revoke stay gated).
  */
-import { assertAdmin, errorResponse, json, supabaseFetch } from "../lib";
+import { errorResponse, json, supabaseFetch } from "../lib";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    assertAdmin(req);
     const body = (await req.json()) as {
       install_id?: string;
       display_name?: string;

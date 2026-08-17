@@ -29,6 +29,8 @@ from centurion_cli.relay_transport import RelaySession, new_conn_id
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONTROL_BASE = "https://1human1ai.com"
+
 _STATE_LOCK = threading.Lock()
 _SESSION: RelaySession | None = None
 _REALTIME = None  # RelayRealtimeClient | None — set lazily to avoid circular import
@@ -62,6 +64,102 @@ def _save_config_patch(patch: dict[str, Any]) -> None:
         save_config(cfg)
     except Exception as exc:
         logger.warning("remote_relay config save failed: %s", exc)
+
+
+def control_base() -> str:
+    """Centurion Vercel origin for health / enable / presence."""
+    cfg = _load_config()
+    raw = str(cfg.get("control_base") or DEFAULT_CONTROL_BASE).strip().rstrip("/")
+    return raw or DEFAULT_CONTROL_BASE
+
+
+def _control_request(
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """JSON GET/POST against the Chat-from-anywhere control plane (no service role)."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    url = control_base() + (path if path.startswith("/") else f"/{path}")
+    payload = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        method=method.upper(),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+            parsed = json.loads(raw) if raw.strip() else {}
+            if not isinstance(parsed, dict):
+                return {"ok": False, "error": "Unexpected control-plane response."}
+            status_code = int(getattr(resp, "status", 200) or 200)
+            if status_code >= 400:
+                parsed.setdefault("ok", False)
+                parsed.setdefault("error", parsed.get("message") or f"HTTP {status_code}")
+                return parsed
+            parsed.setdefault("ok", True)
+            return parsed
+    except urllib.error.HTTPError as exc:
+        try:
+            parsed = json.loads(exc.read().decode("utf-8"))
+        except Exception:
+            parsed = {}
+        if isinstance(parsed, dict) and parsed:
+            parsed.setdefault("ok", False)
+            parsed.setdefault("error", parsed.get("message") or parsed.get("error") or f"HTTP {exc.code}")
+            return parsed
+        return {"ok": False, "error": f"Chat from anywhere control HTTP {exc.code}."}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:240]}
+
+
+def _enroll_with_cloud(
+    *,
+    install_id: str,
+    supabase_url: str = "",
+    supabase_anon_key: str = "",
+) -> dict[str, Any]:
+    """Fetch public Realtime endpoints and register this Brain. Fail closed."""
+    health = _control_request("GET", "/api/remote-relay/health")
+    if not health.get("ok"):
+        return {
+            "ok": False,
+            "error": str(health.get("error") or health.get("message") or "").strip()
+            or "Could not reach Chat from anywhere (Centurion cloud).",
+        }
+    url = supabase_url.strip() or str(health.get("supabase_url") or "").strip()
+    anon = supabase_anon_key.strip() or str(health.get("supabase_anon_key") or "").strip()
+    if not url or not anon:
+        return {
+            "ok": False,
+            "error": "Centurion cloud did not return Realtime endpoints.",
+        }
+    enrolled = _control_request(
+        "POST",
+        "/api/remote-relay/enable",
+        body={"install_id": install_id},
+    )
+    if not enrolled.get("ok"):
+        return {
+            "ok": False,
+            "error": str(enrolled.get("error") or enrolled.get("message") or "").strip()
+            or "Could not enroll this Brain for Chat from anywhere.",
+        }
+    return {
+        "ok": True,
+        "supabase_url": url,
+        "supabase_anon_key": anon,
+    }
 
 
 def ensure_install_id() -> str:
@@ -118,6 +216,7 @@ def status() -> dict[str, Any]:
         "supabase_url": str(cfg.get("supabase_url") or "").strip(),
         "supabase_url_configured": bool(str(cfg.get("supabase_url") or "").strip()),
         "supabase_anon_key": anon,
+        "control_base": control_base(),
         "websockets_installed": ws_ok,
         "realtime_pipe_ready": bool(enabled and ws_ok and presence.get("online")),
         "presence": presence,
@@ -156,9 +255,12 @@ def start_if_enabled() -> dict[str, Any] | None:
     cfg = _load_config()
     if not cfg.get("enabled"):
         return None
+    url = str(cfg.get("supabase_url") or "")
+    anon = str(cfg.get("supabase_anon_key") or "")
     return enable(
-        supabase_url=str(cfg.get("supabase_url") or ""),
-        supabase_anon_key=str(cfg.get("supabase_anon_key") or ""),
+        supabase_url=url,
+        supabase_anon_key=anon,
+        enroll_cloud=not (url.strip() and anon.strip()),
     )
 
 
@@ -170,15 +272,59 @@ def publish_relay_envelopes(events: list[dict[str, Any]]) -> None:
     client.publish_envelopes(events)
 
 
-def enable(*, supabase_url: str = "", supabase_anon_key: str = "") -> dict[str, Any]:
-    """Turn on Chat from anywhere (Brain dials out). Does not alter LAN :9119."""
-    patch: dict[str, Any] = {"enabled": True}
-    if supabase_url.strip():
-        patch["supabase_url"] = supabase_url.strip()
-    if supabase_anon_key.strip():
-        patch["supabase_anon_key"] = supabase_anon_key.strip()
+def enable(
+    *,
+    supabase_url: str = "",
+    supabase_anon_key: str = "",
+    enroll_cloud: bool = True,
+) -> dict[str, Any]:
+    """Turn on Chat from anywhere (Brain dials out). Does not alter LAN :9119.
+
+    Fail closed when Centurion cloud health/enable cannot run — the GTK/iPhone
+    toggle must show the error instead of a silent “On — waiting”.
+    """
     install_id = ensure_install_id()
-    patch["install_id"] = install_id
+    url = str(supabase_url or "").strip()
+    anon = str(supabase_anon_key or "").strip()
+    if enroll_cloud:
+        enrolled = _enroll_with_cloud(
+            install_id=install_id,
+            supabase_url=url,
+            supabase_anon_key=anon,
+        )
+        if not enrolled.get("ok"):
+            err = str(enrolled.get("error") or "Could not enable Chat from anywhere.")
+            with _STATE_LOCK:
+                _PRESENCE.update(
+                    {
+                        "online": False,
+                        "last_error": err[:240],
+                        "updated_at": time.time(),
+                    }
+                )
+            out = status()
+            out["ok"] = False
+            out["error"] = err
+            out["message"] = err
+            out["enabled"] = False
+            return out
+        url = str(enrolled.get("supabase_url") or url).strip()
+        anon = str(enrolled.get("supabase_anon_key") or anon).strip()
+    if not url or not anon:
+        err = "Chat from anywhere needs Centurion cloud endpoints."
+        out = status()
+        out["ok"] = False
+        out["error"] = err
+        out["message"] = err
+        return out
+
+    patch: dict[str, Any] = {
+        "enabled": True,
+        "install_id": install_id,
+        "supabase_url": url,
+        "supabase_anon_key": anon,
+        "control_base": control_base(),
+    }
     _save_config_patch(patch)
     session = get_relay_session()
     epoch = session.reset_connection()
@@ -208,7 +354,9 @@ def enable(*, supabase_url: str = "", supabase_anon_key: str = "") -> dict[str, 
         with _STATE_LOCK:
             _PRESENCE["last_error"] = str(exc)[:240]
             _PRESENCE["updated_at"] = time.time()
-    return status()
+    out = status()
+    out["ok"] = True
+    return out
 
 
 def disable() -> dict[str, Any]:
@@ -277,14 +425,13 @@ def bridge_handle(action: str, request: dict[str, Any]) -> dict[str, Any] | None
     if action == "remote_relay_status":
         return {"ok": True, "action": action, **status()}
     if action == "remote_relay_enable":
-        return {
-            "ok": True,
-            "action": action,
-            **enable(
-                supabase_url=str(request.get("supabase_url") or ""),
-                supabase_anon_key=str(request.get("supabase_anon_key") or ""),
-            ),
-        }
+        result = enable(
+            supabase_url=str(request.get("supabase_url") or ""),
+            supabase_anon_key=str(request.get("supabase_anon_key") or ""),
+        )
+        result.setdefault("action", action)
+        result.setdefault("ok", bool(result.get("ok")))
+        return result
     if action == "remote_relay_disable":
         return {"ok": True, "action": action, **disable()}
     if action == "remote_relay_reconnect":
