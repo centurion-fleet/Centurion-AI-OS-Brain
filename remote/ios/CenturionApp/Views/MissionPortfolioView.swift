@@ -23,7 +23,7 @@ enum PulseCategory: String, CaseIterable {
         case .plans: return "Missions"
         case .wins: return "Finished"
         case .outputs: return "Documents"
-        case .decisions: return "Needs your choice"
+        case .decisions: return "Decisions needed"
         case .pulse: return "Updates"
         }
     }
@@ -359,7 +359,7 @@ struct MissionPortfolioView: View {
                             icon: "checkmark.circle",
                             title: "All clear",
                             message: connectionManager.isCryptoChatReady
-                                ? "Nothing needs your choice right now."
+                                ? "Nothing needs a decision right now."
                                 : "Link your Sovereign to see decisions that need you."
                         )
                     }
@@ -450,7 +450,7 @@ struct MissionPortfolioView: View {
         } else if connectionManager.isCryptoChatReady,
                   swarmStore.lastSyncedAt == nil,
                   swarmStore.lastSyncError == nil {
-            Text("Missions are here. Finished, Documents, Needs your choice, and Updates load next.")
+            Text("Missions are here. Finished, Documents, Decisions needed, and Updates load next.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -463,7 +463,7 @@ struct MissionPortfolioView: View {
             Button {
                 Task { await syncFocusFromBrain(forceRefresh: true) }
             } label: {
-                Text("Linked, but Focus couldn't load from your Centurion. Tap to retry.")
+                Text("Linked, but your Centurion didn’t send missions in time. The phone is still linked — tap to retry. Chat may be using the line.")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(ColorTheme.warning())
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -575,7 +575,7 @@ struct MissionPortfolioView: View {
                 detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
             )
         } else if label.contains("hold") {
-            // Keep in Needs your choice — leave swarm signal pending (no resolve).
+            // Keep in Decisions needed — leave swarm signal pending (no resolve).
             Haptics.lightTap()
         } else {
             openDiscuss(
@@ -589,14 +589,24 @@ struct MissionPortfolioView: View {
         Task {
             await planStore.decide(plan.id, choice: "approve", connectionManager: connectionManager)
             if let signalId = plan.signalId {
-                swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
-            } else if connectionManager.isCryptoChatReady {
-                openPlanDiscuss(
-                    plan,
-                    kickoffNote: "Please proceed with this plan."
+                swarmStore.resolveSignal(
+                    signalId,
+                    choiceNote: "Proceed",
+                    connectionManager: connectionManager
                 )
             }
             applyPulseFromSwarmStore()
+            await MainActor.run { selectedPlan = nil }
+            guard connectionManager.isCryptoChatReady else { return }
+            do {
+                _ = try await messageService.sendMessage(
+                    "Please proceed with this plan now. Continue the work.",
+                    in: .plan(id: plan.id, title: plan.title),
+                    planStore: planStore
+                )
+            } catch {
+                // Status is already recorded; Chat can retry from Discuss.
+            }
         }
     }
 
@@ -642,7 +652,15 @@ struct MissionPortfolioView: View {
 
     private var missionBanner: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            if missionStore.hasCompletedMissionSetup {
+            if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
+                Button {
+                    Task { await syncFocusFromBrain(forceRefresh: true) }
+                } label: {
+                    missionStatement
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Retry loading missions from your Centurion")
+            } else if missionStore.hasCompletedMissionSetup {
                 NavigationLink {
                     MissionStackView()
                 } label: {
@@ -707,11 +725,16 @@ struct MissionPortfolioView: View {
                     NavigationLink {
                         MissionStackView()
                     } label: {
-                        Text("See all missions")
+                        Text(supporting.count > 4
+                             ? "See all \(supporting.count) supporting missions"
+                             : "See all missions")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundColor(ColorTheme.accent())
+                            .foregroundColor(ColorTheme.onAccent())
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(ColorTheme.accent())
+                            .clipShape(Capsule())
                     }
-                    .frame(minHeight: 44, alignment: .leading)
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -789,7 +812,7 @@ struct MissionPortfolioView: View {
             return "Please wait — Chat opens when mission data is on this phone."
         }
         if connectionManager.isCryptoChatReady, missionStore.lifeSyncError != nil {
-            return "Tap to retry. Chat can wait behind a stuck Brain call — reopen Focus after a moment."
+            return "The phone is linked. Your Centurion didn’t answer in time — Chat may be using the line. Tap this card to retry."
         }
         if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
             return "Waiting on your Centurion"
@@ -891,7 +914,7 @@ struct MissionPortfolioView: View {
                         .foregroundColor(ColorTheme.primaryText())
 
                     if activity.phase == .planning {
-                        Text("Drafting a plan… You’ll be able to review it under Needs your choice or Documents.")
+                        Text("Drafting a plan… You’ll be able to review it under Decisions needed or Documents.")
                             .font(.caption)
                             .foregroundColor(ColorTheme.accent())
                             .lineSpacing(3)
@@ -1329,7 +1352,7 @@ struct MissionPortfolioView: View {
             }
 
             if !planStore.pendingReview.isEmpty {
-                planGroup(title: "Needs review", plans: planStore.pendingReview)
+                planGroup(title: "Decisions needed", plans: planStore.pendingReview, showDecideActions: true)
             }
             if !planStore.inProgress.isEmpty {
                 planGroup(title: "In progress", plans: planStore.inProgress)
@@ -1378,62 +1401,103 @@ struct MissionPortfolioView: View {
         .opacity(isAppeared ? 1 : 0)
     }
 
-    private func planGroup(title: String, plans: [PlanArtifact]) -> some View {
+    private func planGroup(title: String, plans: [PlanArtifact], showDecideActions: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(title)
                 .font(.headline)
                 .foregroundColor(ColorTheme.primaryText())
             ForEach(plans) { plan in
-                HStack(alignment: .top, spacing: Spacing.sm) {
-                    Button {
-                        Haptics.mediumTap()
-                        selectedPlan = plan
-                    } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text(plan.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundColor(ColorTheme.primaryText())
-                                    .lineLimit(2)
-                                Spacer()
-                                if let risk = plan.risk {
-                                    Text(risk.displayLabel)
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundColor(ColorTheme.accent())
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack(alignment: .top, spacing: Spacing.sm) {
+                        Button {
+                            Haptics.mediumTap()
+                            selectedPlan = plan
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(plan.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(ColorTheme.primaryText())
+                                        .lineLimit(2)
+                                    Spacer()
+                                    if let risk = plan.risk {
+                                        Text(risk.displayLabel)
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundColor(ColorTheme.accent())
+                                    }
                                 }
-                            }
-                            Text(plan.status.displayLabel)
-                                .font(.caption)
-                                .foregroundColor(ColorTheme.mutedText())
-                            if !plan.goal.isEmpty {
-                                Text(plan.goal)
+                                Text(plan.status.displayLabel)
                                     .font(.caption)
                                     .foregroundColor(ColorTheme.mutedText())
-                                    .lineLimit(2)
+                                if !plan.goal.isEmpty {
+                                    Text(plan.goal)
+                                        .font(.caption)
+                                        .foregroundColor(ColorTheme.mutedText())
+                                        .lineLimit(2)
+                                }
+                                Text("\(plan.steps.count) steps")
+                                    .font(.caption2)
+                                    .foregroundColor(ColorTheme.mutedText())
                             }
-                            Text("\(plan.steps.count) steps")
-                                .font(.caption2)
-                                .foregroundColor(ColorTheme.mutedText())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Spacing.md)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Spacing.md)
-                    }
-                    .buttonStyle(.plain)
+                        .buttonStyle(.plain)
 
-                    Button {
-                        openPlanDiscuss(plan)
-                    } label: {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.body.weight(.semibold))
-                            .foregroundColor(ColorTheme.accent())
-                            .frame(width: 44, height: 44)
-                            .background(ColorTheme.accent().opacity(0.12))
-                            .clipShape(Circle())
+                        Button {
+                            openPlanDiscuss(plan)
+                        } label: {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .font(.body.weight(.semibold))
+                                .foregroundColor(ColorTheme.accent())
+                                .frame(width: 44, height: 44)
+                                .background(ColorTheme.accent().opacity(0.12))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Discuss \(plan.title)")
+                        .padding(.trailing, Spacing.sm)
+                        .padding(.top, Spacing.sm)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Discuss \(plan.title)")
-                    .padding(.trailing, Spacing.sm)
-                    .padding(.top, Spacing.sm)
+
+                    if showDecideActions {
+                        HStack(spacing: 8) {
+                            Button {
+                                Haptics.success()
+                                handlePlanProceed(plan)
+                            } label: {
+                                Text("Proceed")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(CenturionPrimaryButtonStyle())
+                            .accessibilityLabel("Proceed with \(plan.title)")
+
+                            Button {
+                                Haptics.mediumTap()
+                                handlePlanAdjust(plan)
+                            } label: {
+                                Text("Adjust")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(CenturionSecondaryButtonStyle())
+                            .accessibilityLabel("Adjust \(plan.title)")
+
+                            Button {
+                                Haptics.lightTap()
+                                handlePlanHold(plan)
+                            } label: {
+                                Text("Hold")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(CenturionGhostButtonStyle())
+                            .accessibilityLabel("Hold \(plan.title)")
+                        }
+                        .padding(.horizontal, Spacing.md)
+                        .padding(.bottom, Spacing.sm)
+                    }
                 }
                 .cardStyle()
             }
@@ -1448,7 +1512,7 @@ struct MissionPortfolioView: View {
                 Image(systemName: "hand.raised.fill")
                     .font(.caption)
                     .foregroundColor(ColorTheme.warning())
-                Text("Needs Your Decision")
+                Text("Decisions needed")
                     .font(.headline)
                     .foregroundColor(ColorTheme.primaryText())
                 Spacer()

@@ -187,6 +187,8 @@ def handle_request(
         return _handle_life_decisions_list(request, request_id)
     if action == "life_decision_log":
         return _handle_life_decision_log(request, request_id)
+    if action == "life_decision_resolve":
+        return _handle_life_decision_resolve(request, request_id)
     if action == "life_documents_list":
         return _handle_life_documents_list(request, request_id)
     if action == "life_documents_search":
@@ -4186,10 +4188,20 @@ def _handle_life_decision_log(request: dict[str, Any], request_id: str) -> dict[
     try:
         from centurion_cli.life_missions import log_decision
 
-        fields = (
-            request.get("decision") if isinstance(request.get("decision"), dict) else request
-        )
-        decision = log_decision(fields if isinstance(fields, dict) else {})
+        nested = request.get("decision")
+        if isinstance(nested, dict):
+            fields = dict(nested)
+        else:
+            # Don't treat the JSON-RPC request id as a life_decisions primary key.
+            fields = {
+                k: v
+                for k, v in request.items()
+                if k not in {"id", "action", "ok", "decision"}
+            }
+            did = str(request.get("decision_id") or "").strip()
+            if did:
+                fields["id"] = did
+        decision = log_decision(fields)
         return {
             "id": request_id,
             "ok": True,
@@ -4198,6 +4210,25 @@ def _handle_life_decision_log(request: dict[str, Any], request_id: str) -> dict[
         }
     except Exception as exc:
         return _error_response(request_id, action="life_decision_log", exc=exc)
+
+
+def _handle_life_decision_resolve(
+    request: dict[str, Any], request_id: str
+) -> dict[str, Any]:
+    try:
+        from centurion_cli.life_missions import resolve_decision
+
+        did = str(request.get("decision_id") or request.get("id") or "").strip()
+        chosen = str(request.get("chosen") or "Done")
+        decision = resolve_decision(did, chosen)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "life_decision_resolve",
+            "decision": decision,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="life_decision_resolve", exc=exc)
 
 
 def _handle_life_documents_list(

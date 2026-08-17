@@ -218,7 +218,7 @@ enum PulseFeedMapper {
             options: [
                 DecisionOption(label: "Proceed", description: "Tell your Sovereign to continue"),
                 DecisionOption(label: "Adjust", description: "Open Crypto Chat about this"),
-                DecisionOption(label: "Hold", description: "Keep this in Needs your choice for now"),
+                DecisionOption(label: "Hold", description: "Keep this in Decisions needed for now"),
             ],
             generatedBy: swarmName ?? "Sovereign",
             relatedMission: swarmName,

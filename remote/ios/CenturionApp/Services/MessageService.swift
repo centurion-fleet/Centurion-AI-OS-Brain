@@ -566,10 +566,10 @@ final class MessageService: ObservableObject {
                 ?? ProposeFirstChat.fallbackArtifact(from: displayResponse.isEmpty ? rawResponse : displayResponse, userRequest: text)
             await planStore.upsertAndSync(artifact, connectionManager: connectionManager)
             if displayResponse.isEmpty {
-                displayResponse = "I've drafted this for your review on Focus — open Missions, Needs your choice, or Documents when you're ready."
+                displayResponse = "I've drafted this for your review on Focus — open Missions, Decisions needed, or Documents when you're ready."
             } else if !displayResponse.localizedCaseInsensitiveContains("focus")
                         && !displayResponse.localizedCaseInsensitiveContains("mission") {
-                displayResponse += "\n\nYou can review this on Focus under Missions, Needs your choice, or Documents."
+                displayResponse += "\n\nYou can review this on Focus under Missions, Decisions needed, or Documents."
             }
         }
 

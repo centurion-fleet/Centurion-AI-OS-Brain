@@ -538,10 +538,10 @@ struct CenturionPillNav<Item: Hashable>: View {
             .overlay(
                 Capsule()
                     .stroke(
-                        (!isSelected && count > 0 && title(item) == "Needs your choice")
+                        (!isSelected && count > 0 && title(item) == "Decisions needed")
                             ? ColorTheme.accent()
                             : (isSelected ? Color.clear : ColorTheme.border()),
-                        lineWidth: (!isSelected && count > 0 && title(item) == "Needs your choice") ? 1.5 : 0.5
+                        lineWidth: (!isSelected && count > 0 && title(item) == "Decisions needed") ? 1.5 : 0.5
                     )
             )
         }

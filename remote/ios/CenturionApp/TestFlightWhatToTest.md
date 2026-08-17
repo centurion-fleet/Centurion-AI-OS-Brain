@@ -1,6 +1,15 @@
-# Sovereign AI Remote — TestFlight What to Test (build 46)
+# Sovereign AI Remote — TestFlight What to Test (build 47)
 
-**iOS App Version 5.3.1** (not 5.0.1 / 5.2.x). Build **46**. Pair against Brain **5.3.1**.
+**iOS App Version 5.3.2** (not 5.0.1 / 5.2.x / 5.3.1). Build **47**. Pair against Brain **5.3.2**.
+
+## 5.3.2
+
+- **Proceed actually continues.** From Focus list or plan detail, Proceed sends Chat so the Brain keeps working. The item leaves **Decisions needed**.
+- Brain Focus has the same **Review / Proceed / Adjust / Hold** as the phone.
+- Pulse copy is **Decisions needed** (not “Needs your choice” / “Needs review”).
+- Logging a decision on a waiting item records that choice in place and stays on the mission as history.
+- Mission detail shows **that mission’s documents only**. Focus home lists **all documents** across missions.
+- Orange “couldn’t load” banner means the Brain life-stack call timed out (often Chat using the line). Tap the hero card to retry.
 
 ## 5.3.1
 
@@ -12,7 +21,7 @@
 ## 5.3.0
 
 - You hub rows on Brain open (chevron). Reporting & Oversight dialogs are readable.
-- After link, Focus pills (Finished / Documents / Needs your choice / Updates) load after Missions.
+- After link, Focus pills (Finished / Documents / Decisions needed / Updates) load after Missions.
 - Chat: live reply in the transcript; quiet wait under the composer; thinking tokens stay off-screen.
 - Collaborations: **Form swarm** with two worker profiles. Join / Invite via Mission Control. Portal down → error, not an empty board.
 - Away remains internal soak until `REMOTE_RELAY.md` Away DoD is green.

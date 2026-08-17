@@ -15,7 +15,7 @@ enum SwarmPulse: String, Codable, CaseIterable {
         switch self {
         case .idle: return "Working smoothly"
         case .active: return "In progress"
-        case .attention: return "Needs your choice"
+        case .attention: return "Decisions needed"
         case .waiting: return "Waiting for you"
         case .blocked: return "Paused"
         case .complete: return "Finished for you"

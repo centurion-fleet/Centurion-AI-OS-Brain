@@ -15,6 +15,16 @@ export async function fetchOpenDecisions(limit = 20): Promise<Decision[]> {
   return (res.decisions || []).filter(isOpenDecision);
 }
 
+export async function resolveOpenDecision(
+  decisionId: string,
+  chosen = "Done",
+): Promise<void> {
+  await bridgeCall("life_decision_resolve", {
+    decision_id: decisionId,
+    chosen,
+  });
+}
+
 /** Poll open decisions while the Focus tab is visible. */
 export function useOpenDecisions(enabled: boolean, pollMs = 12_000) {
   const [open, setOpen] = useState<Decision[]>([]);

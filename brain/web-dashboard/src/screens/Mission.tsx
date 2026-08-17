@@ -9,10 +9,11 @@ import { PhaseStrip } from "../components/PhaseStrip";
 import { useMissionDetail } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
-import { isOpenDecision } from "../hooks/useOpenDecisions";
+import { isOpenDecision, resolveOpenDecision } from "../hooks/useOpenDecisions";
 import {
   DOCUMENT_LIBRARY_MISSION_ID,
   missionProgress,
+  type Decision,
   type LifeDocument,
   type Mission,
 } from "../types/life";
@@ -27,7 +28,7 @@ import {
 export function Mission() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const attentionId = searchParams.get("attention") || "";
   const seed =
     (location.state as { mission?: Mission } | null)?.mission ?? null;
@@ -42,11 +43,13 @@ export function Mission() {
   const [primaryBusy, setPrimaryBusy] = useState(false);
   const [phaseBusy, setPhaseBusy] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [logEditingId, setLogEditingId] = useState<string | null>(null);
   const [logTitle, setLogTitle] = useState("");
   const [logChosen, setLogChosen] = useState("");
   const [logContext, setLogContext] = useState("");
   const [logBusy, setLogBusy] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
+  const autoLogFor = useRef("");
   const [docOpen, setDocOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docBody, setDocBody] = useState("");
@@ -58,6 +61,7 @@ export function Mission() {
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [resolveBusyId, setResolveBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || !mission) return;
@@ -93,6 +97,19 @@ export function Mission() {
     };
     window.requestAnimationFrame(scroll);
   }, [loading, mission, attentionId, orderedDecisions.length]);
+
+  useEffect(() => {
+    if (loading || !attentionId) return;
+    const target = orderedDecisions.find((d) => d.id === attentionId);
+    if (!target || !isOpenDecision(target)) return;
+    if (autoLogFor.current === target.id) return;
+    autoLogFor.current = target.id;
+    setLogOpen(true);
+    setLogEditingId(target.id);
+    setLogTitle(target.title || "");
+    setLogContext(target.context || "");
+    setLogChosen("");
+  }, [loading, attentionId, orderedDecisions]);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -153,32 +170,78 @@ export function Mission() {
     });
   }
 
+  function openLogForm(decision?: Decision | null) {
+    const target = decision && isOpenDecision(decision) ? decision : null;
+    setLogError(null);
+    setLogOpen(true);
+    if (target) {
+      setLogEditingId(target.id);
+      setLogTitle(target.title || "");
+      setLogContext(target.context || "");
+      setLogChosen("");
+      return;
+    }
+    setLogEditingId(null);
+    setLogTitle("");
+    setLogChosen("");
+    setLogContext("");
+  }
+
+  function closeLogForm() {
+    setLogOpen(false);
+    setLogEditingId(null);
+    setLogTitle("");
+    setLogChosen("");
+    setLogContext("");
+    setLogError(null);
+  }
+
   async function submitDecision() {
     const title = logTitle.trim();
     if (!title) {
       setLogError("Title is required");
       return;
     }
+    const chosen = logChosen.trim() || "Done";
+    const closeId =
+      logEditingId ||
+      (attentionDecision && isOpenDecision(attentionDecision)
+        ? attentionDecision.id
+        : null);
     setLogBusy(true);
     setLogError(null);
     try {
       await bridgeCall("life_decision_log", {
         decision: {
+          ...(closeId ? { id: closeId } : {}),
           mission_id: missionId,
           title,
-          chosen: logChosen.trim(),
+          chosen,
           context: logContext.trim(),
         },
       });
-      setLogTitle("");
-      setLogChosen("");
-      setLogContext("");
-      setLogOpen(false);
+      closeLogForm();
+      if (attentionId) {
+        setSearchParams({}, { replace: true });
+      }
       await refresh();
     } catch (e) {
-      setLogError(e instanceof Error ? e.message : "Could not log decision");
+      setLogError(e instanceof Error ? e.message : "Could not save this choice");
     } finally {
       setLogBusy(false);
+    }
+  }
+
+  async function markDecisionDone(decisionId: string) {
+    setResolveBusyId(decisionId);
+    try {
+      await resolveOpenDecision(decisionId, "Done");
+      if (attentionId === decisionId) {
+        setSearchParams({}, { replace: true });
+      }
+      await refresh();
+    } finally {
+      setResolveBusyId(null);
     }
   }
 
@@ -320,7 +383,7 @@ export function Mission() {
             This is why Focus alerted you
           </p>
           <p className="mt-1 text-sm font-medium text-ink">
-            {attentionDecision.title || attentionTitle || "Needs your choice"}
+            {attentionDecision.title || attentionTitle || "Decisions needed"}
           </p>
           {(attentionDecision.context || "").trim() ? (
             <p className="mt-1 text-xs text-ink-dim">
@@ -453,21 +516,44 @@ export function Mission() {
             Decisions
             {orderedDecisions.some(isOpenDecision) ? (
               <span className="ml-2 text-amber-soft">
-                · {orderedDecisions.filter(isOpenDecision).length} need you
+                · {orderedDecisions.filter(isOpenDecision).length} decisions needed
+              </span>
+            ) : orderedDecisions.length > 0 ? (
+              <span className="ml-2 text-ink-dim">
+                · {orderedDecisions.length} recorded
               </span>
             ) : null}
           </h2>
           <button
             type="button"
-            onClick={() => setLogOpen((o) => !o)}
+            onClick={() =>
+              logOpen
+                ? closeLogForm()
+                : openLogForm(
+                    attentionDecision && isOpenDecision(attentionDecision)
+                      ? attentionDecision
+                      : orderedDecisions.find(isOpenDecision) || null,
+                  )
+            }
             className="rounded-full border border-amber-glow/30 bg-amber-muted/50 px-3 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
           >
-            {logOpen ? "Cancel" : "Log a decision"}
+            {logOpen ? "Cancel" : logEditingId || orderedDecisions.some(isOpenDecision) ? "Record your choice" : "Log a decision"}
           </button>
         </div>
 
         {logOpen && (
           <div className="surface mb-3 space-y-3 rounded-2xl p-4">
+            {logEditingId ? (
+              <p className="text-xs text-ink-dim">
+                This records your choice on the item that was waiting. It leaves
+                Decisions needed and stays on this mission so you can look back.
+              </p>
+            ) : (
+              <p className="text-xs text-ink-dim">
+                Saved choices stay on this mission. Over time this is the record
+                of what you decided.
+              </p>
+            )}
             <input
               value={logTitle}
               onChange={(e) => setLogTitle(e.target.value)}
@@ -477,7 +563,7 @@ export function Mission() {
             <input
               value={logChosen}
               onChange={(e) => setLogChosen(e.target.value)}
-              placeholder="What you chose (optional)"
+              placeholder="What you chose"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-dim focus:border-amber-glow/40"
             />
             <textarea
@@ -494,7 +580,7 @@ export function Mission() {
               onClick={() => void submitDecision()}
               className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
             >
-              {logBusy ? "Saving…" : "Save decision"}
+              {logBusy ? "Saving…" : "Save choice"}
             </button>
           </div>
         )}
@@ -502,18 +588,19 @@ export function Mission() {
         <div className="surface rounded-2xl divide-y divide-white/5 overflow-hidden">
           {orderedDecisions.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
-              No decisions logged yet.
+              No decisions recorded yet.
             </p>
           ) : (
             orderedDecisions.map((d) => {
               const open = isOpenDecision(d);
-              const spotlight = attentionId === d.id || (open && !d.chosen);
+              const spotlight = attentionId === d.id;
+              const when = (d.created_at || "").slice(0, 10);
               return (
                 <div
                   key={d.id}
                   id={`decision-${d.id}`}
                   className={
-                    attentionId === d.id
+                    spotlight
                       ? "flex items-start gap-3 scroll-mt-8 border-l-2 border-amber-glow bg-amber-muted/35 px-4 py-3"
                       : open
                         ? "flex items-start gap-3 scroll-mt-8 bg-amber-muted/15 px-4 py-3"
@@ -523,32 +610,57 @@ export function Mission() {
                   <div className="min-w-0 flex-1">
                     {open ? (
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-soft">
-                        Needs your choice
+                        Decisions needed
                       </p>
-                    ) : null}
-                    <p className="text-sm font-medium text-ink">{d.title}</p>
-                    {d.chosen && (
-                      <p className="mt-1 text-xs text-amber-soft">
-                        Chose: {d.chosen}
+                    ) : (
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
+                        Decided{when ? ` · ${when}` : ""}
                       </p>
                     )}
+                    <p className="text-sm font-medium text-ink">{d.title}</p>
+                    {!open && d.chosen ? (
+                      <p className="mt-1 text-sm text-amber-soft">
+                        You chose: {d.chosen}
+                      </p>
+                    ) : null}
                     {d.context && (
                       <p className="mt-1 text-xs text-ink-dim">{d.context}</p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    title="Discuss in Chat"
-                    aria-label={`Discuss decision ${d.title}`}
-                    onClick={() => discussDecision(d)}
-                    className={
-                      spotlight
-                        ? "shrink-0 rounded-full bg-accent px-2.5 py-1.5 text-sm font-semibold text-[var(--on-accent)]"
-                        : "shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                    }
-                  >
-                    💬
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {open ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openLogForm(d)}
+                          className="shrink-0 rounded-full border border-amber-glow/40 px-3 py-1.5 text-xs font-semibold text-amber-bright"
+                        >
+                          Record
+                        </button>
+                        <button
+                          type="button"
+                          disabled={resolveBusyId === d.id}
+                          onClick={() => void markDecisionDone(d.id)}
+                          className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-[var(--on-accent)] disabled:opacity-50"
+                        >
+                          {resolveBusyId === d.id ? "Saving…" : "Done"}
+                        </button>
+                      </>
+                    ) : null}
+                    <button
+                      type="button"
+                      title="Discuss in Chat"
+                      aria-label={`Discuss decision ${d.title}`}
+                      onClick={() => discussDecision(d)}
+                      className={
+                        spotlight
+                          ? "shrink-0 rounded-full border border-amber-glow/40 px-2.5 py-1.5 text-sm font-semibold text-amber-bright"
+                          : "shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
+                      }
+                    >
+                      💬
+                    </button>
+                  </div>
                 </div>
               );
             })

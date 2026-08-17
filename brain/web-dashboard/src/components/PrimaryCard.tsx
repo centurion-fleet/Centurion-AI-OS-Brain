@@ -141,42 +141,32 @@ export const PrimaryCard = memo(function PrimaryCard({
           )}
         </div>
 
+        {shown.length > 0 ? (
         <div className="mt-10 border-t border-white/8 pt-5">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-dim">
-              Documents{total > 0 ? ` · ${total}` : ""}
+              Documents · {total}
             </p>
-            <Link
-              to={docsHref}
-              className="text-[11px] font-semibold text-amber-soft transition hover:text-amber-bright"
-            >
-              View all
-            </Link>
           </div>
-          {shown.length === 0 ? (
-            <p className="text-sm text-ink-dim">
-              Documents for this mission will show here.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {shown.map((d) => (
-                <li key={d.id}>
-                  <Link
-                    to={docsHref}
-                    className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm text-ink transition hover:text-amber-soft"
-                  >
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {d.title}
-                    </span>
-                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-dim">
-                      {d.doc_type || "other"}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="space-y-1">
+            {shown.map((d) => (
+              <li key={d.id}>
+                <Link
+                  to={docsHref}
+                  className="flex min-h-11 items-center gap-2 rounded-lg px-1 py-1.5 text-sm text-ink transition hover:text-amber-soft"
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {d.title}
+                  </span>
+                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-dim">
+                    {d.doc_type || "other"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
+        ) : null}
       </div>
     </motion.div>
   );

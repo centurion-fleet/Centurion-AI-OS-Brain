@@ -57,7 +57,7 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
 
         var displayLabel: String {
             switch self {
-            case .pendingReview: return "Needs your review"
+            case .pendingReview: return "Decisions needed"
             case .proceeded: return "In progress"
             case .held: return "On hold"
             case .adjusted: return "Adjusting"
@@ -374,7 +374,7 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
     static let reviewOptions: [DecisionOption] = [
         DecisionOption(label: "Proceed", description: "Tell your Sovereign to continue with this plan"),
         DecisionOption(label: "Adjust", description: "Open Crypto Chat to refine the plan"),
-        DecisionOption(label: "Hold", description: "Keep this in Needs your choice for now"),
+        DecisionOption(label: "Hold", description: "Keep this in Decisions needed for now"),
     ]
 
     static let proposeFirstStandingRule =

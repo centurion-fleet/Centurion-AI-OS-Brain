@@ -201,6 +201,110 @@ def test_plan_decide_writes_life_decision(life_home):
     assert any("Approved" in (d.get("chosen") or "") for d in decisions)
 
 
+def test_resolve_decision_marks_done(life_home):
+    from centurion_cli.life_missions import (
+        list_decisions,
+        log_decision,
+        put_mission,
+        resolve_decision,
+    )
+    from centurion_cli.remote_bridge import handle_request
+
+    mission = put_mission(
+        {
+            "title": "Ship product",
+            "statement": "Ship product",
+            "mission_type": "primary",
+            "targets": [{"title": "MVP", "target_type": "essential"}],
+        }
+    )
+    open_one = log_decision(
+        {
+            "mission_id": mission["id"],
+            "title": "Pick a colour",
+            "context": "Brand palette",
+        }
+    )
+    assert open_one["chosen"] == ""
+    closed = resolve_decision(open_one["id"], "Amber")
+    assert closed["chosen"] == "Amber"
+    listed = list_decisions(mission_id=mission["id"])
+    assert listed[0]["id"] == open_one["id"]
+    assert listed[0]["chosen"] == "Amber"
+
+    again = log_decision({"mission_id": mission["id"], "title": "Ship date"})
+    resp = handle_request(
+        {
+            "id": "t1",
+            "action": "life_decision_resolve",
+            "decision_id": again["id"],
+            "chosen": "Done",
+        }
+    )
+    assert resp["ok"] is True
+    assert resp["decision"]["chosen"] == "Done"
+
+
+def test_log_decision_records_choice_in_place(life_home):
+    """Saving a choice updates the waiting row — it stays on the mission, not as a second open item."""
+    from centurion_cli.life_missions import (
+        get_data_version,
+        list_decisions,
+        log_decision,
+        put_mission,
+    )
+    from centurion_cli.remote_bridge import handle_request
+
+    mission = put_mission(
+        {
+            "title": "Ship product",
+            "statement": "Ship product",
+            "mission_type": "primary",
+            "targets": [{"title": "MVP", "target_type": "essential"}],
+        }
+    )
+    waiting = log_decision(
+        {
+            "mission_id": mission["id"],
+            "title": "Pick a colour",
+            "context": "Brand palette",
+        }
+    )
+    before = get_data_version()
+    recorded = log_decision(
+        {
+            "id": waiting["id"],
+            "mission_id": mission["id"],
+            "title": "Pick a colour",
+            "chosen": "Amber",
+            "context": "Brand palette",
+        }
+    )
+    assert recorded["id"] == waiting["id"]
+    assert recorded["chosen"] == "Amber"
+    listed = list_decisions(mission_id=mission["id"])
+    assert len(listed) == 1
+    assert listed[0]["chosen"] == "Amber"
+    assert get_data_version() > before
+
+    resp = handle_request(
+        {
+            "id": "req-1",
+            "action": "life_decision_log",
+            "decision": {
+                "id": waiting["id"],
+                "mission_id": mission["id"],
+                "title": "Pick a colour",
+                "chosen": "Bronze",
+            },
+        }
+    )
+    assert resp["ok"] is True
+    assert resp["decision"]["id"] == waiting["id"]
+    assert resp["decision"]["chosen"] == "Bronze"
+    assert len(list_decisions(mission_id=mission["id"])) == 1
+
+
 def test_bridge_life_actions(life_home):
     from centurion_cli.remote_bridge import handle_request
 
@@ -307,16 +411,19 @@ def test_put_list_document_resolve_inject(life_home):
         for t in thoughts
     )
 
-    # Omitting mission_id falls back to Primary.
+    # Omitting mission_id lands in Document library — not on Primary.
+    from centurion_cli.life_missions import DOCUMENT_LIBRARY_MISSION_ID
+
     doc2 = put_document(
         {
-            "title": "Primary default memo",
-            "body_md": "Landed on primary without mission_id.",
+            "title": "Library default memo",
+            "body_md": "Landed in the library without mission_id.",
             "doc_type": "content",
             "announce": False,
         }
     )
-    assert doc2["mission_id"] == mission["id"]
+    assert doc2["mission_id"] == DOCUMENT_LIBRARY_MISSION_ID
+    assert doc2["id"] not in {d["id"] for d in list_documents(mission_id=mission["id"])}
 
     updated = put_document(
         {

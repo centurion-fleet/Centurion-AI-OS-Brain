@@ -7,13 +7,15 @@ import { SupportingRow } from "../components/SupportingRow";
 import { DreamList } from "../components/DreamList";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { PulseIndicators } from "../components/PulseIndicators";
-import { useMissionStack, usePrimaryDocuments } from "../hooks/useLife";
+import { useMissionStack } from "../hooks/useLife";
 import { useSSE } from "../hooks/useSSE";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { useOpenDecisions } from "../hooks/useOpenDecisions";
+import { usePendingPlans } from "../hooks/usePendingPlans";
 import { bridgeCall } from "../hooks/useBridge";
 import { prefetchMissionChunk } from "../prefetch";
 import { AttentionBanner } from "../components/AttentionBanner";
+import { DocumentsRow } from "../components/DocumentsRow";
 
 export function Deck() {
   const navigate = useNavigate();
@@ -21,26 +23,25 @@ export function Deck() {
   const reduce = useReducedMotion();
   const [findOpen, setFindOpen] = useState(false);
   const { stack, loading, error, refresh } = useMissionStack(20_000, deckVisible);
+  const { open: openDecisions, refresh: refreshOpenDecisions } =
+    useOpenDecisions(deckVisible);
+  const { plans: pendingPlans, refresh: refreshPendingPlans } =
+    usePendingPlans(deckVisible);
   const { thoughts, connected } = useSSE({
     enabled: deckVisible,
     limit: 32,
     onDataVersion: () => {
       void refresh();
+      void refreshOpenDecisions();
+      void refreshPendingPlans();
     },
   });
-  const { open: openDecisions } = useOpenDecisions(deckVisible);
   const autoDiscoveryDone = useRef(false);
 
   const primary = stack?.primary ?? null;
   const supporting = stack?.supporting ?? [];
   const dreams = stack?.dreams ?? [];
   const empty = !loading && !primary && supporting.length === 0;
-
-  const { documents: primaryDocs, count: primaryDocCount } = usePrimaryDocuments(
-    primary?.id,
-    deckVisible && !!primary,
-    60_000,
-  );
 
   useEffect(() => {
     if (!empty || !deckVisible || autoDiscoveryDone.current) return;
@@ -137,7 +138,14 @@ export function Deck() {
         </div>
       )}
 
-      <AttentionBanner decisions={openDecisions} />
+      <AttentionBanner
+        decisions={openDecisions}
+        plans={pendingPlans}
+        onResolved={() => {
+          void refreshOpenDecisions();
+          void refreshPendingPlans();
+        }}
+      />
 
       {loading && !stack ? (
         <div className="mt-16 animate-pulse-soft text-center text-ink-dim">
@@ -175,8 +183,6 @@ export function Deck() {
               hero
               mission={primary}
               latestThought={latestThought}
-              documents={primaryDocs}
-              documentCount={primaryDocCount}
               onOpen={openPrimary}
               onDiscuss={discussPrimary}
               onPrefetch={prefetchMissionChunk}
@@ -196,6 +202,8 @@ export function Deck() {
           />
 
           <DreamList dreams={dreams} onPromote={promoteDream} />
+
+          <DocumentsRow enabled={deckVisible} />
 
           <ActivityFeed thoughts={thoughts} title="Live pulse" max={32} />
         </>

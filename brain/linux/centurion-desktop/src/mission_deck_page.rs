@@ -699,6 +699,67 @@ fn attach_webview(
                     (hooks.on_ask_about)(topic, kickoff);
                     return;
                 }
+                if kind == "plan" {
+                    let title = v
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Plan")
+                        .to_string();
+                    let id = v
+                        .get("id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let status = v
+                        .get("status")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("pending_review")
+                        .to_string();
+                    let goal = v
+                        .get("goal")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let summary = v
+                        .get("summary")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let steps = v
+                        .get("steps")
+                        .and_then(|s| s.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    let risks = v
+                        .get("risks")
+                        .and_then(|s| s.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    let kickoff = v
+                        .get("kickoff")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Please proceed with this plan now.")
+                        .to_string();
+                    let topic = DiscussTopic::Plan {
+                        id: if id.is_empty() { title.clone() } else { id },
+                        title,
+                        status,
+                        goal,
+                        summary,
+                        steps,
+                        risks,
+                    };
+                    (hooks.on_ask_about)(topic, kickoff);
+                    return;
+                }
                 if kind == "document" {
                     let title = v
                         .get("title")

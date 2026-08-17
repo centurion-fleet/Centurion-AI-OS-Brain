@@ -108,7 +108,7 @@ struct SwarmDetailSheet: View {
 
     private var signalsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            CenturionSectionHeader(title: "Needs your choice", icon: "lightbulb.fill")
+            CenturionSectionHeader(title: "Decisions needed", icon: "lightbulb.fill")
             ForEach(swarmStore.signals(for: current.id)) { signal in
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(signal.message)

@@ -96,7 +96,7 @@ impl PulseCategory {
             Self::Plans => "Missions",
             Self::Wins => "Finished",
             Self::Outputs => "Documents",
-            Self::Decisions => "Needs your choice",
+            Self::Decisions => "Decisions needed",
             Self::Pulse => "Updates",
         }
     }
@@ -4262,7 +4262,7 @@ What should we focus on next?"
                         ));
                     } else {
                         for (label, items) in [
-                            ("Needs review", pending),
+                            ("Decisions needed", pending),
                             ("In progress", active),
                             ("Done", done),
                         ] {

@@ -1199,37 +1199,81 @@ def validate_sequence(mission_id: str) -> dict[str, Any]:
 
 
 def log_decision(fields: dict[str, Any]) -> dict[str, Any]:
+    """Insert a decision, or update an existing row when ``id`` matches.
+
+    Updating in place is how Focus records a choice on a waiting item so it
+    stays on the mission as history instead of spawning a second open row.
+    """
     now = _utc_now()
-    did = str(fields.get("id") or _new_id())
+    did = str(fields.get("id") or "").strip()
     title = str(fields.get("title") or "").strip()
     if not title:
         raise ValueError("title required")
     options = fields.get("options")
-    if not isinstance(options, list):
-        options = []
+    options_json = (
+        json.dumps(options) if isinstance(options, list) else None
+    )
+    chosen = str(fields.get("chosen") or "")
+    context = str(fields.get("context") or "")
+    human_said = str(fields.get("human_said") or fields.get("humanSaid") or "")
+    ai_rec = str(
+        fields.get("ai_recommendation") or fields.get("aiRecommendation") or ""
+    )
+    mid = fields.get("mission_id")
+    tid = fields.get("target_id")
     with _conn() as conn:
-        conn.execute(
-            "INSERT INTO life_decisions("
-            "id, mission_id, target_id, title, context, options_json, chosen, "
-            "human_said, ai_recommendation, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (
-                did,
-                fields.get("mission_id"),
-                fields.get("target_id"),
-                title,
-                str(fields.get("context") or ""),
-                json.dumps(options),
-                str(fields.get("chosen") or ""),
-                str(fields.get("human_said") or fields.get("humanSaid") or ""),
-                str(
-                    fields.get("ai_recommendation")
-                    or fields.get("aiRecommendation")
-                    or ""
+        existing = None
+        if did:
+            existing = conn.execute(
+                "SELECT * FROM life_decisions WHERE id = ?", (did,)
+            ).fetchone()
+        if existing:
+            if options_json is None:
+                options_json = existing["options_json"] or "[]"
+            if not human_said:
+                human_said = existing["human_said"] or ""
+            if not ai_rec:
+                ai_rec = existing["ai_recommendation"] or ""
+            conn.execute(
+                "UPDATE life_decisions SET title = ?, context = ?, "
+                "options_json = ?, chosen = ?, human_said = ?, "
+                "ai_recommendation = ?, "
+                "mission_id = COALESCE(?, mission_id), "
+                "target_id = COALESCE(?, target_id) WHERE id = ?",
+                (
+                    title,
+                    context,
+                    options_json,
+                    chosen,
+                    human_said,
+                    ai_rec,
+                    mid,
+                    tid,
+                    did,
                 ),
-                now,
-            ),
-        )
-        mid = fields.get("mission_id")
+            )
+            if not mid:
+                mid = existing["mission_id"]
+        else:
+            if not did:
+                did = _new_id()
+            conn.execute(
+                "INSERT INTO life_decisions("
+                "id, mission_id, target_id, title, context, options_json, chosen, "
+                "human_said, ai_recommendation, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    did,
+                    mid,
+                    tid,
+                    title,
+                    context,
+                    options_json if options_json is not None else "[]",
+                    chosen,
+                    human_said,
+                    ai_rec,
+                    now,
+                ),
+            )
         if mid:
             conn.execute(
                 "INSERT INTO life_mission_state(mission_id, last_decision_id, "
@@ -1239,14 +1283,46 @@ def log_decision(fields: dict[str, Any]) -> dict[str, Any]:
                 "last_decision_id=excluded.last_decision_id, updated_at=excluded.updated_at",
                 (mid, did, now),
             )
+        bump_data_version(conn)
         row = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (did,)).fetchone()
-        d = _row_dict(row)
-        assert d is not None
-        try:
-            d["options"] = json.loads(d.pop("options_json") or "[]")
-        except json.JSONDecodeError:
-            d["options"] = []
-        return d
+        return _decision_from_row(row)
+
+
+def _decision_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    d = _row_dict(row)
+    assert d is not None
+    try:
+        d["options"] = json.loads(d.pop("options_json") or "[]")
+    except json.JSONDecodeError:
+        d["options"] = []
+    return d
+
+
+def resolve_decision(decision_id: str, chosen: str = "Done") -> dict[str, Any]:
+    """Mark an open decision as chosen / done so it leaves Needs your choice."""
+    did = str(decision_id or "").strip()
+    if not did:
+        raise ValueError("decision id required")
+    choice = str(chosen or "").strip() or "Done"
+    now = _utc_now()
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (did,)).fetchone()
+        if row is None:
+            raise ValueError("Decision not found.")
+        conn.execute("UPDATE life_decisions SET chosen = ? WHERE id = ?", (choice, did))
+        mid = row["mission_id"]
+        if mid:
+            conn.execute(
+                "INSERT INTO life_mission_state(mission_id, last_decision_id, "
+                "completed_target_ids_json, checkpoint_json, updated_at) "
+                "VALUES (?, ?, '[]', '{}', ?) "
+                "ON CONFLICT(mission_id) DO UPDATE SET "
+                "last_decision_id=excluded.last_decision_id, updated_at=excluded.updated_at",
+                (mid, did, now),
+            )
+        bump_data_version(conn)
+        updated = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (did,)).fetchone()
+        return _decision_from_row(updated)
 
 
 def list_decisions(*, mission_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
@@ -1281,11 +1357,10 @@ def put_document(fields: dict[str, Any]) -> dict[str, Any]:
     now = _utc_now()
     mission_id = str(fields.get("mission_id") or "").strip()
     if not mission_id:
-        # Default to Primary so Focus write-ups land under a mission even if
-        # the model omits mission_id.
+        # Unscoped writes land in Document library — not on Primary — so a
+        # mission page only shows documents that belong to that mission.
         try:
-            primary = get_stack().get("primary") or {}
-            mission_id = str(primary.get("id") or "").strip()
+            mission_id = ensure_document_library_mission()
         except Exception:
             mission_id = ""
     if not mission_id:
@@ -1540,16 +1615,28 @@ def list_documents(
     with _conn() as conn:
         if mission_id:
             rows = conn.execute(
-                "SELECT * FROM life_documents WHERE mission_id = ? "
-                "ORDER BY updated_at DESC LIMIT ?",
+                "SELECT d.*, m.title AS mission_title FROM life_documents d "
+                "LEFT JOIN life_missions m ON m.id = d.mission_id "
+                "WHERE d.mission_id = ? "
+                "ORDER BY d.updated_at DESC LIMIT ?",
                 (str(mission_id), lim),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM life_documents ORDER BY updated_at DESC LIMIT ?",
+                "SELECT d.*, m.title AS mission_title FROM life_documents d "
+                "LEFT JOIN life_missions m ON m.id = d.mission_id "
+                "ORDER BY d.updated_at DESC LIMIT ?",
                 (lim,),
             ).fetchall()
-        return [_row_dict(r) for r in rows]  # type: ignore[misc]
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            d = _row_dict(row)
+            if d is None:
+                continue
+            title = str(d.pop("mission_title", None) or "").strip()
+            d["mission_title"] = title or None
+            out.append(d)
+        return out
 
 
 def search_documents(
