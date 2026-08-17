@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { FocusBackBar } from "../components/FocusBackBar";
 import { AnimatePresence, m as motion } from "framer-motion";
 import { bridgeCall } from "../hooks/useBridge";
 
@@ -158,10 +159,8 @@ export function Discovery() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl flex-col px-4 pb-16 pt-8 sm:px-6">
-      <Link to="/" className="mb-8 text-sm text-ink-dim hover:text-amber-soft">
-        ← Focus
-      </Link>
+    <div className="mx-auto flex min-h-screen max-w-xl flex-col bg-surface/40 px-4 pb-16 pt-0 sm:px-6">
+      <FocusBackBar eyebrow="Discovery" title="Shape a primary mission" />
 
       <AnimatePresence mode="wait">
         <motion.div

@@ -1,9 +1,10 @@
-"""Family Beneficiary referrals → GoHighLevel (from the Brain / iPhone Remote).
+"""Family Beneficiary + lead capture → GoHighLevel / DrivenAction.
 
-iPhone Settings (You) captures colleague name, email, and phone on the linked
-Brain. This module upserts those contacts into GHL for marketing nurture and,
-on snapshot refresh, checks GHL tags to credit successful purchases toward the
-Family Beneficiary fee machine (4 purchases → complimentary Centurion).
+Brain You and iPhone You capture (1) a family-beneficiary first name and
+(2) colleague leads (name, email, phone). This module upserts those contacts
+into GHL (DrivenAction) for nurture and, on snapshot refresh, checks GHL tags
+to credit successful purchases toward the Family Beneficiary fee machine
+(4 purchases → complimentary Centurion).
 
 Secrets (Brain ``~/.centurion/.env`` only — never ship in the iPhone binary):
   GHL_API_KEY
@@ -125,7 +126,12 @@ def _request(
 
 
 def _referral_tags(*, pending: bool = False, purchased: bool = False) -> list[str]:
-    tags = ["centurion-referral", "centurion-family-beneficiary"]
+    tags = [
+        "drivenaction",
+        "drivenaction-lead",
+        "centurion-referral",
+        "centurion-family-beneficiary",
+    ]
     if pending:
         tags.append("centurion-referral-pending")
     if purchased:
@@ -156,7 +162,7 @@ def push_colleague_referral(referral: dict[str, Any]) -> None:
     first, last = _split_name(name)
     body: dict[str, Any] = {
         "locationId": location_id,
-        "source": "centurion-iphone-family-referral",
+        "source": "centurion-iphone-family-referral | DrivenAction",
         "tags": _referral_tags(pending=True),
     }
     if email:
@@ -171,13 +177,56 @@ def push_colleague_referral(referral: dict[str, Any]) -> None:
     install = _install_id()
     if install:
         note_bits.append(f"referrer install {install}")
-    body["source"] = f"centurion-iphone | {' | '.join(note_bits)}"
+    body["source"] = f"centurion-iphone | DrivenAction | {' | '.join(note_bits)}"
 
     # Prefer upsert when we have email; otherwise create-only with phone.
     path = "/contacts/upsert" if email else "/contacts/"
     result = _request("POST", path, body=body)
     if result is not None:
         logger.info("GHL referral upserted id=%s email=%s", referral_id, email or "(phone)")
+
+
+def push_family_nomination(first_name: str) -> None:
+    """Upsert a family-beneficiary nomination into GHL / DrivenAction.
+
+    Nominations are first-name only. GHL upsert accepts firstName + lastName
+    without email/phone, which is enough to land the lead for nurture.
+    """
+    name = str(first_name or "").strip()
+    if not name:
+        return
+    if not _ghl_credentials():
+        logger.info("GHL family nomination skipped — set GHL_API_KEY and GHL_LOCATION_ID")
+        return
+
+    api_key_location = _ghl_credentials()
+    assert api_key_location is not None
+    _, location_id = api_key_location
+
+    install = _install_id()
+    tags = [
+        "drivenaction",
+        "drivenaction-lead",
+        "centurion-family-beneficiary",
+        "centurion-family-nominee",
+    ]
+    if install:
+        tags.append(f"centurion-referrer-{_slug(install)}")
+
+    note_bits = [f"Family beneficiary nominated: {name}"]
+    if install:
+        note_bits.append(f"referrer install {install}")
+
+    body: dict[str, Any] = {
+        "locationId": location_id,
+        "firstName": name,
+        "lastName": "Family nominee",
+        "source": f"centurion-family-nomination | DrivenAction | {' | '.join(note_bits)}",
+        "tags": tags,
+    }
+    result = _request("POST", "/contacts/upsert", body=body)
+    if result is not None:
+        logger.info("GHL family nomination upserted name=%s", name)
 
 
 def _contact_tags(contact: dict[str, Any]) -> set[str]:

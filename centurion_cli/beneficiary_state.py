@@ -170,6 +170,12 @@ def set_family_beneficiary(first_name: str) -> dict[str, Any]:
 
     cycle["family_beneficiary_first_name"] = name
     _save_state(state)
+    try:
+        from centurion_cli.beneficiary_cloud import push_family_nomination
+
+        push_family_nomination(name)
+    except Exception:
+        pass
     return _snapshot_from_state(state)
 
 

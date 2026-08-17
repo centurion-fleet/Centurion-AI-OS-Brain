@@ -1,4 +1,5 @@
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { FocusBackBar } from "../components/FocusBackBar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { m as motion } from "framer-motion";
 import { TargetSequence } from "../components/TargetSequence";
@@ -110,8 +111,11 @@ export function Mission() {
     return (
       <div className="mx-auto max-w-lg px-4 py-20 text-center">
         <p className="text-ink-muted">{error || "Mission not found"}</p>
-        <Link to="/" className="mt-4 inline-block text-amber-soft">
-          ← Back to Focus
+        <Link
+          to="/"
+          className="mt-4 inline-flex min-h-11 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-[var(--on-accent)]"
+        >
+          Back to Focus
         </Link>
       </div>
     );
@@ -301,13 +305,11 @@ export function Mission() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-7xl px-4 pb-20 pt-6 sm:px-6">
-      <Link
-        to="/"
-        className="mb-6 inline-flex text-sm text-ink-dim transition hover:text-amber-soft"
-      >
-        ← Focus
-      </Link>
+    <div className="mx-auto min-h-screen max-w-7xl bg-surface/40 px-4 pb-20 pt-0 sm:px-6">
+      <FocusBackBar
+        eyebrow="Mission"
+        title={missionTypeLabel(mission.mission_type)}
+      />
 
       {attentionDecision && (
         <div
@@ -345,7 +347,7 @@ export function Mission() {
         transition={{ type: "spring", stiffness: 160, damping: 22 }}
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
-          {missionTypeLabel(mission.mission_type)}
+          {missionTypeLabel(mission.mission_type)} · detail
         </p>
         <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
           {mission.title}

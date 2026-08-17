@@ -5,12 +5,24 @@ struct MissionStackView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var messageService: MessageService
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedMission: FullMission?
     @State private var chatTarget: ChatSheetTarget?
     @State private var statusMessage: String?
 
     var body: some View {
         List {
+            Section {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Back to Focus", systemImage: "chevron.left")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .accessibilityHint("Return to the Focus home page")
+            }
+
             if let primary = missionStore.stack.primary {
                 Section("Primary Mission") {
                     Button {
@@ -112,7 +124,9 @@ struct MissionStackView: View {
                 }
             }
         }
-        .navigationTitle("Mission Stack")
+        .navigationTitle("Mission stack")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(.visible, for: .navigationBar)
         .task {
             guard !connectionManager.isPipeBusyForSideTraffic else { return }
             await missionStore.refreshLifeStack(from: connectionManager)
@@ -143,23 +157,31 @@ struct MissionStackView: View {
     }
 
     private func missionRow(_ mission: FullMission, badge: String?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
                 Text(mission.title.isEmpty ? mission.statement : mission.title)
-                    .font(.body.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(ColorTheme.primaryText())
-                Spacer()
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 8)
                 if let badge {
                     Text(badge)
                         .font(.caption2.weight(.bold))
+                        .foregroundStyle(ColorTheme.onAccent())
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(ColorTheme.accent().opacity(0.2)))
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(ColorTheme.accent()))
                 }
             }
+            if !mission.statement.isEmpty, !mission.title.isEmpty {
+                Text(mission.statement)
+                    .font(.subheadline)
+                    .foregroundStyle(ColorTheme.mutedText())
+                    .lineLimit(3)
+            }
             Text(mission.phase.label)
-                .font(.caption)
-                .foregroundStyle(ColorTheme.mutedText())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(ColorTheme.accent())
             if let focus = mission.focusTarget {
                 Text("Focus · \(focus.title)")
                     .font(.caption)
@@ -170,7 +192,7 @@ struct MissionStackView: View {
                 total: Double(max(mission.targetCount, 1))
             )
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 }
 
@@ -183,6 +205,15 @@ struct MissionDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Back to missions", systemImage: "chevron.left")
+                        .font(.body.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+            }
             Section("Where I’m At") {
                 Text(mission.situation.isEmpty ? "No situation set yet." : mission.situation)
             }

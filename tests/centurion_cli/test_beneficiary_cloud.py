@@ -80,3 +80,44 @@ def test_push_builds_ghl_payload(monkeypatch):
     assert captured["path"] == "/contacts/upsert"
     assert captured["body"]["email"] == "jamie@example.com"
     assert "centurion-referral-pending" in captured["body"]["tags"]
+    assert "drivenaction" in captured["body"]["tags"]
+    assert "drivenaction-lead" in captured["body"]["tags"]
+    assert "DrivenAction" in captured["body"]["source"]
+
+
+def test_set_family_pushes_ghl_nomination(tmp_path, monkeypatch):
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / ".centurion"))
+    pushed = {}
+
+    def fake_push(name):
+        pushed["name"] = name
+
+    with patch("centurion_cli.beneficiary_cloud.push_family_nomination", fake_push):
+        bs.set_family_beneficiary("Alex")
+    assert pushed["name"] == "Alex"
+
+
+def test_push_family_nomination_payload(monkeypatch):
+    monkeypatch.setenv("GHL_API_KEY", "test-key")
+    monkeypatch.setenv("GHL_LOCATION_ID", "loc-1")
+    captured = {}
+
+    def fake_request(method, path, body=None, timeout=12.0):
+        captured["method"] = method
+        captured["path"] = path
+        captured["body"] = body
+        return {"contact": {"id": "c1"}}
+
+    with patch("centurion_cli.beneficiary_cloud._request", fake_request), patch(
+        "centurion_cli.beneficiary_cloud._install_id", return_value="brain_abc"
+    ):
+        from centurion_cli.beneficiary_cloud import push_family_nomination
+
+        push_family_nomination("Alex")
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/contacts/upsert"
+    assert captured["body"]["firstName"] == "Alex"
+    assert captured["body"]["lastName"] == "Family nominee"
+    assert "centurion-family-nominee" in captured["body"]["tags"]
+    assert "drivenaction-lead" in captured["body"]["tags"]
+    assert "DrivenAction" in captured["body"]["source"]

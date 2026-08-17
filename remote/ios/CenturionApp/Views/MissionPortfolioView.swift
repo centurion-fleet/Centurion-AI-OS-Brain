@@ -144,7 +144,7 @@ struct MissionPortfolioView: View {
     }
 
     var body: some View {
-        TabPageChrome(screenTitle: nil, header: {
+        TabPageChrome(screenTitle: nil, navigationBackTitle: "Focus", header: {
             HStack(alignment: .center, spacing: Spacing.sm) {
                 Text("Focus")
                     .font(.subheadline.weight(.medium))
@@ -303,6 +303,8 @@ struct MissionPortfolioView: View {
                 .environmentObject(swarmStore)
 
                 missionBanner
+
+                supportingMissionsStrip
 
                 if !missionStore.activeTargets.isEmpty {
                     activeTargetsStrip
@@ -654,6 +656,63 @@ struct MissionPortfolioView: View {
                     missionStatement
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var supportingMissionsStrip: some View {
+        let supporting = missionStore.stack.supporting
+        return Group {
+            if !supporting.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack {
+                        Text("Supporting missions")
+                            .font(.headline)
+                            .foregroundColor(ColorTheme.primaryText())
+                        Spacer()
+                        Text("\(supporting.count)")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(ColorTheme.onAccent())
+                            .frame(minWidth: 22, minHeight: 22)
+                            .background(ColorTheme.accent())
+                            .clipShape(Circle())
+                    }
+                    ForEach(supporting.prefix(4)) { mission in
+                        NavigationLink {
+                            MissionStackView()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(mission.title.isEmpty ? mission.statement : mission.title)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundColor(ColorTheme.primaryText())
+                                    .multilineTextAlignment(.leading)
+                                if !mission.statement.isEmpty, !mission.title.isEmpty {
+                                    Text(mission.statement)
+                                        .font(.caption)
+                                        .foregroundColor(ColorTheme.mutedText())
+                                        .lineLimit(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Spacing.md)
+                            .background(ColorTheme.surface())
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(ColorTheme.border(), lineWidth: 0.5)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    NavigationLink {
+                        MissionStackView()
+                    } label: {
+                        Text("See all missions")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ColorTheme.accent())
+                    }
+                    .frame(minHeight: 44, alignment: .leading)
+                }
             }
         }
     }

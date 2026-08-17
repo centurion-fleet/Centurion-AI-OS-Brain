@@ -11,14 +11,20 @@ export function AttentionBanner({
 
   return (
     <div
-      className="mt-6 rounded-2xl border border-amber-glow/35 bg-amber-muted/40 px-4 py-3"
+      className="mt-6 rounded-2xl border-2 border-amber-glow/50 bg-amber-muted px-4 py-4"
       role="status"
       aria-live="polite"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
-        Needs your choice ({decisions.length})
-      </p>
-      <ul className="mt-2 space-y-2">
+      <div className="flex items-center gap-3">
+        <span
+          className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-full bg-accent text-sm font-bold text-[var(--on-accent)]"
+          aria-label={`${decisions.length} need your choice`}
+        >
+          {decisions.length}
+        </span>
+        <p className="text-sm font-semibold text-ink">Needs your choice</p>
+      </div>
+      <ul className="mt-3 space-y-2">
         {decisions.map((d) => {
           const mid = d.mission_id;
           const body = (
@@ -36,11 +42,11 @@ export function AttentionBanner({
               {mid ? (
                 <Link
                   to={`/mission/${mid}?attention=${encodeURIComponent(d.id)}`}
-                  className="block rounded-xl px-2 py-1.5 transition hover:bg-amber-glow/15"
+                  className="block rounded-xl px-2 py-2 transition hover:bg-amber-glow/15"
                 >
                   {body}
                   <span className="mt-1 block text-[11px] font-semibold text-amber-bright">
-                    Open →
+                    Open this choice
                   </span>
                 </Link>
               ) : (

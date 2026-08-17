@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Main application entry — three tabs: Chat, Focus, You.
 /// Only the selected tab is built (lazy) so launch stays fast.
@@ -79,6 +80,14 @@ struct ContentView: View {
             .tag(2)
         }
         .tint(ColorTheme.accent())
+        .onAppear {
+            // Bronze attention chip — not the system red error badge.
+            UITabBarItem.appearance().badgeColor = UIColor { trait in
+                trait.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.827, green: 0.804, blue: 0.749, alpha: 1.0)
+                    : UIColor(red: 0.263, green: 0.220, blue: 0.188, alpha: 1.0)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .centurionSelectTab)) { notification in
             if let tab = notification.object as? Int {
                 selectedTab = min(max(tab, 0), 2)

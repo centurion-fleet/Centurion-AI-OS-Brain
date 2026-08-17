@@ -124,15 +124,18 @@ struct SheetHeader: View {
 /// Award-level main tab layout: compact brand + optional chrome + content.
 struct MainTabChrome<Header: View, Content: View>: View {
     let screenTitle: String?
+    let navigationBackTitle: String
     let header: Header
     let content: Content
 
     init(
         screenTitle: String? = nil,
+        navigationBackTitle: String = "",
         @ViewBuilder header: () -> Header,
         @ViewBuilder content: () -> Content
     ) {
         self.screenTitle = screenTitle
+        self.navigationBackTitle = navigationBackTitle
         self.header = header()
         self.content = content()
     }
@@ -159,7 +162,7 @@ struct MainTabChrome<Header: View, Content: View>: View {
                         .ignoresSafeArea()
                 }
             )
-            .navigationTitle("")
+            .navigationTitle(navigationBackTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
         }
@@ -169,9 +172,11 @@ struct MainTabChrome<Header: View, Content: View>: View {
 extension MainTabChrome where Header == EmptyView {
     init(
         screenTitle: String? = nil,
+        navigationBackTitle: String = "",
         @ViewBuilder content: () -> Content
     ) {
         self.screenTitle = screenTitle
+        self.navigationBackTitle = navigationBackTitle
         self.header = EmptyView()
         self.content = content()
     }
@@ -180,7 +185,7 @@ extension MainTabChrome where Header == EmptyView {
         title: String,
         @ViewBuilder content: () -> Content
     ) {
-        self.init(screenTitle: title, content: content)
+        self.init(screenTitle: title, navigationBackTitle: title, content: content)
     }
 }
 
@@ -190,7 +195,7 @@ extension MainTabChrome {
         @ViewBuilder header: () -> Header,
         @ViewBuilder content: () -> Content
     ) {
-        self.init(screenTitle: title, header: header, content: content)
+        self.init(screenTitle: title, navigationBackTitle: title, header: header, content: content)
     }
 }
 
@@ -508,12 +513,13 @@ struct CenturionPillNav<Item: Hashable>: View {
                     .lineLimit(1)
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundColor(ColorTheme.onAccent())
+                        .frame(minWidth: 20, minHeight: 20)
                         .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
                         .background(ColorTheme.accent())
-                        .clipShape(Capsule())
+                        .clipShape(Circle())
+                        .accessibilityHidden(true)
                 }
             }
             .foregroundColor(isSelected ? ColorTheme.onAccent() : ColorTheme.primaryText())
@@ -531,7 +537,12 @@ struct CenturionPillNav<Item: Hashable>: View {
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(isSelected ? Color.clear : ColorTheme.border(), lineWidth: 0.5)
+                    .stroke(
+                        (!isSelected && count > 0 && title(item) == "Needs your choice")
+                            ? ColorTheme.accent()
+                            : (isSelected ? Color.clear : ColorTheme.border()),
+                        lineWidth: (!isSelected && count > 0 && title(item) == "Needs your choice") ? 1.5 : 0.5
+                    )
             )
         }
         .buttonStyle(.plain)

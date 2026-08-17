@@ -188,8 +188,10 @@ mod linux {
         let toolbar = adw::ToolbarView::new();
         if show_back {
             let header = adw::HeaderBar::new();
+            // Keep the NavigationView back control — hiding start buttons
+            // made Connect / You subpages look like a dead end.
             header.set_show_end_title_buttons(false);
-            header.set_show_start_title_buttons(false);
+            header.set_show_start_title_buttons(true);
             toolbar.add_top_bar(&header);
         }
         toolbar.set_content(Some(&scroll));
@@ -210,12 +212,23 @@ mod linux {
     }
 
     fn bind_you_link(row: &adw::ActionRow, nav: &adw::NavigationView, tag: &'static str) {
-        let nav = nav.clone();
+        let nav_row = nav.clone();
         // ActionRow click emits `activated` (same as pairing). `activate` is
         // only the keyboard keybinding, so the hub rows looked dead.
         row.connect_activated(move |_| {
-            nav.push_by_tag(tag);
+            nav_row.push_by_tag(tag);
         });
+        // Suffix button is a second path — some GTK builds swallow row activation
+        // when the hub lives outside a PreferencesPage.
+        let open = gtk::Button::with_label("Open");
+        open.set_valign(gtk::Align::Center);
+        open.add_css_class("flat");
+        open.set_size_request(64, 44);
+        let nav_btn = nav.clone();
+        open.connect_clicked(move |_| {
+            nav_btn.push_by_tag(tag);
+        });
+        row.add_suffix(&open);
     }
 
     #[derive(Default)]
@@ -1198,6 +1211,14 @@ The Brain here is the product; the phone is the remote.",
                 .xalign(0.0)
                 .build(),
         );
+        let hub_pair_button = gtk::Button::with_label("Pair Remote");
+        hub_pair_button.add_css_class("suggested-action");
+        hub_pair_button.set_halign(gtk::Align::Start);
+        hub_pair_button.set_size_request(-1, 44);
+        hub_pair_button.set_tooltip_text(Some(
+            "Show the pairing QR for Sovereign AI Remote on the same Wi‑Fi.",
+        ));
+        settings.append(&hub_pair_button);
 
         let settings_attention_banner = gtk::Box::new(gtk::Orientation::Vertical, 4);
         settings_attention_banner.add_css_class("centurion-attention-banner");
@@ -1262,6 +1283,11 @@ The Brain here is the product; the phone is the remote.",
             .icon_name("network-wireless-symbolic")
             .activatable(true)
             .build();
+        let pairing_qr_button = gtk::Button::with_label("Show QR");
+        pairing_qr_button.add_css_class("suggested-action");
+        pairing_qr_button.set_valign(gtk::Align::Center);
+        pairing_qr_button.set_size_request(-1, 44);
+        pairing_settings_row.add_suffix(&pairing_qr_button);
         connect_group.add(&pairing_settings_row);
 
         // --- You: person, mission, soul ---
@@ -2241,6 +2267,14 @@ The Brain here is the product; the phone is the remote.",
                 show_pairing_qr_window(&window);
             }
         });
+        pairing_qr_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_pairing_qr_window(&window)
+        });
+        hub_pair_button.connect_clicked({
+            let window = window.clone();
+            move |_| show_pairing_qr_window(&window)
+        });
         autonomy_button.connect_clicked({
             let window = window.clone();
             let autonomy_row = autonomy_row.clone();
@@ -2748,7 +2782,7 @@ The Brain here is the product; the phone is the remote.",
         }
     }
 
-    /// Tab titles stay ink; badge mark (!) / (N) is red — global attention chrome.
+    /// Tab titles stay ink; badge is a bronze count pill — not a red error mark.
     #[derive(Clone)]
     struct AttentionTabBar {
         badges: Rc<RefCell<HashMap<String, gtk::Label>>>,
@@ -2762,7 +2796,7 @@ The Brain here is the product; the phone is the remote.",
             };
             match mark {
                 Some(m) if !m.trim().is_empty() => {
-                    badge.set_label(&format!("({m})"));
+                    badge.set_label(m);
                     badge.set_visible(true);
                 }
                 _ => {
@@ -6740,10 +6774,21 @@ What capability should the skill cover?\n\n"
             .placeholder_text("Family beneficiary first name")
             .hexpand(true)
             .build();
-        let colleague = gtk::Entry::builder()
-            .placeholder_text("Colleague referral note / email")
+        let colleague_name = gtk::Entry::builder()
+            .placeholder_text("Colleague name")
             .hexpand(true)
             .build();
+        let colleague_email = gtk::Entry::builder()
+            .placeholder_text("Colleague email")
+            .hexpand(true)
+            .build();
+        let colleague_phone = gtk::Entry::builder()
+            .placeholder_text("Colleague phone")
+            .hexpand(true)
+            .build();
+        let attest = gtk::CheckButton::with_label(
+            "This is a friend or colleague, not a family member",
+        );
         let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
         form.append(
             &gtk::Label::builder()
@@ -6753,11 +6798,22 @@ What capability should the skill cover?\n\n"
                 .selectable(true)
                 .build(),
         );
+        form.append(
+            &gtk::Label::builder()
+                .label("Nominations and colleague leads sync to DrivenAction when this Brain is configured.")
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(["dim-label"])
+                .build(),
+        );
         form.append(&first);
-        form.append(&colleague);
+        form.append(&colleague_name);
+        form.append(&colleague_email);
+        form.append(&colleague_phone);
+        form.append(&attest);
         let dialog = adw::AlertDialog::builder()
             .heading("Family Beneficiary")
-            .body("Nominate a family member or record a colleague referral.")
+            .body("Nominate a family member, or capture a colleague lead (name plus email or phone).")
             .extra_child(&form)
             .close_response("close")
             .build();
@@ -6774,10 +6830,14 @@ What capability should the skill cover?\n\n"
                     );
                 }
                 "colleague" => {
-                    let note = colleague.text().trim().to_string();
                     let _ = run_bridge_action(
                         "beneficiary_submit_colleague",
-                        serde_json::json!({ "note": note, "email": note }),
+                        serde_json::json!({
+                            "name": colleague_name.text().trim().to_string(),
+                            "email": colleague_email.text().trim().to_string(),
+                            "phone": colleague_phone.text().trim().to_string(),
+                            "non_family_attested": attest.is_active(),
+                        }),
                     );
                 }
                 _ => {}

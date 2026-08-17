@@ -1,6 +1,13 @@
-# Sovereign AI Remote — TestFlight What to Test (build 45)
+# Sovereign AI Remote — TestFlight What to Test (build 46)
 
-**iOS App Version 5.3.0** (not 5.0.1 / 5.2.x). Build **45**.
+**iOS App Version 5.3.1** (not 5.0.1 / 5.2.x). Build **46**. Pair against Brain **5.3.1**.
+
+## 5.3.1
+
+- Brain You: **Pair Remote** on the hub, Connect **Open** / **Show QR** — pairing is reachable even if a hub row click is swallowed.
+- Focus: landing vs detail contrast. **Back to Focus** is a full-width control, not a tiny chevron. Supporting missions are larger on Focus and Mission stack.
+- Attention counts are bronze circular badges (not `(N)` in brackets, not red).
+- Nominate family + colleague leads sync to DrivenAction / GoHighLevel when the Brain has GHL keys.
 
 ## 5.3.0
 

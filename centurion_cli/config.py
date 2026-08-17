@@ -2450,14 +2450,14 @@ OPTIONAL_ENV_VARS = {
         "category": "tool",
     },
     "GHL_API_KEY": {
-        "description": "GoHighLevel Private Integration token — Family Beneficiary referrals from iPhone Settings sync to GHL for nurture and purchase tracking",
+        "description": "GoHighLevel / DrivenAction Private Integration token — family nominations and colleague leads from Brain and iPhone sync for nurture and purchase tracking",
         "prompt": "GoHighLevel API key",
         "url": "https://marketplace.gohighlevel.com/",
         "password": True,
         "category": "tool",
     },
     "GHL_LOCATION_ID": {
-        "description": "GoHighLevel Location (sub-account) ID for Family Beneficiary referral contacts",
+        "description": "GoHighLevel / DrivenAction Location (sub-account) ID for family nominations and colleague lead contacts",
         "prompt": "GoHighLevel Location ID",
         "url": "https://marketplace.gohighlevel.com/",
         "password": False,

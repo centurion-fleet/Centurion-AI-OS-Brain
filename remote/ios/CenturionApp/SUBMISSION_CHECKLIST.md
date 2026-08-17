@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.3.0** / build **45**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.3.1** / build **46**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -8,7 +8,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.3.0** / build **45**). Complete b
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md
-- [ ] ASC iOS version created as **5.3.0** (not a stale 5.0.1 / 5.2.x train)
+- [ ] ASC iOS version created as **5.3.1** (not a stale 5.0.1 / 5.2.x train)
 
 ## Encryption export compliance
 
