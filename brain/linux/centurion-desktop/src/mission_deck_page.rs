@@ -30,6 +30,144 @@ enum DeckAttention {
     SwarmWaiting,
 }
 
+fn deck_role(attention: DeckAttention) -> &'static str {
+    match attention {
+        DeckAttention::LifeDecisions => "focus",
+        DeckAttention::SwarmWaiting => "collab",
+    }
+}
+
+const PENDING_PLAN_STATUSES: &[&str] = &[
+    "pending_review",
+    "held",
+    "adjusted",
+    "proposed",
+    "pending",
+];
+
+/// Focus tab badge: only “Decisions needed” (open choices + pending plans).
+fn focus_attention_count() -> u32 {
+    count_open_decisions().saturating_add(count_pending_plans())
+}
+
+fn collab_seen_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        .join("brain_collab_seen.json")
+}
+
+fn load_collab_seen_unix() -> u64 {
+    std::fs::read_to_string(collab_seen_path())
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("seen_unix").and_then(|x| x.as_u64()))
+        .unwrap_or(0)
+}
+
+fn mark_collab_viewed() {
+    let path = collab_seen_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let payload = serde_json::json!({ "seen_unix": unix_secs() });
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
+fn parse_iso_unix(raw: &str) -> u64 {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return 0;
+    }
+    glib::DateTime::from_iso8601(trimmed, None)
+        .ok()
+        .map(|dt| dt.to_unix().max(0) as u64)
+        .unwrap_or(0)
+}
+
+fn count_open_decisions() -> u32 {
+    crate::chat_page::run_bridge_action(
+        "life_decisions_list",
+        serde_json::json!({ "limit": 200 }),
+    )
+    .as_ref()
+    .and_then(|b| b.get("decisions"))
+    .and_then(|v| v.as_array())
+    .map(|arr| {
+        arr.iter()
+            .filter(|d| {
+                d.get("chosen")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+                    .is_empty()
+            })
+            .count() as u32
+    })
+    .unwrap_or(0)
+}
+
+fn count_pending_plans() -> u32 {
+    crate::chat_page::run_bridge_action(
+        "plans_list",
+        serde_json::json!({ "status": "pending_review" }),
+    )
+    .as_ref()
+    .and_then(|b| b.get("plans"))
+    .and_then(|v| v.as_array())
+    .map(|arr| {
+        arr.iter()
+            .filter(|p| {
+                let st = p
+                    .get("status")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("pending_review")
+                    .to_ascii_lowercase();
+                PENDING_PLAN_STATUSES.iter().any(|x| *x == st)
+            })
+            .count() as u32
+    })
+    .unwrap_or(0)
+}
+
+/// Collab tab badge: items newer than the last time the user opened Collab.
+fn swarm_attention_count() -> u32 {
+    let last_seen = load_collab_seen_unix();
+    crate::chat_page::run_bridge_action("swarm_snapshot", serde_json::json!({}))
+        .as_ref()
+        .and_then(|b| b.get("swarms"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|s| unseen_collab_items(s, last_seen))
+                .sum::<u32>()
+        })
+        .unwrap_or(0)
+}
+
+fn unseen_collab_items(swarm: &serde_json::Value, last_seen: u64) -> u32 {
+    if let Some(cards) = swarm.get("cards").and_then(|c| c.as_array()) {
+        if !cards.is_empty() {
+            return cards
+                .iter()
+                .filter(|c| {
+                    let ts = c
+                        .get("created_at")
+                        .and_then(|t| t.as_str())
+                        .map(parse_iso_unix)
+                        .unwrap_or(0);
+                    ts > last_seen
+                })
+                .count() as u32;
+        }
+    }
+    let updated = swarm
+        .get("updated_at")
+        .and_then(|t| t.as_str())
+        .map(parse_iso_unix)
+        .unwrap_or(0);
+    u32::from(updated > last_seen)
+}
+
 struct DeckRuntime {
     ready: Arc<DeckReady>,
     supervisor: Option<Arc<Mutex<DeckSupervisor>>>,
@@ -386,7 +524,13 @@ fn build_inner(
                 retry.set_visible(true);
                 return;
             }
-            match attach_webview(&root, hooks.clone(), suspended.clone(), initial_url) {
+            match attach_webview(
+                &root,
+                hooks.clone(),
+                suspended.clone(),
+                initial_url,
+                deck_role(attention_kind),
+            ) {
                 Some(wv) => {
                     apply_deck_suspend(&wv, suspended.get());
                     *webview_slot.borrow_mut() = Some(wv);
@@ -557,10 +701,19 @@ fn build_inner(
         let deck_ready = deck_ready.clone();
         let attach_if_needed = attach_if_needed.clone();
         let start_warm = start_warm.clone();
+        let attention = attention.clone();
+        let hooks = hooks.clone();
         Rc::new(move |visible: bool| {
             let now_suspended = !visible;
             suspended.set(now_suspended);
             if visible {
+                if matches!(attention_kind, DeckAttention::SwarmWaiting) {
+                    mark_collab_viewed();
+                    if attention.get() != 0 {
+                        attention.set(0);
+                        (hooks.on_attention_changed)(0);
+                    }
+                }
                 if deck_ready.recent() {
                     attach_if_needed();
                 } else {
@@ -575,62 +728,26 @@ fn build_inner(
 
     let handle = HomeHandle::new(refresh, attention.clone(), notify_tab_visible);
 
-    {
+    let poll_attention = {
         let attention = attention.clone();
         let hooks = hooks.clone();
         let suspended = suspended.clone();
-        glib::timeout_add_seconds_local(12, move || {
-            if suspended.get() {
-                return glib::ControlFlow::Continue;
+        Rc::new(move || {
+            if matches!(attention_kind, DeckAttention::SwarmWaiting) && !suspended.get() {
+                mark_collab_viewed();
+                if attention.get() != 0 {
+                    attention.set(0);
+                    (hooks.on_attention_changed)(0);
+                }
+                return;
             }
             let attention = attention.clone();
             let hooks = hooks.clone();
             let (tx, rx) = std::sync::mpsc::channel::<u32>();
             std::thread::spawn(move || {
                 let n = match attention_kind {
-                    DeckAttention::LifeDecisions => crate::chat_page::run_bridge_action(
-                        "life_decisions_list",
-                        serde_json::json!({ "limit": 20 }),
-                    )
-                    .as_ref()
-                    .and_then(|b| b.get("decisions"))
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter(|d| {
-                                d.get("chosen")
-                                    .and_then(|c| c.as_str())
-                                    .unwrap_or("")
-                                    .is_empty()
-                            })
-                            .count() as u32
-                    })
-                    .unwrap_or(0),
-                    DeckAttention::SwarmWaiting => crate::chat_page::run_bridge_action(
-                        "swarm_snapshot",
-                        serde_json::json!({}),
-                    )
-                    .as_ref()
-                    .and_then(|b| b.get("swarms"))
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter(|s| {
-                                let pulse = s
-                                    .get("pulse")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("");
-                                pulse == "waiting"
-                                    || pulse == "attention"
-                                    || pulse == "blocked"
-                                    || s.get("pending_signal_count")
-                                        .and_then(|c| c.as_u64())
-                                        .unwrap_or(0)
-                                        > 0
-                            })
-                            .count() as u32
-                    })
-                    .unwrap_or(0),
+                    DeckAttention::LifeDecisions => focus_attention_count(),
+                    DeckAttention::SwarmWaiting => swarm_attention_count(),
                 };
                 let _ = tx.send(n);
             });
@@ -645,6 +762,22 @@ fn build_inner(
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
             });
+        })
+    };
+
+    {
+        let poll_attention = poll_attention.clone();
+        glib::timeout_add_local(Duration::from_millis(400), move || {
+            poll_attention();
+            glib::ControlFlow::Break
+        });
+    }
+
+    {
+        let poll_attention = poll_attention.clone();
+        glib::timeout_add_seconds_local(12, move || {
+            // Keep the tab badge honest even while Chat is showing.
+            poll_attention();
             glib::ControlFlow::Continue
         });
     }
@@ -675,6 +808,7 @@ fn attach_webview(
     hooks: Rc<HomeHooks>,
     suspended: Rc<Cell<bool>>,
     initial_url: &'static str,
+    deck_role: &'static str,
 ) -> Option<webkit6::WebView> {
     use webkit6::prelude::*;
 
@@ -692,20 +826,23 @@ fn attach_webview(
         .build();
 
     let script = webkit6::UserScript::new(
-        r#"
+        &format!(
+            r#"
+        window.__centurionDeckRole = "{deck_role}";
         // Default false for Brain embed; GTK re-applies true after load when
         // the Missions tab is visible (see connect_load_changed).
-        if (typeof window.__centurionDeckVisible === 'undefined') {
+        if (typeof window.__centurionDeckVisible === 'undefined') {{
           window.__centurionDeckVisible = false;
-        }
-        window.centurionDiscuss = function(payload) {
-          try {
+        }}
+        window.centurionDiscuss = function(payload) {{
+          try {{
             var msg = typeof payload === 'string' ? payload : JSON.stringify(payload);
             window.webkit.messageHandlers.centurion.postMessage(msg);
-          } catch (e) {}
-        };
+          }} catch (e) {{}}
+        }};
         window.centurionOpenChat = window.centurionDiscuss;
-        "#,
+        "#
+        ),
         webkit6::UserContentInjectedFrames::TopFrame,
         webkit6::UserScriptInjectionTime::Start,
         &[],

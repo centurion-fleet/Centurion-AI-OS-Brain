@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useDeckVisible } from "../hooks/useDeckVisible";
+import { embedDeckRole, useDeckVisible } from "../hooks/useDeckVisible";
 import { fetchOpenDecisions } from "../hooks/useOpenDecisions";
 
 /**
  * When the Brain Focus tab becomes visible and there are open decisions
  * (the tab badge), jump straight to the mission + decision that needs you —
  * so the alert is never a mystery after a click into Focus.
+ *
+ * Never run on Collab — that tab is a Kanban, not the mission deck.
  */
 export function AttentionFollow() {
   const deckVisible = useDeckVisible();
@@ -15,6 +17,10 @@ export function AttentionFollow() {
   const followedForVisit = useRef(false);
 
   useEffect(() => {
+    if (embedDeckRole() === "collab") return;
+    if (location.pathname === "/collab" || location.pathname.startsWith("/collab/")) {
+      return;
+    }
     if (!deckVisible) {
       followedForVisit.current = false;
       return;

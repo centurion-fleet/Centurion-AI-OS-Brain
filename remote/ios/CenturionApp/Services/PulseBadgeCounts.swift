@@ -68,6 +68,17 @@ enum PulseBadgeCounts {
         ]
     }
 
+    /// Focus tab badge: all outstanding Decisions needed (not last-visit “new”).
+    static func outstandingFocus(planStore: PlanStore) -> Int {
+        planStore.pendingReview.count
+    }
+
+    /// Collab tab badge: collaborations updated since the user last opened Collab.
+    static func unseenCollab(swarmStore: SwarmStore, lastSeen: TimeInterval) -> Int {
+        let cutoff = Date(timeIntervalSinceReferenceDate: lastSeen)
+        return swarmStore.heroSwarms.filter { $0.updatedAt > cutoff }.count
+    }
+
     static func total(
         isCryptoChatReady: Bool,
         showsDemoContent: Bool,

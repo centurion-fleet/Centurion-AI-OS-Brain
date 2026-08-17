@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { Deck } from "./screens/Deck";
 import { AttentionFollow } from "./components/AttentionFollow";
+import { embedDeckRole } from "./hooks/useDeckVisible";
 
 const Mission = lazy(() =>
   import("./screens/Mission").then((m) => ({ default: m.Mission })),
@@ -24,6 +25,19 @@ function RouteFallback() {
 }
 
 export default function App() {
+  const role = embedDeckRole();
+  // Brain Collab WebView must never mount Focus routes — AttentionFollow
+  // would otherwise jump this tab onto a mission with open decisions.
+  if (role === "collab") {
+    return (
+      <LazyMotion features={domAnimation} strict>
+        <Suspense fallback={<RouteFallback />}>
+          <Collab />
+        </Suspense>
+      </LazyMotion>
+    );
+  }
+
   return (
     <LazyMotion features={domAnimation} strict>
       <BrowserRouter>

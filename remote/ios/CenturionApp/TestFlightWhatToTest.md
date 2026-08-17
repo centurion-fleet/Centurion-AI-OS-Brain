@@ -1,6 +1,12 @@
-# Sovereign AI Remote — TestFlight What to Test (build 48)
+# Sovereign AI Remote — TestFlight What to Test (build 49)
 
-**iOS App Version 5.3.3** (not 5.0.1 / 5.2.x / 5.3.2). Build **48**. Pair against Brain **5.3.3**.
+**iOS App Version 5.3.4** (not 5.0.1 / 5.2.x / 5.3.3). Build **49**. Pair against Brain **5.3.4**.
+
+## 5.3.4
+
+- Brain **Collab** is Kanban (or first-run Form swarm), not Focus. Pair with this Brain build.
+- Focus tab badge is **Decisions needed** (full outstanding count). Collab tab badge is **new since you last opened Collab**.
+- Phone Collab is still orbs + goal + Form swarm.
 
 ## 5.3.3
 

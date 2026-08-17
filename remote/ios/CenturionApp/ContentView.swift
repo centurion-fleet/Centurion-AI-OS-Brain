@@ -11,13 +11,7 @@ struct ContentView: View {
     @EnvironmentObject private var swarmStore: SwarmStore
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
-
-    // Same last-seen keys as Focus subsection pills — clearing a pill updates the tab badge.
-    @AppStorage("pulse_note_plans") private var lastSeenPlans: TimeInterval = 0
-    @AppStorage("pulse_note_wins") private var lastSeenWins: TimeInterval = 0
-    @AppStorage("pulse_note_outputs") private var lastSeenOutputs: TimeInterval = 0
-    @AppStorage("pulse_note_decisions") private var lastSeenDecisions: TimeInterval = 0
-    @AppStorage("pulse_note_pulse") private var lastSeenThoughts: TimeInterval = 0
+    @AppStorage("collab_last_seen") private var lastSeenCollab: TimeInterval = 0
 
     /// Badge only for real recovery — not for first-run “not linked yet”.
     private var showYouAttentionBadge: Bool {
@@ -34,28 +28,14 @@ struct ContentView: View {
         return false
     }
 
-    /// Sum of Focus subsection “new” counts for the tab bar badge (no swarm waiting).
+    /// Outstanding Decisions needed. Swarm waiting is Collab.
     private var homeAttentionCount: Int {
-        PulseBadgeCounts.total(
-            isCryptoChatReady: connectionManager.isCryptoChatReady,
-            showsDemoContent: dataMode.showsDemoContent,
-            swarmStore: swarmStore,
-            planStore: planStore,
-            lastSeen: .init(
-                plans: lastSeenPlans,
-                wins: lastSeenWins,
-                outputs: lastSeenOutputs,
-                decisions: lastSeenDecisions,
-                thoughts: lastSeenThoughts
-            )
-        )
+        PulseBadgeCounts.outstandingFocus(planStore: planStore)
     }
 
-    /// Collaborations that need a human choice — Collab tab only.
+    /// Collaborations the user has not opened since they last changed.
     private var collabAttentionCount: Int {
-        swarmStore.heroSwarms.filter {
-            $0.pulse == .waiting || $0.pulse == .attention || $0.pulse == .blocked
-        }.count
+        PulseBadgeCounts.unseenCollab(swarmStore: swarmStore, lastSeen: lastSeenCollab)
     }
 
     var body: some View {
@@ -102,6 +82,16 @@ struct ContentView: View {
                 trait.userInterfaceStyle == .dark
                     ? UIColor(red: 0.827, green: 0.804, blue: 0.749, alpha: 1.0)
                     : UIColor(red: 0.263, green: 0.220, blue: 0.188, alpha: 1.0)
+            }
+        }
+        .onChange(of: selectedTab) { _, tab in
+            if tab == AdrianNavigation.collabTab {
+                lastSeenCollab = Date.timeIntervalSinceReferenceDate
+            }
+        }
+        .onChange(of: swarmStore.heroSwarms) { _, _ in
+            if selectedTab == AdrianNavigation.collabTab {
+                lastSeenCollab = Date.timeIntervalSinceReferenceDate
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .centurionSelectTab)) { notification in

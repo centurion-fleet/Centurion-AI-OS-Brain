@@ -7,7 +7,7 @@ export function isOpenDecision(d: Decision): boolean {
   return !(d.chosen || "").trim();
 }
 
-export async function fetchOpenDecisions(limit = 20): Promise<Decision[]> {
+export async function fetchOpenDecisions(limit = 200): Promise<Decision[]> {
   const res = await bridgeCall<{ ok: true; decisions: Decision[] }>(
     "life_decisions_list",
     { limit },

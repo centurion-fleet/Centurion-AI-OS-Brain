@@ -131,6 +131,9 @@ def _swarm_cards(
                 "status": status,
                 "column": column_for_status(status),
                 "role": role,
+                "created_at": _iso_from_epoch(
+                    getattr(task, "started_at", None) or getattr(task, "created_at", None)
+                ),
                 "body": _result_preview(
                     getattr(task, "last_failure_error", None)
                     or getattr(task, "body", None),

@@ -3,12 +3,21 @@ import { useEffect, useState } from "react";
 declare global {
   interface Window {
     __centurionDeckVisible?: boolean;
+    /** GTK Focus vs Collab WebView. Unset in a normal browser. */
+    __centurionDeckRole?: "focus" | "collab";
     webkit?: {
       messageHandlers?: {
         centurion?: { postMessage: (msg: string) => void };
       };
     };
   }
+}
+
+export function embedDeckRole(): "focus" | "collab" | undefined {
+  if (typeof window === "undefined") return undefined;
+  const role = window.__centurionDeckRole;
+  if (role === "focus" || role === "collab") return role;
+  return undefined;
 }
 
 /**

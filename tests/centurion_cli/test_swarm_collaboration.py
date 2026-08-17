@@ -118,6 +118,7 @@ def test_snapshot_includes_kanban_cards(tmp_path, monkeypatch):
     assert any(c["title"] == "Research brief" for c in cards)
     research = next(c for c in cards if c["title"] == "Research brief")
     assert research["column"] in {"ready", "doing", "blocked", "done"}
+    assert research.get("created_at")
 
 
 def test_move_swarm_card_blocks(tmp_path, monkeypatch):

@@ -10,6 +10,7 @@ export interface CollabCard {
   column: CollabColumn;
   role: string;
   body: string;
+  created_at?: string;
 }
 
 export interface CollabSwarm {
