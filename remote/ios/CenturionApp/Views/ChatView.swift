@@ -15,14 +15,12 @@ struct ChatView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var dataMode: AppDataMode
     @EnvironmentObject private var missionStore: MissionStore
-    @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var planStore: PlanStore
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
     @State private var lastFailedMessage: String?
     @State private var showRecoverySheet = false
-    @State private var showCollaborationSheet = false
     /// Chat = typed reply (not voice). Propose first = draft work and stop for Focus review.
     @State private var proposeFirst = false
     @FocusState private var isFocused: Bool
@@ -131,12 +129,6 @@ struct ChatView: View {
         .sheet(isPresented: $showRecoverySheet) {
             ThinkingRecoverySheet(initialMessage: sendError ?? "Your Sovereign's thinking service needs attention.")
                 .environmentObject(connectionManager)
-        }
-        .sheet(isPresented: $showCollaborationSheet) {
-            SwarmConnectSheet()
-                .environmentObject(connectionManager)
-                .environmentObject(swarmStore)
-                .environmentObject(missionStore)
         }
     }
 
@@ -248,14 +240,14 @@ struct ChatView: View {
                 if connectionManager.isCryptoChatReady {
                     Button {
                         Haptics.lightTap()
-                        showCollaborationSheet = true
+                        AdrianNavigation.selectTab(AdrianNavigation.collabTab)
                     } label: {
                         Image(systemName: "circle.grid.cross")
                             .font(.caption)
                             .foregroundColor(ColorTheme.accent())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Start collaboration")
+                    .accessibilityLabel("Open Collab")
 
                     StatusDot(
                         isConnected: true,
@@ -526,7 +518,7 @@ struct ChatView: View {
 
     private var offlineBanner: some View {
         Button {
-            NotificationCenter.default.post(name: .centurionSelectTab, object: 2)
+            NotificationCenter.default.post(name: .centurionSelectTab, object: AdrianNavigation.youTab)
         } label: {
             AtmosphericSurface {
                 HStack(alignment: .top, spacing: Spacing.sm) {
@@ -621,7 +613,7 @@ struct ChatView: View {
                     message: "Open You and scan the pairing QR to start Crypto Chat — a private encrypted conversation public AIs do not offer.",
                     actionTitle: "Open You",
                     action: {
-                        NotificationCenter.default.post(name: .centurionSelectTab, object: 2)
+                        NotificationCenter.default.post(name: .centurionSelectTab, object: AdrianNavigation.youTab)
                     }
                 )
             }

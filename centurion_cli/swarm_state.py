@@ -84,6 +84,65 @@ def _result_preview(text: str | None, *, limit: int = 240) -> str:
     return raw[: limit - 1] + "…"
 
 
+def column_for_status(status: str) -> str:
+    """Map kanban task status onto Collaborate columns."""
+    value = str(status or "").strip().lower()
+    if value == "blocked":
+        return "blocked"
+    if value in {"running", "claimed"}:
+        return "doing"
+    if value in {"done", "archived"}:
+        return "done"
+    return "ready"
+
+
+def _task_role(task_id: str, topology: dict[str, Any], root_id: str | None) -> str:
+    tid = str(task_id)
+    if root_id and tid == str(root_id):
+        return "root"
+    if tid == str(topology.get("synthesizer_id") or ""):
+        return "synthesizer"
+    if tid == str(topology.get("verifier_id") or ""):
+        return "verifier"
+    worker_ids = {str(x) for x in (topology.get("worker_ids") or [])}
+    if tid in worker_ids:
+        return "worker"
+    return "task"
+
+
+def _swarm_cards(
+    tasks: list[Any],
+    topology: dict[str, Any],
+    root_id: str | None,
+) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    root = str(root_id or "")
+    for task in tasks:
+        tid = str(getattr(task, "id", "") or "")
+        if not tid or (root and tid == root):
+            continue
+        role = _task_role(tid, topology or {}, root_id)
+        status = str(getattr(task, "status", "") or "")
+        cards.append(
+            {
+                "id": tid,
+                "title": str(getattr(task, "title", "") or "Work"),
+                "assignee": str(getattr(task, "assignee", "") or ""),
+                "status": status,
+                "column": column_for_status(status),
+                "role": role,
+                "body": _result_preview(
+                    getattr(task, "last_failure_error", None)
+                    or getattr(task, "body", None),
+                    limit=180,
+                ),
+            }
+        )
+        if len(cards) >= 80:
+            break
+    return cards
+
+
 def _find_swarm_topology(
     conn: Any,
     tasks: list[Any],
@@ -332,6 +391,7 @@ def _local_board_snapshot() -> dict[str, Any]:
                 "attention_score": _attention_score("waiting" if blocked else pulse, len(blocked)),
                 "source": "kanban",
                 "kanban_board_slug": slug,
+                "cards": _swarm_cards(tasks, topology, root_id),
             }
         )
 
@@ -595,6 +655,73 @@ def resolve_signal(signal_id: str, *, choice_note: str = "") -> dict[str, Any]:
         "unblocked": bool(ok),
         "vault_entry_id": vault_entry_id,
         "message": "Choice recorded. Your Sovereigns can continue.",
+    }
+
+
+def move_swarm_card(
+    *,
+    board: str,
+    task_id: str,
+    column: str,
+    note: str = "",
+) -> dict[str, Any]:
+    """Move a collaboration card between Ready / Blocked / Done.
+
+    Doing is dispatcher-owned — cards become Doing when a worker claims them.
+    """
+    slug = str(board or "").strip()
+    tid = str(task_id or "").strip()
+    dest = str(column or "").strip().lower()
+    if dest in {"todo", "ready"}:
+        dest = "ready"
+    if dest in {"done", "complete"}:
+        dest = "done"
+    if dest in {"blocked", "block"}:
+        dest = "blocked"
+    if not slug or not tid:
+        return {"ok": False, "error": "Board and card are required."}
+    if dest not in {"ready", "blocked", "done"}:
+        return {
+            "ok": False,
+            "error": "Move to Ready, Blocked, or Done. Doing starts when a worker claims the card.",
+        }
+
+    try:
+        from centurion_cli import kanban_db
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        conn = kanban_db.connect(board=slug)
+        try:
+            task = kanban_db.get_task(conn, tid)
+            if task is None:
+                return {"ok": False, "error": "That card is not on this board.", "board": slug}
+            reason = str(note or "").strip() or "Moved on Collaborate"
+            moved = False
+            if dest == "blocked":
+                moved = bool(kanban_db.block_task(conn, tid, reason=reason))
+            elif dest == "done":
+                moved = bool(kanban_db.complete_task(conn, tid, result=reason))
+            else:
+                if task.status == "blocked":
+                    moved = bool(kanban_db.unblock_task(conn, tid))
+                else:
+                    moved = True
+        finally:
+            conn.close()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "board": slug, "task_id": tid}
+
+    snapshot = get_swarm_snapshot()
+    return {
+        "ok": True,
+        "board": slug,
+        "task_id": tid,
+        "column": dest,
+        "moved": moved,
+        "snapshot": snapshot,
+        "message": "Card updated." if moved else "Card was already in that column.",
     }
 
 

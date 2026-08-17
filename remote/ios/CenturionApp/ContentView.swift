@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Main application entry — three tabs: Chat, Focus, You.
+/// Main application entry — four tabs: Chat, Focus, Collab, You.
 /// Only the selected tab is built (lazy) so launch stays fast.
 struct ContentView: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
@@ -34,7 +34,7 @@ struct ContentView: View {
         return false
     }
 
-    /// Sum of Home subsection “new” counts for the tab bar badge.
+    /// Sum of Focus subsection “new” counts for the tab bar badge (no swarm waiting).
     private var homeAttentionCount: Int {
         PulseBadgeCounts.total(
             isCryptoChatReady: connectionManager.isCryptoChatReady,
@@ -51,33 +51,49 @@ struct ContentView: View {
         )
     }
 
+    /// Collaborations that need a human choice — Collab tab only.
+    private var collabAttentionCount: Int {
+        swarmStore.heroSwarms.filter {
+            $0.pulse == .waiting || $0.pulse == .attention || $0.pulse == .blocked
+        }.count
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            DeferredTabContent(tag: 0, selection: $selectedTab, loadedTabs: $loadedTabs) {
+            DeferredTabContent(tag: AdrianNavigation.chatTab, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 ChatView()
             }
             .tabItem {
                 Label("Chat", systemImage: "message.fill")
             }
-            .tag(0)
+            .tag(AdrianNavigation.chatTab)
 
-            DeferredTabContent(tag: 1, selection: $selectedTab, loadedTabs: $loadedTabs) {
+            DeferredTabContent(tag: AdrianNavigation.focusTab, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 MissionPortfolioView()
             }
             .tabItem {
                 Label("Focus", systemImage: "waveform.path.ecg")
             }
             .badge(homeAttentionCount)
-            .tag(1)
+            .tag(AdrianNavigation.focusTab)
 
-            DeferredTabContent(tag: 2, selection: $selectedTab, loadedTabs: $loadedTabs) {
+            DeferredTabContent(tag: AdrianNavigation.collabTab, selection: $selectedTab, loadedTabs: $loadedTabs) {
+                CollabTabView()
+            }
+            .tabItem {
+                Label("Collab", systemImage: "circle.hexagongrid.fill")
+            }
+            .badge(collabAttentionCount)
+            .tag(AdrianNavigation.collabTab)
+
+            DeferredTabContent(tag: AdrianNavigation.youTab, selection: $selectedTab, loadedTabs: $loadedTabs) {
                 SettingsView()
             }
             .tabItem {
                 Label("You", systemImage: "person.crop.circle")
             }
             .badge(showYouAttentionBadge ? "!" : nil)
-            .tag(2)
+            .tag(AdrianNavigation.youTab)
         }
         .tint(ColorTheme.accent())
         .onAppear {
@@ -90,7 +106,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .centurionSelectTab)) { notification in
             if let tab = notification.object as? Int {
-                selectedTab = min(max(tab, 0), 2)
+                selectedTab = min(max(tab, 0), AdrianNavigation.youTab)
             }
         }
         #if DEBUG

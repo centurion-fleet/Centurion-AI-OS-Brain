@@ -16,9 +16,7 @@ struct SettingsView: View {
     @State private var showResetConfirmation = false
     @State private var showGetHelp = false
     @State private var showAdrian = false
-    @State private var showCollaborations = false
     @State private var showSwarmConnect = false
-    @State private var selectedCollaboration: SwarmSummary?
     @State private var showPrivacyTrust = false
     @State private var showPairingSheet = false
     @State private var showRecoverySheet = false
@@ -112,23 +110,11 @@ struct SettingsView: View {
             .environmentObject(connectionManager)
             .environmentObject(missionStore)
         }
-        .sheet(isPresented: $showCollaborations) {
-            ConstellationView { swarm in
-                showCollaborations = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    selectedCollaboration = swarm
-                }
-            }
-            .environmentObject(swarmStore)
-        }
         .sheet(isPresented: $showSwarmConnect) {
-            SwarmConnectSheet()
+            SwarmConnectSheet(presentation: .advanced)
                 .environmentObject(connectionManager)
                 .environmentObject(swarmStore)
-        }
-        .sheet(item: $selectedCollaboration) { swarm in
-            SwarmDetailSheet(swarm: swarm)
-                .environmentObject(swarmStore)
+                .environmentObject(missionStore)
         }
         .sheet(isPresented: $showPrivacyTrust) {
             NavigationStack {
@@ -430,17 +416,17 @@ struct SettingsView: View {
         settingsSection(
             title: "Collaborations",
             icon: "circle.hexagongrid.fill",
-            footer: "Collaborations live on Focus as orbs. Form a swarm on this Brain, or join another owner through Mission Control. You're notified in-app when a choice is needed."
+            footer: "Collaborations live on the Collab tab as orbs. Form a swarm on this Brain, or join another owner through Mission Control."
         ) {
             Button {
-                showCollaborations = true
+                AdrianNavigation.selectTab(AdrianNavigation.collabTab)
             } label: {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: "circle.hexagongrid.fill")
                         .font(.body)
                         .foregroundColor(ColorTheme.accent())
                         .frame(width: 24)
-                    Text("Active collaborations")
+                    Text("Open Collab")
                         .font(.body)
                         .foregroundColor(ColorTheme.primaryText())
                     Spacer()
@@ -459,12 +445,25 @@ struct SettingsView: View {
             sectionDivider
 
             Button {
-                showSwarmConnect = true
+                AdrianNavigation.selectTab(AdrianNavigation.collabTab)
             } label: {
                 CenturionListRow(
                     icon: "person.badge.plus",
                     title: "Start a collaboration",
-                    subtitle: "Form a local swarm, or join/invite via Mission Control"
+                    subtitle: "Opens Collab — give your Sovereign a goal"
+                )
+            }
+            .buttonStyle(.plain)
+
+            sectionDivider
+
+            Button {
+                showSwarmConnect = true
+            } label: {
+                CenturionListRow(
+                    icon: "person.2.badge.gearshape",
+                    title: "Join or invite",
+                    subtitle: "Mission Control token — a down portal shows an error"
                 )
             }
             .buttonStyle(.plain)

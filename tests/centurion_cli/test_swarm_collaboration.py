@@ -94,3 +94,52 @@ def test_snapshot_merges_portal_when_sync_ok(tmp_path, monkeypatch):
     assert snap["portal"]["ok"] is True
     assert any(p.get("id") == "proj-1" for p in snap["projects"])
     assert any(s.get("id") == "proj-1" for s in snap["swarms"])
+
+
+def test_snapshot_includes_kanban_cards(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    from centurion_cli import kanban_db
+    from centurion_cli.swarm_state import create_collaboration_board, get_swarm_snapshot
+
+    created = create_collaboration_board(name="Card Board", objective="See columns")
+    slug = created["swarm_id"]
+    conn = kanban_db.connect(board=slug)
+    try:
+        kanban_db.create_task(conn, title="Research brief", body="Find sources")
+    finally:
+        conn.close()
+
+    snapshot = get_swarm_snapshot()
+    match = next(s for s in snapshot["swarms"] if s["id"] == slug)
+    cards = match["cards"]
+    assert any(c["title"] == "Research brief" for c in cards)
+    research = next(c for c in cards if c["title"] == "Research brief")
+    assert research["column"] in {"ready", "doing", "blocked", "done"}
+
+
+def test_move_swarm_card_blocks(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    from centurion_cli import kanban_db
+    from centurion_cli.swarm_state import create_collaboration_board, move_swarm_card
+
+    created = create_collaboration_board(name="Move Board", objective="Move a card")
+    slug = created["swarm_id"]
+    conn = kanban_db.connect(board=slug)
+    try:
+        task_id = kanban_db.create_task(
+            conn, title="Pick vendor", body="Needs a choice"
+        )
+    finally:
+        conn.close()
+
+    result = move_swarm_card(board=slug, task_id=task_id, column="blocked")
+    assert result["ok"] is True
+    swarm = next(s for s in result["snapshot"]["swarms"] if s["id"] == slug)
+    card = next(c for c in swarm["cards"] if c["id"] == task_id)
+    assert card["column"] == "blocked"

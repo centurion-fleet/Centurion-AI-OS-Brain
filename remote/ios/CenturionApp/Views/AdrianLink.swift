@@ -44,6 +44,11 @@ extension Notification.Name {
 }
 
 enum AdrianNavigation {
+    static let chatTab = 0
+    static let focusTab = 1
+    static let collabTab = 2
+    static let youTab = 3
+
     static func selectTab(_ index: Int) {
         NotificationCenter.default.post(name: .centurionSelectTab, object: index)
     }
@@ -58,10 +63,10 @@ enum AdrianNavigation {
         switch action {
         case .openConnect:
             showAdrian.wrappedValue = false
-            selectTab(2)
+            selectTab(youTab)
         case .openMission:
             showAdrian.wrappedValue = false
-            selectTab(1)
+            selectTab(focusTab)
         case .openGetHelp:
             showAdrian.wrappedValue = false
             showGetHelp?.wrappedValue = true

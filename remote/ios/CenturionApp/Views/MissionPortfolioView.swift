@@ -65,9 +65,6 @@ struct MissionPortfolioView: View {
     @State private var selectedOutput: CenturionOutput?
     /// Plan review sheet
     @State private var selectedPlan: PlanArtifact?
-    /// Swarm constellation sheets
-    @State private var selectedSwarm: SwarmSummary?
-    @State private var showConstellation = false
 
     // MARK: - Notification tracking
     // Stores the last time each category was viewed. Items newer than this date
@@ -261,24 +258,6 @@ struct MissionPortfolioView: View {
                 }
             }
         }
-        .sheet(item: $selectedSwarm) { swarm in
-            SwarmDetailSheet(swarm: swarm) { discussed in
-                openDiscuss(
-                    title: discussed.displayName,
-                    detail: discussed.objective.isEmpty
-                        ? "Swarm “\(discussed.displayName)”."
-                        : discussed.objective
-                )
-            }
-            .environmentObject(swarmStore)
-        }
-        .sheet(isPresented: $showConstellation) {
-            ConstellationView { swarm in
-                showConstellation = false
-                selectedSwarm = swarm
-            }
-            .environmentObject(swarmStore)
-        }
     }
 
     private var pulseScrollContent: some View {
@@ -289,18 +268,6 @@ struct MissionPortfolioView: View {
                 }
 
                 brainSyncBanner
-
-                SwarmConstellationHero(
-                    hasMission: missionStore.hasCompletedMissionSetup,
-                    missionSnippet: missionStore.mission.statement,
-                    onSelectSwarm: { swarm in
-                        selectedSwarm = swarm
-                    },
-                    onShowAll: {
-                        showConstellation = true
-                    }
-                )
-                .environmentObject(swarmStore)
 
                 missionBanner
 

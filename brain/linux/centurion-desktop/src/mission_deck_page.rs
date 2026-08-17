@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::chat_page::DiscussTopic;
@@ -22,6 +22,29 @@ use crate::home_page::{HomeHandle, HomeHooks};
 const DECK_HOST: &str = "127.0.0.1";
 const DECK_PORT: u16 = 9120;
 const DECK_URL: &str = "http://127.0.0.1:9120/";
+const COLLAB_URL: &str = "http://127.0.0.1:9120/collab";
+
+#[derive(Clone, Copy)]
+enum DeckAttention {
+    LifeDecisions,
+    SwarmWaiting,
+}
+
+struct DeckRuntime {
+    ready: Arc<DeckReady>,
+    supervisor: Option<Arc<Mutex<DeckSupervisor>>>,
+}
+
+fn deck_runtime() -> &'static DeckRuntime {
+    static RUNTIME: OnceLock<DeckRuntime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        let ready = Arc::new(DeckReady::default());
+        let supervisor = resolve_mission_deck_dir().map(|dir| {
+            Arc::new(Mutex::new(DeckSupervisor::new(dir, ready.clone())))
+        });
+        DeckRuntime { ready, supervisor }
+    })
+}
 
 /// Resolve where `web-dashboard` (with `server.js` + `dist/`) lives.
 pub fn resolve_mission_deck_dir() -> Option<PathBuf> {
@@ -278,6 +301,26 @@ impl Drop for DeckSupervisor {
 
 /// Build the Missions tab: WebKit view of Mission Deck, with GTK fallback message.
 pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
+    build_inner(hooks, DECK_URL, DeckAttention::LifeDecisions)
+}
+
+/// Collaborate tab — same Mission Deck server, `/collab` Kanban route.
+pub fn build_collab(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
+    build_inner(hooks, COLLAB_URL, DeckAttention::SwarmWaiting)
+}
+
+fn opening_label(attention: DeckAttention) -> &'static str {
+    match attention {
+        DeckAttention::LifeDecisions => "Opening Mission Deck…",
+        DeckAttention::SwarmWaiting => "Opening Collaborate…",
+    }
+}
+
+fn build_inner(
+    hooks: HomeHooks,
+    initial_url: &'static str,
+    attention_kind: DeckAttention,
+) -> (gtk::Box, HomeHandle) {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.set_hexpand(true);
     root.set_vexpand(true);
@@ -290,7 +333,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     // GTK widgets are !Send — keep WebView on the UI thread via Rc/RefCell.
     let webview_slot: Rc<RefCell<Option<webkit6::WebView>>> = Rc::new(RefCell::new(None));
 
-    let status = gtk::Label::new(Some("Opening Mission Deck…"));
+    let status = gtk::Label::new(Some(opening_label(attention_kind)));
     status.add_css_class("centurion-mission-deck-status");
     status.set_wrap(true);
     status.set_margin_top(24);
@@ -305,11 +348,10 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     retry.set_margin_bottom(24);
     root.append(&retry);
 
-    let deck_ready = Arc::new(DeckReady::default());
+    let runtime = deck_runtime();
+    let deck_ready = runtime.ready.clone();
     let supervisor: Rc<RefCell<Option<Arc<Mutex<DeckSupervisor>>>>> =
-        Rc::new(RefCell::new(resolve_mission_deck_dir().map(|dir| {
-            Arc::new(Mutex::new(DeckSupervisor::new(dir, deck_ready.clone())))
-        })));
+        Rc::new(RefCell::new(runtime.supervisor.clone()));
 
     // Node warms on first Focus show or after the tab has sat idle for two seconds.
     // WebView still attaches only on first Focus show.
@@ -340,11 +382,11 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             }
             if !node_ready.get() {
                 status.set_visible(true);
-                status.set_label("Opening Mission Deck…");
+                status.set_label(opening_label(attention_kind));
                 retry.set_visible(true);
                 return;
             }
-            match attach_webview(&root, hooks.clone(), suspended.clone()) {
+            match attach_webview(&root, hooks.clone(), suspended.clone(), initial_url) {
                 Some(wv) => {
                     apply_deck_suspend(&wv, suspended.get());
                     *webview_slot.borrow_mut() = Some(wv);
@@ -377,7 +419,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             node_ready.set(false);
             *node_error.borrow_mut() = None;
             status.set_visible(true);
-            status.set_label("Opening Mission Deck…");
+            status.set_label(opening_label(attention_kind));
             retry.set_visible(true);
 
             let supervisor_bg = supervisor.borrow().clone();
@@ -388,7 +430,37 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                         .to_string();
                     *node_error.borrow_mut() = Some(err.clone());
                     status.set_label(&err);
+                    return;
                 }
+                let deck_ready = deck_ready.clone();
+                let node_ready = node_ready.clone();
+                let status = status.clone();
+                let retry = retry.clone();
+                let suspended = suspended.clone();
+                let attach_if_needed = attach_if_needed.clone();
+                let ticks = Rc::new(Cell::new(0u32));
+                glib::timeout_add_local(Duration::from_millis(50), move || {
+                    if deck_ready.recent() {
+                        node_ready.set(true);
+                        retry.set_visible(false);
+                        if suspended.get() {
+                            status.set_label("Ready — open this tab when you need it.");
+                        } else {
+                            attach_if_needed();
+                        }
+                        return glib::ControlFlow::Break;
+                    }
+                    let n = ticks.get().saturating_add(1);
+                    ticks.set(n);
+                    if n > 160 {
+                        let err = "Mission Deck server did not become ready.".to_string();
+                        node_ready.set(false);
+                        status.set_label(&err);
+                        retry.set_visible(true);
+                        return glib::ControlFlow::Break;
+                    }
+                    glib::ControlFlow::Continue
+                });
                 return;
             };
 
@@ -406,8 +478,7 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
                             *node_error.borrow_mut() = None;
                             retry.set_visible(false);
                             if suspended.get() {
-                                status
-                                    .set_label("Mission Deck ready — open Focus when you need it.");
+                                status.set_label("Ready — open this tab when you need it.");
                             } else {
                                 attach_if_needed();
                             }
@@ -516,24 +587,51 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
             let hooks = hooks.clone();
             let (tx, rx) = std::sync::mpsc::channel::<u32>();
             std::thread::spawn(move || {
-                let n = crate::chat_page::run_bridge_action(
-                    "life_decisions_list",
-                    serde_json::json!({ "limit": 20 }),
-                )
-                .as_ref()
-                .and_then(|b| b.get("decisions"))
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter(|d| {
-                            d.get("chosen")
-                                .and_then(|c| c.as_str())
-                                .unwrap_or("")
-                                .is_empty()
-                        })
-                        .count() as u32
-                })
-                .unwrap_or(0);
+                let n = match attention_kind {
+                    DeckAttention::LifeDecisions => crate::chat_page::run_bridge_action(
+                        "life_decisions_list",
+                        serde_json::json!({ "limit": 20 }),
+                    )
+                    .as_ref()
+                    .and_then(|b| b.get("decisions"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter(|d| {
+                                d.get("chosen")
+                                    .and_then(|c| c.as_str())
+                                    .unwrap_or("")
+                                    .is_empty()
+                            })
+                            .count() as u32
+                    })
+                    .unwrap_or(0),
+                    DeckAttention::SwarmWaiting => crate::chat_page::run_bridge_action(
+                        "swarm_snapshot",
+                        serde_json::json!({}),
+                    )
+                    .as_ref()
+                    .and_then(|b| b.get("swarms"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter(|s| {
+                                let pulse = s
+                                    .get("pulse")
+                                    .and_then(|p| p.as_str())
+                                    .unwrap_or("");
+                                pulse == "waiting"
+                                    || pulse == "attention"
+                                    || pulse == "blocked"
+                                    || s.get("pending_signal_count")
+                                        .and_then(|c| c.as_u64())
+                                        .unwrap_or(0)
+                                        > 0
+                            })
+                            .count() as u32
+                    })
+                    .unwrap_or(0),
+                };
                 let _ = tx.send(n);
             });
             glib::timeout_add_local(Duration::from_millis(50), move || match rx.try_recv() {
@@ -576,6 +674,7 @@ fn attach_webview(
     root: &gtk::Box,
     hooks: Rc<HomeHooks>,
     suspended: Rc<Cell<bool>>,
+    initial_url: &'static str,
 ) -> Option<webkit6::WebView> {
     use webkit6::prelude::*;
 
@@ -695,6 +794,65 @@ fn attach_webview(
                         mission_id,
                         mission_title,
                         target_id,
+                    };
+                    (hooks.on_ask_about)(topic, kickoff);
+                    return;
+                }
+                if kind == "collab" {
+                    let id = v
+                        .get("id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = v
+                        .get("name")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Collaboration")
+                        .to_string();
+                    let pulse = v
+                        .get("pulse")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let objective = v
+                        .get("objective")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let board_id = v
+                        .get("board_id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or(&id)
+                        .to_string();
+                    let root_id = v
+                        .get("root_id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let workers_summary = v
+                        .get("workers_summary")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let blackboard_json = v
+                        .get("blackboard_json")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("{}")
+                        .to_string();
+                    let kickoff = v
+                        .get("kickoff")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Let's talk about this collaboration.")
+                        .to_string();
+                    let topic = DiscussTopic::Collab {
+                        id: if id.is_empty() { name.clone() } else { id },
+                        name,
+                        pulse,
+                        objective,
+                        board_id,
+                        root_id,
+                        workers_summary,
+                        blackboard_json,
                     };
                     (hooks.on_ask_about)(topic, kickoff);
                     return;
@@ -873,7 +1031,7 @@ fn attach_webview(
         });
     }
 
-    webview.load_uri(DECK_URL);
+    webview.load_uri(initial_url);
     webview.set_hexpand(true);
     webview.set_vexpand(true);
     root.append(&webview);

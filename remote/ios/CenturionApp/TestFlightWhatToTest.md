@@ -1,6 +1,16 @@
-# Sovereign AI Remote — TestFlight What to Test (build 47)
+# Sovereign AI Remote — TestFlight What to Test (build 48)
 
-**iOS App Version 5.3.2** (not 5.0.1 / 5.2.x / 5.3.1). Build **47**. Pair against Brain **5.3.2**.
+**iOS App Version 5.3.3** (not 5.0.1 / 5.2.x / 5.3.2). Build **48**. Pair against Brain **5.3.3**.
+
+## 5.3.3
+
+- Tabs are **Chat | Focus | Collab | You**. Collab sits between Focus and You.
+- **Phone stays orbs. Desk gets Kanban.** Same swarm, two surfaces.
+- Collab first-run: write a **goal** (what this swarm should produce now), then Form. Gateway can be started from the tab if it is down.
+- Waiting / attention / blocked swarm counts badge **Collab**, not Focus.
+- You hub **Open** / **Start a collaboration** opens the Collab tab. Join or invite is under Advanced (Mission Control).
+- Focus Missions pill is still reviewable **Plans**. Life Mission is the why; Form swarm does not copy a Focus plan.
+- Away remains internal soak until `REMOTE_RELAY.md` Away DoD is green.
 
 ## 5.3.2
 

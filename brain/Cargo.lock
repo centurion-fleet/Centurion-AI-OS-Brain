@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-common"
-version = "5.3.2"
+version = "5.3.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-desktop"
-version = "5.3.2"
+version = "5.3.3"
 dependencies = [
  "centurion-common",
  "gio",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-install-brain"
-version = "5.3.2"
+version = "5.3.3"
 dependencies = [
  "glib",
  "gtk4",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "centurion-remote"
-version = "5.3.2"
+version = "5.3.3"
 dependencies = [
  "async-trait",
  "base64",

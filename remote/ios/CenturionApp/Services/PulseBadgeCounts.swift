@@ -56,12 +56,7 @@ enum PulseBadgeCounts {
         let decisionsCutoff = Date(timeIntervalSinceReferenceDate: lastSeen.decisions)
         let thoughtsCutoff = Date(timeIntervalSinceReferenceDate: lastSeen.thoughts)
 
-        let liveActive = swarmStore.heroSwarms.contains {
-            $0.pulse == .active
-                || $0.pulse == .attention
-                || $0.pulse == .waiting
-                || $0.pulse == .blocked
-        } || feed.liveActivity != nil
+        let liveActive = feed.liveActivity != nil
 
         return [
             .live: liveActive ? 1 : 0,

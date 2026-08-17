@@ -121,17 +121,17 @@ cargo build --release -p centurion-desktop
 
 On the Fedora unit with Centurion installed and **gateway running** (`kanban.dispatch_in_gateway` default true):
 
-1. Settings → Collaborations → **Open** → **Form collaboration**.
-2. Goal required; pick 2 worker profiles + verifier + synthesizer (profiles must exist: `centurion -p <name> setup`).
-3. Submit → board appears; live card shows workers with real status (not fake progress).
+1. **Collab** tab → **Form swarm** (goal required). Advanced still offers empty board / Join / Invite.
+2. Goal required; pick 2 worker profiles + verifier + synthesizer when using Advanced (profiles must exist: `centurion -p <name> setup`). Goal-first Form auto-picks a second profile when one exists.
+3. Submit → Brain Collab shows columns; iPhone Collab shows the orb; live cards show workers with real status (not fake progress).
 4. Confirm workers spawn (`centurion -p <profile> chat` / gateway logs) and blackboard updates in detail view.
-5. Block a worker → signal shows Resolve/Note; resolve from UI.
+5. Block a worker → signal shows Resolve/Note; resolve from UI (**I've decided** on the phone).
 6. When synthesizer completes, Outcomes prefer its result.
 7. **Discuss** seeds Chat with board/root/workers/blackboard framing (no portal tokens).
 8. **Join** / **Invite** with a live `ctk_proj_*` token; a down portal must fail honestly.
-9. Phone Remote: Form swarm (not only empty board); constellation orbs; **I've decided**.
+9. Phone Remote: Form swarm (not only empty board); constellation orbs on **Collab**; **I've decided**.
 
-`swarm_connect` / `swarm_invite` join and invite via portal Mission Control after a live probe. Empty board remains a secondary path. If the portal is down, the Brain shows that error — it does not save a silent empty join.
+You → Collaborations **Open** switches to the Collab tab. `swarm_connect` / `swarm_invite` join and invite via portal Mission Control after a live probe. Empty board remains a secondary path. If the portal is down, the Brain shows that error — it does not save a silent empty join.
 
 ## Local chat
 

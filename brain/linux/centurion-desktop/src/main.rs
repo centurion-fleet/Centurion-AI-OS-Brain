@@ -1597,7 +1597,7 @@ The Brain here is the product; the phone is the remote.",
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
             .subtitle(
-                "Shared work boards on this Brain (and peers you can reach). Cloud Mission Control stays off.",
+                "Local boards on this Brain. Open Collab to form a swarm; Join or Invite uses Mission Control when you have a token.",
             )
             .icon_name("system-users-symbolic")
             .build();
@@ -1844,6 +1844,8 @@ The Brain here is the product; the phone is the remote.",
 
         let attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
             Rc::new(RefCell::new(Rc::new(|_: u32| {})));
+        let collab_attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
+            Rc::new(RefCell::new(Rc::new(|_: u32| {})));
         let (home, home_handle) = {
             let stack = stack.clone();
             let chat_handle = chat_handle.clone();
@@ -1863,18 +1865,42 @@ The Brain here is the product; the phone is the remote.",
             })
         };
 
+        let (collab, collab_handle) = {
+            let stack = stack.clone();
+            let chat_handle = chat_handle.clone();
+            let collab_attention_sink = collab_attention_sink.clone();
+            crate::mission_deck_page::build_collab(crate::home_page::HomeHooks {
+                on_ask_about: Rc::new(
+                    move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
+                        stack.set_visible_child_name("chat");
+                        chat_handle.seed_discuss_topic(topic, &kickoff);
+                    },
+                ),
+                on_attention_changed: Rc::new(move |n: u32| {
+                    (collab_attention_sink.borrow())(n);
+                }),
+            })
+        };
+
         stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&home, Some("missions"), "Focus");
+        stack.add_titled(&collab, Some("collab"), "Collab");
         stack.add_titled(&settings_scroll, Some("settings"), "You");
         stack.set_visible_child_name("chat");
         chat.set_vexpand(true);
         home.set_vexpand(true);
+        collab.set_vexpand(true);
         settings_scroll.set_vexpand(true);
         settings_scroll.set_hexpand(true);
 
         let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
             &stack,
-            &[("chat", "Chat"), ("missions", "Focus"), ("settings", "You")],
+            &[
+                ("chat", "Chat"),
+                ("missions", "Focus"),
+                ("collab", "Collab"),
+                ("settings", "You"),
+            ],
         );
 
         let refresh_settings_attention_ui = {
@@ -1923,6 +1949,18 @@ The Brain here is the product; the phone is the remote.",
                     tab_badges_ui.set_badge("missions", Some(&n.to_string()));
                 } else {
                     tab_badges_ui.set_badge("missions", None);
+                }
+            }) as Rc<dyn Fn()>
+        };
+        let refresh_collab_badge = {
+            let tab_badges_ui = tab_badges_ui.clone();
+            let collab_handle = collab_handle.clone();
+            Rc::new(move || {
+                let n = collab_handle.attention_count();
+                if n > 0 {
+                    tab_badges_ui.set_badge("collab", Some(&n.to_string()));
+                } else {
+                    tab_badges_ui.set_badge("collab", None);
                 }
             }) as Rc<dyn Fn()>
         };
@@ -1980,10 +2018,12 @@ The Brain here is the product; the phone is the remote.",
         };
         let refresh_stack_badges = {
             let refresh_home_badge = refresh_home_badge.clone();
+            let refresh_collab_badge = refresh_collab_badge.clone();
             let refresh_settings_badge = refresh_settings_badge.clone();
             let refresh_chat_badge = refresh_chat_badge.clone();
             Rc::new(move || {
                 refresh_home_badge();
+                refresh_collab_badge();
                 refresh_settings_badge();
                 refresh_chat_badge();
             }) as Rc<dyn Fn()>
@@ -1992,6 +2032,12 @@ The Brain here is the product; the phone is the remote.",
             let refresh_home_badge = refresh_home_badge.clone();
             Rc::new(move |_n: u32| {
                 refresh_home_badge();
+            })
+        };
+        *collab_attention_sink.borrow_mut() = {
+            let refresh_collab_badge = refresh_collab_badge.clone();
+            Rc::new(move |_n: u32| {
+                refresh_collab_badge();
             })
         };
         chat_handle.set_on_attention_changed({
@@ -2054,8 +2100,10 @@ The Brain here is the product; the phone is the remote.",
         let tab_refresh_list = device_list.clone();
         let tab_devices_fp = devices_fp.clone();
         let tab_home_badge = refresh_home_badge.clone();
+        let tab_collab_badge = refresh_collab_badge.clone();
         let tab_chat_badge = refresh_chat_badge.clone();
         let tab_home_handle = home_handle.clone();
+        let tab_collab_handle = collab_handle.clone();
         let tab_settings_rows = settings_rows.clone();
         stack.connect_visible_child_name_notify(move |stack| {
             if stack.visible_child_name().as_deref() == Some("settings") {
@@ -2064,18 +2112,21 @@ The Brain here is the product; the phone is the remote.",
                 refresh_settings_rows_async(&tab_settings_rows, true);
             }
             let missions_visible = stack.visible_child_name().as_deref() == Some("missions");
-            // Pause Mission Deck WebView + polls while Chat/Settings is active.
+            let collab_visible = stack.visible_child_name().as_deref() == Some("collab");
             tab_home_handle.notify_tab_visible(missions_visible);
-            // Soft refresh (visibility inject) — do not hard-reload the WebView.
+            tab_collab_handle.notify_tab_visible(collab_visible);
             if missions_visible {
                 tab_home_handle.refresh();
             }
-            // Local badges only — do not re-probe Settings CLI on every tab switch.
+            if collab_visible {
+                tab_collab_handle.refresh();
+            }
             tab_home_badge();
+            tab_collab_badge();
             tab_chat_badge();
         });
-        // Default tab is Chat — suspend Deck immediately after wire-up.
         home_handle.notify_tab_visible(false);
+        collab_handle.notify_tab_visible(false);
 
         let switcher = tab_bar;
         let header = adw::HeaderBar::new();
@@ -2244,21 +2295,9 @@ The Brain here is the product; the phone is the remote.",
             move |_| show_ops_glance_dialog(&window)
         });
         collab_connect_button.connect_clicked({
-            let window = window.clone();
-            let chat_handle = chat_handle.clone();
             let stack = stack.clone();
             move |_| {
-                crate::home_page::show_collaborations_window(
-                    &window,
-                    Rc::new({
-                        let chat_handle = chat_handle.clone();
-                        let stack = stack.clone();
-                        move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
-                            stack.set_visible_child_name("chat");
-                            chat_handle.seed_discuss_topic(topic, &kickoff);
-                        }
-                    }),
-                );
+                stack.set_visible_child_name("collab");
             }
         });
         pairing_settings_row.connect_activated({

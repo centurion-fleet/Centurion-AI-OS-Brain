@@ -88,6 +88,7 @@
 		F34F85E0402B0374F135DB0F /* SecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */; };
 		FC19A03FC2F9C3049D1CF708 /* RemoteModelSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EFA99F966F83149987FD09D /* RemoteModelSwitcherView.swift */; };
 		FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815E8C975CB35A4357AFF0E1 /* ChatView.swift */; };
+		C011AB7AB0000000C011AB02 /* CollabTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C011AB7AB0000000C011AB01 /* CollabTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -134,6 +135,7 @@
 		7F6DAFBA8E38674A30EADBE2 /* SecureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureChannel.swift; sourceTree = "<group>"; };
 		807258BF5E1D7EADE682EECA /* SwarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmStore.swift; sourceTree = "<group>"; };
 		815E8C975CB35A4357AFF0E1 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		C011AB7AB0000000C011AB01 /* CollabTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollabTabView.swift; sourceTree = "<group>"; };
 		8321EC5C6440EF1FB9E6C91B /* RemoteConnectionString.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteConnectionString.swift; sourceTree = "<group>"; };
 		88202317CAFA2493C7E033D6 /* AdrianService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdrianService.swift; sourceTree = "<group>"; };
 		8D95296E12EE53B0B40BA20C /* SwarmConnectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwarmConnectSheet.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				E2E54C10DC6DFDDFB0905C52 /* AutonomyLevelView.swift */,
 				5D39A035029C828E8083141A /* CenturionShowcaseSection.swift */,
 				815E8C975CB35A4357AFF0E1 /* ChatView.swift */,
+				C011AB7AB0000000C011AB01 /* CollabTabView.swift */,
 				6A427BD838F46B4F357B51D9 /* ConnectionView.swift */,
 				C8DD82DF2D6A8ED5E2D1A15B /* ConstellationView.swift */,
 				95C97A0A1DB69C5815C14640 /* ContactPickerRepresentable.swift */,
@@ -414,6 +417,7 @@
 				7B6E3A4535648BC3F269D364 /* CenturionShowcaseSection.swift in Sources */,
 				5B4DA3067AECDB4BF96FFDCF /* CenturionTheme.swift in Sources */,
 				FCD351264E71B1AEA723F4B2 /* ChatView.swift in Sources */,
+				C011AB7AB0000000C011AB02 /* CollabTabView.swift in Sources */,
 				AEFCA67F544062A0E253A653 /* ConnectionManager.swift in Sources */,
 				79327A346B13F76541E0524B /* ConnectionView.swift in Sources */,
 				E04CC701C6B56F3DF9ACBA7C /* ConstellationView.swift in Sources */,
@@ -517,7 +521,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = J6DY26ZGL4;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -531,7 +535,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 5.3.2;
+				MARKETING_VERSION = 5.3.3;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -547,13 +551,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.3.2;
+				MARKETING_VERSION = 5.3.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -595,7 +599,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = J6DY26ZGL4;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -615,7 +619,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 5.3.2;
+				MARKETING_VERSION = 5.3.3;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -632,13 +636,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 5.3.2;
+				MARKETING_VERSION = 5.3.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.centurion.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

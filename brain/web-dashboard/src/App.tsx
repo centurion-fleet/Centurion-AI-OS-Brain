@@ -11,6 +11,9 @@ const TV = lazy(() => import("./screens/TV").then((m) => ({ default: m.TV })));
 const Discovery = lazy(() =>
   import("./screens/Discovery").then((m) => ({ default: m.Discovery })),
 );
+const Collab = lazy(() =>
+  import("./screens/Collab").then((m) => ({ default: m.Collab })),
+);
 
 function RouteFallback() {
   return (
@@ -31,6 +34,7 @@ export default function App() {
             <Route path="/mission/:id" element={<Mission />} />
             <Route path="/tv" element={<TV />} />
             <Route path="/discovery" element={<Discovery />} />
+            <Route path="/collab" element={<Collab />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

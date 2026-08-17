@@ -85,7 +85,7 @@ Never ask "what is your mission?" in Soul flows. Never describe human story/valu
 ### Cognitive load budget
 - **Max 3** concepts per screen above the fold.
 - **Max 1** decision per screen for first-run flows.
-- **Three tabs** — Chat, Focus, You. Prefer progressive disclosure over more tabs. Pairing, thinking, privacy, and Family & friends live under You, behind sub-menus.
+- **Four tabs** — Chat, Focus, Collab, You. Prefer progressive disclosure over more tabs. Pairing, thinking, privacy, and Family & friends live under You, behind sub-menus.
 
 ### Emotional tone
 - Warm, direct, respectful — like a trusted advisor, not a startup landing page.
@@ -110,7 +110,7 @@ Use `MainTabChrome` on all **four** main tabs with **`CompactBrandHeader`** (app
 
 | Context | Header |
 |---------|--------|
-| Main tabs (Chat, Focus, You) | `CompactBrandHeader` via `MainTabChrome` |
+| Main tabs (Chat, Focus, Collab, You) | `CompactBrandHeader` via `MainTabChrome` |
 | Secondary screens (Mission, Soul, Memory Horizon, Get Help, Adrian, Privacy & Trust, Discovery, …) | `FullBrandHeader` |
 | Sheets / modals | `SheetHeader` or navigation title only — no full brand |
 
@@ -131,11 +131,12 @@ Full token + component reference: **`STYLING_GUIDE.md`**.
 
 ## 5. Information architecture lock
 
-### Three tabs — human names (display)
+### Four tabs — human names (display)
 | Tab | User-facing purpose | Default content |
 |-----|---------------------|-----------------|
 | Chat | Talk with your Sovereign | Conversations, calm messaging |
-| Home | What your Sovereign is doing | Human outcomes, not agent topology |
+| Focus | What your Sovereign is doing | Missions, decisions, documents |
+| Collab | Who is working together | Constellation orbs; Form swarm |
 | You | Personal hub | You first (Mission, Soul, Autonomy), then Your Sovereign, Collaborations, Family & friends, Connect, This Brain, Privacy & Trust, Help & about |
 
 **Connect is not a tab.** Mission, Soul, and Autonomy open at the top of **You**. Pairing lives under **You → Connect**. Thinking, memory, and reporting live under **You → Your Sovereign**. Family & friends is lower in the same list.
@@ -241,7 +242,7 @@ Before any release:
 
 ## 11. Swarm / Collaborations (locked)
 
-**Placement:** Ambient constellation on **Home** — not a sixth tab. Progressive drill-in via orb tap (detail sheet) and "+N" (full constellation sheet). Tertiary list in **You → Collaborations**.
+**Placement:** **Collab** tab — constellation of orbs (glance + one decision). Not a Kanban board on the phone. Brain Collaborate is the column board. Progressive drill-in via orb tap (detail sheet). You → Collaborations opens the Collab tab; Join/Invite stays Advanced.
 
 ### Language rules
 
@@ -253,7 +254,8 @@ Before any release:
 
 ### Pulse ↔ orb vocabulary
 
-| Internal `pulse` | User-facing (orb + subtitle) | Home badge |
+| Internal `pulse` | User-facing (orb + subtitle) | Collab badge |
+|------------------|------------------------------|------------|
 |------------------|------------------------------|------------|
 | `idle` | Working smoothly | none |
 | `active` | In progress | Working on now dot |
@@ -287,7 +289,7 @@ their mission while out in the world:
 - Decide: open Signals with one clear action.
 - Receive: finished documents/outcomes, readable and shareable.
 - Steer: Discuss with collaboration context carried back to the Brain.
-- Collaborate: **Start a collaboration** (local board); portal invite/connect frozen. Brain owns boards.
+- Collaborate: **Collab** tab (orbs) + **Start a collaboration** (goal-first Form); Join/Invite via Mission Control. Brain owns boards.
 
 ### Collaboration isolation
 
@@ -307,14 +309,14 @@ workspaces, memories, or chat context unless the human explicitly links them.
 
 ### Ship gate (Swarm UX)
 
-- [ ] No sixth tab for collaborations
-- [ ] Home hero shows constellation (not a task list) when swarms exist
+- [ ] Collaborations live on the **Collab** tab (orbs on iPhone, Kanban on Brain)
+- [ ] Collab tab shows constellation (not a task list) when swarms exist
 - [ ] Default surfaces use plain language from table above
 - [ ] Orb motion honors Reduce Motion
 - [ ] Demo swarms labeled when `showsDemoContent` is on
 - [ ] Remote reads collaboration state from the Sovereign Brain; iPhone stores
       only preferences/cache
-- [ ] Dashboard `/mission` and Remote use the same Brain-owned snapshot service
+- [ ] Dashboard `/collab` and Remote use the same Brain-owned snapshot service
 
 ---
 

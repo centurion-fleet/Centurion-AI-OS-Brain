@@ -89,7 +89,7 @@ Elevation via `Elevation.card` shadow + `AtmosphericSurface` vignette — moody,
 
 | Context | Component |
 |---------|-----------|
-| **Main tabs** (Chat, Focus, You) | `CompactBrandHeader` — mark + "SOVEREIGN" |
+| **Main tabs** (Chat, Focus, Collab, You) | `CompactBrandHeader` — mark + "SOVEREIGN" |
 | **Secondary screens** (Mission, Soul, Get Help, Adrian, Privacy & Trust, …) | `FullBrandHeader` — mark + product name + tagline |
 | **Sheets / modals** | No header, or `SheetHeader` (title only) |
 

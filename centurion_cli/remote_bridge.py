@@ -115,6 +115,8 @@ def handle_request(
         return _handle_swarm_create_board(request, request_id)
     if action == "swarm_create":
         return _handle_swarm_create(request, request_id)
+    if action == "swarm_move_card":
+        return _handle_swarm_move_card(request, request_id)
     if action == "profiles_list":
         return _handle_profiles_list(request_id)
     if action == "beneficiary_snapshot":
@@ -1054,6 +1056,29 @@ def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, 
         }
     except Exception as exc:
         return _error_response(request_id, action="swarm_create", exc=exc)
+
+
+def _handle_swarm_move_card(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Move a Collaborate Kanban card to Ready, Blocked, or Done."""
+    try:
+        from centurion_cli.swarm_state import move_swarm_card
+
+        result = move_swarm_card(
+            board=str(request.get("board") or request.get("swarm_id") or "").strip(),
+            task_id=str(request.get("task_id") or request.get("card_id") or "").strip(),
+            column=str(request.get("column") or request.get("status") or "").strip(),
+            note=str(request.get("note") or "").strip(),
+        )
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_move_card",
+            "message": result.get("message") or result.get("error"),
+            "result": result,
+            "snapshot": result.get("snapshot"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_move_card", exc=exc)
 
 
 def _handle_profiles_list(request_id: str) -> dict[str, Any]:

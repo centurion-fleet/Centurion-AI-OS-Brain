@@ -10,7 +10,7 @@ Power-user tunnel/`EXPOSE_9119.md` is **not** the App Store Away path.
 
 - [ ] `xcodegen generate` then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.3.0** / build **45**
+- [ ] Display name: **Sovereign AI Remote**; version **5.3.3** / build **48**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 - [ ] Camera permission string present (`NSCameraUsageDescription` — QR only)
 
@@ -56,8 +56,8 @@ Mirror of [`brain/linux/docs/REMOTE_RELAY.md`](../../../brain/linux/docs/REMOTE_
 
 ## Collaborations
 
-- [ ] You → **Start a collaboration** → **Form** with goal + 2 worker profiles (gateway running)
-- [ ] Focus shows the board; block a worker → Needs your choice → **I've decided**
+- [ ] **Collab** tab → **Form swarm** with a goal (gateway running; two worker profiles on the desk)
+- [ ] iPhone Collab shows the orb; Brain Collab shows columns; block a worker → Needs your choice → **I've decided**
 - [ ] Discuss seeds Chat with board framing
 - [ ] Join / Invite fields reach Mission Control; a down portal shows an error (no silent empty board)
 
@@ -68,6 +68,6 @@ Mirror of [`brain/linux/docs/REMOTE_RELAY.md`](../../../brain/linux/docs/REMOTE_
 
 ## Accessibility
 
-- [ ] Dynamic Type on Chat / You / Focus
-- [ ] VoiceOver on Chat / You / Focus
+- [ ] Dynamic Type on Chat / You / Focus / Collab
+- [ ] VoiceOver on Chat / You / Focus / Collab
 - [ ] Primary actions are at least 44pt

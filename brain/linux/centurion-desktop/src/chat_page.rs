@@ -598,6 +598,9 @@ impl ChatHandle {
         self.input.set_text(&body);
         self.input.place_cursor_end();
         self.input.grab_focus();
+        if let Some(cb) = self.resync_composer.borrow().as_ref() {
+            cb();
+        }
         if let Some(open) = self.open_topic_session.borrow().as_ref() {
             open(title);
         }
@@ -765,6 +768,22 @@ fn intent_teach(intent: ChatIntent) -> &'static str {
         ChatIntent::Plan => "Plan — ask for a structured proposal this turn.",
         ChatIntent::Focus => "Focus — centre every reply on your Primary Life Mission.",
         ChatIntent::Research => "Research — evidence-backed; loads research skills.",
+    }
+}
+
+fn composer_placeholder(intent: ChatIntent, topic: Option<&DiscussTopic>) -> String {
+    if let Some(topic) = topic {
+        let title = topic.session_title();
+        return match intent {
+            ChatIntent::Plan => format!("Ask for a plan about {title}…"),
+            _ => format!("Message about {title}…"),
+        };
+    }
+    match intent {
+        ChatIntent::Chat => "Message your Sovereign…".to_owned(),
+        ChatIntent::Plan => "Ask your Sovereign to propose a plan…".to_owned(),
+        ChatIntent::Focus => "Message about your Primary Mission…".to_owned(),
+        ChatIntent::Research => "Ask for evidence-backed research…".to_owned(),
     }
 }
 
@@ -1153,11 +1172,10 @@ fn build_focus_turn(
     (outbound, life_inject, resolved)
 }
 
-const COMPOSER_MIN_HEIGHT: i32 = 88;
-const COMPOSER_MAX_HEIGHT: i32 = 220;
-const COMPOSER_PLACEHOLDER: &str =
-    "Add a follow-up…  ·  Enter to send  ·  Shift+Enter for new line";
-const TRANSCRIPT_SPACER_PX: i32 = 200;
+const COMPOSER_MIN_HEIGHT: i32 = 48;
+const COMPOSER_MAX_HEIGHT: i32 = 160;
+const COMPOSER_PLACEHOLDER: &str = "Message your Sovereign…";
+const TRANSCRIPT_SPACER_PX: i32 = 48;
 
 /// Multiline Cursor-like composer (TextView + scroll + placeholder overlay).
 #[derive(Clone)]
@@ -1257,6 +1275,11 @@ impl ComposerInput {
 
     fn grab_focus(&self) {
         self.view.grab_focus();
+    }
+
+    fn set_placeholder(&self, text: &str) {
+        self.placeholder.set_label(text);
+        self.refresh_placeholder();
     }
 
     #[allow(dead_code)]
@@ -3456,11 +3479,25 @@ fn session_row(
         row.add_css_class("centurion-session-active");
     }
 
-    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    box_.set_margin_top(8);
-    box_.set_margin_bottom(8);
-    box_.set_margin_start(10);
+    let box_ = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    box_.set_margin_top(6);
+    box_.set_margin_bottom(6);
+    box_.set_margin_start(6);
     box_.set_margin_end(4);
+
+    let icon_wrap = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    icon_wrap.add_css_class("centurion-chat-session-icon");
+    icon_wrap.set_valign(gtk::Align::Center);
+    icon_wrap.set_halign(gtk::Align::Center);
+    icon_wrap.set_size_request(32, 32);
+    icon_wrap.set_hexpand(false);
+    let icon = gtk::Image::from_icon_name("user-available-symbolic");
+    icon.set_pixel_size(14);
+    icon_wrap.append(&icon);
+    box_.append(&icon_wrap);
+
+    let text_col = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    text_col.set_hexpand(true);
 
     let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     let title = gtk::Label::builder()
@@ -3480,6 +3517,19 @@ fn session_row(
                 .build(),
         );
     }
+    text_col.append(&title_row);
+
+    if !summary.preview.is_empty() && summary.preview != summary.title {
+        text_col.append(
+            &gtk::Label::builder()
+                .label(&summary.preview)
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+    }
+    box_.append(&text_col);
 
     let menu_button = gtk::MenuButton::builder()
         .icon_name("view-more-symbolic")
@@ -3545,20 +3595,7 @@ fn session_row(
     });
     row.add_controller(right_click);
 
-    title_row.append(&menu_button);
-    box_.append(&title_row);
-
-    if !summary.preview.is_empty() && summary.preview != summary.title {
-        box_.append(
-            &gtk::Label::builder()
-                .label(&summary.preview)
-                .xalign(0.0)
-                .ellipsize(gtk::pango::EllipsizeMode::End)
-                .css_classes(["caption", "dim-label"])
-                .build(),
-        );
-    }
-
+    box_.append(&menu_button);
     row.set_child(Some(&box_));
     row
 }
@@ -4038,6 +4075,59 @@ fn build_archived_activity_widget(archive: &ActivityArchive) -> gtk::Box {
     card
 }
 
+fn chat_avatar(user: bool) -> gtk::Box {
+    let wrap = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    wrap.add_css_class("centurion-chat-avatar");
+    wrap.set_valign(gtk::Align::End);
+    wrap.set_halign(gtk::Align::Center);
+    wrap.set_hexpand(false);
+    wrap.set_size_request(28, 28);
+    wrap.set_margin_bottom(4);
+    if user {
+        wrap.add_css_class("centurion-chat-avatar-user");
+        let img = gtk::Image::from_icon_name("avatar-default-symbolic");
+        img.set_pixel_size(12);
+        wrap.append(&img);
+    } else {
+        let inner = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        inner.add_css_class("centurion-chat-avatar-inner");
+        inner.set_halign(gtk::Align::Center);
+        inner.set_valign(gtk::Align::Center);
+        inner.set_hexpand(true);
+        inner.set_vexpand(true);
+        wrap.append(&inner);
+    }
+    wrap
+}
+
+fn chat_empty_state() -> gtk::Box {
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    box_.add_css_class("centurion-chat-empty");
+    box_.set_halign(gtk::Align::Center);
+    box_.set_valign(gtk::Align::Center);
+    box_.set_hexpand(true);
+    box_.set_vexpand(true);
+    let icon = gtk::Image::from_icon_name("user-available-symbolic");
+    icon.set_pixel_size(28);
+    icon.add_css_class("dim-label");
+    box_.append(&icon);
+    box_.append(
+        &gtk::Label::builder()
+            .label("Message your Sovereign")
+            .css_classes(["centurion-chat-empty-title"])
+            .build(),
+    );
+    box_.append(
+        &gtk::Label::builder()
+            .label("Typed conversation. Thinking stays off this page.")
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .css_classes(["centurion-chat-empty-body"])
+            .build(),
+    );
+    box_
+}
+
 fn message_row(
     message: &ChatMessage,
     assistant_name: &str,
@@ -4047,13 +4137,12 @@ fn message_row(
     row.set_activatable(false);
     row.set_selectable(false);
 
-    let outer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    let outer = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     outer.set_margin_top(4);
     outer.set_margin_bottom(4);
     outer.set_hexpand(true);
 
     let bubble = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    // Size to content, not the full window — Cursor-like readable column.
     bubble.set_hexpand(false);
     bubble.add_css_class("centurion-chat-bubble");
 
@@ -4067,13 +4156,7 @@ fn message_row(
     }
 
     if message.role == ChatRole::Assistant {
-        bubble.append(
-            &gtk::Label::builder()
-                .label(assistant_name)
-                .xalign(0.0)
-                .css_classes(["caption", "dim-label"])
-                .build(),
-        );
+        outer.set_tooltip_text(Some(assistant_name));
     } else if message.role == ChatRole::System {
         let caption = if message.content.starts_with("Worked with")
             || message.content.starts_with("Thinking")
@@ -4126,10 +4209,12 @@ fn message_row(
             spacer.set_hexpand(true);
             outer.append(&spacer);
             outer.append(&bubble);
+            outer.append(&chat_avatar(true));
         }
         ChatRole::Assistant => {
             bubble.set_halign(gtk::Align::Start);
             bubble.add_css_class("centurion-chat-bot");
+            outer.append(&chat_avatar(false));
             outer.append(&bubble);
             let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
             spacer.set_hexpand(true);
@@ -4626,7 +4711,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     );
     let new_chat_button = gtk::Button::with_label("New chat");
     new_chat_button.set_halign(gtk::Align::Fill);
-    new_chat_button.add_css_class("suggested-action");
+    new_chat_button.add_css_class("centurion-chat-new");
     new_chat_button.set_tooltip_text(Some(
         "Start a fresh conversation on this brain.",
     ));
@@ -4635,7 +4720,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
 
     let session_list = gtk::ListBox::new();
     session_list.set_selection_mode(gtk::SelectionMode::Browse);
-    session_list.add_css_class("navigation-sidebar");
+    session_list.add_css_class("centurion-chat-session-list");
     session_list.set_vexpand(true);
 
     let session_empty = gtk::Label::builder()
@@ -4777,13 +4862,14 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     }
     let selection = gtk::NoSelection::new(Some(message_store.clone()));
     let message_list = gtk::ListView::new(Some(selection), Some(factory));
-    message_list.add_css_class("boxed-list");
-    message_list.set_margin_start(12);
-    message_list.set_margin_end(12);
+    message_list.add_css_class("centurion-chat-transcript-list");
+    message_list.set_margin_start(8);
+    message_list.set_margin_end(8);
     message_list.set_margin_top(4);
     message_list.set_margin_bottom(8);
     message_list.set_hexpand(true);
     message_list.set_vexpand(false);
+    message_list.set_visible(false);
     let message_store = message_store;
 
     // Live reply draft — iPhone streamingDraftRow. Tokens land here; thinking does not.
@@ -4798,8 +4884,16 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     let draft_dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     draft_dot.add_css_class("centurion-chat-streaming-dot");
     draft_dot.set_valign(gtk::Align::End);
-    draft_dot.set_margin_bottom(6);
-    draft_dot.set_size_request(10, 10);
+    draft_dot.set_halign(gtk::Align::Center);
+    draft_dot.set_margin_bottom(4);
+    draft_dot.set_size_request(28, 28);
+    let draft_dot_inner = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    draft_dot_inner.add_css_class("centurion-chat-streaming-dot-inner");
+    draft_dot_inner.set_halign(gtk::Align::Center);
+    draft_dot_inner.set_valign(gtk::Align::Center);
+    draft_dot_inner.set_hexpand(true);
+    draft_dot_inner.set_vexpand(true);
+    draft_dot.append(&draft_dot_inner);
     streaming_draft.append(&draft_dot);
     let draft_bubble = gtk::Box::new(gtk::Orientation::Vertical, 0);
     draft_bubble.add_css_class("centurion-chat-streaming-bubble");
@@ -4830,11 +4924,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     transcript_spacer.set_hexpand(true);
 
     // Transcript fills the page. Streaming draft sits in the stream, not above the composer.
+    let empty_hero = chat_empty_state();
     let transcript_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     transcript_box.set_hexpand(true);
+    transcript_box.append(&empty_hero);
     transcript_box.append(&message_list);
     transcript_box.append(&streaming_draft);
     transcript_box.append(&transcript_spacer);
+
+    let transcript_clamp = adw::Clamp::builder()
+        .maximum_size(680)
+        .tightening_threshold(480)
+        .hexpand(true)
+        .build();
+    transcript_clamp.set_child(Some(&transcript_box));
 
     let message_scroll = gtk::ScrolledWindow::builder()
         .vexpand(true)
@@ -4843,7 +4946,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         .vscrollbar_policy(gtk::PolicyType::Automatic)
         .propagate_natural_height(false)
         .build();
-    message_scroll.set_child(Some(&transcript_box));
+    message_scroll.set_child(Some(&transcript_clamp));
     let follow_bottom = Rc::new(Cell::new(true));
     let programmatic_scroll = Rc::new(Cell::new(false));
     wire_follow_bottom_scroll(
@@ -5113,6 +5216,16 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     error_row.set_margin_top(4);
     chat_column.insert_child_after(&error_row, Some(&top));
 
+    let composer_placeholder_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(RefCell::new(None));
+    let refresh_composer_placeholder: Rc<dyn Fn()> = Rc::new({
+        let slot = composer_placeholder_slot.clone();
+        move || {
+            if let Some(cb) = slot.borrow().as_ref() {
+                cb();
+            }
+        }
+    });
     let active_discuss: Rc<RefCell<Option<DiscussTopic>>> = Rc::new(RefCell::new(None));
     // Soul name: fill after first paint — never during build_window.
     refresh_assistant_name_async(
@@ -5142,10 +5255,12 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let active_discuss = active_discuss.clone();
         let context_banner = context_banner.clone();
         let context_bar = context_bar.clone();
+        let refresh_composer_placeholder = refresh_composer_placeholder.clone();
         clear_context.connect_clicked(move |_| {
             *active_discuss.borrow_mut() = None;
             context_banner.set_label("");
             context_bar.set_visible(false);
+            refresh_composer_placeholder();
         });
     }
     context_bar.append(&context_banner);
@@ -5162,7 +5277,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         });
     }
 
-    // Cursor-like chrome: queue strip → chips → input → toolbar (mode · model · attach · send).
+    // Composer: field + send, then quiet pills / model.
     let intent = Rc::new(Cell::new(ChatIntent::Chat));
     let message_queue: Rc<RefCell<Vec<QueuedFollowUp>>> = Rc::new(RefCell::new(Vec::new()));
 
@@ -5302,15 +5417,6 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         }
     });
 
-    let mode_teach = gtk::Label::builder()
-        .label(intent_teach(ChatIntent::Chat))
-        .xalign(0.0)
-        .wrap(true)
-        .max_width_chars(56)
-        .css_classes(["centurion-mode-teach"])
-        .build();
-
-    // Generation guard so a stale async banner resolve cannot overwrite a newer one.
     let focus_banner_gen = Rc::new(Cell::new(0u64));
 
     let sync_mode_pills: Rc<dyn Fn(ChatIntent)> = Rc::new({
@@ -5322,13 +5428,13 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let active_discuss = active_discuss.clone();
         let apply_focus_banner = apply_focus_banner.clone();
         let focus_banner_gen = focus_banner_gen.clone();
-        let mode_teach = mode_teach.clone();
+        let refresh_composer_placeholder = refresh_composer_placeholder.clone();
         move |selected: ChatIntent| {
             chat_pill.set_active(selected == ChatIntent::Chat);
             plan_pill.set_active(selected == ChatIntent::Plan);
             focus_pill.set_active(selected == ChatIntent::Focus);
             research_pill.set_active(selected == ChatIntent::Research);
-            mode_teach.set_label(intent_teach(selected));
+            refresh_composer_placeholder();
             if selected == ChatIntent::Focus {
                 let discuss = active_discuss.borrow().clone();
                 let from_discuss = matches!(
@@ -5384,16 +5490,20 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     wire_mode_pill(&focus_pill, ChatIntent::Focus);
     wire_mode_pill(&research_pill, ChatIntent::Research);
 
+    chat_pill.set_tooltip_text(Some(intent_teach(ChatIntent::Chat)));
+    plan_pill.set_tooltip_text(Some(intent_teach(ChatIntent::Plan)));
+    focus_pill.set_tooltip_text(Some(intent_teach(ChatIntent::Focus)));
+    research_pill.set_tooltip_text(Some(intent_teach(ChatIntent::Research)));
+
     mode_row.append(&chat_pill);
     mode_row.append(&plan_pill);
     mode_row.append(&focus_pill);
     mode_row.append(&research_pill);
 
-    let mode_wrap = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    mode_wrap.set_halign(gtk::Align::Start);
+    let mode_wrap = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    mode_wrap.set_halign(gtk::Align::Fill);
     mode_wrap.set_hexpand(true);
     mode_wrap.append(&mode_row);
-    mode_wrap.append(&mode_teach);
 
     let model_btn = gtk::MenuButton::builder()
         .label("Selecting model…")
@@ -5554,60 +5664,73 @@ pub fn build() -> (gtk::Box, ChatHandle) {
     };
 
     let input = ComposerInput::build();
-    let input_wrap = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    input_wrap.set_margin_start(16);
-    input_wrap.set_margin_end(16);
-    input_wrap.set_margin_top(4);
-    input_wrap.set_margin_bottom(4);
-    input_wrap.append(input.root());
-    bottom.append(&input_wrap);
-
-    let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    toolbar.add_css_class("centurion-chat-toolbar");
-    toolbar.set_margin_start(16);
-    toolbar.set_margin_end(16);
-    toolbar.set_margin_bottom(14);
-    toolbar.set_margin_top(2);
-
     let attach_button = gtk::Button::from_icon_name("mail-attachment-symbolic");
     attach_button.set_tooltip_text(Some("Attach files · drag & drop · paste image"));
     attach_button.add_css_class("centurion-chat-attach-btn");
-    attach_button.set_valign(gtk::Align::Center);
-    attach_button.set_size_request(44, 44);
+    attach_button.set_valign(gtk::Align::End);
+    attach_button.set_size_request(40, 40);
 
-    let send_button = gtk::Button::with_label("Send");
-    send_button.add_css_class("suggested-action");
+    let send_button = gtk::Button::from_icon_name("go-up-symbolic");
+    send_button.add_css_class("centurion-chat-send");
     send_button.set_tooltip_text(Some("Send · Enter"));
-    send_button.set_valign(gtk::Align::Center);
-    send_button.set_size_request(88, 40);
+    send_button.set_valign(gtk::Align::End);
+    send_button.set_size_request(40, 40);
 
-    let stop_button = gtk::Button::with_label("Stop");
+    let stop_button = gtk::Button::from_icon_name("media-playback-stop-symbolic");
     stop_button.add_css_class("centurion-chat-stop");
     stop_button.set_tooltip_text(Some("Stop this turn"));
-    stop_button.set_valign(gtk::Align::Center);
-    stop_button.set_size_request(88, 40);
+    stop_button.set_valign(gtk::Align::End);
+    stop_button.set_size_request(40, 40);
     stop_button.set_visible(false);
 
     let sending_spinner = gtk::Spinner::new();
     sending_spinner.set_visible(false);
     sending_spinner.set_valign(gtk::Align::Center);
 
-    let toolbar_spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    toolbar_spacer.set_hexpand(true);
-
-    toolbar.append(&mode_wrap);
-    toolbar.append(&model_btn);
-    toolbar.append(&toolbar_spacer);
-    toolbar.append(&attach_button);
-    toolbar.append(&send_button);
-    toolbar.append(&stop_button);
-    toolbar.append(&sending_spinner);
-    bottom.append(&toolbar);
+    let input_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    input_row.add_css_class("centurion-chat-input-row");
+    input_row.set_margin_start(16);
+    input_row.set_margin_end(16);
+    input_row.set_margin_top(4);
+    input_row.set_margin_bottom(4);
+    input_row.set_valign(gtk::Align::End);
+    input_row.append(&attach_button);
+    let input_wrap = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    input_wrap.set_hexpand(true);
+    input_wrap.append(input.root());
+    input_row.append(&input_wrap);
+    input_row.append(&send_button);
+    input_row.append(&stop_button);
+    bottom.append(&input_row);
     wait_hint.set_margin_start(16);
     wait_hint.set_margin_end(16);
-    wait_hint.set_margin_bottom(10);
+    wait_hint.set_margin_bottom(6);
     bottom.append(&wait_hint);
+
+    let tools_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    tools_row.add_css_class("centurion-chat-tools");
+    tools_row.set_margin_start(16);
+    tools_row.set_margin_end(16);
+    tools_row.set_margin_bottom(8);
+    tools_row.set_margin_top(2);
+    mode_wrap.set_hexpand(true);
+    tools_row.append(&mode_wrap);
+    tools_row.append(&model_btn);
+    bottom.append(&tools_row);
     chat_column.append(&bottom);
+
+    *composer_placeholder_slot.borrow_mut() = Some(Rc::new({
+        let input = input.clone();
+        let intent = intent.clone();
+        let active_discuss = active_discuss.clone();
+        move || {
+            input.set_placeholder(&composer_placeholder(
+                intent.get(),
+                active_discuss.borrow().as_ref(),
+            ));
+        }
+    }));
+    refresh_composer_placeholder();
 
     let refresh_queue_strip_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
         Rc::new(RefCell::new(None));
@@ -5791,27 +5914,24 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let programmatic_scroll = programmatic_scroll.clone();
         let rendered_count = rendered_count.clone();
         let showing_empty_placeholder = showing_empty_placeholder.clone();
+        let empty_hero = empty_hero.clone();
+        let message_list = message_list.clone();
+        let transcript_spacer = transcript_spacer.clone();
         move || {
             let name = assistant_name.borrow().clone();
             title.set_label(&format!("Chat with {name}"));
             message_store.remove_all();
             let msgs = messages.borrow();
             if msgs.is_empty() {
-                let item = TranscriptItem {
-                    message: ChatMessage {
-                        role: ChatRole::System,
-                        content:
-                            "Your private conversation starts here. Use the message box at the bottom of this page."
-                                .to_owned(),
-                        activity: None,
-                    },
-                    assistant_name: name.clone(),
-                    is_last_assistant: false,
-                };
-                message_store.append(&glib::BoxedAnyObject::new(item));
+                empty_hero.set_visible(true);
+                message_list.set_visible(false);
+                transcript_spacer.set_visible(false);
                 rendered_count.set(0);
                 showing_empty_placeholder.set(true);
             } else {
+                empty_hero.set_visible(false);
+                message_list.set_visible(true);
+                transcript_spacer.set_visible(true);
                 let last_assistant_idx = msgs
                     .iter()
                     .rposition(|m| m.role == ChatRole::Assistant && m.activity.is_none());
@@ -6213,6 +6333,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let context_banner = context_banner.clone();
         let context_bar = context_bar.clone();
         let title_label = title.clone();
+        let refresh_composer_placeholder = refresh_composer_placeholder.clone();
         move || {
             clear_approval();
             set_sending(false);
@@ -6228,6 +6349,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             *active_discuss.borrow_mut() = None;
             context_banner.set_label("");
             context_bar.set_visible(false);
+            refresh_composer_placeholder();
             // Commit continuity for the active chat, then lazy-clear so the next
             // send creates a fresh session without an empty Conversations ghost.
             if let Some(sid) = session_id.borrow().clone() {
@@ -6653,6 +6775,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
         let context_banner = context_banner.clone();
         let context_bar = context_bar.clone();
         let title_label = title.clone();
+        let refresh_composer_placeholder = refresh_composer_placeholder.clone();
         session_list.connect_row_activated(move |_, row| {
             if *is_sending.borrow() || switching.get() {
                 return;
@@ -6679,6 +6802,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
             let active_discuss = active_discuss.clone();
             let context_banner = context_banner.clone();
             let context_bar = context_bar.clone();
+            let refresh_composer_placeholder = refresh_composer_placeholder.clone();
             // Resolve the display name in the same worker as the resume so the UI
             // continuation never blocks on soul_get.
             let (tx, rx) = mpsc::channel::<
@@ -6708,6 +6832,7 @@ pub fn build() -> (gtk::Box, ChatHandle) {
                             context_bar.set_visible(false);
                         }
                     }
+                    refresh_composer_placeholder();
                     follow_bottom.set(true);
                     refresh_messages();
                     refresh_sessions();
@@ -7353,6 +7478,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
         let context_banner = context_banner.clone();
         let context_bar = context_bar.clone();
         let discuss_open_gen = Rc::new(Cell::new(0u64));
+        let refresh_composer_placeholder = refresh_composer_placeholder.clone();
         move |topic_title: String| {
             clear_approval();
             set_sending(false);
@@ -7415,6 +7541,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
             let active_discuss = active_discuss.clone();
             let context_banner = context_banner.clone();
             let context_bar = context_bar.clone();
+            let refresh_composer_placeholder = refresh_composer_placeholder.clone();
             glib::timeout_add_local(Duration::from_millis(16), move || match rx.try_recv() {
                 Ok(outcome) => {
                     if discuss_open_gen.get() != open_gen {
@@ -7436,6 +7563,7 @@ Title: {}\nGoal: {}\nSummary: {}\nSteps: {}\nTargets: {}\n\n{}",
                                 context_banner.set_label(&t.banner_label());
                                 context_bar.set_visible(true);
                             }
+                            refresh_composer_placeholder();
                             refresh_messages();
                             if has_history {
                                 // Continuing the topic thread — don't leave a fresh kickoff.

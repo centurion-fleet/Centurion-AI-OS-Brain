@@ -2,6 +2,11 @@ import SwiftUI
 
 /// Form a local swarm, create an empty board, or join/invite via Mission Control.
 struct SwarmConnectSheet: View {
+    enum Presentation {
+        case goalFirst
+        case advanced
+    }
+
     private enum Mode: String, CaseIterable, Identifiable {
         case form = "Form"
         case board = "Empty board"
@@ -11,11 +16,14 @@ struct SwarmConnectSheet: View {
         var id: String { rawValue }
     }
 
+    var presentation: Presentation = .advanced
+
     @EnvironmentObject private var connectionManager: ConnectionManager
     @EnvironmentObject private var swarmStore: SwarmStore
     @EnvironmentObject private var missionStore: MissionStore
     @Environment(\.dismiss) private var dismiss
 
+    @State private var style: Presentation
     @State private var mode: Mode = .form
     @State private var collaborationName = ""
     @State private var goal = ""
@@ -34,23 +42,32 @@ struct SwarmConnectSheet: View {
     @State private var errorMessage: String?
     @State private var isBusy = false
 
+    init(presentation: Presentation = .advanced) {
+        self.presentation = presentation
+        _style = State(initialValue: presentation)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     SheetHeader(
-                        title: "Collaborations",
-                        subtitle: "Form a swarm on this Sovereign, or join/invite another owner through Mission Control."
+                        title: style == .goalFirst ? "Give your Sovereign a goal" : "Collaborations",
+                        subtitle: style == .goalFirst
+                            ? "Workers on this Brain will research, draft, check, then synthesize. Gateway must be running on the desk."
+                            : "Form a swarm on this Sovereign, or join/invite another owner through Mission Control."
                     )
 
-                    Picker("Mode", selection: $mode) {
-                        ForEach(Mode.allCases) { item in
-                            Text(item.rawValue).tag(item)
+                    if style == .advanced {
+                        Picker("Mode", selection: $mode) {
+                            ForEach(Mode.allCases) { item in
+                                Text(item.rawValue).tag(item)
+                            }
                         }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
 
-                    switch mode {
+                    switch style == .goalFirst ? Mode.form : mode {
                     case .form:
                         formFields
                     case .board:
@@ -77,6 +94,16 @@ struct SwarmConnectSheet: View {
                     }
                     .buttonStyle(CenturionPrimaryButtonStyle())
                     .disabled(isBusy || !connectionManager.isCryptoChatReady)
+
+                    if style == .goalFirst {
+                        Button("Advanced — empty board, join, invite") {
+                            Haptics.lightTap()
+                            withAnimation(Motion.standard) { style = .advanced }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(ColorTheme.accent())
+                        .frame(minHeight: 44)
+                    }
 
                     if !connectionManager.isCryptoChatReady {
                         Text("Link your Sovereign in You first.")
@@ -110,17 +137,21 @@ struct SwarmConnectSheet: View {
 
     private var formFields: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Creates a live Kanban swarm on this Brain: two workers, a verifier, then a synthesizer. Gateway must be running.")
+            Text("Creates a live collaboration on this Brain: two workers, a verifier, then a synthesizer. Gateway must be running.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
-            field("Name (optional)", text: $collaborationName)
+            if style == .advanced {
+                field("Name (optional)", text: $collaborationName)
+            }
             field("Goal", text: $goal)
-            field("Worker 1 title", text: $worker1Title)
-            profilePicker("Worker 1 profile", selection: $worker1Profile)
-            field("Worker 2 title", text: $worker2Title)
-            profilePicker("Worker 2 profile", selection: $worker2Profile)
-            profilePicker("Verifier", selection: $verifierProfile)
-            profilePicker("Synthesizer", selection: $synthesizerProfile)
+            if style == .advanced {
+                field("Worker 1 title", text: $worker1Title)
+                profilePicker("Worker 1 profile", selection: $worker1Profile)
+                field("Worker 2 title", text: $worker2Title)
+                profilePicker("Worker 2 profile", selection: $worker2Profile)
+                profilePicker("Verifier", selection: $verifierProfile)
+                profilePicker("Synthesizer", selection: $synthesizerProfile)
+            }
             if profiles.filter({ $0 != "default" }).isEmpty {
                 Text("Create worker profiles on the desk with `centurion -p researcher setup` so dispatch can spawn real workers.")
                     .font(.caption)
