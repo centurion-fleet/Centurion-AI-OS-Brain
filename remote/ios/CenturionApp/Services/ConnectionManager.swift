@@ -1342,7 +1342,12 @@ final class ConnectionManager: ObservableObject {
 
     private static func isDroppedSocket(_ error: Error) -> Bool {
         if let connectionError = error as? ConnectionError {
-            if case .connectionClosed = connectionError { return true }
+            switch connectionError {
+            case .connectionClosed, .messageTooLarge, .invalidResponse:
+                return true
+            default:
+                break
+            }
         }
         if let nwError = error as? NWError {
             if case .posix(.ECONNABORTED) = nwError { return true }
@@ -1666,6 +1671,49 @@ final class ConnectionManager: ObservableObject {
         if let ok = payload["ok"] as? Bool, !ok {
             throw ConnectionError.serverRejected(
                 payload["message"] as? String ?? "Could not start collaboration."
+            )
+        }
+        return payload
+    }
+
+    /// List Centurion profiles for Form collaboration pickers.
+    func listProfiles() async throws -> [[String: Any]] {
+        let payload = try await invokeRemote(action: "profiles_list")
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not list worker profiles."
+            )
+        }
+        return payload["profiles"] as? [[String: Any]] ?? []
+    }
+
+    /// Form a local Kanban swarm (workers + verifier + synthesizer) that can dispatch.
+    @discardableResult
+    func createLocalSwarm(
+        goal: String,
+        workers: [[String: Any]],
+        verifier: String,
+        synthesizer: String,
+        name: String = "",
+        missionId: String? = nil
+    ) async throws -> [String: Any] {
+        var extra: [String: Any] = [
+            "goal": goal,
+            "workers": workers,
+            "verifier_assignee": verifier,
+            "synthesizer_assignee": synthesizer,
+            "dispatch": true,
+        ]
+        if !name.isEmpty {
+            extra["name"] = name
+        }
+        if let missionId, !missionId.isEmpty {
+            extra["mission_id"] = missionId
+        }
+        let payload = try await invokeRemote(action: "swarm_create", extra: extra)
+        if let ok = payload["ok"] as? Bool, !ok {
+            throw ConnectionError.serverRejected(
+                payload["message"] as? String ?? "Could not form collaboration."
             )
         }
         return payload
@@ -2043,6 +2091,11 @@ final class ConnectionManager: ObservableObject {
             throw ConnectionError.serverRejected(
                 "Your Sovereign took too long to respond. Reconnecting…"
             )
+        } catch {
+            if Self.isDroppedSocket(error) {
+                poisonPipelineAndReconnect()
+            }
+            throw error
         }
 
         guard let json = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
@@ -2064,6 +2117,8 @@ final class ConnectionManager: ObservableObject {
             "swarm_invite_response": "swarm_invite",
             "swarm_resolve_signal_response": "swarm_resolve_signal",
             "swarm_create_board_response": "swarm_create_board",
+            "swarm_create_response": "swarm_create",
+            "profiles_list_response": "profiles_list",
             "beneficiary_snapshot_response": "beneficiary_snapshot",
             "beneficiary_set_family_member_response": "beneficiary_set_family_member",
             "beneficiary_submit_colleague_response": "beneficiary_submit_colleague",

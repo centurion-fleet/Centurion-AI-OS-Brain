@@ -425,7 +425,8 @@ def _portal_snapshot(since: str | None = None) -> dict[str, Any]:
         return {
             "ok": False,
             "source": "local",
-            "message": "Mission Control not connected — run centurion swarm connect",
+            "connected": False,
+            "message": "",
             "swarms": [],
             "projects": [],
             "targets": [],
@@ -433,7 +434,7 @@ def _portal_snapshot(since: str | None = None) -> dict[str, Any]:
         }
 
     try:
-        client = SwarmMcClient(project_token=token, install_id=install_id)
+        client = SwarmMcClient(project_token=token, install_id=install_id, timeout=8)
         data = client.sync(project_id, since)
     except Exception as exc:
         return {
@@ -505,24 +506,29 @@ def _portal_snapshot(since: str | None = None) -> dict[str, Any]:
 def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
     """Return the Brain-owned collaboration snapshot for Remote/dashboard.
 
-    Local boards only — portal Mission Control sync is frozen so Brain never
-    blocks on personalcenturion.com (was up to 120s).
+    Local boards always. Portal Mission Control sync runs only when mc.json
+    is configured, with a short timeout so a down portal cannot stall Focus.
     """
-    del since  # portal incremental sync unused while MC is quarantined
     local = _local_board_snapshot()
-    portal = {
-        "ok": False,
-        "source": "local",
-        "message": (
-            "Mission Control portal sync is frozen — collaborations are "
-            "local boards only. Life Missions live in life.db."
-        ),
-        "swarms": [],
-        "projects": [],
-        "targets": [],
-        "tasks": [],
-    }
+    portal = _portal_snapshot(since=since)
     swarms = list(local["swarms"])
+    seen = {str(item.get("id") or "") for item in swarms}
+    portal_ok = bool(portal.get("ok"))
+    if portal_ok:
+        for item in portal.get("swarms") or []:
+            if not isinstance(item, dict):
+                continue
+            sid = str(item.get("id") or "")
+            if sid and sid not in seen:
+                swarms.append(item)
+                seen.add(sid)
+        projects = list(portal.get("projects") or [])
+        targets = list(portal.get("targets") or [])
+        tasks = list(portal.get("tasks") or [])
+        message = None
+    else:
+        projects, targets, tasks = [], [], []
+        message = str(portal.get("message") or "").strip() or None
     swarms.sort(key=lambda item: int(item.get("attention_score") or 0), reverse=True)
     return {
         "ok": True,
@@ -532,10 +538,10 @@ def get_swarm_snapshot(*, since: str | None = None) -> dict[str, Any]:
         "signals": local["signals"],
         "outcomes": local["outcomes"],
         "activities": local["activities"],
-        "projects": [],
-        "targets": [],
-        "tasks": [],
-        "message": portal.get("message"),
+        "projects": projects,
+        "targets": targets,
+        "tasks": tasks,
+        "message": message,
     }
 
 

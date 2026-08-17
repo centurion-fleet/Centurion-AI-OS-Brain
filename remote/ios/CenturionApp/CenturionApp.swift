@@ -100,6 +100,13 @@ struct CenturionApp: App {
                 await services.planStore.refreshFromHost(connectionManager: connectionManager)
             }
             connectionManager.endPostLinkHydration(generation: generation)
+            // Missions unlock Chat. Finished / Documents / Needs your choice / Updates
+            // use the same pipe next — they are slower, not missing.
+            if connectionManager.linkHydrationGeneration == generation,
+               connectionManager.isCryptoChatReady,
+               !connectionManager.isRemoteTurnInFlight {
+                await services.swarmStore.refresh(from: connectionManager)
+            }
         }
     }
 

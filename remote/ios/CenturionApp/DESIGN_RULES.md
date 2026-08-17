@@ -267,7 +267,7 @@ Before any release:
 
 - Humans see **Signals** only (decisions, ceremonies) — not handoffs, tool progress, or activity log.
 - Pulse attention setting (in-app only): **Surface decisions in the app when needed** (default) vs **Keep Pulse quieter until I open it**. Does **not** schedule OS push or local notifications in the current ship.
-- Collaboration entry: **Start a collaboration** (local board on this Sovereign). Portal Mission Control connect/invite stays frozen (`MC_FROZEN`) — not offered in the Remote.
+- Collaboration entry: **Start a collaboration** — Form a local swarm, empty board, or Join/Invite via Mission Control. A down portal must fail honestly.
 
 ### Brain vs Remote architecture
 

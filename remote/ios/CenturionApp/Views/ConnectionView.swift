@@ -62,7 +62,7 @@ struct ConnectionView: View {
 
     private var trustStatement: some View {
         VStack(spacing: Spacing.xs) {
-            Text("Your Sovereign stays with you anywhere — link once with a remote pairing code. Same Wi‑Fi is a bonus when you’re home.")
+            Text("Your Sovereign stays with you anywhere — start pairing on home Wi‑Fi. Same Wi‑Fi is a bonus when you’re home.")
                 .font(.system(.subheadline, design: .serif).weight(.medium))
                 .foregroundColor(ColorTheme.primaryText())
                 .multilineTextAlignment(.center)
@@ -119,20 +119,20 @@ struct ConnectionView: View {
                         Haptics.lightTap()
                         showPairingSheet = true
                     } label: {
-                        Text("Link to your Centurion")
+                        Text("Start pairing")
                     }
                     .buttonStyle(CenturionGhostButtonStyle())
-                    .accessibilityLabel("Link to your Centurion")
+                    .accessibilityLabel("Start pairing")
                 }
             } else {
                 Button {
                     Haptics.lightTap()
                     showPairingSheet = true
                 } label: {
-                    Text("Link to your Centurion")
+                    Text("Start pairing")
                 }
                 .buttonStyle(CenturionPrimaryButtonStyle())
-                .accessibilityLabel("Link to your Centurion")
+                .accessibilityLabel("Start pairing")
             }
         } else if connectionManager.llmHealth.needsAttention {
             Button {
@@ -229,7 +229,7 @@ struct ConnectionView: View {
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Paste a remote pairing code from your Centurion — or find it on the same Wi‑Fi"
+            return "Start pairing to scan the QR on your Brain — or find it on the same Wi‑Fi"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -298,7 +298,7 @@ struct DeviceLinkSection: View {
                                     Haptics.lightTap()
                                     showPairingSheet = true
                                 } label: {
-                                    Text("Link to your Centurion")
+                                    Text("Start pairing")
                                 }
                                 .buttonStyle(CenturionGhostButtonStyle())
                             } else {
@@ -306,7 +306,7 @@ struct DeviceLinkSection: View {
                                     Haptics.lightTap()
                                     showPairingSheet = true
                                 } label: {
-                                    Text("Link to your Centurion")
+                                    Text("Start pairing")
                                 }
                                 .buttonStyle(CenturionPrimaryButtonStyle())
                             }
@@ -336,10 +336,12 @@ struct DeviceLinkSection: View {
                         }
                     }
 
-                    Text("Link once with a remote pairing code from your Centurion. Same Wi‑Fi still works when you’re home.")
-                        .font(.caption)
-                        .foregroundColor(ColorTheme.mutedText())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !connectionManager.isCryptoChatReady {
+                        Text("Start pairing to scan the QR on your Brain. Paste a code only if you need a fallback.")
+                            .font(.caption)
+                            .foregroundColor(ColorTheme.mutedText())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
@@ -392,7 +394,7 @@ struct DeviceLinkSection: View {
         case .connecting:
             return "Setting up Crypto Chat…"
         case .disconnected:
-            return "Paste a remote pairing code from your Centurion — or find it on the same Wi‑Fi"
+            return "Start pairing to scan the QR on your Brain — or find it on the same Wi‑Fi"
         case .awaitingApproval(let message):
             return message
         case .error(let message):
@@ -576,8 +578,8 @@ struct ConnectionPairingSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 SheetHeader(
-                    title: "Link to your Centurion",
-                    subtitle: "Scan the QR code on your Centurion's screen. Sovereign AI Remote saves it securely and finishes linking."
+                    title: "Connect to your Brain",
+                    subtitle: "Scan the QR code on Sovereign AI Brain. Remote saves it and finishes linking. Paste a code only if you need a fallback."
                 )
 
                 Button {

@@ -13,6 +13,7 @@ final class SwarmStore: ObservableObject {
     @Published private(set) var lastSyncError: String?
     @Published private(set) var lastSyncedAt: Date?
     @Published private(set) var isShowingOfflineCache: Bool = false
+    @Published private(set) var isRefreshing = false
 
     private let digestKey = "centurion.swarm.digest.v1"
     private let snapshotCacheKey = "centurion.swarm.snapshot.v2"
@@ -93,6 +94,12 @@ final class SwarmStore: ObservableObject {
             isShowingOfflineCache = !swarms.isEmpty
             return
         }
+        if connectionManager.isRemoteTurnInFlight || connectionManager.isHydratingAfterLink {
+            return
+        }
+        if isRefreshing { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
         do {
             let snapshot = try await connectionManager.fetchSwarmSnapshot()
             try apply(snapshot: snapshot, persistCache: true)

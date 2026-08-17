@@ -947,15 +947,80 @@ def test_remote_activity_filters_noisy_status_and_caps_terminal():
     assert summary == "$ uname -a\nexit 0"
     assert "xxxx" not in summary
 
-def test_swarm_connect_and_invite_remain_frozen():
+def test_swarm_connect_validates_token():
     from centurion_cli import remote_bridge as rb
 
     connect = rb._handle_swarm_connect({}, "req-1")
     assert connect["ok"] is False
-    assert connect.get("code") == "MC_FROZEN"
-    invite = rb._handle_swarm_invite({}, "req-2")
+    assert connect.get("code") == "MC_TOKEN_REQUIRED"
+
+
+def test_swarm_invite_requires_connection(monkeypatch, tmp_path):
+    from centurion_cli import remote_bridge as rb
+
+    monkeypatch.setenv("CENTURION_HOME", str(tmp_path / ".centurion"))
+    (tmp_path / ".centurion").mkdir()
+    invite = rb._handle_swarm_invite({"invited_customer_id": "cust-1"}, "req-2")
     assert invite["ok"] is False
-    assert invite.get("code") == "MC_FROZEN"
+    assert invite.get("code") == "MC_NOT_CONNECTED"
+
+
+def test_swarm_connect_happy_path(monkeypatch, tmp_path):
+    from centurion_cli import remote_bridge as rb
+
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def sync(self, project_id, since=None):
+            return {"projects": [{"id": project_id}]}
+
+    monkeypatch.setattr("gateway.swarm_mc.SwarmMcClient", _FakeClient)
+    resp = rb._handle_swarm_connect(
+        {
+            "token": "ctk_proj_testtoken",
+            "project_id": "proj-1",
+            "install_id": "inst-1",
+        },
+        "req-c",
+    )
+    assert resp["ok"] is True
+    saved = json.loads((home / "mc.json").read_text())
+    assert saved["project_id"] == "proj-1"
+    assert saved["install_id"] == "inst-1"
+
+
+def test_swarm_connect_portal_down_does_not_save(monkeypatch, tmp_path):
+    from centurion_cli import remote_bridge as rb
+
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    class _Boom:
+        def __init__(self, **kwargs):
+            pass
+
+        def sync(self, project_id, since=None):
+            raise RuntimeError("MC API unreachable: timed out")
+
+    monkeypatch.setattr("gateway.swarm_mc.SwarmMcClient", _Boom)
+    resp = rb._handle_swarm_connect(
+        {
+            "token": "ctk_proj_testtoken",
+            "project_id": "proj-1",
+            "install_id": "inst-1",
+        },
+        "req-d",
+    )
+    assert resp["ok"] is False
+    assert resp.get("code") == "MC_UNREACHABLE"
+    assert resp.get("retryable") is True
+    assert not (home / "mc.json").exists()
 
 def test_profiles_list_bridge_action(monkeypatch):
     from types import SimpleNamespace

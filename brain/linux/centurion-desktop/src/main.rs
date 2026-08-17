@@ -197,17 +197,23 @@ mod linux {
     }
 
     fn you_hub_link(title: &str, subtitle: &str, icon: &str) -> adw::ActionRow {
-        adw::ActionRow::builder()
+        let row = adw::ActionRow::builder()
             .title(title)
             .subtitle(subtitle)
             .icon_name(icon)
             .activatable(true)
-            .build()
+            .build();
+        let chevron = gtk::Image::from_icon_name("go-next-symbolic");
+        chevron.add_css_class("dim-label");
+        row.add_suffix(&chevron);
+        row
     }
 
     fn bind_you_link(row: &adw::ActionRow, nav: &adw::NavigationView, tag: &'static str) {
         let nav = nav.clone();
-        row.connect_activate(move |_| {
+        // ActionRow click emits `activated` (same as pairing). `activate` is
+        // only the keyboard keybinding, so the hub rows looked dead.
+        row.connect_activated(move |_| {
             nav.push_by_tag(tag);
         });
     }
@@ -1372,7 +1378,7 @@ The Brain here is the product; the phone is the remote.",
 
         let collaborations_group = adw::PreferencesGroup::builder()
             .title("Collaborations")
-            .description("Shared work boards on this Brain")
+            .description("Local swarms on this Brain, plus Mission Control join/invite")
             .build();
         let family_group = adw::PreferencesGroup::builder()
             .title("Family &amp; friends")
@@ -4762,6 +4768,7 @@ Being · Continuity\n\
             .build();
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.add_css_class("centurion-dialog-body");
         content.set_margin_top(12);
         content.set_margin_bottom(12);
         content.set_margin_start(12);
@@ -4986,6 +4993,7 @@ Being · Continuity\n\
         list.append(&external_row);
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        content.add_css_class("centurion-dialog-body");
         content.set_margin_top(12);
         content.set_margin_bottom(12);
         content.set_margin_start(12);
@@ -4994,6 +5002,7 @@ Being · Continuity\n\
             &gtk::Label::builder()
                 .label("Changes apply on the next conversation.")
                 .xalign(0.0)
+                .css_classes(["dim-label"])
                 .build(),
         );
         content.append(&list);
@@ -5788,6 +5797,7 @@ The token stays in ~/.centurion/.env on this machine only.",
         dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
 
         let extra = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        extra.add_css_class("centurion-dialog-body");
         let note = gtk::Label::builder()
             .label("In Telegram: open @BotFather → /newbot → copy the token.")
             .wrap(true)

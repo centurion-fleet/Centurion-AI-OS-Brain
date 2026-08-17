@@ -430,7 +430,7 @@ struct SettingsView: View {
         settingsSection(
             title: "Collaborations",
             icon: "circle.hexagongrid.fill",
-            footer: "Collaborations live on Focus as orbs — not a separate tab. You're notified only when a choice is needed."
+            footer: "Collaborations live on Focus as orbs. Form a swarm on this Brain, or join another owner through Mission Control. You're notified in-app when a choice is needed."
         ) {
             Button {
                 showCollaborations = true
@@ -464,7 +464,7 @@ struct SettingsView: View {
                 CenturionListRow(
                     icon: "person.badge.plus",
                     title: "Start a collaboration",
-                    subtitle: "Local board on this Sovereign — portal invite not available"
+                    subtitle: "Form a local swarm, or join/invite via Mission Control"
                 )
             }
             .buttonStyle(.plain)

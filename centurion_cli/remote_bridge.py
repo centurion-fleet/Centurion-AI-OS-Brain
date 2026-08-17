@@ -823,40 +823,145 @@ def _handle_swarm_snapshot(request: dict[str, Any], request_id: str) -> dict[str
 
 
 def _handle_swarm_connect(request: dict[str, Any], request_id: str) -> dict[str, Any]:
-    """Portal Mission Control connect is frozen — Life Missions are local."""
-    del request
-    msg = (
-        "Portal Mission Control connect is frozen on this Brain. "
-        "Life Missions use life.db (life_missions). "
-        "Local collaboration boards: create a board without a portal token."
-    )
-    return {
-        "id": request_id,
-        "ok": False,
-        "action": "swarm_connect",
-        "code": "MC_FROZEN",
-        "error": msg,
-        "message": msg,
-        "retryable": False,
-    }
+    """Join a portal Mission Control project (ctk_proj_*) after a live probe."""
+    token = str(request.get("token") or request.get("project_token") or "").strip()
+    project_id = str(request.get("project_id") or "").strip()
+    install_id = str(request.get("install_id") or "").strip()
+    if not token.startswith("ctk_proj_"):
+        msg = "Provide a Mission Control project token (ctk_proj_…)."
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_connect",
+            "code": "MC_TOKEN_REQUIRED",
+            "error": msg,
+            "message": msg,
+            "retryable": False,
+        }
+    if not project_id:
+        msg = "Provide the Mission Control project id."
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_connect",
+            "code": "MC_PROJECT_REQUIRED",
+            "error": msg,
+            "message": msg,
+            "retryable": False,
+        }
+    if not install_id:
+        msg = "Provide this Brain's install id."
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_connect",
+            "code": "MC_INSTALL_REQUIRED",
+            "error": msg,
+            "message": msg,
+            "retryable": False,
+        }
+    try:
+        from gateway.swarm_mc import SwarmMcClient, persist_mc_connection
+
+        client = SwarmMcClient(
+            project_token=token,
+            install_id=install_id,
+            timeout=12,
+        )
+        client.sync(project_id)
+        persist_mc_connection(project_id, token, install_id)
+        msg = "Mission Control connected. Shared boards will appear on Focus."
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "swarm_connect",
+            "message": msg,
+            "project_id": project_id,
+            "install_id": install_id,
+        }
+    except Exception as exc:
+        detail = str(exc).strip() or "Mission Control connect failed."
+        retryable = "unreachable" in detail.lower() or "timed out" in detail.lower()
+        code = "MC_UNREACHABLE" if retryable else "MC_CONNECT_FAILED"
+        msg = f"Could not join Mission Control: {detail}"
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_connect",
+            "code": code,
+            "error": msg,
+            "message": msg,
+            "retryable": retryable,
+        }
 
 
 def _handle_swarm_invite(request: dict[str, Any], request_id: str) -> dict[str, Any]:
-    """Portal Mission Control invite is frozen."""
-    del request
-    msg = (
-        "Portal Mission Control invites are frozen on this Brain. "
-        "Use local collaboration boards; Life Missions stay offline in life.db."
-    )
-    return {
-        "id": request_id,
-        "ok": False,
-        "action": "swarm_invite",
-        "code": "MC_FROZEN",
-        "error": msg,
-        "message": msg,
-        "retryable": False,
-    }
+    """Invite another owner onto the connected Mission Control project."""
+    invited = str(
+        request.get("invited_customer_id") or request.get("customer_id") or ""
+    ).strip()
+    role = str(request.get("role") or "operator").strip() or "operator"
+    if not invited:
+        msg = "Provide the invitee's Mission Control customer id."
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_invite",
+            "code": "MC_INVITEE_REQUIRED",
+            "error": msg,
+            "message": msg,
+            "retryable": False,
+        }
+    try:
+        from gateway.swarm_mc import SwarmMcClient, load_mc_config
+
+        cfg = load_mc_config()
+        token = str(cfg.get("project_token") or "").strip()
+        install_id = str(cfg.get("install_id") or "").strip()
+        project_id = str(request.get("project_id") or cfg.get("project_id") or "").strip()
+        if not project_id or not token.startswith("ctk_proj_") or not install_id:
+            msg = (
+                "Join a collaboration first (You → Collaborations → Join), "
+                "then invite. Portal was not connected on this Brain."
+            )
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "swarm_invite",
+                "code": "MC_NOT_CONNECTED",
+                "error": msg,
+                "message": msg,
+                "retryable": False,
+            }
+        client = SwarmMcClient(
+            project_token=token,
+            install_id=install_id,
+            timeout=20,
+        )
+        result = client.invite_friend(project_id, invited, role=role)
+        msg = "Invite sent. They join from Collaborations → Join on their Remote or Brain."
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "swarm_invite",
+            "message": msg,
+            "project_id": project_id,
+            "result": result if isinstance(result, dict) else {"raw": result},
+        }
+    except Exception as exc:
+        detail = str(exc).strip() or "Mission Control invite failed."
+        retryable = "unreachable" in detail.lower() or "timed out" in detail.lower()
+        code = "MC_UNREACHABLE" if retryable else "MC_INVITE_FAILED"
+        msg = f"Could not send invite: {detail}"
+        return {
+            "id": request_id,
+            "ok": False,
+            "action": "swarm_invite",
+            "code": code,
+            "error": msg,
+            "message": msg,
+            "retryable": retryable,
+        }
 
 
 def _handle_swarm_resolve_signal(request: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -950,7 +1055,7 @@ def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, 
 
 
 def _handle_profiles_list(request_id: str) -> dict[str, Any]:
-    """List Centurion profiles for Desktop swarm formation pickers."""
+    """List Centurion profiles for Desktop and Remote swarm formation pickers."""
     try:
         from centurion_cli.profiles import list_profiles
 

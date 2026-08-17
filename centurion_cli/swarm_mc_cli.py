@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from centurion_cli.colors import Colors, color
 from centurion_cli.config import load_config, save_config
-from gateway.swarm_mc import DEFAULT_PORTAL_API, save_mc_config
+from gateway.swarm_mc import DEFAULT_PORTAL_API, persist_mc_connection, save_mc_config
 
 
 def cmd_swarm_link(args: argparse.Namespace) -> int:
@@ -134,19 +134,7 @@ def cmd_swarm_connect(args: argparse.Namespace) -> int:
         print(color("Provide --project-id (swarm project UUID).", Colors.YELLOW), file=sys.stderr)
         return 1
 
-    save_mc_config(project_id, token, install_id)
-
-    config = load_config() or {}
-    platforms = config.setdefault("platforms", {})
-    mc = platforms.setdefault("swarm_mc", {})
-    if isinstance(mc, dict):
-        mc["enabled"] = True
-        mc["project_id"] = project_id
-        mc["install_id"] = install_id
-    save_config(config)
-
-    os.environ["CTK_PROJECT_TOKEN"] = token
-    os.environ["CENTURION_INSTALL_ID"] = install_id
+    persist_mc_connection(project_id, token, install_id)
 
     print()
     print(color("  Mission Control connected", Colors.GREEN))

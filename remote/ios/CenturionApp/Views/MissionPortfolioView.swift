@@ -57,6 +57,7 @@ struct MissionPortfolioView: View {
     @State private var liveExpanded = false
     @State private var showActivityDetails = false
     @State private var selectedCategory: PulseCategory = .live
+    @State private var syncSpinning = false
 
     /// Unified chat sheet state
     @State private var chatTarget: ChatSheetTarget?
@@ -100,6 +101,21 @@ struct MissionPortfolioView: View {
         )
     }
 
+    private var showsWorkingSync: Bool {
+        connectionManager.isHydratingAfterLink || liveActivity != nil
+    }
+
+    private func openWorkingOnNow() {
+        Haptics.lightTap()
+        withAnimation(Motion.standard) {
+            selectedCategory = .live
+            if liveActivity != nil {
+                liveExpanded = true
+            }
+        }
+        markSeen(.live)
+    }
+
     /// Mark a category as seen — clear its badge
     private func markSeen(_ category: PulseCategory) {
         let now = Date.timeIntervalSinceReferenceDate
@@ -128,7 +144,37 @@ struct MissionPortfolioView: View {
     }
 
     var body: some View {
-        TabPageChrome(title: "Focus") {
+        TabPageChrome(screenTitle: nil, header: {
+            HStack(alignment: .center, spacing: Spacing.sm) {
+                Text("Focus")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ColorTheme.mutedText())
+                Spacer(minLength: 0)
+                if showsWorkingSync {
+                    Button(action: openWorkingOnNow) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(ColorTheme.accent())
+                            .rotationEffect(.degrees(syncSpinning ? 360 : 0))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Mission working. Opens Working on now.")
+                    .accessibilityHint("Shows what your Sovereign is doing right now")
+                    .onAppear {
+                        withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                            syncSpinning = true
+                        }
+                    }
+                    .onDisappear {
+                        syncSpinning = false
+                    }
+                }
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.bottom, Spacing.xs)
+
             CenturionPillNav(
                 items: PulseCategory.allCases,
                 selection: $selectedCategory,
@@ -140,7 +186,7 @@ struct MissionPortfolioView: View {
             .onChange(of: selectedCategory) { _, category in
                 markSeen(category)
             }
-        } content: {
+        }, content: {
             Group {
                 if isDataLoaded {
                     pulseScrollContent
@@ -148,9 +194,15 @@ struct MissionPortfolioView: View {
                     LoadingState(message: "Loading your dashboard…")
                 }
             }
-        }
-        .task {
+        })
+        .task(id: connectionManager.isHydratingAfterLink) {
             isDataLoaded = true
+            guard connectionManager.isCryptoChatReady,
+                  !connectionManager.isHydratingAfterLink else { return }
+            applyPulseFromSwarmStore()
+            if swarmStore.lastSyncedAt == nil {
+                await reloadPulseFeed(forceRefresh: true)
+            }
         }
         .refreshable {
             await syncFocusFromBrain(forceRefresh: true)
@@ -239,7 +291,7 @@ struct MissionPortfolioView: View {
                 brainSyncBanner
 
                 SwarmConstellationHero(
-                    hasMission: missionStore.hasMissionStatement,
+                    hasMission: missionStore.hasCompletedMissionSetup,
                     missionSnippet: missionStore.mission.statement,
                     onSelectSwarm: { swarm in
                         selectedSwarm = swarm
@@ -390,6 +442,13 @@ struct MissionPortfolioView: View {
             EmptyView()
         } else if connectionManager.isHydratingAfterLink {
             Text("Loading mission data from your Centurion. Please wait — Chat opens when that’s done.")
+                .font(.caption)
+                .foregroundColor(ColorTheme.mutedText())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if connectionManager.isCryptoChatReady,
+                  swarmStore.lastSyncedAt == nil,
+                  swarmStore.lastSyncError == nil {
+            Text("Missions are here. Finished, Documents, Needs your choice, and Updates load next.")
                 .font(.caption)
                 .foregroundColor(ColorTheme.mutedText())
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -581,21 +640,21 @@ struct MissionPortfolioView: View {
 
     private var missionBanner: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            NavigationLink {
-                MissionStackView()
-            } label: {
-                missionStatement
+            if missionStore.hasCompletedMissionSetup {
+                NavigationLink {
+                    MissionStackView()
+                } label: {
+                    missionStatement
+                }
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink {
+                    MissionView()
+                } label: {
+                    missionStatement
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-
-            NavigationLink {
-                MissionView()
-            } label: {
-                Text("Life Mission settings")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -648,6 +707,9 @@ struct MissionPortfolioView: View {
         if !missionStore.mission.statement.isEmpty {
             return missionStore.mission.statement
         }
+        if let first = missionStore.mission.targets.first {
+            return first.title
+        }
         if connectionManager.isHydratingAfterLink {
             return "Loading missions from your Centurion…"
         }
@@ -661,8 +723,8 @@ struct MissionPortfolioView: View {
     }
 
     private var missionSubtitle: String {
-        if missionStore.hasMissionStatement {
-            return "Tap to view your mission and commitments"
+        if missionStore.hasCompletedMissionSetup {
+            return ""
         }
         if connectionManager.isHydratingAfterLink {
             return "Please wait — Chat opens when mission data is on this phone."
@@ -673,7 +735,7 @@ struct MissionPortfolioView: View {
         if connectionManager.isCryptoChatReady, !missionStore.lifeSyncedWithSovereign {
             return "Waiting on your Centurion"
         }
-        return "Tap to reflect on your life mission"
+        return "A short wizard in You — then Focus stays on the work."
     }
 
     private var missionStatement: some View {
@@ -709,12 +771,14 @@ struct MissionPortfolioView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Spacing.xs)
 
-            Text(missionSubtitle)
-                .font(.caption)
-                .foregroundColor(ColorTheme.mutedText())
-                .italic()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+            if !missionSubtitle.isEmpty {
+                Text(missionSubtitle)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+                    .italic()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
         .centurionCard(elevated: true)

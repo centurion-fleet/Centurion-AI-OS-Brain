@@ -87,8 +87,8 @@ struct WelcomeOnboardingView: View {
     private var connectStep: some View {
         VStack(spacing: Spacing.lg) {
             SheetHeader(
-                title: "Link your Centurion",
-                subtitle: "Scan the QR code on your Centurion while you’re on home Wi‑Fi — that pairs Crypto Chat. After you enable Chat from anywhere on the Brain, the same app can continue Crypto Chat away from home (no home IP or port-forward). Paste remains a fallback."
+                title: "Connect to your Brain",
+                subtitle: "Scan the QR code on your Brain while you’re on home Wi‑Fi — that pairs Crypto Chat. After you enable Chat from anywhere on the Brain, the same app can continue Crypto Chat away from home (no home IP or port-forward). Paste remains a fallback."
             )
 
             AtmosphericSurface {
@@ -165,7 +165,7 @@ struct WelcomeOnboardingView: View {
                         }
                         .buttonStyle(CenturionPrimaryButtonStyle())
                     } else {
-                        Button("Paste pairing code") {
+                        Button("Start pairing") {
                             showPairingSheet = true
                             Haptics.lightTap()
                         }

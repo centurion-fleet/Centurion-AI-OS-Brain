@@ -2,7 +2,7 @@
 
 **Sovereign Remote** — private iPhone companion to your Centurion Sovereign brain.
 
-**Status:** Centurion **v5.2.152** (marketing). TestFlight build number comes from `CURRENT_PROJECT_VERSION` in [`CenturionApp/project.yml`](CenturionApp/project.yml) (build **44**).
+**Status:** Centurion **v5.3.0** (marketing). TestFlight build number comes from `CURRENT_PROJECT_VERSION` in [`CenturionApp/project.yml`](CenturionApp/project.yml) (build **45**).
 
 ## Security Architecture
 

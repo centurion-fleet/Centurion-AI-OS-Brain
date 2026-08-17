@@ -128,8 +128,10 @@ On the Fedora unit with Centurion installed and **gateway running** (`kanban.dis
 5. Block a worker → signal shows Resolve/Note; resolve from UI.
 6. When synthesizer completes, Outcomes prefer its result.
 7. **Discuss** seeds Chat with board/root/workers/blackboard framing (no portal tokens).
+8. **Join** / **Invite** with a live `ctk_proj_*` token; a down portal must fail honestly.
+9. Phone Remote: Form swarm (not only empty board); constellation orbs; **I've decided**.
 
-`swarm_connect` / `swarm_invite` stay `MC_FROZEN`. Empty board remains a secondary path.
+`swarm_connect` / `swarm_invite` join and invite via portal Mission Control after a live probe. Empty board remains a secondary path. If the portal is down, the Brain shows that error — it does not save a silent empty join.
 
 ## Local chat
 

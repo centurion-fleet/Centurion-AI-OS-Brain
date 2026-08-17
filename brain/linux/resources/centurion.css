@@ -3,8 +3,8 @@
    Bronze is a spotlight (active nav, primary CTA, presence) — not wallpaper.
    Mission Deck React UI owns the Missions pane; these tokens theme native GTK chrome.
 
-   Light tokens live in the prefers-color-scheme block below. The app still
-   ForceDark at startup, so that block is unused until ForceDark is lifted. */
+   Light tokens are not applied while ForceDark is on — remapping them made
+   dialogs (which are not `window`) paint dark text on dark chrome. */
 
 @define-color centurion_bg #110C09;
 @define-color centurion_surface #1A1512;
@@ -572,26 +572,90 @@ button.destructive-action {
   color: @centurion_fg;
 }
 
-@media (prefers-color-scheme: light) {
-  @define-color centurion_bg #FAFAF9;
-  @define-color centurion_surface #F3F2EE;
-  @define-color centurion_surface_elevated #FFFFFF;
-  @define-color centurion_fg #080503;
-  @define-color centurion_fg_muted #5E534A;
-  @define-color centurion_border #DAD7D0;
-  @define-color centurion_accent #433830;
-  @define-color centurion_accent_bright #080503;
-  @define-color centurion_canvas #FAFAF9;
-  @define-color centurion_ink #080503;
-  @define-color centurion_muted #5E534A;
-  @define-color centurion_dim #5E534A;
-  @define-color centurion_interactive #433830;
-  @define-color centurion_interactive_soft #080503;
-  @define-color centurion_warm #433830;
-  @define-color centurion_warm_soft #433830;
-  @define-color centurion_attention #433830;
-  @define-color centurion_attention_soft #5E534A;
-  @define-color accent_color #433830;
-  @define-color accent_bg_color #433830;
-  @define-color accent_fg_color #F1EEE7;
+button.destructive-action label {
+  color: @centurion_fg;
 }
+
+button.suggested-action label {
+  color: @centurion_bg;
+}
+
+/* Dialogs and popovers are not `window`. `label { color: inherit }` otherwise
+   resolves to black on Adwaita's ForceDark chrome (Reporting & Oversight and
+   every other extra_child popup). */
+dialog,
+alertdialog,
+window.dialog,
+.dialog,
+popover,
+popover.background,
+popover > contents {
+  background: @centurion_surface_elevated;
+  color: @centurion_fg;
+}
+
+dialog label,
+alertdialog label,
+window.dialog label,
+.dialog label,
+popover label,
+.centurion-dialog-body label {
+  color: @centurion_fg;
+}
+
+dialog .dim-label,
+dialog label.subtitle,
+alertdialog .dim-label,
+alertdialog label.subtitle,
+window.dialog .dim-label,
+popover .dim-label,
+.centurion-dialog-body .dim-label {
+  color: @centurion_muted;
+}
+
+dialog .boxed-list,
+alertdialog .boxed-list,
+dialog list,
+alertdialog list,
+.centurion-dialog-body .boxed-list {
+  background: @centurion_surface;
+  color: @centurion_fg;
+  border-radius: 12px;
+}
+
+dialog row,
+alertdialog row,
+.centurion-dialog-body row {
+  color: @centurion_fg;
+  background: @centurion_surface;
+}
+
+dialog entry,
+alertdialog entry,
+popover entry,
+.centurion-dialog-body entry {
+  background: alpha(#fff, 0.06);
+  color: @centurion_fg;
+  caret-color: @centurion_fg;
+}
+
+dialog textview,
+dialog textview > text,
+alertdialog textview,
+alertdialog textview > text,
+.centurion-dialog-body textview,
+.centurion-dialog-body textview > text {
+  background: @centurion_surface;
+  color: @centurion_fg;
+}
+
+dialog dropdown,
+alertdialog dropdown,
+dialog button.flat,
+alertdialog button.flat {
+  color: @centurion_fg;
+}
+
+/* ForceDark is on. Do not remap tokens for prefers-color-scheme: light —
+   that painted dark ink onto dark dialogs. Restore the light map only when
+   ForceDark is lifted. */

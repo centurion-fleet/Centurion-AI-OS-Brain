@@ -21,10 +21,12 @@ class SwarmMcClient:
         project_token: str,
         install_id: str,
         api_base: str | None = None,
+        timeout: float | None = None,
     ) -> None:
         self.project_token = project_token.strip()
         self.install_id = install_id.strip()
         self.api_base = (api_base or os.getenv("CENTURION_PORTAL_API", DEFAULT_PORTAL_API)).rstrip("/")
+        self.timeout = 120.0 if timeout is None else float(timeout)
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -43,12 +45,14 @@ class SwarmMcClient:
         data = json.dumps(body).encode() if body is not None else None
         req = Request(url, data=data, headers=self._headers(), method=method)
         try:
-            with urlopen(req, timeout=120) as resp:
+            with urlopen(req, timeout=self.timeout) as resp:
                 raw = resp.read().decode()
                 return json.loads(raw) if raw else {}
         except HTTPError as err:
             detail = err.read().decode()
             raise RuntimeError(f"MC API {method} {path} failed ({err.code}): {detail}") from err
+        except TimeoutError as err:
+            raise RuntimeError(f"MC API unreachable: timed out after {self.timeout:.0f}s") from err
         except URLError as err:
             raise RuntimeError(f"MC API unreachable: {err}") from err
 
@@ -178,3 +182,23 @@ def save_mc_config(project_id: str, project_token: str, install_id: str) -> None
             indent=2,
         )
     )
+
+
+def persist_mc_connection(project_id: str, project_token: str, install_id: str) -> None:
+    """Save mc.json, enable swarm_mc in config.yaml, and export env for this process."""
+    save_mc_config(project_id, project_token, install_id)
+    os.environ["CTK_PROJECT_TOKEN"] = project_token
+    os.environ["CENTURION_INSTALL_ID"] = install_id
+    try:
+        from centurion_cli.config import load_config, save_config
+
+        config = load_config() or {}
+        platforms = config.setdefault("platforms", {})
+        mc = platforms.setdefault("swarm_mc", {})
+        if isinstance(mc, dict):
+            mc["enabled"] = True
+            mc["project_id"] = project_id
+            mc["install_id"] = install_id
+        save_config(config)
+    except Exception:
+        pass

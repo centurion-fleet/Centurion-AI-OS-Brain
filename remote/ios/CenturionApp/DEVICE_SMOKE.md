@@ -1,6 +1,6 @@
 # Sovereign AI Remote — device smoke checklist
 
-Run on a physical iPhone with Brain **5.2.151+**. **Pair once on home Wi‑Fi**, then
+Run on a physical iPhone with Brain **5.3.0+**. **Pair once on home Wi‑Fi**, then
 validate Away on **cellular** only after Brain `remote_relay_status` shows
 `websockets_installed` + `realtime_pipe_ready` and Chat from anywhere is enabled.
 
@@ -10,7 +10,7 @@ Power-user tunnel/`EXPOSE_9119.md` is **not** the App Store Away path.
 
 - [ ] `xcodegen generate` then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.2.151** / build **43+**
+- [ ] Display name: **Sovereign AI Remote**; version **5.3.0** / build **45**
 - [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
 - [ ] Camera permission string present (`NSCameraUsageDescription` — QR only)
 
@@ -54,12 +54,20 @@ Mirror of [`brain/linux/docs/REMOTE_RELAY.md`](../../../brain/linux/docs/REMOTE_
 - [ ] Ops / License / Firecrawl respond when linked
 - [ ] Skills / Fleet / Plugins / Telegram rows labeled **(glance)** — status only, not full control
 
-## Collaborations honesty
+## Collaborations
 
-- [ ] You → **Start a collaboration** creates a local board only
-- [ ] No portal Invite / Mission Control join UI (frozen `MC_FROZEN`)
+- [ ] You → **Start a collaboration** → **Form** with goal + 2 worker profiles (gateway running)
+- [ ] Focus shows the board; block a worker → Needs your choice → **I've decided**
+- [ ] Discuss seeds Chat with board framing
+- [ ] Join / Invite fields reach Mission Control; a down portal shows an error (no silent empty board)
 
 ## Privacy Hub honesty
 
 - [ ] Privacy Hub describes home LAN vs optional Anywhere (E2E content; cloud metadata/presence only)
 - [ ] No absolute “zero server metadata” / “no routing server” claims
+
+## Accessibility
+
+- [ ] Dynamic Type on Chat / You / Focus
+- [ ] VoiceOver on Chat / You / Focus
+- [ ] Primary actions are at least 44pt

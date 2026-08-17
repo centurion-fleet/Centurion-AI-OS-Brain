@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Clean chat interface with a pull-down conversation tray.
-/// Tap Conversations under the page title to open the tray.
+/// Chat — transcript first. Conversations tray is the only chrome above messages.
 struct ChatView: View {
     /// Initialize with an optional conversation to open immediately.
     /// Pass nil (default) for the clean empty state.
@@ -41,13 +40,18 @@ struct ChatView: View {
     var body: some View {
         Group {
             if usesPageChrome {
-                TabPageChrome(title: "Chat") {
+                VStack(spacing: 0) {
                     conversationTrayTrigger
                         .padding(.horizontal, Spacing.sm)
-                        .padding(.bottom, Spacing.xs)
-                } content: {
                     chatContent
                 }
+                .background(
+                    ZStack {
+                        ColorTheme.background()
+                        ColorTheme.atmosphericVeil()
+                            .ignoresSafeArea()
+                    }
+                )
             } else {
                 VStack(spacing: 0) {
                     conversationTrayTrigger
@@ -104,87 +108,19 @@ struct ChatView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if selectedConversation == nil {
-                allChatHeader
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: Spacing.sm) {
-                            let msgs = messageService.allMessages
-                            if connectionManager.isHydratingAfterLink {
-                                hydratingChatNotice
-                                    .padding(.top, Spacing.xl)
-                                    .id("hydrating-notice")
-                            } else if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
-                                emptyState
-                                    .padding(.top, Spacing.xl)
-                            } else {
-                                ForEach(msgs) { message in
-                                    messageRow(message, showContext: true)
-                                        .id(message.id)
-                                }
-                            }
-                            if isSending, !connectionManager.streamingAssistantText.isEmpty {
-                                streamingDraftRow(connectionManager.streamingAssistantText)
-                                    .id("streaming-draft")
-                            }
-                        }
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.vertical, Spacing.sm)
-                    }
-                    .onChange(of: messageService.allMessages.count) { _, _ in
-                        scrollToLastInStream(proxy)
-                    }
-                    .onChange(of: connectionManager.streamingAssistantText) { _, _ in
-                        withAnimation(Motion.light) {
-                            proxy.scrollTo("streaming-draft", anchor: .bottom)
-                        }
-                    }
-                    .onAppear {
-                        scrollToLastInStream(proxy)
-                    }
-                }
-            } else if let conversation = selectedConversation {
-                contextHeader(conversation: conversation)
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: Spacing.sm) {
-                            let msgs = messageService.messages(for: conversation.id)
-                            if connectionManager.isHydratingAfterLink {
-                                hydratingChatNotice
-                                    .padding(.top, Spacing.xxl)
-                                    .id("hydrating-notice")
-                            } else if msgs.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
-                                emptyChatState(context: conversation.context)
-                                    .padding(.top, Spacing.xxl)
-                            } else {
-                                ForEach(msgs) { message in
-                                    messageRow(message, showContext: false)
-                                        .id(message.id)
-                                }
-                            }
-                            if isSending, !connectionManager.streamingAssistantText.isEmpty {
-                                streamingDraftRow(connectionManager.streamingAssistantText)
-                                    .id("streaming-draft")
-                            }
-                        }
-                        .padding(.horizontal, Spacing.md)
-                        .padding(.vertical, Spacing.sm)
-                    }
-                    .onChange(of: messageService.allMessages.count) { _, _ in
-                        scrollToLast(proxy, conversation: conversation)
-                    }
-                    .onChange(of: connectionManager.streamingAssistantText) { _, _ in
-                        withAnimation(Motion.light) {
-                            proxy.scrollTo("streaming-draft", anchor: .bottom)
-                        }
-                    }
-                    .onAppear {
-                        scrollToLast(proxy, conversation: conversation)
-                    }
+            Group {
+                if selectedConversation == nil {
+                    transcript(messages: messageService.allMessages, showContext: true)
+                } else if let conversation = selectedConversation {
+                    contextHeader(conversation: conversation)
+                    transcript(
+                        messages: messageService.messages(for: conversation.id),
+                        showContext: false,
+                        conversation: conversation
+                    )
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let approval = connectionManager.pendingToolApproval {
                 toolApprovalCard(approval)
@@ -201,6 +137,66 @@ struct ChatView: View {
                 .environmentObject(connectionManager)
                 .environmentObject(swarmStore)
                 .environmentObject(missionStore)
+        }
+    }
+
+    private func transcript(
+        messages: [Message],
+        showContext: Bool,
+        conversation: Conversation? = nil
+    ) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Spacing.md) {
+                    if connectionManager.isHydratingAfterLink {
+                        hydratingChatNotice
+                            .padding(.top, Spacing.lg)
+                            .id("hydrating-notice")
+                    } else if messages.isEmpty && !(isSending && !connectionManager.streamingAssistantText.isEmpty) {
+                        if let conversation {
+                            emptyChatState(context: conversation.context)
+                                .padding(.top, Spacing.xl)
+                        } else {
+                            emptyState
+                                .padding(.top, Spacing.xl)
+                        }
+                    } else {
+                        ForEach(messages) { message in
+                            messageRow(message, showContext: showContext)
+                                .id(message.id)
+                        }
+                    }
+                    if isSending, !connectionManager.streamingAssistantText.isEmpty {
+                        streamingDraftRow(connectionManager.streamingAssistantText)
+                            .id("streaming-draft")
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.md)
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: messages.count) { _, _ in
+                if let conversation {
+                    scrollToLast(proxy, conversation: conversation)
+                } else {
+                    scrollToLastInStream(proxy)
+                }
+            }
+            .onChange(of: connectionManager.streamingAssistantText) { _, _ in
+                withAnimation(Motion.light) {
+                    proxy.scrollTo("streaming-draft", anchor: .bottom)
+                }
+            }
+            .onAppear {
+                if let conversation {
+                    scrollToLast(proxy, conversation: conversation)
+                } else {
+                    scrollToLastInStream(proxy)
+                }
+            }
         }
     }
 
@@ -270,7 +266,7 @@ struct ChatView: View {
                 }
             }
             .padding(.horizontal, Spacing.sm)
-            .padding(.vertical, Spacing.xs)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
     }
@@ -411,36 +407,6 @@ struct ChatView: View {
         .buttonStyle(.plain)
     }
 
-    private var allChatHeader: some View {
-        HStack(spacing: Spacing.sm) {
-            if connectionManager.isHydratingAfterLink {
-                ProgressView()
-                    .controlSize(.mini)
-                    .tint(ColorTheme.accent())
-                Text("Loading mission data. Please wait.")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .lineLimit(1)
-            } else {
-                Image(systemName: "lock.shield.fill")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.success())
-                Text("Crypto Chat · All messages")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.mutedText())
-                    .lineLimit(1)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .background(
-            connectionManager.isHydratingAfterLink
-                ? ColorTheme.accent().opacity(0.06)
-                : ColorTheme.success().opacity(0.05)
-        )
-    }
-
     private func trayRow(_ conversation: Conversation) -> some View {
         Button(action: {
             Haptics.mediumTap()
@@ -519,7 +485,7 @@ struct ChatView: View {
             Spacer()
         }
         .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
+        .padding(.vertical, 6)
         .background(ColorTheme.accent().opacity(0.05))
     }
 
@@ -762,77 +728,90 @@ struct ChatView: View {
     }
 
     private var inputBar: some View {
-        VStack(spacing: Spacing.xs) {
-            chatIntentPicker
-                .padding(.horizontal, Spacing.md)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .bottom, spacing: Spacing.sm) {
+                Button {
+                    Haptics.lightTap()
+                    proposeFirst.toggle()
+                } label: {
+                    Image(systemName: proposeFirst ? "list.clipboard.fill" : "bubble.left.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(proposeFirst ? ColorTheme.accent() : ColorTheme.mutedText())
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!connectionManager.isChatComposerReady)
+                .accessibilityLabel(proposeFirst ? "Propose first" : "Chat")
+                .accessibilityHint("Switch between a spoken reply and a plan to review")
 
-            AtmosphericSurface(elevated: true) {
-                HStack(spacing: Spacing.sm) {
-                    TextField(
-                        connectionManager.isHydratingAfterLink
-                            ? "Loading mission data. Please wait…"
-                            : selectedConversation != nil
-                            ? (proposeFirst
-                                ? "Ask for a plan about \(selectedConversation!.displayTitle)…"
-                                : "Message about \(selectedConversation!.displayTitle)…")
-                            : (proposeFirst
-                                ? "Ask your Sovereign to propose a plan…"
-                                : "Message your Sovereign…"),
-                        text: $messageText
-                    )
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 16))
-                    .focused($isFocused)
-                    .disabled(!connectionManager.isChatComposerReady)
-                    .padding(.horizontal, Spacing.md)
-                    .padding(.vertical, Spacing.sm)
-                    .background(ColorTheme.chatInput())
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                            .stroke(isFocused ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
-                    )
-                    .animation(Motion.light, value: isFocused)
+                TextField(
+                    connectionManager.isHydratingAfterLink
+                        ? "Loading mission data. Please wait…"
+                        : selectedConversation != nil
+                        ? (proposeFirst
+                            ? "Ask for a plan about \(selectedConversation!.displayTitle)…"
+                            : "Message about \(selectedConversation!.displayTitle)…")
+                        : (proposeFirst
+                            ? "Ask your Sovereign to propose a plan…"
+                            : "Message your Sovereign…"),
+                    text: $messageText,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 17))
+                .lineLimit(1...5)
+                .focused($isFocused)
+                .disabled(!connectionManager.isChatComposerReady)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(ColorTheme.chatInput())
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(isFocused ? ColorTheme.accent().opacity(0.4) : ColorTheme.border(), lineWidth: 1)
+                )
 
-                    if isSending {
-                        Button {
-                            Haptics.lightTap()
-                            connectionManager.cancelInFlightChat()
-                            isSending = false
-                            sendError = "Stopped. Send Hi again when Device link is green."
-                        } label: {
-                            Image(systemName: "stop.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(ColorTheme.warning())
-                        }
-                        .accessibilityLabel("Stop waiting")
-                    } else {
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(
-                                    messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? ColorTheme.mutedText()
-                                    : ColorTheme.accent()
-                                )
-                        }
-                        .disabled(
-                            connectionManager.isHydratingAfterLink
-                                || messageText.trimmingCharacters(in: .whitespaces).isEmpty
-                        )
-                        .animation(Motion.light, value: messageText)
+                if isSending {
+                    Button {
+                        Haptics.lightTap()
+                        connectionManager.cancelInFlightChat()
+                        isSending = false
+                        sendError = "Stopped. Send Hi again when Device link is green."
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(ColorTheme.warning())
                     }
+                    .accessibilityLabel("Stop waiting")
+                } else {
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(
+                                messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                                ? ColorTheme.mutedText()
+                                : ColorTheme.accent()
+                            )
+                    }
+                    .disabled(
+                        connectionManager.isHydratingAfterLink
+                            || messageText.trimmingCharacters(in: .whitespaces).isEmpty
+                    )
+                    .animation(Motion.light, value: messageText)
                 }
             }
             .padding(.horizontal, Spacing.md)
-            .padding(.vertical, Spacing.sm)
+            .padding(.top, Spacing.xs)
+            .padding(.bottom, 6)
 
             if isSending, connectionManager.streamingAssistantText.isEmpty {
                 Text(connectionManager.turnActivityHint
-                    ?? "Waiting on your Centurion. Tap stop if this hangs — a reply can take up to a few minutes.")
+                    ?? "Waiting on your Centurion. Tap stop if this hangs.")
                     .font(.caption2)
                     .foregroundColor(ColorTheme.mutedText())
                     .padding(.horizontal, Spacing.md)
+                    .padding(.bottom, 4)
             } else if sendError == nil,
                       connectionManager.isChatComposerReady,
                       connectionManager.llmHealth.needsAttention {
@@ -845,66 +824,10 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, Spacing.md)
+                .padding(.bottom, 4)
             }
         }
-        .padding(.bottom, Spacing.lg)
-    }
-
-    private var chatIntentPicker: some View {
-        HStack(spacing: Spacing.xs) {
-            intentChip(
-                title: "Chat",
-                systemImage: "bubble.left.fill",
-                selected: !proposeFirst
-            ) {
-                proposeFirst = false
-            }
-            intentChip(
-                title: "Propose first",
-                systemImage: "list.clipboard",
-                selected: proposeFirst
-            ) {
-                proposeFirst = true
-            }
-            Spacer(minLength: 0)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("How should your Sovereign respond")
-    }
-
-    private func intentChip(
-        title: String,
-        systemImage: String,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            Haptics.lightTap()
-            action()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(title)
-                    .font(.caption.weight(.semibold))
-            }
-            .foregroundColor(selected ? ColorTheme.accent() : ColorTheme.mutedText())
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(selected ? ColorTheme.accent().opacity(0.12) : ColorTheme.surfaceElevated())
-            )
-            .overlay(
-                Capsule()
-                    .stroke(
-                        selected ? ColorTheme.accent().opacity(0.35) : ColorTheme.border(),
-                        lineWidth: 0.5
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .background(ColorTheme.background())
     }
 
     // MARK: - Actions
@@ -928,6 +851,7 @@ struct ChatView: View {
         Haptics.messageSent()
         messageText = ""
         isSending = true
+        isFocused = false
 
         // Select the conversation before the async send so the user's message
         // stays visible while waiting for the Sovereign response.
@@ -999,10 +923,11 @@ struct ChatView: View {
             .padding(.bottom, 4)
 
             Text(text)
-                .font(.system(size: 16))
+                .font(.system(size: 17))
                 .foregroundColor(ColorTheme.primaryText())
-                .padding(.horizontal, Spacing.sm)
-                .padding(.vertical, Spacing.xs)
+                .lineSpacing(5)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, 10)
                 .background(ColorTheme.mutedText().opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .textSelection(.enabled)
@@ -1054,18 +979,13 @@ struct ChatView: View {
                     .lineLimit(1)
             }
 
-            if message.role == .centurion {
-                Text("Sovereign")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(ColorTheme.accent())
-                    .padding(.horizontal, 4)
-            }
-
             Text(message.content)
-                .font(.system(size: 16))
+                .font(.system(size: 17))
                 .foregroundColor(ColorTheme.primaryText())
+                .lineSpacing(5)
+                .textSelection(.enabled)
                 .padding(.horizontal, Spacing.md)
-                .padding(.vertical, Spacing.sm)
+                .padding(.vertical, 10)
                 .background(message.role == .user
                     ? ColorTheme.accent().opacity(0.12)
                     : ColorTheme.surfaceElevated())

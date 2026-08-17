@@ -57,19 +57,18 @@ def test_mission_control_tool_refuses_portal(centurion_home):
     assert "ctk_proj" in blob or "portal" in blob
 
 
-def test_swarm_connect_frozen(centurion_home):
+def test_swarm_connect_requires_token(centurion_home):
     resp = handle_request(
         {
             "id": "1",
             "action": "swarm_connect",
-            "token": "ctk_proj_fake",
+            "token": "not-a-project-token",
             "project_id": "proj",
             "install_id": "inst",
         }
     )
     assert resp["ok"] is False
-    assert resp.get("code") == "MC_FROZEN"
-    assert "frozen" in str(resp.get("message") or "").lower()
+    assert resp.get("code") == "MC_TOKEN_REQUIRED"
 
 
 def test_swarm_snapshot_local_only(centurion_home):

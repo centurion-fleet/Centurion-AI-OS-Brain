@@ -76,18 +76,40 @@ final class BeneficiaryStore: ObservableObject {
             lastError = "Enter a first name."
             return false
         }
+        let previous = snapshot
+        applyLocalName(trimmed)
+        lastError = nil
+
         guard connectionManager.isCryptoChatReady else {
-            lastError = "Link your Sovereign in You to save this."
-            return false
+            lastError = "Saved on this phone. Connect to your Brain in You to sync."
+            return true
         }
+
+        let idle = await waitUntilPipeIdle(connectionManager)
+        guard idle, connectionManager.isCryptoChatReady else {
+            lastError = nil
+            Task { await self.syncFamilyNameWhenIdle(trimmed, connectionManager: connectionManager) }
+            return true
+        }
+
         do {
             let payload = try await connectionManager.setFamilyBeneficiary(firstName: trimmed)
-            try apply(payload: payload)
+            do {
+                try apply(payload: payload)
+            } catch {
+                applyLocalName(trimmed)
+            }
             lastError = nil
             return true
-        } catch {
-            lastError = error.localizedDescription
+        } catch let ConnectionError.serverRejected(message) {
+            snapshot = previous
+            persistSnapshot()
+            lastError = message
             return false
+        } catch {
+            lastError = nil
+            Task { await self.syncFamilyNameWhenIdle(trimmed, connectionManager: connectionManager) }
+            return true
         }
     }
 
@@ -103,7 +125,7 @@ final class BeneficiaryStore: ObservableObject {
             return false
         }
         guard connectionManager.isCryptoChatReady else {
-            lastError = "Link your Sovereign in You to send referrals."
+            lastError = "Connect to your Brain in You to send referrals."
             return false
         }
         do {
@@ -154,6 +176,44 @@ final class BeneficiaryStore: ObservableObject {
 
         snapshot = decoded
         previousSuccessfulCount = decoded.currentCycle.successfulColleagueCount
+        persistSnapshotData(data)
+    }
+
+    private func applyLocalName(_ name: String) {
+        snapshot.currentCycle.familyBeneficiaryFirstName = name
+        persistSnapshot()
+    }
+
+    private func persistSnapshot() {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(snapshot) else { return }
+        persistSnapshotData(data)
+    }
+
+    private func persistSnapshotData(_ data: Data) {
         UserDefaults.standard.set(data, forKey: cacheKey)
+    }
+
+    private func waitUntilPipeIdle(_ connectionManager: ConnectionManager) async -> Bool {
+        for _ in 0..<60 {
+            if !connectionManager.isPipeBusyForSideTraffic {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return !connectionManager.isPipeBusyForSideTraffic
+    }
+
+    private func syncFamilyNameWhenIdle(_ name: String, connectionManager: ConnectionManager) async {
+        _ = await waitUntilPipeIdle(connectionManager)
+        guard connectionManager.isCryptoChatReady else { return }
+        do {
+            let payload = try await connectionManager.setFamilyBeneficiary(firstName: name)
+            try apply(payload: payload)
+            lastError = nil
+        } catch {
+            // Keep the local name. Next You refresh or save retries.
+        }
     }
 }

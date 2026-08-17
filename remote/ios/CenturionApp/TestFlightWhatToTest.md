@@ -1,6 +1,14 @@
-# Sovereign AI Remote — TestFlight What to Test (build 43)
+# Sovereign AI Remote — TestFlight What to Test (build 45)
 
-**iOS App Version 5.2.151** (not 5.0.1). Build **43**.
+**iOS App Version 5.3.0** (not 5.0.1 / 5.2.x). Build **45**.
+
+## 5.3.0
+
+- You hub rows on Brain open (chevron). Reporting & Oversight dialogs are readable.
+- After link, Focus pills (Finished / Documents / Needs your choice / Updates) load after Missions.
+- Chat: live reply in the transcript; quiet wait under the composer; thinking tokens stay off-screen.
+- Collaborations: **Form swarm** with two worker profiles. Join / Invite via Mission Control. Portal down → error, not an empty board.
+- Away remains internal soak until `REMOTE_RELAY.md` Away DoD is green.
 
 ## You tab (5.2.151)
 
@@ -29,7 +37,7 @@
 ## Honesty (5.2.145)
 
 - Privacy Hub: home Wi‑Fi vs Chat from anywhere (E2E content; cloud metadata only).
-- Collaborations: **Start a collaboration** = local board only (no portal invite).
+- Collaborations: Form / Join / Invite — portal errors are visible.
 - Brain desk: Skills / Fleet / Plugins / Telegram are **glance** (status only).
 - Unlinked Chat: **Not linked to a Brain** banner — no fake live threads.
 

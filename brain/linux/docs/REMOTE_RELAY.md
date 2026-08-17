@@ -108,8 +108,8 @@ Mid-turn reconnect: Realtime drop fails the in-flight turn with retryable copy (
 
 ## TestFlight path (LAN topics first)
 
-1. Brain package at tip **5.2.152+** with this branch merged.
-2. iPhone TestFlight build marketing **5.2.152** / build **44** (lockstep).
+1. Brain package at tip **5.3.0** with this branch merged.
+2. iPhone TestFlight build marketing **5.3.0** / build **45** (lockstep).
 3. Pair on home Wi‑Fi (Unbox QR) — no home IP typed.
 4. Run **LAN topics DoD** below before claiming topic continuity.
 5. Optionally enable Settings → Anywhere (Desktop) / You → Chat from anywhere (iPhone) for internal relay soak — **do not** use App Store “works anywhere” wording until Away DoD is green.

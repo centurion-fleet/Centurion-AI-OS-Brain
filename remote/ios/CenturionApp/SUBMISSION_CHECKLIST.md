@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.2.152** / build **44**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.3.0** / build **45**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -8,7 +8,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.2.152** / build **44**). Complete
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md
-- [ ] ASC iOS version created as **5.2.152** (not a stale 5.0.1 / 5.1.0 train)
+- [ ] ASC iOS version created as **5.3.0** (not a stale 5.0.1 / 5.2.x train)
 
 ## Encryption export compliance
 
@@ -68,7 +68,12 @@ Capture checklist:
 - [ ] `iphone-65-03-memory-horizon.png` — Memory Horizon
 - [ ] `iphone-65-04-mission.png` — Life Mission
 - [ ] `iphone-65-05-connect.png` — Link / Connect (**Scan QR**)
-- [ ] Uploaded to ASC Media Manager (**6.5-inch**, 1284×2778)
+- [ ] `iphone-69-01-focus.png` — Focus / Missions (1290×2796) when Media Manager shows 6.9"
+- [ ] `iphone-69-02-chat.png` — Crypto Chat
+- [ ] `iphone-69-03-memory-horizon.png` — Memory Horizon
+- [ ] `iphone-69-04-mission.png` — Life Mission
+- [ ] `iphone-69-05-connect.png` — Link / Connect (**Scan QR**)
+- [ ] Uploaded to ASC Media Manager (6.5-inch 1284×2778 and 6.9-inch if the slot is present)
 
 ## Camera / QR pairing disclosure
 
@@ -77,7 +82,6 @@ Capture checklist:
 
 ## Features intentionally not shipped as unfinished
 
-- Portal Mission Control connect/invite frozen (`MC_FROZEN`) — Remote offers **Start a collaboration** (local board) only.
 - Digest preference is **in-app attention** only — no OS push / local notification entitlement in this build.
 - Beneficiary complimentary Sovereign fulfillment is **ops** (team contact) — not in-app provisioning.
 - Desk skills / fleet / plugins / Telegram on the phone are **glance** (status only).
@@ -92,3 +96,9 @@ Capture checklist:
 See [`DEVICE_SMOKE.md`](DEVICE_SMOKE.md). TestFlight What to Test: [`TestFlightWhatToTest.md`](TestFlightWhatToTest.md).
 
 **Away App Store “works anywhere” wording:** still gated until Away DoD in `brain/linux/docs/REMOTE_RELAY.md` is green on cellular + CGNAT.
+
+## Accessibility (pre-submit)
+
+- [ ] Dynamic Type on Chat / You / Focus
+- [ ] VoiceOver on Chat / You / Focus
+- [ ] 44pt targets on primary actions (Scan QR, send, Form swarm)

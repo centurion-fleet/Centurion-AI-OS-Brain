@@ -1788,10 +1788,9 @@ pub fn show_connect_collab_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dy
     let dialog = adw::AlertDialog::builder()
         .heading("New collaboration board")
         .body(
-            "Shared work boards on this Brain (and peers you can reach). \
-Cloud Mission Control stays off — no portal invite tokens.\n\n\
-After create, the board is saved on this Brain for local / advisor use. \
-Add a Fleet peer in Settings to involve another Centurion.",
+            "Shared work boards on this Brain. Form a swarm to put workers on the board. \
+Join or Invite uses Mission Control when the portal is reachable.\n\n\
+After create, the board is saved on this Brain. Empty boards do not dispatch workers.",
         )
         .extra_child(&box_)
         .close_response("cancel")
@@ -1842,13 +1841,13 @@ Add a Fleet peer in Settings to involve another Centurion.",
                         .unwrap_or("")
                         .to_owned();
                     let note = if board_id.is_empty() {
-                        "Board saved on this Brain (local / advisor). Add a Fleet peer in \
-Settings to involve another Centurion."
+                        "Empty board saved on this Brain. Form a swarm to dispatch workers, \
+or Join/Invite to share with another owner."
                             .to_owned()
                     } else {
                         format!(
-                            "Board saved on this Brain ({board_id}). Add a Fleet peer in \
-Settings to involve another Centurion."
+                            "Empty board saved on this Brain ({board_id}). Form a swarm to \
+dispatch workers, or Join/Invite to share with another owner."
                         )
                     };
                     if let Ok(mut slot) = created_note_worker.lock() {
@@ -1874,6 +1873,176 @@ Settings to involve another Centurion."
                     if let Some(note) = note {
                         let done = adw::AlertDialog::builder()
                             .heading("Board created")
+                            .body(&note)
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent_w));
+                    }
+                }
+            }),
+        );
+    });
+    dialog.present(Some(parent));
+}
+
+/// Join a portal Mission Control project (`swarm_connect`).
+pub fn show_join_mc_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    let token = gtk::Entry::builder()
+        .placeholder_text("Project token (ctk_proj_…)")
+        .hexpand(true)
+        .build();
+    let project_id = gtk::Entry::builder()
+        .placeholder_text("Project id")
+        .hexpand(true)
+        .build();
+    let install_id = gtk::Entry::builder()
+        .placeholder_text("Install id")
+        .hexpand(true)
+        .build();
+    box_.append(&token);
+    box_.append(&project_id);
+    box_.append(&install_id);
+    let dialog = adw::AlertDialog::builder()
+        .heading("Join collaboration")
+        .body(
+            "Paste the Mission Control project token from an invite. This Brain \
+probes the portal before saving — a down portal will not silently join.",
+        )
+        .extra_child(&box_)
+        .close_response("cancel")
+        .default_response("join")
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("join", "Join");
+    dialog.set_response_appearance("join", adw::ResponseAppearance::Suggested);
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    dialog.connect_response(None, move |_d, response| {
+        if response != "join" {
+            return;
+        }
+        let token_v = token.text().trim().to_owned();
+        let project_v = project_id.text().trim().to_owned();
+        let install_v = install_id.text().trim().to_owned();
+        let refresh = refresh.clone();
+        let parent_w = parent_w.clone();
+        let created_note = Arc::new(Mutex::new(None::<String>));
+        let created_note_worker = Arc::clone(&created_note);
+        run_async_then(
+            parent_w.clone(),
+            refresh,
+            move || {
+                let req = serde_json::json!({
+                    "token": token_v,
+                    "project_id": project_v,
+                    "install_id": install_v,
+                });
+                let payload = run_bridge_action("swarm_connect", req)
+                    .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
+                if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    let note = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Mission Control connected.")
+                        .to_owned();
+                    if let Ok(mut slot) = created_note_worker.lock() {
+                        *slot = Some(note);
+                    }
+                    Ok(())
+                } else {
+                    Err(payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Could not join Mission Control.")
+                        .to_owned())
+                }
+            },
+            Rc::new({
+                let created_note = Arc::clone(&created_note);
+                let parent_w = parent_w.clone();
+                move || {
+                    if let Some(note) = created_note.lock().ok().and_then(|mut s| s.take()) {
+                        let done = adw::AlertDialog::builder()
+                            .heading("Joined")
+                            .body(&note)
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent_w));
+                    }
+                }
+            }),
+        );
+    });
+    dialog.present(Some(parent));
+}
+
+/// Invite another owner onto the connected Mission Control project.
+pub fn show_invite_mc_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn()>) {
+    let box_ = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    let customer = gtk::Entry::builder()
+        .placeholder_text("Their customer id")
+        .hexpand(true)
+        .build();
+    box_.append(&customer);
+    let dialog = adw::AlertDialog::builder()
+        .heading("Invite to collaboration")
+        .body(
+            "Sends a Mission Control invite. They join from Collaborations → Join \
+on their Remote or Brain. Join this Brain first if the portal is not connected.",
+        )
+        .extra_child(&box_)
+        .close_response("cancel")
+        .default_response("invite")
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("invite", "Send invite");
+    dialog.set_response_appearance("invite", adw::ResponseAppearance::Suggested);
+    let parent_w = parent.clone().upcast::<gtk::Widget>();
+    dialog.connect_response(None, move |_d, response| {
+        if response != "invite" {
+            return;
+        }
+        let customer_v = customer.text().trim().to_owned();
+        let refresh = refresh.clone();
+        let parent_w = parent_w.clone();
+        let created_note = Arc::new(Mutex::new(None::<String>));
+        let created_note_worker = Arc::clone(&created_note);
+        run_async_then(
+            parent_w.clone(),
+            refresh,
+            move || {
+                let req = serde_json::json!({
+                    "invited_customer_id": customer_v,
+                });
+                let payload = run_bridge_action("swarm_invite", req)
+                    .ok_or_else(|| "Could not reach the collaboration service.".to_owned())?;
+                if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    let note = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Invite sent.")
+                        .to_owned();
+                    if let Ok(mut slot) = created_note_worker.lock() {
+                        *slot = Some(note);
+                    }
+                    Ok(())
+                } else {
+                    Err(payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Could not send invite.")
+                        .to_owned())
+                }
+            },
+            Rc::new({
+                let created_note = Arc::clone(&created_note);
+                let parent_w = parent_w.clone();
+                move || {
+                    if let Some(note) = created_note.lock().ok().and_then(|mut s| s.take()) {
+                        let done = adw::AlertDialog::builder()
+                            .heading("Invite sent")
                             .body(&note)
                             .close_response("ok")
                             .build();
@@ -2260,10 +2429,16 @@ pub fn show_collaborations_window(
     form_btn.add_css_class("suggested-action");
     let empty_board_btn = gtk::Button::with_label("Empty board");
     empty_board_btn.add_css_class("flat");
+    let join_btn = gtk::Button::with_label("Join");
+    join_btn.add_css_class("flat");
+    let invite_btn = gtk::Button::with_label("Invite");
+    invite_btn.add_css_class("flat");
     let refresh_btn = gtk::Button::with_label("Refresh");
     refresh_btn.add_css_class("flat");
     actions.append(&form_btn);
     actions.append(&empty_board_btn);
+    actions.append(&join_btn);
+    actions.append(&invite_btn);
     actions.append(&refresh_btn);
     outer.append(&actions);
 
@@ -2317,7 +2492,7 @@ pub fn show_collaborations_window(
                 );
             } else {
                 status.set_label(&format!(
-                    "{} collaboration{} · local boards only",
+                    "{} collaboration{} · local boards, plus Mission Control when connected",
                     data.swarms.len(),
                     if data.swarms.len() == 1 { "" } else { "s" }
                 ));
@@ -2449,6 +2624,16 @@ pub fn show_collaborations_window(
         let window_w = window.clone().upcast::<gtk::Widget>();
         let do_refresh = do_refresh.clone();
         move |_| show_connect_collab_dialog(&window_w, do_refresh.clone())
+    });
+    join_btn.connect_clicked({
+        let window_w = window.clone().upcast::<gtk::Widget>();
+        let do_refresh = do_refresh.clone();
+        move |_| show_join_mc_dialog(&window_w, do_refresh.clone())
+    });
+    invite_btn.connect_clicked({
+        let window_w = window.clone().upcast::<gtk::Widget>();
+        let do_refresh = do_refresh.clone();
+        move |_| show_invite_mc_dialog(&window_w, do_refresh.clone())
     });
     refresh_btn.connect_clicked({
         let do_refresh = do_refresh.clone();

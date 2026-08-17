@@ -92,6 +92,12 @@ final class MissionStore: ObservableObject {
         !mission.statement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Mission Discovery / commitments are a first-run wizard. Any content means
+    /// Focus should stop reminding people to complete them.
+    var hasCompletedMissionSetup: Bool {
+        hasMissionStatement || !mission.targets.isEmpty
+    }
+
     var hasSoulConfiguration: Bool {
         soul.isValid
     }
