@@ -1930,6 +1930,16 @@ final class ConnectionManager: ObservableObject {
         return r["snapshot"] as? [String: Any] ?? r
     }
 
+    func resolveLifeDecision(decisionId: UUID, chosen: String = "Proceed") async throws {
+        _ = try await invokeLife(
+            "life_decision_resolve",
+            extra: [
+                "decision_id": decisionId.uuidString.lowercased(),
+                "chosen": chosen,
+            ]
+        )
+    }
+
     func injectLifeContext(
         message: String,
         missionId: String? = nil,

@@ -49,7 +49,6 @@ export function Mission() {
   const [logContext, setLogContext] = useState("");
   const [logBusy, setLogBusy] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
-  const autoLogFor = useRef("");
   const [docOpen, setDocOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docBody, setDocBody] = useState("");
@@ -62,6 +61,8 @@ export function Mission() {
   const [attachError, setAttachError] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [resolveBusyId, setResolveBusyId] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const resolveInflight = useRef<string | null>(null);
 
   useEffect(() => {
     if (loading || !mission) return;
@@ -93,23 +94,10 @@ export function Mission() {
     const scroll = () => {
       const row = document.getElementById(`decision-${attentionId}`);
       const section = decisionsSectionRef.current;
-      (row || section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      (row || section)?.scrollIntoView({ behavior: "smooth", block: "center" });
     };
     window.requestAnimationFrame(scroll);
   }, [loading, mission, attentionId, orderedDecisions.length]);
-
-  useEffect(() => {
-    if (loading || !attentionId) return;
-    const target = orderedDecisions.find((d) => d.id === attentionId);
-    if (!target || !isOpenDecision(target)) return;
-    if (autoLogFor.current === target.id) return;
-    autoLogFor.current = target.id;
-    setLogOpen(true);
-    setLogEditingId(target.id);
-    setLogTitle(target.title || "");
-    setLogContext(target.context || "");
-    setLogChosen("");
-  }, [loading, attentionId, orderedDecisions]);
 
   const merged = [
     ...live.filter((t) => !t.mission_id || t.mission_id === id),
@@ -233,14 +221,22 @@ export function Mission() {
   }
 
   async function markDecisionDone(decisionId: string) {
+    if (resolveInflight.current) return;
+    resolveInflight.current = decisionId;
     setResolveBusyId(decisionId);
+    setResolveError(null);
     try {
       await resolveOpenDecision(decisionId, "Done");
       if (attentionId === decisionId) {
         setSearchParams({}, { replace: true });
       }
       await refresh();
+    } catch (e) {
+      setResolveError(
+        e instanceof Error ? e.message : "Could not mark this decision done.",
+      );
     } finally {
+      resolveInflight.current = null;
       setResolveBusyId(null);
     }
   }
@@ -390,17 +386,37 @@ export function Mission() {
               {attentionDecision.context}
             </p>
           ) : null}
-          <button
-            type="button"
-            className="mt-3 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-[var(--on-accent)]"
-            onClick={() => {
-              document
-                .getElementById(`decision-${attentionDecision.id}`)
-                ?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-          >
-            Jump to decision
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {isOpenDecision(attentionDecision) ? (
+              <button
+                type="button"
+                disabled={resolveBusyId === attentionDecision.id}
+                className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-accent px-4 text-xs font-semibold text-[var(--on-accent)] disabled:opacity-50"
+                onMouseDown={(e) => {
+                  if (e.button !== 0 || resolveBusyId) return;
+                  e.preventDefault();
+                  void markDecisionDone(attentionDecision.id);
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void markDecisionDone(attentionDecision.id);
+                }}
+              >
+                {resolveBusyId === attentionDecision.id ? "Saving…" : "Done"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-amber-glow/40 px-4 text-xs font-semibold text-amber-bright"
+              onClick={() => {
+                document
+                  .getElementById(`decision-${attentionDecision.id}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >
+              Jump to decision
+            </button>
+          </div>
         </div>
       )}
 
@@ -577,14 +593,25 @@ export function Mission() {
             <button
               type="button"
               disabled={logBusy}
-              onClick={() => void submitDecision()}
-              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
+              onMouseDown={(e) => {
+                if (e.button !== 0 || logBusy) return;
+                e.preventDefault();
+                void submitDecision();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                void submitDecision();
+              }}
+              className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-accent px-5 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
             >
               {logBusy ? "Saving…" : "Save choice"}
             </button>
           </div>
         )}
 
+        {resolveError && (
+          <p className="mb-3 text-sm text-amber-soft">{resolveError}</p>
+        )}
         <div className="surface rounded-2xl divide-y divide-white/5 overflow-hidden">
           {orderedDecisions.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-dim">
@@ -601,9 +628,9 @@ export function Mission() {
                   id={`decision-${d.id}`}
                   className={
                     spotlight
-                      ? "flex items-start gap-3 scroll-mt-8 border-l-2 border-amber-glow bg-amber-muted/35 px-4 py-3"
+                      ? "flex items-start gap-3 scroll-mt-28 border-l-2 border-amber-glow bg-amber-muted/35 px-4 py-3"
                       : open
-                        ? "flex items-start gap-3 scroll-mt-8 bg-amber-muted/15 px-4 py-3"
+                        ? "flex items-start gap-3 scroll-mt-28 bg-amber-muted/15 px-4 py-3"
                         : "flex items-start gap-3 px-4 py-3"
                   }
                 >
@@ -640,8 +667,16 @@ export function Mission() {
                         <button
                           type="button"
                           disabled={resolveBusyId === d.id}
-                          onClick={() => void markDecisionDone(d.id)}
-                          className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-[var(--on-accent)] disabled:opacity-50"
+                          onMouseDown={(e) => {
+                            if (e.button !== 0 || resolveBusyId) return;
+                            e.preventDefault();
+                            void markDecisionDone(d.id);
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            void markDecisionDone(d.id);
+                          }}
+                          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-full bg-accent px-3 text-xs font-semibold text-[var(--on-accent)] disabled:opacity-50"
                         >
                           {resolveBusyId === d.id ? "Saving…" : "Done"}
                         </button>

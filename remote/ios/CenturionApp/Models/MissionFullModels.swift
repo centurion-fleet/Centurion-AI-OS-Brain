@@ -383,6 +383,46 @@ struct DecisionRecord: Identifiable, Decodable, Equatable {
         if let s = try? c.decodeIfPresent(String.self, forKey: key) { return UUID(uuidString: s) }
         return nil
     }
+
+    var isOpen: Bool {
+        chosen.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func asDecisionItem() -> DecisionItem {
+        DecisionItem(
+            id: id,
+            title: title.isEmpty ? "Decision needed" : title,
+            context: context,
+            options: [
+                DecisionOption(label: "Proceed", description: "Mark this decided and continue"),
+                DecisionOption(label: "Adjust", description: "Open Chat about this"),
+                DecisionOption(label: "Hold", description: "Keep this in Decisions needed for now"),
+            ],
+            generatedBy: "Your Sovereign",
+            relatedMission: nil,
+            urgency: .today,
+            createdAt: Self.parseDate(createdAt) ?? .now,
+            lifeDecisionId: id,
+            kind: .life
+        )
+    }
+
+    private static func parseDate(_ raw: String) -> Date? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: trimmed) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: trimmed) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        if let date = formatter.date(from: String(trimmed.prefix(19))) { return date }
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.date(from: String(trimmed.prefix(19)))
+    }
 }
 
 struct ThoughtEntry: Identifiable, Decodable, Equatable {

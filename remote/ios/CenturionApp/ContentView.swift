@@ -9,6 +9,7 @@ struct ContentView: View {
     @EnvironmentObject private var dataMode: AppDataMode
     @EnvironmentObject private var planStore: PlanStore
     @EnvironmentObject private var swarmStore: SwarmStore
+    @EnvironmentObject private var missionStore: MissionStore
     @State private var selectedTab = 0
     @State private var loadedTabs: Set<Int> = [0]
     @AppStorage("collab_last_seen") private var lastSeenCollab: TimeInterval = 0
@@ -30,7 +31,7 @@ struct ContentView: View {
 
     /// Outstanding Decisions needed. Swarm waiting is Collab.
     private var homeAttentionCount: Int {
-        PulseBadgeCounts.outstandingFocus(planStore: planStore)
+        PulseBadgeCounts.outstandingFocus(planStore: planStore, missionStore: missionStore)
     }
 
     /// Collaborations the user has not opened since they last changed.

@@ -251,7 +251,7 @@ struct PlanArtifact: Identifiable, Codable, Equatable {
     /// Payload suitable for host ``plan_put``.
     var hostPayload: [String: Any] {
         var body: [String: Any] = [
-            "id": id.uuidString,
+            "id": id.uuidString.lowercased(),
             "title": title,
             "goal": goal,
             "steps": steps,

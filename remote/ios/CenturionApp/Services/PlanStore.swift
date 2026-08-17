@@ -177,12 +177,13 @@ final class PlanStore: ObservableObject {
             default: return .pendingReview
             }
         }()
+        let previous = plans.first(where: { $0.id == id })?.status
         markStatus(id, status: localStatus)
 
         guard let connectionManager, connectionManager.isCryptoChatReady else { return }
         do {
             if let updated = try await connectionManager.decidePlan(
-                planId: id.uuidString,
+                planId: id.uuidString.lowercased(),
                 choice: choice,
                 note: note
             ) {
@@ -190,6 +191,9 @@ final class PlanStore: ObservableObject {
             }
             lastError = nil
         } catch {
+            if let previous {
+                markStatus(id, status: previous)
+            }
             lastError = error.localizedDescription
         }
     }

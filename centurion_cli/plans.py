@@ -325,13 +325,20 @@ def list_plans(status: str | None = None) -> list[dict[str, Any]]:
 
 
 def get_plan(plan_id: str) -> dict[str, Any] | None:
-    path = _plan_path(str(plan_id))
+    pid = str(plan_id or "").strip()
+    if not pid:
+        return None
+    path = _plan_path(pid)
+    if not path.exists() and pid.lower() != pid:
+        path = _plan_path(pid.lower())
+    if not path.exists() and pid.upper() != pid:
+        path = _plan_path(pid.upper())
     if not path.exists():
         return None
     raw = _read_json(path, None)
     if not isinstance(raw, dict):
         return None
-    return _normalize_plan(raw, plan_id=str(plan_id))
+    return _normalize_plan(raw, plan_id=pid)
 
 
 def put_plan(payload: dict[str, Any] | None) -> dict[str, Any]:

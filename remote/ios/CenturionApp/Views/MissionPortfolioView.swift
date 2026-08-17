@@ -65,6 +65,7 @@ struct MissionPortfolioView: View {
     @State private var selectedOutput: CenturionOutput?
     /// Plan review sheet
     @State private var selectedPlan: PlanArtifact?
+    @State private var decisionError: String?
 
     // MARK: - Notification tracking
     // Stores the last time each category was viewed. Items newer than this date
@@ -223,6 +224,9 @@ struct MissionPortfolioView: View {
             }
         }
         .onChange(of: planStore.plans.count) { _, _ in
+            applyPulseFromSwarmStore()
+        }
+        .onChange(of: missionStore.decisions) { _, _ in
             applyPulseFromSwarmStore()
         }
         .onAppear {
@@ -487,7 +491,11 @@ struct MissionPortfolioView: View {
     }
 
     private func applyPulseFromSwarmStore() {
-        let feed = PulseFeedMapper.map(from: swarmStore, planStore: planStore)
+        let feed = PulseFeedMapper.map(
+            from: swarmStore,
+            planStore: planStore,
+            lifeDecisions: missionStore.decisions
+        )
         liveActivity = feed.liveActivity
         completedLoops = feed.wins
         outputs = feed.outputs
@@ -498,6 +506,27 @@ struct MissionPortfolioView: View {
     private func handleDecisionOption(_ option: DecisionOption, for decision: DecisionItem) {
         Haptics.mediumTap()
         let label = option.label.lowercased()
+        decisionError = nil
+
+        if decision.kind == .life || decision.lifeDecisionId != nil {
+            let lifeId = decision.lifeDecisionId ?? decision.id
+            if label.contains("proceed") || label.contains("approve") || label.contains("done") {
+                handleLifeProceed(lifeId, title: decision.title, context: decision.context)
+            } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
+                openDiscuss(
+                    title: "Adjust: \(decision.title)",
+                    detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
+                )
+            } else if label.contains("hold") {
+                Haptics.lightTap()
+            } else {
+                openDiscuss(
+                    title: "Decision: \(decision.title) — \(option.label)",
+                    detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
+                )
+            }
+            return
+        }
 
         if decision.kind == .plan || decision.planId != nil {
             let plan = decision.planId.flatMap { planStore.plan(id: $0) }
@@ -552,9 +581,35 @@ struct MissionPortfolioView: View {
         }
     }
 
+    private func handleLifeProceed(_ decisionId: UUID, title: String, context: String) {
+        Task {
+            if let error = await missionStore.resolveOpenDecision(
+                decisionId,
+                chosen: "Proceed",
+                connectionManager: connectionManager
+            ) {
+                await MainActor.run { decisionError = error }
+                return
+            }
+            applyPulseFromSwarmStore()
+            guard connectionManager.isCryptoChatReady else { return }
+            do {
+                _ = try await messageService.sendMessage(
+                    "Please proceed. Continue the work from this decision: \(title).",
+                    in: .decision(id: decisionId, title: title)
+                )
+            } catch {
+                // Decision is already resolved on the Brain.
+            }
+        }
+    }
+
     private func handlePlanProceed(_ plan: PlanArtifact) {
         Task {
             await planStore.decide(plan.id, choice: "approve", connectionManager: connectionManager)
+            if let error = planStore.lastError, !error.isEmpty {
+                await MainActor.run { decisionError = error }
+            }
             if let signalId = plan.signalId {
                 swarmStore.resolveSignal(
                     signalId,
@@ -1495,6 +1550,11 @@ struct MissionPortfolioView: View {
             ForEach(decisions) { decision in
                 decisionCard(decision)
                     .cardStyle()
+            }
+            if let decisionError, !decisionError.isEmpty {
+                Text(decisionError)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.warning())
             }
         }
         .opacity(isAppeared ? 1 : 0)

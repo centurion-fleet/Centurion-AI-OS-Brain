@@ -1,6 +1,11 @@
-# Sovereign AI Remote — TestFlight What to Test (build 51)
+# Sovereign AI Remote — TestFlight What to Test (build 52)
 
-**iOS App Version 5.3.6** (not 5.0.1 / 5.2.x / 5.3.5). Build **51**. Pair against Brain **5.3.6**.
+**iOS App Version 5.3.7** (not 5.0.1 / 5.2.x / 5.3.6). Build **52**. Pair against Brain **5.3.7**.
+
+## 5.3.7
+
+- **Focus Proceed actually resolves the decision** on the Brain. Pair with this Brain — earlier builds opened Chat or missed the host id, so Decisions needed never cleared.
+- Focus tab opens the homepage (decisions list), not a supporting mission. Mission **Done** fires on press (WebKit was eating the tap).
 
 ## 5.3.6
 

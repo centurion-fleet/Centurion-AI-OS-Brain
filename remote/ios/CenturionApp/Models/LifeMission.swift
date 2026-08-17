@@ -207,11 +207,14 @@ struct DecisionItem: Identifiable {
     let signalId: String?
     /// Local PlanArtifact id when this is a plan review.
     let planId: UUID?
+    /// Brain `life.db` decision id when this is a Focus life decision.
+    let lifeDecisionId: UUID?
     let kind: Kind
 
     enum Kind: String {
         case general
         case plan
+        case life
     }
 
     enum Urgency: String {
@@ -232,6 +235,7 @@ struct DecisionItem: Identifiable {
         createdAt: Date,
         signalId: String? = nil,
         planId: UUID? = nil,
+        lifeDecisionId: UUID? = nil,
         kind: Kind = .general
     ) {
         self.id = id
@@ -244,6 +248,7 @@ struct DecisionItem: Identifiable {
         self.createdAt = createdAt
         self.signalId = signalId
         self.planId = planId
+        self.lifeDecisionId = lifeDecisionId
         self.kind = kind
     }
 
@@ -253,8 +258,8 @@ struct DecisionItem: Identifiable {
     }
 }
 
-struct DecisionOption: Identifiable {
-    let id = UUID()
+struct DecisionOption: Identifiable, Equatable {
+    var id: String { label }
     let label: String
     let description: String
 }

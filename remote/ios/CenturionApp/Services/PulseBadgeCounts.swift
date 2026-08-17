@@ -16,10 +16,15 @@ enum PulseBadgeCounts {
         isCryptoChatReady: Bool,
         showsDemoContent: Bool,
         swarmStore: SwarmStore,
-        planStore: PlanStore
+        planStore: PlanStore,
+        lifeDecisions: [DecisionRecord] = []
     ) -> PulseFeedMapper.Feed {
         if isCryptoChatReady {
-            return PulseFeedMapper.map(from: swarmStore, planStore: planStore)
+            return PulseFeedMapper.map(
+                from: swarmStore,
+                planStore: planStore,
+                lifeDecisions: lifeDecisions
+            )
         }
         #if DEBUG
         if showsDemoContent {
@@ -69,8 +74,9 @@ enum PulseBadgeCounts {
     }
 
     /// Focus tab badge: all outstanding Decisions needed (not last-visit “new”).
-    static func outstandingFocus(planStore: PlanStore) -> Int {
+    static func outstandingFocus(planStore: PlanStore, missionStore: MissionStore? = nil) -> Int {
         planStore.pendingReview.count
+            + (missionStore?.decisions.filter(\.isOpen).count ?? 0)
     }
 
     /// Collab tab badge: collaborations updated since the user last opened Collab.

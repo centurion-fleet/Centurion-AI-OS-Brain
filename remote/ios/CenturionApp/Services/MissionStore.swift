@@ -707,6 +707,26 @@ final class MissionStore: ObservableObject {
         }
     }
 
+    func resolveOpenDecision(
+        _ decisionId: UUID,
+        chosen: String = "Proceed",
+        connectionManager: ConnectionManager
+    ) async -> String? {
+        guard connectionManager.isCryptoChatReady else {
+            return "Link your Sovereign to resolve this decision."
+        }
+        do {
+            try await connectionManager.resolveLifeDecision(
+                decisionId: decisionId,
+                chosen: chosen
+            )
+            await refreshLifeStack(from: connectionManager)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     func promoteDream(_ dreamId: UUID, connectionManager: ConnectionManager) async -> String? {
         guard connectionManager.isCryptoChatReady else {
             return "Link your Sovereign to promote a dream."

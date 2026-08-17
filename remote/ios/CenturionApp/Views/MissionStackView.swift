@@ -202,6 +202,7 @@ struct MissionDetailView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var connectionManager: ConnectionManager
     @Environment(\.dismiss) private var dismiss
+    @State private var resolveError: String?
 
     var body: some View {
         List {
@@ -243,15 +244,39 @@ struct MissionDetailView: View {
 
             if !missionStore.decisions.isEmpty {
                 Section("Decisions") {
-                    ForEach(missionStore.decisions.prefix(8)) { decision in
-                        VStack(alignment: .leading, spacing: 2) {
+                    ForEach(missionStore.decisions.filter { $0.missionId == nil || $0.missionId == mission.id }.prefix(8)) { decision in
+                        VStack(alignment: .leading, spacing: 8) {
                             Text(decision.title)
                             if !decision.chosen.isEmpty {
                                 Text("Chose: \(decision.chosen)")
                                     .font(.caption)
                                     .foregroundStyle(ColorTheme.mutedText())
+                            } else {
+                                Button {
+                                    Task {
+                                        if let error = await missionStore.resolveOpenDecision(
+                                            decision.id,
+                                            chosen: "Proceed",
+                                            connectionManager: connectionManager
+                                        ) {
+                                            resolveError = error
+                                        } else {
+                                            resolveError = nil
+                                        }
+                                    }
+                                } label: {
+                                    Text("Proceed")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity, minHeight: 44)
+                                }
+                                .buttonStyle(.borderedProminent)
                             }
                         }
+                    }
+                    if let resolveError, !resolveError.isEmpty {
+                        Text(resolveError)
+                            .font(.caption)
+                            .foregroundStyle(ColorTheme.warning())
                     }
                 }
             }

@@ -1,12 +1,19 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { embedDeckRole, useDeckVisible } from "../hooks/useDeckVisible";
-import { fetchOpenDecisions } from "../hooks/useOpenDecisions";
+
+function scrollFocusHome() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+}
 
 /**
- * When the Brain Focus tab becomes visible and there are open decisions
- * (the tab badge), jump straight to the mission + decision that needs you —
- * so the alert is never a mystery after a click into Focus.
+ * Clicking the Brain Focus tab always opens the Focus homepage (decisions
+ * list at the top) — never a supporting-mission detail or a mid-page scroll.
+ *
+ * In-tab navigation (open a mission, Discovery) is left alone until the user
+ * leaves Focus and comes back.
  *
  * Never run on Collab — that tab is a Kanban, not the mission deck.
  */
@@ -14,7 +21,8 @@ export function AttentionFollow() {
   const deckVisible = useDeckVisible();
   const navigate = useNavigate();
   const location = useLocation();
-  const followedForVisit = useRef(false);
+  const tabOpen = useRef(false);
+  const pendingHomeScroll = useRef(false);
 
   useEffect(() => {
     if (embedDeckRole() === "collab") return;
@@ -22,46 +30,24 @@ export function AttentionFollow() {
       return;
     }
     if (!deckVisible) {
-      followedForVisit.current = false;
+      tabOpen.current = false;
+      pendingHomeScroll.current = false;
       return;
     }
-    if (followedForVisit.current) return;
-
-    let cancelled = false;
-    void (async () => {
-      let open;
-      try {
-        open = await fetchOpenDecisions();
-      } catch {
+    if (!tabOpen.current) {
+      tabOpen.current = true;
+      pendingHomeScroll.current = true;
+      if (location.pathname !== "/") {
+        navigate("/", { replace: true });
         return;
       }
-      if (cancelled || open.length === 0) return;
-      followedForVisit.current = true;
-
-      const first = open.find((d) => d.mission_id) ?? open[0];
-      const mid = first.mission_id;
-      if (!mid) return;
-
-      const targetPath = `/mission/${mid}`;
-      const qs = `attention=${encodeURIComponent(first.id)}`;
-      const alreadyHere =
-        location.pathname === targetPath &&
-        new URLSearchParams(location.search).get("attention") === first.id;
-      if (alreadyHere) return;
-
-      navigate(`${targetPath}?${qs}`, {
-        replace: location.pathname === targetPath,
-        state: {
-          attentionTitle: first.title,
-          attentionContext: first.context || "",
-        },
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [deckVisible, navigate, location.pathname, location.search]);
+    }
+    if (pendingHomeScroll.current && location.pathname === "/") {
+      pendingHomeScroll.current = false;
+      scrollFocusHome();
+      requestAnimationFrame(scrollFocusHome);
+    }
+  }, [deckVisible, navigate, location.pathname]);
 
   return null;
 }

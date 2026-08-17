@@ -13,7 +13,11 @@ enum PulseFeedMapper {
         var thoughts: [CenturionThought]
     }
 
-    static func map(from store: SwarmStore, planStore: PlanStore? = nil) -> Feed {
+    static func map(
+        from store: SwarmStore,
+        planStore: PlanStore? = nil,
+        lifeDecisions: [DecisionRecord] = []
+    ) -> Feed {
         let liveSwarm = store.heroSwarms
             .filter {
                 $0.pulse == .active
@@ -53,6 +57,12 @@ enum PulseFeedMapper {
                 }
                 .map { $0.asDecisionItem() }
             decisions = planDecisions + decisions
+        }
+
+        let openLife = lifeDecisions.filter(\.isOpen).map { $0.asDecisionItem() }
+        if !openLife.isEmpty {
+            let existing = Set(decisions.map(\.id))
+            decisions = openLife.filter { !existing.contains($0.id) } + decisions
         }
 
         let thoughts = store.activities

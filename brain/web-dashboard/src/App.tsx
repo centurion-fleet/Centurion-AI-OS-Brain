@@ -27,7 +27,7 @@ function RouteFallback() {
 export default function App() {
   const role = embedDeckRole();
   // Brain Collab WebView must never mount Focus routes — AttentionFollow
-  // would otherwise jump this tab onto a mission with open decisions.
+  // resets the Focus tab to the homepage (decisions list).
   if (role === "collab") {
     return (
       <LazyMotion features={domAnimation} strict>

@@ -1306,10 +1306,14 @@ def resolve_decision(decision_id: str, chosen: str = "Done") -> dict[str, Any]:
     choice = str(chosen or "").strip() or "Done"
     now = _utc_now()
     with _conn() as conn:
-        row = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (did,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM life_decisions WHERE id = ? OR lower(id) = lower(?)",
+            (did, did),
+        ).fetchone()
         if row is None:
             raise ValueError("Decision not found.")
-        conn.execute("UPDATE life_decisions SET chosen = ? WHERE id = ?", (choice, did))
+        canonical = row["id"]
+        conn.execute("UPDATE life_decisions SET chosen = ? WHERE id = ?", (choice, canonical))
         mid = row["mission_id"]
         if mid:
             conn.execute(
@@ -1318,10 +1322,10 @@ def resolve_decision(decision_id: str, chosen: str = "Done") -> dict[str, Any]:
                 "VALUES (?, ?, '[]', '{}', ?) "
                 "ON CONFLICT(mission_id) DO UPDATE SET "
                 "last_decision_id=excluded.last_decision_id, updated_at=excluded.updated_at",
-                (mid, did, now),
+                (mid, canonical, now),
             )
         bump_data_version(conn)
-        updated = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (did,)).fetchone()
+        updated = conn.execute("SELECT * FROM life_decisions WHERE id = ?", (canonical,)).fetchone()
         return _decision_from_row(updated)
 
 

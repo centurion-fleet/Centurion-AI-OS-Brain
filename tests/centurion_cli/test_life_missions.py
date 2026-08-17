@@ -245,6 +245,30 @@ def test_resolve_decision_marks_done(life_home):
     assert resp["decision"]["chosen"] == "Done"
 
 
+def test_resolve_decision_accepts_uppercase_uuid(life_home):
+    """iOS UUID.uuidString is uppercase; life.db stores Python uuid4 lowercase."""
+    from centurion_cli.life_missions import log_decision, put_mission, resolve_decision
+
+    mission = put_mission(
+        {
+            "title": "Ship product",
+            "statement": "Ship product",
+            "mission_type": "primary",
+            "targets": [{"title": "MVP", "target_type": "essential"}],
+        }
+    )
+    open_one = log_decision(
+        {
+            "mission_id": mission["id"],
+            "title": "Pick a colour",
+            "context": "Brand palette",
+        }
+    )
+    closed = resolve_decision(open_one["id"].upper(), "Done")
+    assert closed["chosen"] == "Done"
+    assert closed["id"] == open_one["id"]
+
+
 def test_log_decision_records_choice_in_place(life_home):
     """Saving a choice updates the waiting row — it stays on the mission, not as a second open item."""
     from centurion_cli.life_missions import (
