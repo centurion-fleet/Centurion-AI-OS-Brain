@@ -1,6 +1,11 @@
-# Sovereign AI Remote — TestFlight What to Test (build 49)
+# Sovereign AI Remote — TestFlight What to Test (build 50)
 
-**iOS App Version 5.3.4** (not 5.0.1 / 5.2.x / 5.3.3). Build **49**. Pair against Brain **5.3.4**.
+**iOS App Version 5.3.5** (not 5.0.1 / 5.2.x / 5.3.4). Build **50**. Pair against Brain **5.3.5**.
+
+## 5.3.5
+
+- Brain **Form swarm** actually creates the board (goal stays until the Kanban appears). Pair with this Brain — 5.3.4 cleared the goal and stayed on the empty form.
+- Form no longer waits on inline worker dispatch (gateway picks workers up). Button shows **Forming…** and errors land in the amber banner.
 
 ## 5.3.4
 

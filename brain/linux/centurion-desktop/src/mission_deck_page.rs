@@ -825,14 +825,15 @@ fn attach_webview(
         .vexpand(true)
         .build();
 
+    let vis = if deck_role == "collab" { "true" } else { "false" };
     let script = webkit6::UserScript::new(
         &format!(
             r#"
         window.__centurionDeckRole = "{deck_role}";
-        // Default false for Brain embed; GTK re-applies true after load when
-        // the Missions tab is visible (see connect_load_changed).
+        // Collab WebView is only mounted while that tab is showing.
+        // Focus defaults false; GTK re-applies true after load when visible.
         if (typeof window.__centurionDeckVisible === 'undefined') {{
-          window.__centurionDeckVisible = false;
+          window.__centurionDeckVisible = {vis};
         }}
         window.centurionDiscuss = function(payload) {{
           try {{

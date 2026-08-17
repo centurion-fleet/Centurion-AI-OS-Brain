@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { useCollab } from "../hooks/useCollab";
 import { bridgeCall } from "../hooks/useBridge";
@@ -33,7 +33,7 @@ function discussCollab(swarm: CollabSwarm) {
 
 export function Collab() {
   const visible = useDeckVisible();
-  const { swarms, loading, error, refresh } = useCollab(visible);
+  const { swarms, loading, error, refresh, applySnapshot } = useCollab(visible);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +41,7 @@ export function Collab() {
   const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
   const [gatewayHint, setGatewayHint] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const formingRef = useRef(false);
 
   const selected = useMemo(() => {
     if (!swarms.length) return null;
@@ -94,6 +95,8 @@ export function Collab() {
       setFormError("Describe what the collaboration should achieve.");
       return;
     }
+    if (formingRef.current) return;
+    formingRef.current = true;
     setBusy(true);
     setFormError(null);
     try {
@@ -105,25 +108,36 @@ export function Collab() {
         .map((p) => p.name)
         .filter(Boolean);
       const first = names.includes("default") ? "default" : names[0] || "default";
-      const second =
-        names.find((n) => n !== first) || first;
-      await bridgeCall("swarm_create", {
+      const second = names.find((n) => n !== first) || first;
+      const created = await bridgeCall("swarm_create", {
         goal: text,
         name: "",
-        dispatch: true,
+        // Gateway dispatcher picks up ready workers. Inline dispatch can hang
+        // the Brain WebView click with no feedback.
+        dispatch: false,
         workers: [
-          { profile: first, title: "Research", body: "Research" },
-          { profile: second, title: "Draft", body: "Draft" },
+          { profile: first, title: "Research", body: text },
+          { profile: second, title: "Draft", body: text },
         ],
         verifier_assignee: first,
         synthesizer_assignee: second,
       });
+      let snap = await refresh();
+      if (!snap?.swarms?.length) {
+        snap = applySnapshot(created);
+      }
+      if (!snap?.swarms?.length) {
+        setFormError(
+          "The collaboration was created but the board did not appear. Try Form swarm again.",
+        );
+        return;
+      }
       setGoal("");
-      await refresh();
       await probeGateway();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
+      formingRef.current = false;
       setBusy(false);
     }
   }
@@ -146,7 +160,7 @@ export function Collab() {
     }
   }
 
-  const empty = !loading && swarms.length === 0;
+  const empty = swarms.length === 0;
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 pb-20 pt-8 sm:px-6 sm:pt-10">
@@ -178,7 +192,16 @@ export function Collab() {
       )}
 
       {(error || formError) && (
-        <p className="mb-4 text-sm text-ink">{formError || error}</p>
+        <p
+          className="mb-4 rounded-2xl border border-amber-glow/40 bg-amber-muted px-4 py-3 text-sm text-ink"
+          role="alert"
+        >
+          {formError || error}
+        </p>
+      )}
+
+      {loading && empty && (
+        <p className="mb-4 text-sm text-muted">Opening collaborations…</p>
       )}
 
       {empty ? (
@@ -265,7 +288,13 @@ function FirstRunForm({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "glass rounded-2xl p-5" : "glass-strong rounded-3xl p-6 sm:p-8"}>
+    <form
+      className={compact ? "glass rounded-2xl p-5" : "glass-strong rounded-3xl p-6 sm:p-8"}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onForm();
+      }}
+    >
       <label className="block text-sm font-semibold text-ink">
         What should they work on?
         <textarea
@@ -274,27 +303,42 @@ function FirstRunForm({
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           placeholder="Draft a weekly briefing from this week’s research."
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              onForm();
+            }
+          }}
         />
       </label>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-[var(--on-accent)] disabled:opacity-50"
+          className="inline-flex min-h-11 cursor-pointer items-center rounded-full bg-accent px-5 text-sm font-semibold text-[var(--on-accent,#FAFAF9)] disabled:opacity-50"
           disabled={busy}
-          onClick={onForm}
+          onMouseDown={(e) => {
+            // WebKitGTK often eats the click after textarea blur; form on press.
+            if (e.button !== 0 || busy) return;
+            e.preventDefault();
+            onForm();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            onForm();
+          }}
         >
-          Form swarm
+          {busy ? "Forming…" : "Form swarm"}
         </button>
         <button
           type="button"
-          className="text-sm font-medium text-muted underline-offset-4 hover:underline"
+          className="cursor-pointer text-sm font-medium text-muted underline-offset-4 hover:underline"
           onClick={() => setShowAdvanced(!showAdvanced)}
         >
           {showAdvanced ? "Hide advanced" : "Join another owner (Mission Control)"}
         </button>
       </div>
       {showAdvanced && <AdvancedJoin />}
-    </div>
+    </form>
   );
 }
 

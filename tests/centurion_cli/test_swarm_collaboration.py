@@ -144,3 +144,34 @@ def test_move_swarm_card_blocks(tmp_path, monkeypatch):
     swarm = next(s for s in result["snapshot"]["swarms"] if s["id"] == slug)
     card = next(c for c in swarm["cards"] if c["id"] == task_id)
     assert card["column"] == "blocked"
+
+
+def test_create_local_swarm_without_inline_dispatch(tmp_path, monkeypatch):
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+    import agent.vault as vault_mod
+    vault_mod._shared_store = None
+    vault_mod._shared_embedder = None
+
+    from centurion_cli.swarm_state import create_local_swarm, get_swarm_snapshot
+
+    result = create_local_swarm(
+        goal="Draft a weekly briefing from this week's research.",
+        workers=[
+            {"profile": "default", "title": "Research", "body": "Research"},
+            {"profile": "default", "title": "Draft", "body": "Draft"},
+        ],
+        verifier_assignee="default",
+        synthesizer_assignee="default",
+        dispatch=False,
+    )
+    assert result["ok"] is True, result.get("error")
+    slug = result["swarm_id"]
+    snapshot = get_swarm_snapshot()
+    match = next(s for s in snapshot["swarms"] if s["id"] == slug)
+    assert match["cards"], match
+    titles = {c["title"] for c in match["cards"]}
+    assert "Research" in titles
+    assert "Draft" in titles
+

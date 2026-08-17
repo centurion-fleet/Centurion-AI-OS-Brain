@@ -1697,12 +1697,14 @@ final class ConnectionManager: ObservableObject {
         name: String = "",
         missionId: String? = nil
     ) async throws -> [String: Any] {
-        var extra: [String: Any] = [
+        var         extra: [String: Any] = [
             "goal": goal,
             "workers": workers,
             "verifier_assignee": verifier,
             "synthesizer_assignee": synthesizer,
-            "dispatch": true,
+            // Gateway dispatcher picks up ready workers. Inline dispatch can hang
+            // the phone/Brain with no feedback.
+            "dispatch": false,
         ]
         if !name.isEmpty {
             extra["name"] = name

@@ -816,12 +816,19 @@ def _handle_swarm_snapshot(request: dict[str, Any], request_id: str) -> dict[str
                 snapshot = {**snapshot, "life": extras}
         except Exception:
             pass
-        return {
+        payload: dict[str, Any] = {
             "id": request_id,
             "ok": True,
             "action": "swarm_snapshot",
             "snapshot": snapshot,
         }
+        # Desk Collab reads top-level `swarms`. iPhone reads `snapshot`.
+        if isinstance(snapshot, dict):
+            payload["swarms"] = snapshot.get("swarms") or []
+            payload["signals"] = snapshot.get("signals") or []
+            payload["portal"] = snapshot.get("portal")
+            payload["message"] = snapshot.get("message")
+        return payload
     except Exception as exc:
         return _error_response(request_id, action="swarm_snapshot", exc=exc)
 
@@ -1038,9 +1045,9 @@ def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, 
             board=str(request.get("board") or request.get("swarm_id") or "").strip() or None,
             mission_id=str(request.get("mission_id") or "").strip() or None,
             idempotency_key=str(request.get("idempotency_key") or "").strip() or None,
-            dispatch=bool(request.get("dispatch", True)),
+            dispatch=bool(request.get("dispatch", False)),
         )
-        return {
+        payload: dict[str, Any] = {
             "id": request_id,
             "ok": bool(result.get("ok")),
             "action": "swarm_create",
@@ -1054,6 +1061,10 @@ def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, 
             "verifier_id": result.get("verifier_id"),
             "synthesizer_id": result.get("synthesizer_id"),
         }
+        snap = result.get("snapshot")
+        if isinstance(snap, dict):
+            payload["swarms"] = snap.get("swarms") or []
+        return payload
     except Exception as exc:
         return _error_response(request_id, action="swarm_create", exc=exc)
 

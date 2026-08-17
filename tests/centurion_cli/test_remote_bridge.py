@@ -1130,6 +1130,30 @@ def test_swarm_create_happy_path(monkeypatch, tmp_path):
     assert resp["worker_ids"] == ["w1", "w2"]
     assert created_boards == ["Weekly briefing"]
 
+
+def test_swarm_snapshot_exposes_swarms_at_top_level(monkeypatch, tmp_path):
+    from centurion_cli import remote_bridge as rb
+
+    home = tmp_path / ".centurion"
+    home.mkdir()
+    monkeypatch.setenv("CENTURION_HOME", str(home))
+
+    monkeypatch.setattr(
+        "centurion_cli.swarm_state.get_swarm_snapshot",
+        lambda since=None: {
+            "ok": True,
+            "swarms": [{"id": "desk-collab-1", "display_name": "Briefing"}],
+            "signals": [],
+            "portal": {"ok": False},
+            "message": None,
+        },
+    )
+    resp = rb._handle_swarm_snapshot({}, "req-snap")
+    assert resp["ok"] is True
+    assert resp["swarms"][0]["id"] == "desk-collab-1"
+    assert resp["snapshot"]["swarms"][0]["id"] == "desk-collab-1"
+
+
 def test_swarm_create_missing_profile(monkeypatch):
     from centurion_cli import remote_bridge as rb
 
