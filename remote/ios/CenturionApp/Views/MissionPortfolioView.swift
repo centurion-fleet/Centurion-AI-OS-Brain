@@ -40,6 +40,12 @@ enum PulseCategory: String, CaseIterable {
     }
 }
 
+/// Chat to open after a Focus review sheet has finished dismissing.
+private struct PendingFocusChat {
+    let context: ConversationContext
+    let kickoff: String?
+}
+
 struct MissionPortfolioView: View {
     @EnvironmentObject private var missionStore: MissionStore
     @EnvironmentObject private var swarmStore: SwarmStore
@@ -66,6 +72,8 @@ struct MissionPortfolioView: View {
     /// Plan review sheet
     @State private var selectedPlan: PlanArtifact?
     @State private var decisionError: String?
+    @State private var decisionNotice: String?
+    @State private var pendingChat: PendingFocusChat?
 
     // MARK: - Notification tracking
     // Stores the last time each category was viewed. Items newer than this date
@@ -262,6 +270,13 @@ struct MissionPortfolioView: View {
                 }
             }
         }
+        .onChange(of: selectedPlan) { _, plan in
+            guard plan == nil, let pending = pendingChat else { return }
+            pendingChat = nil
+            DispatchQueue.main.async {
+                presentFocusChat(context: pending.context, kickoff: pending.kickoff)
+            }
+        }
     }
 
     private var pulseScrollContent: some View {
@@ -366,33 +381,65 @@ struct MissionPortfolioView: View {
                     }
                 }
         }
-        .presentationDetents([.height(380), .large])
+        .presentationDetents([.large, .medium])
         .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.scrolls)
     }
 
     private func openChat(context: ConversationContext) {
-        Haptics.lightTap()
-        chatTarget = ChatSheetTarget(context: context)
+        presentFocusChat(context: context, kickoff: nil)
     }
 
     /// Opens Crypto Chat about a Pulse item and seeds a one-time context note.
     private func openDiscuss(title: String, detail: String, topicKind: String = "decision") {
-        Haptics.lightTap()
         let conversation = messageService.seedDiscussContext(
             title: title,
             detail: detail,
             topicKind: topicKind,
             topicRef: ["title": title, "source": "pulse"]
         )
-        chatTarget = ChatSheetTarget(context: conversation.context)
+        presentFocusChat(context: conversation.context, kickoff: nil)
     }
 
     /// Opens (or resumes) the stable plan-scoped Discuss thread.
     private func openPlanDiscuss(_ plan: PlanArtifact, kickoffNote: String? = nil) {
-        Haptics.lightTap()
         planStore.upsert(plan)
         let conversation = messageService.seedPlanDiscuss(plan: plan, kickoffNote: kickoffNote)
-        chatTarget = ChatSheetTarget(context: conversation.context)
+        presentFocusChat(
+            context: conversation.context,
+            kickoff: kickoffNote
+        )
+    }
+
+    /// Prefer the Chat tab (working composer). If a review sheet is still up, wait for it to dismiss.
+    private func presentFocusChat(context: ConversationContext, kickoff: String?) {
+        if selectedPlan != nil {
+            pendingChat = PendingFocusChat(context: context, kickoff: kickoff)
+            selectedPlan = nil
+            return
+        }
+        let conversation = messageService.findOrCreateConversation(for: context)
+        messageService.currentConversation = conversation
+        AdrianNavigation.openChat(conversationId: conversation.id)
+        guard let kickoff,
+              !kickoff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              connectionManager.isCryptoChatReady else {
+            return
+        }
+        Task {
+            do {
+                _ = try await messageService.sendMessage(
+                    kickoff,
+                    in: context,
+                    missionStore: missionStore,
+                    planStore: planStore
+                )
+            } catch {
+                await MainActor.run {
+                    decisionError = connectionManager.friendlyRemoteError(error)
+                }
+            }
+        }
     }
 
     private func syncFocusFromBrain(forceRefresh: Bool = false) async {
@@ -505,90 +552,160 @@ struct MissionPortfolioView: View {
 
     private func handleDecisionOption(_ option: DecisionOption, for decision: DecisionItem) {
         Haptics.mediumTap()
-        let label = option.label.lowercased()
         decisionError = nil
+        decisionNotice = nil
 
-        if decision.kind == .life || decision.lifeDecisionId != nil {
-            let lifeId = decision.lifeDecisionId ?? decision.id
-            if label.contains("proceed") || label.contains("approve") || label.contains("done") {
-                handleLifeProceed(lifeId, title: decision.title, context: decision.context)
-            } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
-                openDiscuss(
-                    title: "Adjust: \(decision.title)",
-                    detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
-                )
-            } else if label.contains("hold") {
-                Haptics.lightTap()
-            } else {
-                openDiscuss(
-                    title: "Decision: \(decision.title) — \(option.label)",
-                    detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
-                )
-            }
-            return
-        }
-
-        if decision.kind == .plan || decision.planId != nil {
-            let plan = decision.planId.flatMap { planStore.plan(id: $0) }
-                ?? PlanArtifact(
-                    id: decision.planId ?? decision.id,
-                    title: decision.title,
-                    goal: decision.context,
-                    steps: [],
-                    risks: [],
-                    openQuestions: [],
-                    summary: decision.context,
-                    relatedMission: decision.relatedMission,
-                    signalId: decision.signalId,
-                    status: .pendingReview,
-                    createdAt: decision.createdAt
-                )
-            if label.contains("proceed") {
-                handlePlanProceed(plan)
-            } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
-                handlePlanAdjust(plan)
-            } else if label.contains("hold") {
-                handlePlanHold(plan)
-            } else {
-                selectedPlan = plan
-            }
-            return
-        }
-
-        if label.contains("proceed") || label.contains("approve") {
-            if let signalId = decision.signalId {
-                swarmStore.resolveSignal(signalId, connectionManager: connectionManager)
-                applyPulseFromSwarmStore()
-            } else {
-                openDiscuss(
-                    title: "Proceed: \(decision.title)",
-                    detail: "\(decision.title)\n\n\(decision.context)\n\nPlease proceed."
-                )
-            }
-        } else if label.contains("adjust") || label.contains("discuss") || label.contains("modify") {
-            openDiscuss(
-                title: "Adjust: \(decision.title)",
-                detail: "\(decision.title)\n\n\(decision.context)\n\nI’d like to adjust this before you continue."
-            )
-        } else if label.contains("hold") {
-            // Keep in Decisions needed — leave swarm signal pending (no resolve).
-            Haptics.lightTap()
-        } else {
-            openDiscuss(
-                title: "Decision: \(decision.title) — \(option.label)",
-                detail: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
+        let choice = FocusDecisionChoice.parse(option.label)
+        switch choice {
+        case .proceed:
+            handleProceed(decision)
+        case .adjust:
+            handleAdjust(decision)
+        case .hold:
+            handleHold(decision)
+        case nil:
+            openDecisionChat(
+                decision,
+                kickoff: "\(decision.title)\n\n\(decision.context)\n\nChosen option: \(option.label) — \(option.description)"
             )
         }
     }
 
-    private func handleLifeProceed(_ decisionId: UUID, title: String, context: String) {
+    private func handleProceed(_ decision: DecisionItem) {
+        Haptics.success()
+        removeDecisionLocally(decision)
+        decisionNotice = "Proceeding — your Sovereign continues."
+        selectedPlan = nil
+
+        if decision.kind == .life || decision.lifeDecisionId != nil {
+            handleLifeProceed(decision.lifeDecisionId ?? decision.id, title: decision.title)
+            return
+        }
+        if decision.kind == .plan || decision.planId != nil {
+            handlePlanProceed(planMatching(decision))
+            return
+        }
+        if let signalId = decision.signalId {
+            swarmStore.resolveSignal(signalId, choiceNote: "Proceed", connectionManager: connectionManager)
+            applyPulseFromSwarmStore()
+        }
+        sendDecisionKickoff(
+            decision,
+            text: "Please proceed. Continue the work from this decision: \(decision.title)."
+        )
+    }
+
+    private func handleAdjust(_ decision: DecisionItem) {
+        Haptics.mediumTap()
+        if decision.kind == .plan || decision.planId != nil {
+            handlePlanAdjust(planMatching(decision))
+            return
+        }
+        openDecisionChat(
+            decision,
+            kickoff: "I’d like to adjust this before you continue.\n\n\(decision.title)\n\n\(decision.context)"
+        )
+    }
+
+    private func handleHold(_ decision: DecisionItem) {
+        Haptics.lightTap()
+        if decision.kind == .plan || decision.planId != nil {
+            handlePlanHold(planMatching(decision))
+            return
+        }
+        selectedPlan = nil
+        decisionNotice = "Held — still in Decisions needed."
+        // Life + swarm: leave open so it stays on the pile. Do not Chat.
+        applyPulseFromSwarmStore()
+    }
+
+    private func planMatching(_ decision: DecisionItem) -> PlanArtifact {
+        decision.planId.flatMap { planStore.plan(id: $0) }
+            ?? PlanArtifact(
+                id: decision.planId ?? decision.id,
+                title: decision.title,
+                goal: decision.context,
+                steps: [],
+                risks: [],
+                openQuestions: [],
+                summary: decision.context,
+                relatedMission: decision.relatedMission,
+                signalId: decision.signalId,
+                status: .pendingReview,
+                createdAt: decision.createdAt
+            )
+    }
+
+    private func removeDecisionLocally(_ decision: DecisionItem) {
+        decisions.removeAll {
+            $0.id == decision.id
+                || $0.lifeDecisionId == decision.lifeDecisionId && decision.lifeDecisionId != nil
+                || $0.planId == decision.planId && decision.planId != nil
+        }
+    }
+
+    private func openDecisionChat(_ decision: DecisionItem, kickoff: String?) {
+        let context: ConversationContext
+        if decision.kind == .plan || decision.planId != nil {
+            let plan = planMatching(decision)
+            planStore.upsert(plan)
+            _ = messageService.seedPlanDiscuss(plan: plan)
+            context = .plan(id: plan.id, title: plan.title)
+        } else {
+            let id = decision.lifeDecisionId ?? decision.id
+            _ = messageService.seedDiscussContext(
+                title: decision.title,
+                detail: "\(decision.title)\n\n\(decision.context)",
+                topicKind: "decision",
+                topicRef: [
+                    "decision_id": id.uuidString,
+                    "id": id.uuidString,
+                    "title": decision.title,
+                    "source": "pulse",
+                ]
+            )
+            context = .decision(id: id, title: decision.title)
+        }
+        presentFocusChat(context: context, kickoff: kickoff)
+    }
+
+    private func sendDecisionKickoff(_ decision: DecisionItem, text: String) {
+        guard connectionManager.isCryptoChatReady else { return }
+        let context: ConversationContext
+        if decision.kind == .plan || decision.planId != nil {
+            let plan = planMatching(decision)
+            context = .plan(id: plan.id, title: plan.title)
+        } else {
+            context = .decision(id: decision.lifeDecisionId ?? decision.id, title: decision.title)
+        }
+        Task {
+            do {
+                _ = try await messageService.sendMessage(
+                    text,
+                    in: context,
+                    missionStore: missionStore,
+                    planStore: planStore
+                )
+            } catch {
+                await MainActor.run {
+                    decisionError = connectionManager.friendlyRemoteError(error)
+                }
+            }
+        }
+    }
+
+    private func handleLifeProceed(_ decisionId: UUID, title: String) {
         Task {
             if let error = await missionStore.resolveOpenDecision(
                 decisionId,
                 chosen: "Proceed",
                 connectionManager: connectionManager
             ) {
-                await MainActor.run { decisionError = error }
+                await MainActor.run {
+                    decisionError = error
+                    decisionNotice = nil
+                }
+                applyPulseFromSwarmStore()
                 return
             }
             applyPulseFromSwarmStore()
@@ -599,16 +716,22 @@ struct MissionPortfolioView: View {
                     in: .decision(id: decisionId, title: title)
                 )
             } catch {
-                // Decision is already resolved on the Brain.
+                await MainActor.run {
+                    decisionError = connectionManager.friendlyRemoteError(error)
+                }
             }
         }
     }
 
     private func handlePlanProceed(_ plan: PlanArtifact) {
+        selectedPlan = nil
         Task {
             await planStore.decide(plan.id, choice: "approve", connectionManager: connectionManager)
             if let error = planStore.lastError, !error.isEmpty {
-                await MainActor.run { decisionError = error }
+                await MainActor.run {
+                    decisionError = error
+                    decisionNotice = nil
+                }
             }
             if let signalId = plan.signalId {
                 swarmStore.resolveSignal(
@@ -618,7 +741,6 @@ struct MissionPortfolioView: View {
                 )
             }
             applyPulseFromSwarmStore()
-            await MainActor.run { selectedPlan = nil }
             guard connectionManager.isCryptoChatReady else { return }
             do {
                 _ = try await messageService.sendMessage(
@@ -627,7 +749,9 @@ struct MissionPortfolioView: View {
                     planStore: planStore
                 )
             } catch {
-                // Status is already recorded; Chat can retry from Discuss.
+                await MainActor.run {
+                    decisionError = connectionManager.friendlyRemoteError(error)
+                }
             }
         }
     }
@@ -644,8 +768,16 @@ struct MissionPortfolioView: View {
     }
 
     private func handlePlanHold(_ plan: PlanArtifact) {
+        selectedPlan = nil
         Task {
             await planStore.decide(plan.id, choice: "hold", connectionManager: connectionManager)
+            if let error = planStore.lastError, !error.isEmpty {
+                await MainActor.run { decisionError = error }
+            } else {
+                await MainActor.run {
+                    decisionNotice = "Held — still in Decisions needed."
+                }
+            }
             applyPulseFromSwarmStore()
         }
     }
@@ -1556,6 +1688,11 @@ struct MissionPortfolioView: View {
                     .font(.caption)
                     .foregroundColor(ColorTheme.warning())
             }
+            if let decisionNotice, !decisionNotice.isEmpty, decisionError == nil {
+                Text(decisionNotice)
+                    .font(.caption)
+                    .foregroundColor(ColorTheme.mutedText())
+            }
         }
         .opacity(isAppeared ? 1 : 0)
     }
@@ -1579,10 +1716,12 @@ struct MissionPortfolioView: View {
                 }
                 Spacer()
                 Button(action: {
-                    openDiscuss(
-                        title: "Decision: \(decision.title)",
-                        detail: "\(decision.title)\n\n\(decision.context)"
-                    )
+                    Haptics.lightTap()
+                    if decision.kind == .plan || decision.planId != nil {
+                        openPlanDiscuss(planMatching(decision))
+                    } else {
+                        openDecisionChat(decision, kickoff: nil)
+                    }
                 }) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 11))
@@ -1639,31 +1778,47 @@ struct MissionPortfolioView: View {
                 .padding(.bottom, 2)
             }
 
-            // Options
-            VStack(spacing: Spacing.xxs) {
-                ForEach(decision.options) { option in
-                    Button(action: {
-                        handleDecisionOption(option, for: decision)
-                    }) {
-                        HStack {
-                            Text(option.label)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                        }
-                        .foregroundColor(ColorTheme.primaryText())
-                        .padding(Spacing.sm)
-                        .background(ColorTheme.surface())
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(ColorTheme.border(), lineWidth: 0.5)
-                        )
-                    }
-                    .buttonStyle(.plain)
+            // Options — 44pt targets in the thumb zone
+            HStack(spacing: 8) {
+                Button {
+                    handleDecisionOption(
+                        DecisionOption(label: "Proceed", description: "Mark this decided and continue"),
+                        for: decision
+                    )
+                } label: {
+                    Text("Proceed")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .buttonStyle(CenturionPrimaryButtonStyle())
+                .accessibilityLabel("Proceed with \(decision.title)")
+
+                Button {
+                    handleDecisionOption(
+                        DecisionOption(label: "Adjust", description: "Open Chat about this"),
+                        for: decision
+                    )
+                } label: {
+                    Text("Adjust")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(CenturionSecondaryButtonStyle())
+                .accessibilityLabel("Adjust \(decision.title)")
+
+                Button {
+                    handleDecisionOption(
+                        DecisionOption(label: "Hold", description: "Keep this in Decisions needed for now"),
+                        for: decision
+                    )
+                } label: {
+                    Text("Hold")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(CenturionGhostButtonStyle())
+                .contentShape(Rectangle())
+                .accessibilityLabel("Hold \(decision.title)")
             }
         }
         .padding()

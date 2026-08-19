@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.3.7** / build **52**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.3.8** / build **59**). Complete before App Store submit.
 
 ## Listing name & price
 
@@ -8,7 +8,7 @@ Centurion v5 lockstep (`MARKETING_VERSION` **5.3.7** / build **52**). Complete b
 - [ ] Price = **Free**
 - [ ] Description / promotional text from [`AppStoreDescription.md`](AppStoreDescription.md) — free for Centurion customers; Sovereign required
 - [ ] Review Notes pasted from AppStoreDescription.md
-- [ ] ASC iOS version created as **5.3.7** (not a stale 5.0.1 / 5.2.x train)
+- [ ] ASC iOS version created as **5.3.8** (not a stale 5.0.1 / 5.2.x / 5.3.0 train)
 
 ## Encryption export compliance
 
@@ -59,7 +59,7 @@ By:
 
 ## Screenshots
 
-Required device size is **iPhone 6.9"** (1290×2796 accepted). Real PNGs live under [`AppStore/`](AppStore/) — see [`AppStore/SCREENSHOTS.md`](AppStore/SCREENSHOTS.md).
+Required device size is **iPhone 6.5"** (1284×2778). Real PNGs live under [`AppStore/`](AppStore/) — see [`AppStore/SCREENSHOTS.md`](AppStore/SCREENSHOTS.md). Build **59+** is **iPhone-only**, so App Store Connect must not require a 13-inch iPad slot once that binary is selected.
 
 Capture checklist:
 
@@ -73,7 +73,7 @@ Capture checklist:
 - [ ] `iphone-69-03-memory-horizon.png` — Memory Horizon
 - [ ] `iphone-69-04-mission.png` — Life Mission
 - [ ] `iphone-69-05-connect.png` — Link / Connect (**Scan QR**)
-- [ ] Uploaded to ASC Media Manager (6.5-inch 1284×2778 and 6.9-inch if the slot is present)
+- [ ] Uploaded to ASC Media Manager (6.5-inch 1284×2778, 6.9-inch if present). iPad 13" is **not** required for iPhone-only build **59+**.
 
 ## Camera / QR pairing disclosure
 

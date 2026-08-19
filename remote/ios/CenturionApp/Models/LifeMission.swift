@@ -264,6 +264,28 @@ struct DecisionOption: Identifiable, Equatable {
     let description: String
 }
 
+/// The three Focus “Decisions needed” verbs. Labels from Brain/custom
+/// options are mapped so Proceed / Adjust / Hold always mean the same thing.
+enum FocusDecisionChoice: String {
+    case proceed
+    case adjust
+    case hold
+
+    static func parse(_ label: String) -> FocusDecisionChoice? {
+        let lowered = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lowered.contains("proceed") || lowered.contains("approve") || lowered == "done" {
+            return .proceed
+        }
+        if lowered.contains("adjust") || lowered.contains("modify") || lowered.contains("change") {
+            return .adjust
+        }
+        if lowered.contains("hold") || lowered.contains("later") || lowered.contains("pause") {
+            return .hold
+        }
+        return nil
+    }
+}
+
 /// A Sovereign thought — appears in the Sovereign Remote stream.
 struct CenturionThought: Identifiable {
     let id: UUID

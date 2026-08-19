@@ -41,6 +41,8 @@ struct AdrianLink: View {
 
 extension Notification.Name {
     static let centurionSelectTab = Notification.Name("centurion.selectTab")
+    /// Object is the `Conversation.id` to show on the Chat tab.
+    static let centurionOpenConversation = Notification.Name("centurion.openConversation")
 }
 
 enum AdrianNavigation {
@@ -51,6 +53,12 @@ enum AdrianNavigation {
 
     static func selectTab(_ index: Int) {
         NotificationCenter.default.post(name: .centurionSelectTab, object: index)
+    }
+
+    /// Switch to Chat and open a specific thread (Focus Adjust / Discuss).
+    static func openChat(conversationId: UUID) {
+        NotificationCenter.default.post(name: .centurionOpenConversation, object: conversationId)
+        selectTab(chatTab)
     }
 
     @MainActor

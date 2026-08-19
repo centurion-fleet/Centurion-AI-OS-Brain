@@ -38,18 +38,20 @@ struct ChatView: View {
     var body: some View {
         Group {
             if usesPageChrome {
-                VStack(spacing: 0) {
-                    conversationTrayTrigger
-                        .padding(.horizontal, Spacing.sm)
-                    chatContent
-                }
-                .background(
-                    ZStack {
-                        ColorTheme.background()
-                        ColorTheme.atmosphericVeil()
-                            .ignoresSafeArea()
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        conversationTrayTrigger
+                        chatContent
                     }
-                )
+                    .background(
+                        ZStack {
+                            ColorTheme.background()
+                            ColorTheme.atmosphericVeil()
+                                .ignoresSafeArea()
+                        }
+                    )
+                    .toolbar(.hidden, for: .navigationBar)
+                }
             } else {
                 VStack(spacing: 0) {
                     conversationTrayTrigger
@@ -58,6 +60,18 @@ struct ChatView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            if usesPageChrome, selectedConversation == nil, let current = messageService.currentConversation {
+                selectedConversation = current
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .centurionOpenConversation)) { notification in
+            guard usesPageChrome, let id = notification.object as? UUID else { return }
+            if let conv = messageService.conversations.first(where: { $0.id == id }) {
+                selectedConversation = conv
+                showTray = false
+            }
+        }
         .alert("Rename topic", isPresented: $showRenameAlert) {
             TextField("Name", text: $renameDraft)
             Button("Cancel", role: .cancel) {
@@ -170,6 +184,11 @@ struct ChatView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .scrollBounceBehavior(.basedOnSize)
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    dismissComposer()
+                }
+            )
             .onChange(of: messages.count) { _, _ in
                 if let conversation {
                     scrollToLast(proxy, conversation: conversation)
@@ -194,73 +213,102 @@ struct ChatView: View {
 
     // MARK: - Conversation Tray Trigger
 
+    /// Closes the composer so the Chat / Focus / Collab / You tab bar is visible again.
+    private func dismissComposer() {
+        isFocused = false
+    }
+
     private var conversationTrayTrigger: some View {
-        Button(action: {
-            Haptics.lightTap()
-            let opening = !showTray
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
-                showTray.toggle()
-            }
-            if opening, !connectionManager.isHydratingAfterLink {
-                Task { @MainActor in
-                    _ = await messageService.syncHostTopicsFromBrain()
+        HStack(spacing: Spacing.sm) {
+            if usesPageChrome && isFocused {
+                Button {
+                    Haptics.lightTap()
+                    dismissComposer()
+                } label: {
+                    Text("Done")
+                        .font(.body.weight(.semibold))
+                        .foregroundColor(ColorTheme.accent())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close keyboard and show tabs")
+                .accessibilityHint("Reveals Chat, Focus, Collab, and You at the bottom of the screen.")
             }
-        }) {
-            HStack(spacing: 4) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.caption)
-                    .foregroundColor(ColorTheme.accent())
-                Text("Conversations")
-                    .font(.caption.weight(.semibold))
-                Image(systemName: showTray ? "chevron.up" : "chevron.down")
-                    .font(.caption2)
-                    .foregroundColor(ColorTheme.mutedText())
 
-                if let conv = selectedConversation {
-                    Text(conv.displayTitle)
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(ColorTheme.accent().opacity(0.1))
-                        .clipShape(Capsule())
-                } else {
-                    Text("All Chat")
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(ColorTheme.accent().opacity(0.1))
-                        .clipShape(Capsule())
+            Button(action: {
+                Haptics.lightTap()
+                dismissComposer()
+                let opening = !showTray
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                    showTray.toggle()
                 }
-
-                Spacer()
-
-                if connectionManager.isCryptoChatReady {
-                    Button {
-                        Haptics.lightTap()
-                        AdrianNavigation.selectTab(AdrianNavigation.collabTab)
-                    } label: {
-                        Image(systemName: "circle.grid.cross")
-                            .font(.caption)
-                            .foregroundColor(ColorTheme.accent())
+                if opening, !connectionManager.isHydratingAfterLink {
+                    Task { @MainActor in
+                        _ = await messageService.syncHostTopicsFromBrain()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open Collab")
-
-                    StatusDot(
-                        isConnected: true,
-                        isEncrypted: connectionManager.isChannelEncrypted,
-                        needsAttention: !connectionManager.isHydratingAfterLink
-                            && connectionManager.llmHealth.needsAttention
-                    )
                 }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.accent())
+                    Text("Conversations")
+                        .font(.caption.weight(.semibold))
+                    Image(systemName: showTray ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundColor(ColorTheme.mutedText())
+
+                    if let conv = selectedConversation {
+                        Text(conv.displayTitle)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(ColorTheme.accent().opacity(0.1))
+                            .clipShape(Capsule())
+                    } else {
+                        Text("All Chat")
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(ColorTheme.accent().opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+
+                    Spacer(minLength: 8)
+                }
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, Spacing.sm)
-            .padding(.vertical, 6)
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                selectedConversation.map { "Conversations, \($0.displayTitle)" } ?? "Conversations, All Chat"
+            )
+            .accessibilityHint("Switch topics. Close the keyboard to reach Focus, Collab, or You.")
+
+            if connectionManager.isCryptoChatReady {
+                Button {
+                    Haptics.lightTap()
+                    dismissComposer()
+                    AdrianNavigation.selectTab(AdrianNavigation.collabTab)
+                } label: {
+                    Image(systemName: "circle.grid.cross")
+                        .font(.caption)
+                        .foregroundColor(ColorTheme.accent())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open Collab")
+
+                StatusDot(
+                    isConnected: true,
+                    isEncrypted: connectionManager.isChannelEncrypted,
+                    needsAttention: !connectionManager.isHydratingAfterLink
+                        && connectionManager.llmHealth.needsAttention
+                )
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, Spacing.sm)
+        .padding(.vertical, 2)
     }
 
     // MARK: - Pull-Down Conversation Tray
@@ -754,6 +802,16 @@ struct ChatView: View {
                 .font(.system(size: 17))
                 .lineLimit(1...5)
                 .focused($isFocused)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            dismissComposer()
+                        }
+                        .fontWeight(.semibold)
+                        .accessibilityLabel("Close keyboard and show tabs")
+                    }
+                }
                 .disabled(!connectionManager.isChatComposerReady)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)

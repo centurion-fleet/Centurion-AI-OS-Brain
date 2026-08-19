@@ -80,6 +80,29 @@
     box-shadow: none;
   }
 
+  /* 13-inch iPad App Store slot: 2064×2752. Wider chrome, no Dynamic Island. */
+  body.export.ipad .shot {
+    width: 2064px;
+    height: 2752px;
+  }
+  body.export.ipad .caption {
+    padding: 72px 96px 28px;
+  }
+  body.export.ipad .caption h1 { font-size: 72px; }
+  body.export.ipad .caption .lede { font-size: 30px; max-width: 1600px; }
+  body.export.ipad .phone-stage {
+    padding: 8px 88px 0;
+    align-items: stretch;
+  }
+  body.export.ipad .phone {
+    width: 100%;
+    height: auto;
+    flex: 1;
+    border-radius: 36px 36px 0 0;
+  }
+  body.export.ipad .island-row { display: none; }
+  body.export.ipad .status { padding: 28px 56px 12px; }
+
   .caption {
     padding: 96px 88px 36px;
     flex: 0 0 auto;
@@ -366,7 +389,7 @@
 <body>
   <div class="gallery-header">
     <h1>Sovereign AI Remote — App Store screenshots</h1>
-    <p>6.5" class · 1284 × 2778 · paper &amp; bronze · Chat / Focus / You. Open with <code>?shot=01</code> through <code>?shot=05</code> to export. These match current language; capture from the 5.2.151 device build if App Review wants pixel-identical chrome.</p>
+    <p>iPhone 6.5" (1284 × 2778) and iPad 13" (2064 × 2752). Open with <code>?shot=01</code> through <code>?shot=05</code> and optional <code>&amp;w=&amp;h=</code> to export. These match current language; capture from the device build if App Review wants pixel-identical chrome.</p>
   </div>
 
   <div class="gallery">
@@ -588,7 +611,9 @@
   const outW = Number(params.get("w") || 1284);
   const outH = Number(params.get("h") || 2778);
   if (shot) {
+    const isIpad = outW >= 2000 && outW / outH > 0.7;
     document.body.classList.add("export");
+    if (isIpad) document.body.classList.add("ipad");
     document.body.style.width = outW + "px";
     document.body.style.height = outH + "px";
     document.body.style.overflow = "hidden";
@@ -601,6 +626,15 @@
       wrap.style.overflow = "hidden";
       wrap.style.position = "relative";
       const el = wrap.querySelector(".shot");
+      if (isIpad) {
+        el.style.width = outW + "px";
+        el.style.height = outH + "px";
+        el.style.transform = "none";
+        el.style.position = "relative";
+        el.style.left = "0";
+        el.style.top = "0";
+        return;
+      }
       const sx = outW / 1290;
       const sy = outH / 2796;
       const s = Math.max(sx, sy);

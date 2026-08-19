@@ -11,12 +11,11 @@ Export: [`AppStoreIcon-1024.png`](AppStoreIcon-1024.png) (RGB, no alpha, full-bl
 
 ## Required captures (iPhone 6.5")
 
-App Store Connect for this listing currently accepts **6.5-inch** portrait sizes only:
+Build **59+** is **iPhone-only**. App Store Connect requires iPhone 6.5" screenshots only — not 13-inch iPad — once that binary is selected on the version.
 
-- **1284 × 2778** (use this set)
-- **1242 × 2688** (older 6.5")
-
-Do not upload 1290 × 2796 (6.9") unless Media Manager shows a 6.9-inch slot.
+- **iPhone 6.5"** — **1284 × 2778** (1242 × 2688 also accepted)
+- Do not upload 1290 × 2796 (6.9") unless Media Manager shows a 6.9-inch slot.
+- iPad 13" PNGs in this folder are leftover from the Universal **54** upload; they are unused after the iPhone-only binary is selected.
 
 | File | Size | Screen |
 |------|------|--------|
@@ -42,12 +41,11 @@ xcrun simctl io booted screenshot remote/ios/CenturionApp/AppStore/iphone-69-0N-
 
 Do **not** upload HTML. Upload the PNGs. Do **not** upload `RoutingAppCoverage.geojson` — this is not a routing app.
 
-iPad screenshots are not required (iPhone, portrait).
+iPad screenshots are not required for iPhone-only build **59+**.
 
 ## Status
 
-- [ ] Build selected on **iOS 5.3.0** (build **45**)
-- [ ] 6.5" PNGs generated (or recaptured from device)
+- [ ] Build **59** selected on the iOS version
+- [ ] 6.5" PNGs uploaded (1284×2778)
 - [ ] 6.9" PNGs in `AppStore/` when Media Manager shows that slot
-- [ ] Screenshots uploaded to App Store Connect Media Manager (6.5-inch, 1284×2778)
 - [ ] Listing preview reviewed (language: Focus / Missions, not Home / Plans)

@@ -61,7 +61,8 @@ final class MessageService: ObservableObject {
         let context: ConversationContext
         switch kind {
         case "decision":
-            context = .decision(id: UUID(), title: title)
+            let id = Self.uuidFromRef(topicRef, keys: ["decision_id", "id"]) ?? UUID()
+            context = .decision(id: id, title: title)
         case "document":
             context = .document(id: UUID(), title: title, missionId: nil)
         case "mission":
@@ -71,7 +72,7 @@ final class MessageService: ObservableObject {
         default:
             context = .standalone(title: title)
         }
-        var conversation = findOrCreateConversation(for: context)
+        let conversation = findOrCreateConversation(for: context)
         let existing = messages(for: conversation.id)
         if existing.isEmpty {
             let note = Message(

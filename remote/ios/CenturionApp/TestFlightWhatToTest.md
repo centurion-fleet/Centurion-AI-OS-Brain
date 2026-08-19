@@ -1,6 +1,14 @@
-# Sovereign AI Remote — TestFlight What to Test (build 52)
+# Sovereign AI Remote — TestFlight What to Test (build 59)
 
-**iOS App Version 5.3.7** (not 5.0.1 / 5.2.x / 5.3.6). Build **52**. Pair against Brain **5.3.7**.
+**iOS App Version 5.3.8** (not 5.0.1 / 5.2.x / 5.3.7). Build **59**. Pair against Brain **5.3.8**.
+
+## 5.3.8
+
+- **Focus Decisions needed — Proceed / Adjust / Hold actually run.** Pair with this Brain.
+  - **Proceed** records the choice, leaves the list, and tells the Brain to continue. Stay on Focus.
+  - **Adjust** opens Chat on that decision’s thread and sends the change request so the Brain replies. The item stays in Decisions needed.
+  - **Hold** parks the item with a confirmation. No Chat.
+- The bubble on the card is still “talk without choosing.”
 
 ## 5.3.7
 

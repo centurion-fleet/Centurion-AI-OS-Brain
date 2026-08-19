@@ -10,8 +10,8 @@ Power-user tunnel/`EXPOSE_9119.md` is **not** the App Store Away path.
 
 - [ ] `xcodegen generate` then build Release for `com.centurion.ios`
 - [ ] App icon 1024 any + dark present; launch screen shows AppMark
-- [ ] Display name: **Sovereign AI Remote**; version **5.3.7** / build **52**
-- [ ] Portrait only; PrivacyInfo.xcprivacy in app bundle
+- [ ] Display name: **Sovereign AI Remote**; version **5.3.8** / build **59**
+- [ ] iPhone only (`TARGETED_DEVICE_FAMILY = 1`); PrivacyInfo.xcprivacy in app bundle
 - [ ] Camera permission string present (`NSCameraUsageDescription` — QR only)
 
 ## Pairing & Crypto Chat — QR primary (home)

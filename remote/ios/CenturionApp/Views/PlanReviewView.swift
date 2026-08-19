@@ -11,7 +11,6 @@ struct PlanReviewView: View {
     var onDiscuss: (() -> Void)? = nil
     var onShare: ((String) -> Void)? = nil
 
-    @Environment(\.dismiss) private var dismiss
     @State private var reviewerId = ""
     @State private var shareMessage: String?
 
@@ -139,7 +138,6 @@ struct PlanReviewView: View {
                         Button {
                             Haptics.success()
                             onProceed()
-                            dismiss()
                         } label: {
                             Text("Proceed")
                         }
@@ -148,7 +146,6 @@ struct PlanReviewView: View {
                         Button {
                             Haptics.mediumTap()
                             onAdjust()
-                            dismiss()
                         } label: {
                             Text("Adjust")
                         }
@@ -157,7 +154,6 @@ struct PlanReviewView: View {
                         Button {
                             Haptics.lightTap()
                             onHold()
-                            dismiss()
                         } label: {
                             Text("Hold")
                         }
@@ -192,7 +188,6 @@ struct PlanReviewView: View {
         Button {
             Haptics.lightTap()
             onDiscuss?()
-            dismiss()
         } label: {
             HStack(spacing: Spacing.xs) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
