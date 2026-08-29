@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ _DEFAULT_DIGEST_MAX_CHARS = 1200
 _DEFAULT_LOOKBACK_HOURS = 36
 _DEFAULT_MAX_SESSIONS = 5
 _MIN_MESSAGES_FOR_DIGEST = 2
+_MAX_CONTINUITY_ENTRIES = 8
 
 
 def _centurion_home() -> Path:
@@ -418,12 +420,51 @@ def read_hot_cache_continuity(max_chars: int = _DEFAULT_DIGEST_MAX_CHARS) -> str
         return ""
 
 
+def _read_prior_continuity_entries(path: Path) -> list[str]:
+    """Return prior digest entries from CONTINUITY.md, newest first.
+
+    Entries keep their ``## `` prefix. Handles the legacy single-note format
+    (``# Continuity note``) by normalizing its body into a ``## (legacy)`` entry
+    so history is preserved (and ages out) rather than overwritten.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+    raw = raw.strip()
+    if not raw:
+        return []
+    parts = re.split(r"\n(?=## )", raw)
+    entries: list[str] = []
+    for idx, part in enumerate(parts):
+        part = part.strip()
+        if not part:
+            continue
+        if idx == 0:
+            lines = part.splitlines()
+            if lines and lines[0].lstrip().startswith("# Continuity"):
+                rest = "\n".join(lines[1:]).strip()
+                if rest:
+                    entries.append(f"## (legacy)\n\n{rest}")
+                continue
+            entries.append(part)
+            continue
+        entries.append(part)
+    return entries
+
+
 def _write_hot_cache_continuity(
     text: str,
     *,
     session_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Persist session-end digest to Hot Cache so the next first turn can prefetch it."""
+    """Persist a session-end digest to Hot Cache as a rolling history.
+
+    Newest digest is prepended so the first-turn prefetch (which truncates from
+    the top) sees the most recent sessions. History accumulates up to
+    ``_MAX_CONTINUITY_ENTRIES`` so a Centurion whose Vault is off or locked does
+    not lose its continuity trail every session.
+    """
     path = hot_cache_continuity_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -433,10 +474,13 @@ def _write_hot_cache_continuity(
             .isoformat()
             .replace("+00:00", "Z")
         )
-        header = f"# Continuity note\n\nUpdated: {when}"
+        entry = f"## {when}"
         if session_id:
-            header += f"\nSession: {session_id}"
-        body = f"{header}\n\n{text.strip()}\n"
+            entry += f" — {session_id}"
+        entry += f"\n\n{text.strip()}"
+        entries = [entry]
+        entries.extend(_read_prior_continuity_entries(path)[: _MAX_CONTINUITY_ENTRIES - 1])
+        body = "# Continuity notes (most recent first)\n\n" + "\n\n".join(entries) + "\n"
         tmp = path.with_suffix(".tmp")
         tmp.write_text(body, encoding="utf-8")
         tmp.replace(path)

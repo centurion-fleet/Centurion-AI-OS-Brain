@@ -257,3 +257,60 @@ def test_build_session_recall_digest_empty_db(centurion_home):
     # No state.db → empty digest (or SessionDB creates empty)
     digest = build_session_recall_digest(current_session_id="x")
     assert digest == "" or isinstance(digest, str)
+
+
+def test_hot_cache_continuity_accumulates_history(centurion_home):
+    from agent.memory_continuity import (
+        _MAX_CONTINUITY_ENTRIES,
+        _write_hot_cache_continuity,
+        read_hot_cache_continuity,
+    )
+
+    assert _write_hot_cache_continuity("First session digest.", session_id="s1")
+    assert _write_hot_cache_continuity("Second session digest.", session_id="s2")
+
+    content = read_hot_cache_continuity(max_chars=100_000)
+    assert "Second session digest." in content
+    assert "First session digest." in content
+    # Newest first, so the second digest appears before the first.
+    assert content.index("Second session digest.") < content.index("First session digest.")
+
+
+def test_hot_cache_continuity_caps_history(centurion_home):
+    from agent.memory_continuity import (
+        _MAX_CONTINUITY_ENTRIES,
+        _write_hot_cache_continuity,
+        read_hot_cache_continuity,
+    )
+
+    for i in range(_MAX_CONTINUITY_ENTRIES + 3):
+        _write_hot_cache_continuity(f"Digest {i}.", session_id=f"s{i}")
+
+    content = read_hot_cache_continuity(max_chars=1_000_000)
+    # Oldest entries are dropped; the newest are retained.
+    assert "Digest 0." not in content
+    assert f"Digest {_MAX_CONTINUITY_ENTRIES + 2}." in content
+    assert content.count("## ") == _MAX_CONTINUITY_ENTRIES
+
+
+def test_hot_cache_continuity_migrates_legacy_note(centurion_home):
+    from agent.memory_continuity import (
+        _write_hot_cache_continuity,
+        read_hot_cache_continuity,
+    )
+
+    legacy = (
+        "# Continuity note\n\n"
+        "Updated: 2026-08-28T12:11:36Z\n"
+        "Session: 20260828_084645_492b86\n\n"
+        "Onboarded Didier Bodart.\n"
+    )
+    (centurion_home / "memories" / "CONTINUITY.md").write_text(legacy, encoding="utf-8")
+
+    _write_hot_cache_continuity("New session digest.", session_id="s-new")
+
+    content = read_hot_cache_continuity(max_chars=100_000)
+    assert "New session digest." in content
+    assert "Onboarded Didier Bodart." in content  # legacy body preserved, not lost
+    assert "## (legacy)" in content  # normalized under a legacy entry header
+    assert content.index("New session digest.") < content.index("Onboarded Didier Bodart.")
