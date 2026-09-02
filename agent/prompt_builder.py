@@ -19,10 +19,12 @@ from agent.skill_utils import (
     extract_skill_conditions,
     extract_skill_description,
     get_all_skills_dirs,
+    get_config_path,
     get_disabled_skill_names,
     iter_skill_index_files,
     parse_frontmatter,
     skill_matches_platform,
+    yaml_load,
 )
 from utils import atomic_json_write
 
@@ -1265,6 +1267,31 @@ def _skill_should_show(
     return True
 
 
+def _compact_index_enabled() -> bool:
+    """Whether the skill index lists names only (default) or names + descriptions.
+
+    Reads ``skills.compact_index`` from config.yaml, defaulting to True.  A
+    compact (name-only) index cuts the system-prompt skills block ~50%
+    (measured ~8.5k chars / ~2.1k tokens per cold-cache turn on 144 skills).
+    Full descriptions remain available on demand via ``skills_list`` and
+    ``skill_view``.
+    """
+    config_path = get_config_path()
+    if not config_path.exists():
+        return True
+    try:
+        parsed = yaml_load(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return True
+    if not isinstance(parsed, dict):
+        return True
+    skills_cfg = parsed.get("skills")
+    if not isinstance(skills_cfg, dict):
+        return True
+    val = skills_cfg.get("compact_index", True)
+    return bool(val) if isinstance(val, bool) else True
+
+
 def build_skills_system_prompt(
     available_tools: "set[str] | None" = None,
     available_toolsets: "set[str] | None" = None,
@@ -1451,14 +1478,15 @@ def build_skills_system_prompt(
                 index_lines.append(f"  {category}:")
             # Deduplicate and sort skills within each category
             seen = set()
+            compact = _compact_index_enabled()
             for name, desc in sorted(skills_by_category[category], key=lambda x: x[0]):
                 if name in seen:
                     continue
                 seen.add(name)
-                if desc:
-                    index_lines.append(f"    - {name}: {desc}")
-                else:
+                if compact or not desc:
                     index_lines.append(f"    - {name}")
+                else:
+                    index_lines.append(f"    - {name}: {desc}")
 
         result = (
             "## Skills (mandatory)\n"
@@ -1472,6 +1500,9 @@ def build_skills_system_prompt(
             "Skills also encode the user's preferred approach, conventions, and quality standards "
             "for tasks like code review, planning, and testing — load them even for tasks you "
             "already know how to do, because the skill defines how it should be done here.\n"
+            "The index lists skill names only. If a name looks relevant but you're unsure what it "
+            "does, list descriptions with skills_list or load it with skill_view(name) to see its "
+            "purpose — never skip a skill because its name is ambiguous.\n"
             "Whenever the user asks you to configure, set up, install, enable, disable, modify, "
             "or troubleshoot Centurion AI OS itself — its CLI, config, models, providers, tools, "
             "skills, voice, gateway, plugins, or any feature — load the `centurion-os` skill "

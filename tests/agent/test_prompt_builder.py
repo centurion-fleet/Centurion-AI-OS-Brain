@@ -32,6 +32,23 @@ from agent.prompt_builder import (
 from centurion_cli.nous_subscription import NousFeatureState, NousSubscriptionFeatures
 
 
+def _write_skill_config(tmp_path, **skills_opts):
+    """Write a config.yaml under tmp_path's CENTURION_HOME with skills options.
+
+    Compact index defaults ON in code, so tests that need the full
+    (description-bearing) render must explicitly opt out with
+    ``compact_index=False``; tests that exercise compact mode rely on the
+    default when no config is written.
+    """
+    cfg = {}
+    if skills_opts:
+        cfg["skills"] = dict(skills_opts)
+    if cfg:
+        import json
+
+        (tmp_path / "config.yaml").write_text(json.dumps(cfg), encoding="utf-8")
+
+
 # =========================================================================
 # Guidance constants
 # =========================================================================
@@ -256,6 +273,7 @@ class TestBuildSkillsSystemPrompt:
 
     def test_builds_index_with_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+        _write_skill_config(tmp_path, compact_index=False)
         skills_dir = tmp_path / "skills" / "coding" / "python-debug"
         skills_dir.mkdir(parents=True)
         (skills_dir / "SKILL.md").write_text(
@@ -265,6 +283,35 @@ class TestBuildSkillsSystemPrompt:
         assert "python-debug" in result
         assert "Debug Python scripts" in result
         assert "available_skills" in result
+
+    def test_compact_index_strips_descriptions(self, monkeypatch, tmp_path):
+        """Default compact mode lists names only — descriptions stay on demand."""
+        monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+        skills_dir = tmp_path / "skills" / "coding" / "python-debug"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text(
+            "---\nname: python-debug\ndescription: Debug Python scripts\n---\n"
+        )
+        result = build_skills_system_prompt()
+        # name present, description stripped
+        assert "- python-debug" in result
+        assert "Debug Python scripts" not in result
+        # preamble points at the on-demand lookup path
+        assert "skills_list" in result
+        assert "available_skills" in result
+
+    def test_compact_index_disabled_keeps_descriptions(self, monkeypatch, tmp_path):
+        """compact_index=False restores the full name: description render."""
+        monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+        _write_skill_config(tmp_path, compact_index=False)
+        skills_dir = tmp_path / "skills" / "coding" / "python-debug"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "SKILL.md").write_text(
+            "---\nname: python-debug\ndescription: Debug Python scripts\n---\n"
+        )
+        result = build_skills_system_prompt()
+        assert "Debug Python scripts" in result
+        assert "python-debug" in result
 
     def test_deduplicates_skills(self, monkeypatch, tmp_path):
         monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
@@ -309,6 +356,7 @@ class TestBuildSkillsSystemPrompt:
     def test_includes_matching_platform_skills(self, monkeypatch, tmp_path):
         """Skills with platforms: [macos] should appear on macOS."""
         monkeypatch.setenv("CENTURION_HOME", str(tmp_path))
+        _write_skill_config(tmp_path, compact_index=False)
         skills_dir = tmp_path / "skills" / "apple"
         mac_skill = skills_dir / "imessage"
         mac_skill.mkdir(parents=True)
