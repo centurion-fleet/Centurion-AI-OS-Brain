@@ -10,6 +10,7 @@ from centurion_constants import get_centurion_home, secure_parent_dir
 WRAPPED_KEY_NAME = "vault.key.wrapped"
 DB_NAME = "vault.db"
 AUDIT_NAME = "audit.log"
+PASSPHRASE_NAME = ".vault-passphrase"
 MODELS_DIR_NAME = "models"
 DEFAULT_MODEL_FILENAME = "nomic-embed-text-v1.5.Q4_K_M.gguf"
 
@@ -37,6 +38,16 @@ def db_path() -> Path:
 
 def wrapped_key_path() -> Path:
     return get_vault_dir() / WRAPPED_KEY_NAME
+
+
+def passphrase_file_path() -> Path:
+    """Default keyfile for auto-unlock: inside CENTURION_HOME, OUTSIDE vault/.
+
+    Deliberately outside ``vault/`` so that copying or backing up the vault
+    directory alone does not carry the passphrase with it — the ciphertext
+    stays encrypted in transit. The file must be mode 0600.
+    """
+    return get_centurion_home() / PASSPHRASE_NAME
 
 
 def audit_path() -> Path:

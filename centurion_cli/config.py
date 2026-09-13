@@ -1334,6 +1334,9 @@ DEFAULT_CONFIG = {
     # Complements MEMORY.md/USER.md; never auto-ingests turns.
     "vault": {
         "enabled": False,              # opt-in until unlocked + initialized
+        "auto_unlock": True,           # unlock in-process at agent startup from
+                                       # $CENTURION_VAULT_PASSPHRASE or the 0600
+                                       # keyfile (vault is process-local otherwise)
         "prefetch_on_turn": False,
         "require_user_confirm": False,
         "max_entry_chars": 4000,

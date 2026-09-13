@@ -1093,6 +1093,14 @@ def init_agent(
             agent._vault_prefetch_on_turn = bool(
                 vault_cfg.get("enabled") and vault_cfg.get("prefetch_on_turn")
             )
+            # Vault unlock state is process-local, so the `centurion vault unlock`
+            # CLI (a separate, short-lived process) can never unlock a running
+            # gateway/agent. Unlock in-process from the env var or keyfile.
+            # Idempotent: only the first agent in a process does the work.
+            if vault_cfg.get("enabled") and vault_cfg.get("auto_unlock", True):
+                from agent.vault import auto_unlock
+
+                auto_unlock()
         except Exception:
             agent._vault_prefetch_on_turn = False
 

@@ -35,6 +35,53 @@ safely.
 3. **Vault** — opt-in sealed store (`core`/`experiential`/`pattern`). Needs a key:
    `vault.enabled` must be true AND a key must be present.
 
+## Vault unlock is PROCESS-LOCAL (read before trusting the Vault)
+
+The decryption key lives in a module-level global (`agent/vault/__init__.py` →
+`_shared_store`), so unlock state belongs to one process. Observed on v5.3.10:
+
+- `centurion vault unlock` unlocks **its own short-lived process**, prints success,
+  and exits — taking the key with it. It can **never** unlock a running gateway.
+  It looks like it worked. It did not.
+- There is no daemon, no socket, no env-var passphrase, and the `vault` tool has
+  **no `unlock` action**.
+- **Symptom:** `Key present: True` + `Unlocked: False`, permanently. Setting
+  `vault.enabled: true` alone changes nothing.
+- **Silent failure:** when locked, `prefetch_for_query()` returns `""` and
+  session-end digests skip the Vault entirely, falling back to
+  `memories/CONTINUITY.md`. Nothing errors. A Centurion can believe it has a
+  sealed long-term memory that has never once been written to.
+
+**Fixed:** `agent.vault.auto_unlock()` is called from `agent/agent_init.py` when
+`vault.enabled` is true (and `vault.auto_unlock`, default true). It reads the
+passphrase from `$CENTURION_VAULT_PASSPHRASE` or the 0600 keyfile
+`$CENTURION_HOME/.vault-passphrase` and unlocks **in-process**, where the key must
+live. Idempotent, never raises. Enable it with `centurion config set vault.enabled
+true` plus a keyfile — no plugin needed.
+
+On a Brain older than the fix, the same thing can be done with a plugin under
+`~/.centurion/plugins/` that calls `open_vault(passphrase)` from `on_session_start`
+— plugins load into the live process, so the unlock persists. Full pattern, code and
+pitfalls: `references/vault-unlock.md`.
+
+**Verify from inside the session, not the CLI:** `centurion vault status` is its own
+process and will still read `Unlocked: False` even when the gateway is unlocked.
+Check the `vault` tool's status from inside a gateway session, or the log line
+`Vault: auto-unlocked (N entries)`.
+
+**Passphrase storage:** a 0600 keyfile deliberately *outside* `vault/`, so a backup
+of `vault/` alone stays encrypted (an invariant with a test). State the tradeoff
+plainly to the owner: the passphrase is then readable by anything running as the
+agent's user, including the agent. At-rest encryption protects against disk theft,
+leaked backups and other local users — **not** against the agent, malware, or root.
+Do not treat the Vault as a place for secrets that would harm the owner if the agent
+were compromised.
+
+**Also check:** the embedder defaults to `stub-hash-v1` (keyword-ish, not semantic)
+unless `llama-cpp-python` is importable in the running venv; `embed_base_url` is
+declared in config but consumed nowhere, so there is no loopback-server route.
+Details in the reference file.
+
 ## Continuity (the bridge)
 
 - `agent/memory_continuity.py`.

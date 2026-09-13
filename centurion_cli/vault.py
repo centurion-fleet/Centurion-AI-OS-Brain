@@ -149,6 +149,16 @@ def vault_command(args: argparse.Namespace) -> None:
         print(f"\n  ✓ Vault unlocked ({vault.status()['total_entries']} entries).\n")
         return
 
+    if cmd == "install-model":
+        # Needs no Vault access at all — it only downloads the embedder GGUF.
+        # Handled before the unlock block, which previously prompted for a
+        # passphrase and then died with EOFError when run non-interactively.
+        _install_embedding_model(
+            url=getattr(args, "url", "") or "",
+            force=bool(getattr(args, "force", False)),
+        )
+        return
+
     # Remaining commands need unlock
     vault = open_vault()
     if not vault.is_unlocked:
@@ -203,13 +213,6 @@ def vault_command(args: argparse.Namespace) -> None:
             print(f"    [{h.score:.3f}] {h.memory_type.value}  {h.id}")
             print(f"           {h.snippet}")
         print()
-        return
-
-    if cmd == "install-model":
-        _install_embedding_model(
-            url=getattr(args, "url", "") or "",
-            force=bool(getattr(args, "force", False)),
-        )
         return
 
     print(f"  Unknown vault command: {cmd}", file=sys.stderr)

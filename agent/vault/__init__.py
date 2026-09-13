@@ -9,6 +9,7 @@ a hostile OS while unlocked (DEK lives in process memory).
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -30,6 +31,7 @@ from agent.vault.paths import (
     get_vault_dir,
     model_path,
     models_dir,
+    passphrase_file_path,
     wrapped_key_path,
 )
 from agent.vault.search import hybrid_search
@@ -164,6 +166,70 @@ def is_initialized() -> bool:
     return wrapped_key_path().exists()
 
 
+VAULT_PASSPHRASE_ENV = "CENTURION_VAULT_PASSPHRASE"
+
+
+def read_passphrase(*, env_var: str = VAULT_PASSPHRASE_ENV) -> Optional[str]:
+    """Return the Vault passphrase from the environment or the keyfile.
+
+    Order: the environment variable first (container/service friendly), then the
+    0600 keyfile at :func:`agent.vault.paths.passphrase_file_path`. Returns
+    ``None`` when neither is present or the value is empty.
+    """
+    value = (os.environ.get(env_var) or "").strip()
+    if value:
+        return value
+    try:
+        path = passphrase_file_path()
+        if path.exists():
+            value = path.read_text(encoding="utf-8").strip()
+            return value or None
+    except OSError:
+        logger.debug("Vault: could not read passphrase file", exc_info=True)
+    return None
+
+
+def auto_unlock(*, env_var: str = VAULT_PASSPHRASE_ENV) -> bool:
+    """Unlock the Vault in this process at startup. Never raises.
+
+    Why this exists: Vault unlock state is **process-local** — the decryption
+    key lives in a module-level global. The ``centurion vault unlock`` CLI
+    command therefore unlocks its own short-lived process and exits, taking the
+    key with it; it can never unlock a long-running gateway or agent process.
+    Without an in-process unlock, the Vault reports ``key_present: True`` and
+    ``unlocked: False`` indefinitely, and every read and write silently no-ops —
+    ``prefetch_for_query()`` returns ``""`` and session digests fall back to
+    ``CONTINUITY.md`` with no warning.
+
+    Call this from agent/gateway startup. Returns ``True`` if the Vault is
+    unlocked afterwards.
+    """
+    try:
+        vault = open_vault()
+        if vault.is_unlocked:
+            return True
+        if not is_initialized():
+            return False
+        passphrase = read_passphrase(env_var=env_var)
+        if not passphrase:
+            logger.info(
+                "Vault: enabled but locked, and no passphrase available "
+                "(set %s or create %s with mode 0600)",
+                env_var,
+                passphrase_file_path(),
+            )
+            return False
+        vault.unlock(passphrase)
+        logger.info(
+            "Vault: auto-unlocked (%s entries)",
+            vault.status().get("total_entries"),
+        )
+        return vault.is_unlocked
+    except Exception:
+        logger.warning("Vault: auto-unlock failed", exc_info=True)
+        return False
+
+
 def initialize(passphrase: str) -> Vault:
     """Create key + empty DB and return an unlocked Vault."""
     ensure_vault_dir()
@@ -268,9 +334,12 @@ __all__ = [
     "VaultLockedError",
     "LockState",
     "MemoryType",
+    "VAULT_PASSPHRASE_ENV",
+    "auto_unlock",
     "initialize",
     "is_initialized",
     "open_vault",
+    "read_passphrase",
     "lock_shared",
     "get_shared_vault",
     "change_passphrase",
