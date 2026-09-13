@@ -1588,11 +1588,16 @@ def get_commits(since_tag=None):
     else:
         range_spec = "HEAD"
 
-    # Format: hash<US>author_name<US>author_email<US>subject\0body
-    # Using %x1f (unit separator) to avoid conflict with | in author names
+    # Format: hash<US>author_name<US>author_email<US>subject\0body<RS>
+    # %x1f (unit separator) avoids conflict with | in author names.
+    # %x1e (record separator) terminates each commit. Never split on NUL: a NUL
+    # pair only appears when a body is EMPTY, so splitting on "\0\0" made every
+    # commit with a body stick to the previous delimiter and get swallowed —
+    # the 5.3.11 run kept 7 of 35 commits and silently dropped the headline
+    # feature. RS is emitted for every commit regardless of body length.
     log = git(
         "log", range_spec,
-        "--format=%H%x1f%an%x1f%ae%x1f%s%x00%b%x00",
+        "--format=%H%x1f%an%x1f%ae%x1f%s%x00%b%x1e",
         "--no-merges",
     )
 
@@ -1600,9 +1605,7 @@ def get_commits(since_tag=None):
         return []
 
     commits = []
-    # Split on double-null to get each commit entry, since body ends with \0
-    # and format ends with \0, each record ends with \0\0 between entries
-    for entry in log.split("\0\0"):
+    for entry in log.split("\x1e"):
         entry = entry.strip()
         if not entry:
             continue
