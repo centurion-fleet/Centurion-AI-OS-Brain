@@ -384,7 +384,12 @@ class EmailAdapter(BasePlatformAdapter):
                         self._trim_seen_uids()
 
                     status, msg_data = imap.uid("fetch", uid, "(RFC822)")
-                    if status != "OK":
+                    if status != "OK" or not msg_data:
+                        continue
+
+                    # Gmail can return None entries in the fetch response (race when
+                    # the message changes between search and fetch) — guard the tuple.
+                    if not isinstance(msg_data[0], tuple) or msg_data[0][1] is None:
                         continue
 
                     raw_email = msg_data[0][1]
