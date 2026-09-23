@@ -1,0 +1,9 @@
+/* Self-hosted Instrument Sans — loaded via @fontsource in main.tsx.
+   This file remains for any local overrides / display weight aliases. */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Instrument Sans");
+}

@@ -163,8 +163,6 @@ _FORBIDDEN_DISPLAY_NAMES = frozenset(
     {
         "hermes",
         "hermes agent",
-        "nous",
-        "nous research",
         "chatgpt",
         "claude",
         "gemini",

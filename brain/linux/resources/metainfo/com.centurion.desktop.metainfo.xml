@@ -7,6 +7,9 @@
   <project_license>LicenseRef-proprietary</project_license>
   <name>Sovereign AI Brain</name>
   <summary>Centurion AI OS + Sovereign AI Brain for your computer</summary>
+  <developer id="com.centurion">
+    <name>Centurion</name>
+  </developer>
   <description>
     <p>
       Sovereign AI Brain installs the Centurion desktop and the Centurion AI OS
@@ -16,9 +19,6 @@
   </description>
   <launchable type="desktop-id">com.centurion.desktop.desktop</launchable>
   <icon type="stock">com.centurion.desktop</icon>
-  <icon type="local" width="128" height="128">/usr/share/icons/hicolor/128x128/apps/com.centurion.desktop.png</icon>
-  <icon type="local" width="64" height="64">/usr/share/icons/hicolor/64x64/apps/com.centurion.desktop.png</icon>
-  <icon type="local" width="256" height="256">/usr/share/icons/hicolor/256x256/apps/com.centurion.desktop.png</icon>
   <categories>
     <category>Utility</category>
     <category>Network</category>

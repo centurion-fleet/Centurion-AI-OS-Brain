@@ -1,9 +1,9 @@
 Name:           centurion-desktop
-Version:        0.14.0
+Version:        %{version}
 Release:        1%{?dist}
 Summary:        Native Sovereign AI Brain desktop and iPhone service
 License:        MIT
-URL:            https://github.com/NousResearch/Centurion-AI-OS
+URL:            https://github.com/centurion-fleet/Centurion-AI-OS
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
@@ -69,5 +69,5 @@ desktop-file-validate \
 %{_prefix}/lib/firewalld/services/centurion-remote.xml
 
 %changelog
-* Sat Jul 11 2026 Centurion AI OS <engineering@centurion.ai> - 0.14.0-1
+* Sat Jul 11 2026 Centurion AI OS <support@1human1ai.com> - 0.14.0-1
 - Initial native GTK4 desktop and encrypted iPhone service

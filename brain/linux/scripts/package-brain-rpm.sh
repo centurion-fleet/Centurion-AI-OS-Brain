@@ -197,7 +197,7 @@ cat > "${STAGE}/usr/share/doc/centurion-brain/README.txt" <<EOF
 Sovereign AI Brain ${VERSION} — full Centurion AI OS (Fedora RPM)
 
 This one package installs:
-  • Centurion AI OS (thinking / chat engine)
+  • Centurion AI OS (thinking engine)
   • Sovereign AI Brain (desktop app)
   • Focus / Mission Deck (start and manage missions)
   • Gateway surfaces: Telegram, WhatsApp, and Centurion Remote only
@@ -252,8 +252,9 @@ Requires:       nodejs
 Sovereign AI Brain + Centurion AI OS for Fedora (full install).
 
 Double-click this package in Software to install everything needed for
-Chat, Thinking, and Focus (missions). Opens from your app menu as
-“Sovereign AI Brain”. Keeps existing ~/.centurion data if present.
+Thinking and Focus (missions), including brain-to-brain collaboration.
+Opens from your app menu as “Sovereign AI Brain”. Keeps existing
+~/.centurion data if present.
 
 %prep
 %setup -c -n centurion-brain-%{version}

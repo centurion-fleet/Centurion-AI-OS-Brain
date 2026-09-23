@@ -2110,8 +2110,6 @@ def _scrub_foreign_identity_history(
             token in lower
             for token in (
                 "hermes",
-                "nous research",
-                "nousresearch",
                 "i'm claude",
                 "i am claude",
                 "i'm chatgpt",

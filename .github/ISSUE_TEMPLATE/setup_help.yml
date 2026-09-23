@@ -13,7 +13,7 @@ body:
         - If you're in a chat session, you can use `/debug` instead — it does the same thing
         - Try `centurion update` to get the latest version
         - Check the [README troubleshooting section](https://github.com/centurion-fleet/Centurion-AI-OS#troubleshooting)
-        - For general questions, consider the [Centurion Fleet Discord](https://discord.gg/NousResearch) for faster help
+        - For general questions, consider the [Centurion support](https://www.1human1ai.com) for faster help
 
   - type: textarea
     id: description

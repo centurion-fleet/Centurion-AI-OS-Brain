@@ -63,7 +63,7 @@ _CENTURION_MODEL_WARNING = (
 # happen to carry "centurion" in their tag but are fully tool-capable.
 #
 # Positive examples the regex must match:
-#   NousResearch third-party llama model, centurion-4-405b, openrouter/hermes3:70b
+#   Third-party llama models available through OpenRouter
 # Negative examples it must NOT match:
 #   centurion-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
 _NOUS_CENTURION_NON_AGENTIC_RE = re.compile(
