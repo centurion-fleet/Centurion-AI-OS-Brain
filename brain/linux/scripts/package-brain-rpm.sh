@@ -62,6 +62,11 @@ find_bin() {
 VERSION="$(resolve_version)"
 # RPM version cannot have some chars; keep dotted semver.
 RPM_VERSION="${VERSION}"
+# RPM release. Bump this (not the version) when shipping a fix to an
+# already-released build: `dnf upgrade` only moves forward on release, and
+# same-version/same-release packages are refused as "already installed".
+# Override with CENTURION_BRAIN_RELEASE=2.
+RPM_RELEASE="${CENTURION_BRAIN_RELEASE:-1}"
 ARCH="$(uname -m)"
 case "${ARCH}" in
   x86_64|amd64) ARCH="x86_64" ;;
@@ -227,7 +232,7 @@ AutoProv:       no
 
 Name:           centurion-brain
 Version:        ${RPM_VERSION}
-Release:        1%{?dist}
+Release:        ${RPM_RELEASE}%{?dist}
 Summary:        Sovereign AI Brain + Centurion AI OS (full)
 License:        Proprietary
 URL:            https://www.1human1ai.com
@@ -326,7 +331,7 @@ RPM_BUILT="$(find "${RPMBUILD}/RPMS" -type f -name 'centurion-brain-*.rpm' | hea
   exit 1
 }
 
-OUT_NAME="centurion-brain-${VERSION}-1.fc.${ARCH}.rpm"
+OUT_NAME="centurion-brain-${VERSION}-${RPM_RELEASE}.fc.${ARCH}.rpm"
 # Prefer the rpmbuild basename when it already encodes version+dist.
 BASE="$(basename "${RPM_BUILT}")"
 OUT_RPM="${DIST}/${BASE}"
@@ -340,6 +345,28 @@ cp -f "${RPM_BUILT}" "${OUT_RPM}"
     shasum -a 256 "$(basename "${OUT_RPM}")" > "$(basename "${OUT_RPM}").sha256"
   fi
 )
+
+# Signing — the pipeline is sign-CAPABLE, but the Centurion release key is an org
+# decision that has not yet been made (no GPG secret key exists on the build box).
+# When the key lands, set CENTURION_RPM_SIGN=<keyid> (and %_gpg_name in ~/.rpmmacros);
+# the build will then sign with `rpm --addsign`. Until then the default stays
+# unsigned and we say so loudly instead of shipping it silently.
+if [[ -n "${CENTURION_RPM_SIGN:-}" ]]; then
+  SIGBIN="$(command -v rpmsign 2>/dev/null || command -v rpm 2>/dev/null || true)"
+  if [[ -n "${SIGBIN}" ]]; then
+    echo "Signing RPM with ${CENTURION_RPM_SIGN}…"
+    if "${SIGBIN}" --addsign "${OUT_RPM}" >/dev/null 2>&1; then
+      echo "Signed: ${OUT_RPM}"
+    else
+      echo "WARNING: signing failed — RPM left unsigned." >&2
+    fi
+  else
+    echo "WARNING: rpmsign/rpm not found — RPM left unsigned." >&2
+  fi
+else
+  echo "WARNING: RPM is UNSIGNED (CENTURION_RPM_SIGN not set — no release key configured)." >&2
+  echo "         GNOME Software will show 'Potentially Unsafe / Provided by a third party'." >&2
+fi
 
 SIZE="$(wc -c < "${OUT_RPM}" | tr -d ' ')"
 echo

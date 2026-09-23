@@ -357,7 +357,10 @@ def fleet_peer_connect(args: argparse.Namespace) -> None:
             print("    That Brain is running an older build — it needs the update first.")
         elif status == 0:
             print(f"  ✗ Could not reach it: {body}")
-            print("    Check the address, and that port forwarding is set up on their router.")
+            print("    If you are both on the SAME WiFi, check that:")
+            print("      • they ran 'centurion fleet peer enable' and RESTARTED the Brain")
+            print("      • you are using their address, not yours (it is printed by enable)")
+            print("    If you are on DIFFERENT networks, port forwarding is also needed.")
         else:
             print(f"  ✗ Unexpected reply (HTTP {status}): {body}")
         return
@@ -509,10 +512,13 @@ def fleet_peer_enable(args: argparse.Namespace) -> None:
     print()
     print("  Two things still to do:")
     print(f"   1. Restart the Brain so it picks this up.")
-    print(f"   2. On your ROUTER, forward port {port} to this machine ({lan}).")
+    print(f"   2. Give the other machine THIS address:  http://{lan}:{port}")
+    print()
+    print(f"  Same WiFi? You are done — no router change is needed.")
+    print(f"  Different networks? Forward port {port} on your router to {lan}.")
     print()
     print("  Once both sides have done this, pair them with:")
-    print(f"      centurion fleet peer connect <their-public-address>:{port} --token <shared secret>")
+    print(f"      centurion fleet peer connect {lan}:{port} --token <shared secret>")
 
 
 def fleet_peer_status(args: argparse.Namespace) -> None:
