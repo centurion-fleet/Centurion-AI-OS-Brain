@@ -41,7 +41,6 @@ interface PrimaryCardProps {
   documents?: LifeDocument[];
   documentCount?: number;
   onOpen: () => void;
-  onDiscuss?: () => void;
   onPrefetch?: () => void;
   /** When true, render as the Focus first-viewport hero (no nested card chrome). */
   hero?: boolean;
@@ -53,7 +52,6 @@ export const PrimaryCard = memo(function PrimaryCard({
   documents = [],
   documentCount,
   onOpen,
-  onDiscuss,
   onPrefetch,
   hero = false,
 }: PrimaryCardProps) {
@@ -130,15 +128,6 @@ export const PrimaryCard = memo(function PrimaryCard({
           >
             Open mission
           </button>
-          {onDiscuss && (
-            <button
-              type="button"
-              onClick={onDiscuss}
-              className="rounded-full border border-amber-glow/40 bg-amber-muted/50 px-5 py-2.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/20"
-            >
-              Discuss
-            </button>
-          )}
         </div>
 
         {shown.length > 0 ? (

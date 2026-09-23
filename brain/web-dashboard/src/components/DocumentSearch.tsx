@@ -7,26 +7,6 @@ import {
   type Mission,
 } from "../types/life";
 
-function discussDocument(d: LifeDocument) {
-  const w = window as Window & {
-    centurionDiscuss?: (p: Record<string, unknown>) => void;
-  };
-  if (typeof w.centurionDiscuss !== "function") return;
-  const excerpt = (d.body_md || d.excerpt || d.summary || "").slice(0, 1200);
-  w.centurionDiscuss({
-    kind: "document",
-    id: d.id,
-    title: d.title,
-    summary: d.summary || "",
-    body_excerpt: excerpt,
-    mission_id: d.mission_id,
-    mission_title: d.mission_title || undefined,
-    doc_type: d.doc_type || "other",
-    plan_id: d.plan_id || undefined,
-    kickoff: `Let's evolve this document: ${d.title}`,
-  });
-}
-
 function isAssignableMission(m: Mission): boolean {
   if (m.id === DOCUMENT_LIBRARY_MISSION_ID) return false;
   const profile = m.profile;
@@ -348,15 +328,6 @@ export function DocumentSearch({
                           {assigning ? "Cancel" : "Assign…"}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        title="Discuss in Chat"
-                        aria-label={`Discuss ${d.title}`}
-                        onClick={() => discussDocument(d)}
-                        className="rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1 text-[11px] font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                      >
-                        Discuss
-                      </button>
                     </div>
                   </div>
                   {assigning && (

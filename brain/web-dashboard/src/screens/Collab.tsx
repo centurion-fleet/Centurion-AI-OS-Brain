@@ -9,28 +9,6 @@ import {
   type CollabSwarm,
 } from "../types/collab";
 
-function discussCollab(swarm: CollabSwarm) {
-  const w = window as Window & {
-    centurionDiscuss?: (p: Record<string, unknown>) => void;
-  };
-  if (typeof w.centurionDiscuss !== "function") return;
-  const workers = (swarm.workers || [])
-    .map((row) => `- ${row.title} (${row.assignee || "unassigned"}): ${row.status}`)
-    .join("\n");
-  w.centurionDiscuss({
-    kind: "collab",
-    id: swarm.id,
-    name: swarm.display_name,
-    pulse: swarm.pulse,
-    objective: swarm.objective,
-    board_id: swarm.kanban_board_slug || swarm.id,
-    root_id: swarm.root_id || "",
-    workers_summary: workers,
-    blackboard_json: JSON.stringify(swarm.blackboard || {}),
-    kickoff: `Let's talk about this collaboration: ${swarm.display_name}`,
-  });
-}
-
 export function Collab() {
   const visible = useDeckVisible();
   const { swarms, loading, error, refresh, applySnapshot } = useCollab(visible);
@@ -261,7 +239,6 @@ export function Collab() {
               swarm={selected}
               busy={busy}
               onMove={moveCard}
-              onDiscuss={() => discussCollab(selected)}
             />
           )}
         </>
@@ -407,12 +384,10 @@ function Board({
   swarm,
   busy,
   onMove,
-  onDiscuss,
 }: {
   swarm: CollabSwarm;
   busy: boolean;
   onMove: (card: CollabCard, column: CollabColumn) => void;
-  onDiscuss: () => void;
 }) {
   const cards = swarm.cards || [];
   return (
@@ -422,13 +397,6 @@ function Board({
           <h2 className="text-xl font-medium text-ink">{swarm.display_name}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">{swarm.objective}</p>
         </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center rounded-full glass px-4 text-sm font-semibold text-ink"
-          onClick={onDiscuss}
-        >
-          Discuss
-        </button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {COLUMNS.map((col) => {

@@ -87,20 +87,6 @@ export function Deck() {
     navigate(`/mission/${primary.id}`, { state: { mission: primary } });
   }, [navigate, primary]);
 
-  const discussPrimary = useCallback(() => {
-    if (!primary) return;
-    const w = window as Window & {
-      centurionDiscuss?: (p: Record<string, unknown>) => void;
-    };
-    if (typeof w.centurionDiscuss !== "function") return;
-    w.centurionDiscuss({
-      id: primary.id,
-      title: primary.title,
-      statement: primary.statement || primary.purpose,
-      kickoff: `Let's talk about my mission: ${primary.title}`,
-    });
-  }, [primary]);
-
   const openSupporting = useCallback(
     (id: string) => {
       const m = supporting.find((x) => x.id === id);
@@ -184,7 +170,6 @@ export function Deck() {
               mission={primary}
               latestThought={latestThought}
               onOpen={openPrimary}
-              onDiscuss={discussPrimary}
               onPrefetch={prefetchMissionChunk}
             />
           ) : (

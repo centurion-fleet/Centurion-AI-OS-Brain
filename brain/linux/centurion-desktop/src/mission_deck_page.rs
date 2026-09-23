@@ -835,13 +835,6 @@ fn attach_webview(
         if (typeof window.__centurionDeckVisible === 'undefined') {{
           window.__centurionDeckVisible = {vis};
         }}
-        window.centurionDiscuss = function(payload) {{
-          try {{
-            var msg = typeof payload === 'string' ? payload : JSON.stringify(payload);
-            window.webkit.messageHandlers.centurion.postMessage(msg);
-          }} catch (e) {{}}
-        }};
-        window.centurionOpenChat = window.centurionDiscuss;
         "#
         ),
         webkit6::UserContentInjectedFrames::TopFrame,

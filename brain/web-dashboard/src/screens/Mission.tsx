@@ -128,35 +128,8 @@ export function Mission() {
 
   const progress = missionProgress(mission);
   const missionId = mission.id;
-  const missionTitle = mission.title;
   const advanceTo = nextPhase(mission.phase);
   const missionSnapshot = mission;
-
-  function discussDecision(d: {
-    id: string;
-    title: string;
-    chosen?: string;
-    context?: string;
-    target_id?: string | null;
-  }) {
-    const w = window as Window & {
-      centurionDiscuss?: (p: Record<string, unknown>) => void;
-    };
-    if (typeof w.centurionDiscuss !== "function") return;
-    w.centurionDiscuss({
-      kind: "decision",
-      id: d.id,
-      title: d.title,
-      chosen: d.chosen || "",
-      context: d.context || "",
-      mission_id: missionId,
-      mission_title: missionTitle,
-      target_id: d.target_id || undefined,
-      kickoff: `Let's revisit this decision: ${d.title}${
-        d.chosen ? ` (chose: ${d.chosen})` : ""
-      }`,
-    });
-  }
 
   function openLogForm(decision?: Decision | null) {
     const target = decision && isOpenDecision(decision) ? decision : null;
@@ -239,33 +212,6 @@ export function Mission() {
       resolveInflight.current = null;
       setResolveBusyId(null);
     }
-  }
-
-  function discussDocument(d: {
-    id: string;
-    title: string;
-    summary?: string;
-    body_md?: string;
-    doc_type?: string;
-    plan_id?: string | null;
-  }) {
-    const w = window as Window & {
-      centurionDiscuss?: (p: Record<string, unknown>) => void;
-    };
-    if (typeof w.centurionDiscuss !== "function") return;
-    const excerpt = (d.body_md || d.summary || "").slice(0, 1200);
-    w.centurionDiscuss({
-      kind: "document",
-      id: d.id,
-      title: d.title,
-      summary: d.summary || "",
-      body_excerpt: excerpt,
-      mission_id: missionId,
-      mission_title: missionTitle,
-      doc_type: d.doc_type || "other",
-      plan_id: d.plan_id || undefined,
-      kickoff: `Let's evolve this document: ${d.title}`,
-    });
   }
 
   async function submitDocument() {
@@ -445,25 +391,6 @@ export function Mission() {
           <ProgressBar value={progress} height="h-2.5" />
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              const w = window as Window & {
-                centurionDiscuss?: (p: Record<string, unknown>) => void;
-              };
-              if (typeof w.centurionDiscuss === "function") {
-                w.centurionDiscuss({
-                  id: mission.id,
-                  title: mission.title,
-                  statement: mission.statement || mission.purpose,
-                  kickoff: `Let's talk about my mission: ${mission.title}`,
-                });
-              }
-            }}
-            className="rounded-full border border-amber-glow/40 bg-amber-muted px-5 py-2.5 text-sm font-semibold text-amber-bright shadow-amber-sm transition hover:bg-amber-glow/25"
-          >
-            Discuss in Chat
-          </button>
           {advanceTo && (
             <button
               type="button"
@@ -518,8 +445,6 @@ export function Mission() {
         <TargetSequence
           targets={mission.targets || []}
           missionId={mission.id}
-          missionTitle={mission.title}
-          missionStatement={mission.statement || mission.purpose}
           onTargetsChanged={() => void refresh()}
         />
       </section>
@@ -682,19 +607,6 @@ export function Mission() {
                         </button>
                       </>
                     ) : null}
-                    <button
-                      type="button"
-                      title="Discuss in Chat"
-                      aria-label={`Discuss decision ${d.title}`}
-                      onClick={() => discussDecision(d)}
-                      className={
-                        spotlight
-                          ? "shrink-0 rounded-full border border-amber-glow/40 px-2.5 py-1.5 text-sm font-semibold text-amber-bright"
-                          : "shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                      }
-                    >
-                      💬
-                    </button>
                   </div>
                 </div>
               );
@@ -847,15 +759,6 @@ export function Mission() {
                           Updated {d.updated_at.replace("T", " ").slice(0, 16)}
                         </p>
                       )}
-                    </button>
-                    <button
-                      type="button"
-                      title="Discuss in Chat"
-                      aria-label={`Discuss document ${d.title}`}
-                      onClick={() => discussDocument(d)}
-                      className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                    >
-                      💬
                     </button>
                   </div>
                   {open && d.body_md && (

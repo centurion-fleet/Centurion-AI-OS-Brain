@@ -20,43 +20,12 @@ function groupProgress(targets: MissionTarget[]): number {
 interface TargetSequenceProps {
   targets: MissionTarget[];
   missionId: string;
-  missionTitle: string;
-  missionStatement?: string;
   onTargetsChanged?: () => void | Promise<void>;
-}
-
-function discussTarget(
-  mission: {
-    id: string;
-    title: string;
-    statement?: string;
-  },
-  t: MissionTarget,
-) {
-  const w = window as Window & {
-    centurionDiscuss?: (p: Record<string, unknown>) => void;
-  };
-  if (typeof w.centurionDiscuss !== "function") return;
-  const label = TARGET_LABELS[t.target_type] || "Target";
-  w.centurionDiscuss({
-    id: mission.id,
-    title: mission.title,
-    statement: mission.statement || "",
-    target_id: t.id,
-    target_title: t.title,
-    target_type: t.target_type,
-    target_description: t.description || "",
-    target_status: t.status,
-    sequence_number: t.sequence_number,
-    kickoff: `Let's discuss this ${label} target: ${t.title}`,
-  });
 }
 
 export function TargetSequence({
   targets,
   missionId,
-  missionTitle,
-  missionStatement,
   onTargetsChanged,
 }: TargetSequenceProps) {
   const [local, setLocal] = useState(targets);
@@ -70,36 +39,12 @@ export function TargetSequence({
     (a, b) => a.sequence_number - b.sequence_number,
   );
   const groups: TargetType[] = ["essential", "shouldHave", "niceToHave"];
-  const mission = {
-    id: missionId,
-    title: missionTitle,
-    statement: missionStatement,
-  };
-
   if (ordered.length === 0) {
     return (
       <div className="surface rounded-2xl px-4 py-8 text-center">
         <p className="text-sm text-ink-dim">
-          No targets yet. Discuss this mission in Chat to lock a sequence.
+          No targets yet. Add a target to build a sequence.
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            const w = window as Window & {
-              centurionDiscuss?: (p: Record<string, unknown>) => void;
-            };
-            if (typeof w.centurionDiscuss !== "function") return;
-            w.centurionDiscuss({
-              id: mission.id,
-              title: mission.title,
-              statement: mission.statement || "",
-              kickoff: `Let's lock a target sequence for: ${mission.title}`,
-            });
-          }}
-          className="mt-4 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-4 py-2 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-        >
-          Discuss in Chat
-        </button>
       </div>
     );
   }
@@ -204,18 +149,6 @@ export function TargetSequence({
                       </p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      discussTarget(mission, t);
-                    }}
-                    title="Discuss in Chat"
-                    aria-label={`Discuss ${t.title} in Chat`}
-                    className="shrink-0 rounded-full border border-amber-glow/30 bg-amber-muted/60 px-2.5 py-1.5 text-sm font-semibold text-amber-bright transition hover:bg-amber-glow/25"
-                  >
-                    💬
-                  </button>
                 </motion.li>
               ))}
             </ul>
