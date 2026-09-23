@@ -54,7 +54,7 @@ sidebar_position: 1
 
 ### Centurion Portal
 
-[Centurion Portal](https://portal.personal-centurion.com) 是 Centurion Fleet 的统一订阅网关，也是**运行 Centurion AI OS 的推荐方式**。一次 OAuth 登录即可访问 300+ 前沿智能体模型（Claude、GPT、Gemini、DeepSeek、Qwen、Kimi、GLM、MiniMax、Grok 等），以及 [Tool Gateway](/user-guide/features/tool-gateway)（网页搜索、图像生成、TTS、浏览器自动化）和 [Nous Chat](https://chat.nousresearch.com)——费用从你的 Nous 订阅中扣除，无需单独管理各提供商账户。
+[Centurion Portal](https://portal.personal-centurion.com) 是 Centurion Fleet 的统一订阅网关，也是**运行 Centurion AI OS 的推荐方式**。一次 OAuth 登录即可访问 300+ 前沿智能体模型（Claude、GPT、Gemini、DeepSeek、Qwen、Kimi、GLM、MiniMax、Grok 等），以及 [Tool Gateway](/user-guide/features/tool-gateway)（网页搜索、图像生成、TTS、浏览器自动化）和 [Nous Chat](https://chat.1human1ai.com)——费用从你的 Nous 订阅中扣除，无需单独管理各提供商账户。
 
 ```bash
 centurion setup --portal     # 全新安装——一条命令完成 OAuth + 提供商 + 网关配置

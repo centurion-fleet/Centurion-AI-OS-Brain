@@ -72,7 +72,7 @@ AUTH_LOCK_TIMEOUT_SECONDS = 15.0
 
 # Centurion Portal defaults
 DEFAULT_NOUS_PORTAL_URL = "https://portal.personal-centurion.com"
-DEFAULT_NOUS_INFERENCE_URL = "https://inference-api.nousresearch.com/v1"
+DEFAULT_NOUS_INFERENCE_URL = "https://inference-api.1human1ai.com/v1"
 DEFAULT_NOUS_CLIENT_ID = "centurion-cli"
 NOUS_LEGACY_AGENT_KEY_SCOPE = "inference:mint_agent_key"
 NOUS_INFERENCE_INVOKE_SCOPE = "inference:invoke"
@@ -1627,7 +1627,7 @@ def _optional_base_url(value: Any) -> Optional[str]:
 # dev/staging escape hatch and the env source is already trusted (the
 # user set it themselves).
 _ALLOWED_NOUS_INFERENCE_HOSTS: FrozenSet[str] = frozenset({
-    "inference-api.nousresearch.com",
+    "inference-api.1human1ai.com",
 })
 
 

@@ -642,7 +642,7 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
     centurion_main.cmd_model(
         SimpleNamespace(
             portal_url="https://portal.personal-centurion.com",
-            inference_url="https://inference.nousresearch.com/v1",
+            inference_url="https://inference.1human1ai.com/v1",
             client_id="centurion-local",
             scope="openid profile",
             no_browser=True,
@@ -654,7 +654,7 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
 
     assert captured == {
         "portal_url": "https://portal.personal-centurion.com",
-        "inference_url": "https://inference.nousresearch.com/v1",
+        "inference_url": "https://inference.1human1ai.com/v1",
         "client_id": "centurion-local",
         "scope": "openid profile",
         "no_browser": True,

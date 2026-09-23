@@ -245,7 +245,7 @@ Claude Sonnet 4 对所有当前技术在明显有害内容方面具有较强抵�
 
 3. **ULTRAPLINIAN 需要花费** — 竞速 55 个模型意味着 55 次 API 调用。快速测试使用 `fast` 层级（10 个模型），仅在需要最大覆盖时使用 `ultra`。
 
-4. **Centurion 模型无需越狱** — `nousresearch/centurion-3-*` 和 `centurion-4-*` 已无审查。直接使用即可。
+4. **Centurion 模型无需越狱** — `centurion/centurion-3-*` 和 `centurion-4-*` 已无审查。直接使用即可。
 
 5. **始终在 execute_code 中使用 `load_godmode.py`** — 各独立脚本（`parseltongue.py`、`godmode_race.py`、`auto_jailbreak.py`）有 argparse CLI 入口点。通过 `exec()` 在 execute_code 中加载时，`__name__` 为 `'__main__'`，argparse 会触发并导致脚本崩溃。加载器会处理此问题。
 

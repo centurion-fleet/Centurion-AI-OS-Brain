@@ -194,7 +194,7 @@ Centurion-AI-OS/
 ├── skills/                   # Bundled skills (copied to ~/.centurion/skills/ on install)
 ├── optional-skills/          # Official optional skills (discoverable via hub, not activated by default)
 ├── tests/                    # Test suite
-├── website/                  # Documentation site (Centurion-AI-OS.nousresearch.com)
+├── website/                  # Documentation site (Centurion-AI-OS.1human1ai.com)
 │
 ├── cli-config.yaml.example   # Example configuration (copied to ~/.centurion/config.yaml)
 └── AGENTS.md                 # Development guide for AI coding assistants

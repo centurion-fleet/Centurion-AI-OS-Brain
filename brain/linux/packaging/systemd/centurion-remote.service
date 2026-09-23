@@ -1,6 +1,6 @@
 [Unit]
 Description=Centurion encrypted iPhone service (away-from-home TCP 9119)
-Documentation=https://github.com/NousResearch/Centurion-AI-OS
+Documentation=https://github.com/centurion-fleet/Centurion-AI-OS
 After=network-online.target
 Wants=network-online.target
 

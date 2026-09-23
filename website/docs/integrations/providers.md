@@ -54,7 +54,7 @@ In the `model:` config section, you can use either `default:` or `model:` as the
 
 ### Centurion Portal
 
-[Centurion Portal](https://portal.personal-centurion.com) is Centurion Fleet's unified subscription gateway and **the recommended way to run Centurion AI OS**. One OAuth login covers 300+ frontier agentic models (Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, Grok, ...) plus the [Tool Gateway](/user-guide/features/tool-gateway) (web search, image generation, TTS, browser automation) plus [Nous Chat](https://chat.nousresearch.com) — billed against your Nous subscription instead of separate per-provider accounts.
+[Centurion Portal](https://portal.personal-centurion.com) is Centurion Fleet's unified subscription gateway and **the recommended way to run Centurion AI OS**. One OAuth login covers 300+ frontier agentic models (Claude, GPT, Gemini, DeepSeek, Qwen, Kimi, GLM, MiniMax, Grok, ...) plus the [Tool Gateway](/user-guide/features/tool-gateway) (web search, image generation, TTS, browser automation) plus [Nous Chat](https://chat.1human1ai.com) — billed against your Nous subscription instead of separate per-provider accounts.
 
 ```bash
 centurion setup --portal     # fresh install — OAuth + provider + gateway in one command

@@ -38,16 +38,16 @@ class NousProfile(ProviderProfile):
 
 nous = NousProfile(
     name="nous",
-    aliases=("nous-portal", "nousresearch"),
+    aliases=("nous-portal", "centurion"),
     env_vars=("NOUS_API_KEY",),
     display_name="Centurion Fleet",
     description="Centurion Fleet — Centurion model family",
-    signup_url="https://nousresearch.com/",
+    signup_url="https://1human1ai.com/",
     fallback_models=(
         "centurion-3-405b",
         "centurion-3-70b",
     ),
-    base_url="https://inference.nousresearch.com/v1",
+    base_url="https://inference.1human1ai.com/v1",
     auth_type="oauth_device_code",
 )
 

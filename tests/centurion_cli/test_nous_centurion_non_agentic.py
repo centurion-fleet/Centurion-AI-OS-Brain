@@ -23,16 +23,16 @@ from centurion_cli.model_switch import (
 @pytest.mark.parametrize(
     "model_name",
     [
-        "NousResearch/Centurion-3-Llama-3.1-70B",
-        "NousResearch/Centurion-3-Llama-3.1-405B",
+        "centurion-fleet/Centurion-3-Llama-3.1-70B",
+        "centurion-fleet/Centurion-3-Llama-3.1-405B",
         "centurion-3",
         "Centurion-3",
         "centurion-4",
         "centurion-4-405b",
         "centurion_4_70b",
         "openrouter/hermes3:70b",
-        "openrouter/nousresearch/centurion-4-405b",
-        "NousResearch/Hermes3",
+        "openrouter/centurion/centurion-4-405b",
+        "centurion-fleet/Hermes3",
         "centurion-3.1",
     ],
 )

@@ -1009,7 +1009,7 @@ class TestLoginNousSkipKeepsCurrent:
         fake_auth_state = {
             "access_token": "fake-nous-token",
             "agent_key": "fake-agent-key",
-            "inference_base_url": "https://inference-api.nousresearch.com",
+            "inference_base_url": "https://inference-api.1human1ai.com",
             "portal_base_url": "https://portal.personal-centurion.com",
             "refresh_token": "fake-refresh",
             "token_expires_at": 9999999999,

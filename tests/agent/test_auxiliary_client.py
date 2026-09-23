@@ -917,7 +917,7 @@ class TestAuxiliaryPoolAwareness:
 
     def test_try_nous_uses_portal_recommendation_for_text(self):
         """When the Portal recommends a compaction model, _try_nous honors it."""
-        fresh_base = "https://inference-api.nousresearch.com/v1"
+        fresh_base = "https://inference-api.1human1ai.com/v1"
         with (
             patch("agent.auxiliary_client._read_nous_auth", return_value={"access_token": "***"}),
             patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", fresh_base)),
@@ -935,7 +935,7 @@ class TestAuxiliaryPoolAwareness:
 
     def test_try_nous_uses_portal_recommendation_for_vision(self):
         """Vision tasks should ask for the vision-specific recommendation."""
-        fresh_base = "https://inference-api.nousresearch.com/v1"
+        fresh_base = "https://inference-api.1human1ai.com/v1"
         with (
             patch("agent.auxiliary_client._read_nous_auth", return_value={"access_token": "***"}),
             patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", fresh_base)),
@@ -951,7 +951,7 @@ class TestAuxiliaryPoolAwareness:
 
     def test_try_nous_falls_back_when_recommendation_lookup_raises(self):
         """If the Portal lookup throws, we must still return a usable model."""
-        fresh_base = "https://inference-api.nousresearch.com/v1"
+        fresh_base = "https://inference-api.1human1ai.com/v1"
         with (
             patch("agent.auxiliary_client._read_nous_auth", return_value={"access_token": "***"}),
             patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", fresh_base)),
@@ -969,11 +969,11 @@ class TestAuxiliaryPoolAwareness:
             status_code = 401
 
         stale_client = MagicMock()
-        stale_client.base_url = "https://inference-api.nousresearch.com/v1"
+        stale_client.base_url = "https://inference-api.1human1ai.com/v1"
         stale_client.chat.completions.create.side_effect = _Auth401("stale nous key")
 
         fresh_client = MagicMock()
-        fresh_client.base_url = "https://inference-api.nousresearch.com/v1"
+        fresh_client.base_url = "https://inference-api.1human1ai.com/v1"
         fresh_client.chat.completions.create.return_value = {"ok": True}
 
         with (
@@ -981,7 +981,7 @@ class TestAuxiliaryPoolAwareness:
             patch("agent.auxiliary_client._get_cached_client", return_value=(stale_client, "nous-model")),
             patch("agent.auxiliary_client.OpenAI", return_value=fresh_client),
             patch("agent.auxiliary_client._validate_llm_response", side_effect=lambda resp, _task: resp),
-            patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", "https://inference-api.nousresearch.com/v1")),
+            patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", "https://inference-api.1human1ai.com/v1")),
         ):
             result = call_llm(
                 task="compression",
@@ -998,11 +998,11 @@ class TestAuxiliaryPoolAwareness:
             status_code = 401
 
         stale_client = MagicMock()
-        stale_client.base_url = "https://inference-api.nousresearch.com/v1"
+        stale_client.base_url = "https://inference-api.1human1ai.com/v1"
         stale_client.chat.completions.create = AsyncMock(side_effect=_Auth401("stale nous key"))
 
         fresh_async_client = MagicMock()
-        fresh_async_client.base_url = "https://inference-api.nousresearch.com/v1"
+        fresh_async_client.base_url = "https://inference-api.1human1ai.com/v1"
         fresh_async_client.chat.completions.create = AsyncMock(return_value={"ok": True})
 
         with (
@@ -1010,7 +1010,7 @@ class TestAuxiliaryPoolAwareness:
             patch("agent.auxiliary_client._get_cached_client", return_value=(stale_client, "nous-model")),
             patch("agent.auxiliary_client._to_async_client", return_value=(fresh_async_client, "nous-model")),
             patch("agent.auxiliary_client._validate_llm_response", side_effect=lambda resp, _task: resp),
-            patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", "https://inference-api.nousresearch.com/v1")),
+            patch("agent.auxiliary_client._resolve_nous_runtime_api", return_value=("fresh-agent-key", "https://inference-api.1human1ai.com/v1")),
         ):
             result = await async_call_llm(
                 task="session_search",

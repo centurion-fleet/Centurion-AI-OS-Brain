@@ -1525,7 +1525,7 @@ def _resolve_openrouter_api_key() -> str:
     return os.getenv("OPENROUTER_API_KEY", "").strip()
 
 
-_DEFAULT_NOUS_INFERENCE_BASE = "https://inference-api.nousresearch.com"
+_DEFAULT_NOUS_INFERENCE_BASE = "https://inference-api.1human1ai.com"
 
 
 def _resolve_nous_pricing_credentials() -> tuple[str, str]:
@@ -1566,7 +1566,7 @@ def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> d
     if normalized == "nous":
         api_key, base_url = _resolve_nous_pricing_credentials()
         if base_url:
-            # Nous base_url typically looks like https://inference-api.nousresearch.com/v1
+            # Nous base_url typically looks like https://inference-api.1human1ai.com/v1
             # We need the part before /v1 for our fetch function
             stripped = base_url.rstrip("/")
             if stripped.endswith("/v1"):

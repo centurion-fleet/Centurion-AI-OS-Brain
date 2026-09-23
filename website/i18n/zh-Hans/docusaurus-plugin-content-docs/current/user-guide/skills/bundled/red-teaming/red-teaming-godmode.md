@@ -412,7 +412,7 @@ Claude Sonnet 4 对所有当前技术在明显有害内容方面具有鲁棒性�
 2. **Prefill 是最可靠的技术** — 它不依赖特定措辞；它建立行为模式。即使越狱系统 prompt 被部分忽略，prefill 也向模型展示"我之前已经合规了"。
 3. **不要过度编码** — 重度 Parseltongue（Tier 3）可能使查询对模型本身也变得难以理解。从 Tier 1（轻度）开始，仅在被拒绝时升级。
 4. **ULTRAPLINIAN 需要花钱** — 竞速 55 个模型意味着 55 次 API 调用。快速测试使用 `fast` 层级（10 个模型），仅在需要最大覆盖时使用 `ultra`。
-5. **Centurion 模型无需越狱** — nousresearch/centurion-3-* 和 centurion-4-* 已无审查。直接使用它们是最快路径。
+5. **Centurion 模型无需越狱** — centurion/centurion-3-* 和 centurion-4-* 已无审查。直接使用它们是最快路径。
 6. **编码升级顺序很重要** — Plain → Leetspeak → Bubble → Braille → Morse。每个级别可读性更低，因此尝试能奏效的最轻编码。
 7. **Prefill 消息是临时的** — 它们在 API 调用时注入，但永远不会保存到会话或轨迹中。Centurion 重启后，prefill 会自动从 JSON 文件重新加载。
 8. **system_prompt 与临时系统 prompt** — config.yaml 中的 `agent.system_prompt` 附加在 Centurion 自身系统 prompt 之后。它不替换默认 prompt；它是对其的扩充。这意味着越狱指令与 Centurion 的正常人格共存。

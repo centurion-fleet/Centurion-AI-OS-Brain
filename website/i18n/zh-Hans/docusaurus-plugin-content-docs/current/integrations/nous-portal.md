@@ -58,7 +58,7 @@ Portal 代理了来自整个生态系统的精选 agentic 模型目录——统�
 
 ### Nous Chat
 
-你的 Portal 账号同样覆盖 [chat.nousresearch.com](https://chat.nousresearch.com)——Centurion Fleet 的网页对话界面，使用相同的模型目录。适合离开终端时使用，或用于非 agent 的普通对话场景。
+你的 Portal 账号同样覆盖 [chat.1human1ai.com](https://chat.1human1ai.com)——Centurion Fleet 的网页对话界面，使用相同的模型目录。适合离开终端时使用，或用于非 agent 的普通对话场景。
 
 ### 凭证不落入 dotfiles
 
@@ -72,7 +72,7 @@ Portal 代理了来自整个生态系统的精选 agentic 模型目录——统�
 
 Centurion Fleet 自家的 **Centurion 4** 系列（Centurion-4-70B、Centurion-4-405B）通过 Portal 提供，享有大幅折扣。这些是**前沿混合推理对话模型**——在数学、科学、指令遵循、schema 遵从、角色扮演和长文写作方面表现出色。
 
-但**不建议在 Centurion AI OS 内部使用它们**。Centurion 4 针对对话和推理进行了调优，而非 agent 所依赖的高频工具调用循环。请将它们用于 [Nous Chat](https://chat.nousresearch.com)、研究工作流，或通过[订阅代理](/user-guide/features/subscription-proxy)从其他工具调用——但在 agent 场景下，请从目录中选择前沿 agentic 模型：
+但**不建议在 Centurion AI OS 内部使用它们**。Centurion 4 针对对话和推理进行了调优，而非 agent 所依赖的高频工具调用循环。请将它们用于 [Nous Chat](https://chat.1human1ai.com)、研究工作流，或通过[订阅代理](/user-guide/features/subscription-proxy)从其他工具调用——但在 agent 场景下，请从目录中选择前沿 agentic 模型：
 
 ```bash
 /model anthropic/claude-sonnet-4.6     # 最佳通用 agentic 模型
@@ -201,7 +201,7 @@ Tool Gateway 是按工具单独选择启用的，而非全部或全不。完整�
 model:
   provider: nous
   default: anthropic/claude-sonnet-4.6     # 或你选择的其他模型
-  base_url: https://inference.nousresearch.com/v1
+  base_url: https://inference.1human1ai.com/v1
 ```
 
 Tool Gateway 设置位于各自工具的配置节下：

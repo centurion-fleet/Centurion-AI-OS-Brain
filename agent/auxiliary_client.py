@@ -426,7 +426,7 @@ auxiliary_is_nous: bool = False
 # Default auxiliary models per provider
 _OPENROUTER_MODEL = "google/gemini-3-flash-preview"
 _NOUS_MODEL = "google/gemini-3-flash-preview"
-_NOUS_DEFAULT_BASE_URL = "https://inference-api.nousresearch.com/v1"
+_NOUS_DEFAULT_BASE_URL = "https://inference-api.1human1ai.com/v1"
 _ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
 _AUTH_JSON_PATH = get_centurion_home() / "auth.json"
 
@@ -2498,7 +2498,7 @@ def _recoverable_pool_provider(
         return "openai-codex"
     if base_url_host_matches(base, "openrouter.ai"):
         return "openrouter"
-    if base_url_host_matches(base, "inference-api.nousresearch.com"):
+    if base_url_host_matches(base, "inference-api.1human1ai.com"):
         return "nous"
     if base_url_host_matches(base, "api.anthropic.com"):
         return "anthropic"
@@ -4952,7 +4952,7 @@ def call_llm(
         # ── Nous auth refresh parity with main agent ──────────────────
         client_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_base_info, "inference-api.nousresearch.com")
+            or base_url_host_matches(_base_info, "inference-api.1human1ai.com")
         )
         if _is_auth_error(first_err) and client_is_nous:
             refreshed_client, refreshed_model = _refresh_nous_auxiliary_client(
@@ -5354,7 +5354,7 @@ async def async_call_llm(
         # ── Nous auth refresh parity with main agent ──────────────────
         client_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_client_base, "inference-api.nousresearch.com")
+            or base_url_host_matches(_client_base, "inference-api.1human1ai.com")
         )
         if _is_auth_error(first_err) and client_is_nous:
             refreshed_client, refreshed_model = _refresh_nous_auxiliary_client(

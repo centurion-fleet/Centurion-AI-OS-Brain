@@ -157,7 +157,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://discord.gg/NousResearch',
+          href: 'https://discord.gg/centurion-fleet',
           label: 'Discord',
           position: 'right',
         },
@@ -178,7 +178,7 @@ const config: Config = {
         {
           title: 'Community',
           items: [
-            { label: 'Discord', href: 'https://discord.gg/NousResearch' },
+            { label: 'Discord', href: 'https://discord.gg/centurion-fleet' },
             { label: 'GitHub Discussions', href: 'https://github.com/centurion-fleet/Centurion-AI-OS/discussions' },
             { label: 'Skills Hub', href: 'https://agentskills.io' },
           ],
@@ -187,11 +187,11 @@ const config: Config = {
           title: 'More',
           items: [
             { label: 'GitHub', href: 'https://github.com/centurion-fleet/Centurion-AI-OS' },
-            { label: 'Centurion Fleet', href: 'https://nousresearch.com' },
+            { label: 'Centurion Fleet', href: 'https://1human1ai.com' },
           ],
         },
       ],
-      copyright: `Built by <a href="https://nousresearch.com">Centurion Fleet</a> · MIT License · ${new Date().getFullYear()}`,
+      copyright: `Built by <a href="https://1human1ai.com">Centurion Fleet</a> · MIT License · ${new Date().getFullYear()}`,
     },
     prism: {
       theme: prismThemes.github,

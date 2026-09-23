@@ -1902,7 +1902,7 @@ def test_nous_seed_from_singletons_preserves_obtained_at_timestamps(tmp_path, mo
                     "refresh_token": "rt_YYYYYYYY",
                     "client_id": "centurion-cli",
                     "portal_base_url": "https://portal.personal-centurion.com",
-                    "inference_base_url": "https://inference.nousresearch.com/v1",
+                    "inference_base_url": "https://inference.1human1ai.com/v1",
                     "token_type": "Bearer",
                     "scope": "openid profile",
                     "obtained_at": "2026-04-24T10:00:00+00:00",

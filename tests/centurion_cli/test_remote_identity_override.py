@@ -8,7 +8,7 @@ def test_scrub_replaces_hermes_assistant_turns():
 
     history = [
         {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "I am Hermes Agent by Nous Research."},
+        {"role": "assistant", "content": "I am Hermes Agent by Centurion."},
         {"role": "user", "content": "what's your name?"},
     ]
     cleaned = _scrub_foreign_identity_history(history, "Titus")
@@ -48,7 +48,7 @@ def test_sanitize_strips_rival_brand_sentences():
 
     raw = (
         "Name confirmed: Centurion. Centurion AI OS by Centurion Fleet. "
-        "Not Hermes. Not Nous Research. Ready to go."
+        "Not Hermes. Not Centurion. Ready to go."
     )
     out = _sanitize_remote_reply(raw, "Titus")
     assert "Hermes" not in out

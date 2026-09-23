@@ -120,7 +120,7 @@ centurion config set model.default anthropic/claude-sonnet-4.6
 
 ### Don't pick Centurion-4 for agent work
 
-Centurion-4-70B and Centurion-4-405B are available on the Portal at deep discounts, but they're **chat/reasoning models**, not tool-call-tuned. They will struggle with multi-step agent loops. Use them via [Nous Chat](https://chat.nousresearch.com) for conversation/research work, or through the [subscription proxy](/user-guide/features/subscription-proxy) from non-agent tools. For Centurion AI OS itself, stick to the frontier agentic models above.
+Centurion-4-70B and Centurion-4-405B are available on the Portal at deep discounts, but they're **chat/reasoning models**, not tool-call-tuned. They will struggle with multi-step agent loops. Use them via [Nous Chat](https://chat.1human1ai.com) for conversation/research work, or through the [subscription proxy](/user-guide/features/subscription-proxy) from non-agent tools. For Centurion AI OS itself, stick to the frontier agentic models above.
 
 The Portal's own [info page](https://portal.personal-centurion.com/info) carries this warning too — it's the official Nous guidance, not just a Centurion-side opinion.
 

@@ -723,7 +723,7 @@ def try_recover_primary_transport(
     if agent._is_openrouter_url():
         return False
     provider_lower = (agent.provider or "").strip().lower()
-    if provider_lower in {"nous", "nous-research"}:
+    if provider_lower in {"nous", "centurion"}:
         return False
 
     try:
@@ -1170,7 +1170,7 @@ def anthropic_prompt_cache_policy(
     # Centurion Portal proxies to OpenRouter behind the scenes — identical
     # OpenAI-wire envelope cache_control semantics. Treat it as an
     # OpenRouter-equivalent endpoint for caching layout purposes.
-    is_nous_portal = "nousresearch" in eff_base_url.lower()
+    is_nous_portal = "centurion" in eff_base_url.lower()
     is_anthropic_wire = eff_api_mode == "anthropic_messages"
     is_native_anthropic = (
         is_anthropic_wire

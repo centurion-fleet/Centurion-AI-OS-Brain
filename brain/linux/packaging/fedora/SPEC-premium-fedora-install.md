@@ -30,7 +30,7 @@ Non-technical customers must never touch a terminal. This is the ranked-#1 path 
 | Cargo.toml version | `5.2.115` | Spec hardcodes `0.14.0` — overridden by build-rpm.sh `--define`, but spec should be corrected |
 
 **Bugs in the current spec (must fix):**
-1. `URL: https://github.com/NousResearch/Centurion-AI-OS` — **wrong org**. Canonical repo is `https://github.com/centurion-fleet/Centurion-AI-OS` (that's what `install.sh` clones). NousResearch is a stale fork reference.
+1. `URL: https://github.com/centurion-fleet/Centurion-AI-OS` — **wrong org**. Canonical repo is `https://github.com/centurion-fleet/Centurion-AI-OS` (that's what `install.sh` clones). centurion-fleet is a stale fork reference.
 2. `Version: 0.14.0` hardcoded — should be `%{?version}`-driven or synced to Cargo.toml (build-rpm.sh already passes `--define version`).
 3. `%post` only does `%firewalld_reload` — missing: icon theme cache rebuild, desktop database update, user-unit enablement strategy, venv/CLI install.
 4. No GPG signing anywhere in the pipeline.

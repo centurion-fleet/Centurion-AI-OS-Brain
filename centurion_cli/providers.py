@@ -47,7 +47,7 @@ CENTURION_OVERLAYS: Dict[str, CenturionOverlay] = {
     "nous": CenturionOverlay(
         transport="openai_chat",
         auth_type="oauth_device_code",
-        base_url_override="https://inference-api.nousresearch.com/v1",
+        base_url_override="https://inference-api.1human1ai.com/v1",
     ),
     "openai-codex": CenturionOverlay(
         transport="codex_responses",

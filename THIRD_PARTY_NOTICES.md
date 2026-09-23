@@ -22,7 +22,7 @@ permission notice are reproduced in full below.
 ```
 MIT License
 
-Copyright (c) 2025 Nous Research
+Copyright (c) 2025 Centurion
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
