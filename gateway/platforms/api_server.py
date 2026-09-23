@@ -1001,8 +1001,71 @@ class APIServerAdapter(BasePlatformAdapter):
 
     # ── Fleet Message Handlers ────────────────────────────────────────
 
+    def _fleet_authorize(self, request: "web.Request"):
+        """
+        Verify an inbound fleet request.
+
+        The transport has always SENT `X-Centurion-Auth`; nothing ever checked
+        it, so any internet host could post messages into this Brain and read
+        its peer list. Restored 23 Sep 2026 before exposing the fleet publicly.
+
+        Posture:
+          • loopback (127.0.0.1 / ::1) is trusted — local tooling, tests, CLI
+          • remote callers must present a token that matches EITHER the shared
+            fleet token, OR the stored token of a registered peer.
+
+        The shared token is what makes pairing sane for non-technical users:
+        both machines are given the same passphrase, and they can then talk
+        without each having to pre-register the other first.
+
+        Returns (ok: bool, reason: str).
+        """
+        peername = request.transport.get_extra_info("peername") if request.transport else None
+        if peername and peername[0] in ("127.0.0.1", "::1", "localhost"):
+            return True, "loopback"
+
+        presented = request.headers.get("X-Centurion-Auth", "") or ""
+        claimed_id = request.headers.get("X-Centurion-ID", "") or ""
+
+        valid = set()
+        shared = os.getenv("CENTURION_FLEET_TOKEN", "") or self._fleet_shared_token()
+        if shared:
+            valid.add(shared)
+        try:
+            from centurion.fleet.peers import FleetPeers
+            for p in FleetPeers().list_all():
+                if p.auth_token:
+                    valid.add(p.auth_token)
+        except Exception as e:
+            logger.warning(f"Fleet auth: could not read peers: {e}")
+
+        if not valid:
+            return False, "no fleet token configured on this Brain"
+
+        if not presented:
+            return False, "missing X-Centurion-Auth"
+
+        for token in valid:
+            if hmac.compare_digest(presented, token):
+                return True, f"authenticated ({claimed_id or 'unnamed'})"
+
+        return False, "auth token not recognised"
+
+    def _fleet_shared_token(self) -> str:
+        """Shared fleet passphrase from config, if the operator set one."""
+        try:
+            cfg = getattr(self, "config", None)
+            extra = getattr(cfg, "extra", None) or {}
+            return str(extra.get("fleet_token", "") or "")
+        except Exception:
+            return ""
+
     async def _handle_fleet_message(self, request: "web.Request") -> "web.Response":
         """POST /fleet/message — receive message from another Centurion."""
+        ok, why = self._fleet_authorize(request)
+        if not ok:
+            logger.warning(f"Fleet message REJECTED from {request.remote}: {why}")
+            return web.json_response({"status": "unauthorized", "detail": why}, status=401)
         try:
             payload = await request.json()
             sender_id = payload.get("sender_id", "")
@@ -1025,6 +1088,11 @@ class APIServerAdapter(BasePlatformAdapter):
 
     async def _handle_fleet_status(self, request: "web.Request") -> "web.Response":
         """GET /fleet/status — list fleet peers and their connection status."""
+        ok, why = self._fleet_authorize(request)
+        if not ok:
+            # The peer list maps a customer's network. Never serve it to a stranger.
+            logger.warning(f"Fleet status REJECTED from {request.remote}: {why}")
+            return web.json_response({"status": "unauthorized", "detail": why}, status=401)
         from centurion.fleet.peers import FleetPeers
         peers = FleetPeers()
         peer_list = []
@@ -1045,6 +1113,10 @@ class APIServerAdapter(BasePlatformAdapter):
 
     async def _handle_fleet_checkin(self, request: "web.Request") -> "web.Response":
         """POST /fleet/checkin — receive health check-in from another Centurion."""
+        ok, why = self._fleet_authorize(request)
+        if not ok:
+            logger.warning(f"Fleet check-in REJECTED from {request.remote}: {why}")
+            return web.json_response({"status": "unauthorized", "detail": why}, status=401)
         try:
             payload = await request.json()
             centurion_id = payload.get("centurion_id", "")
@@ -3576,6 +3648,14 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/runs/{run_id}/events", self._handle_run_events)
             self._app.router.add_post("/v1/runs/{run_id}/approval", self._handle_run_approval)
             self._app.router.add_post("/v1/runs/{run_id}/stop", self._handle_stop_run)
+
+            # ── Fleet (brain-to-brain) routes ────────────────────────────
+            # These three handlers existed but were NEVER registered, so every
+            # fleet request 404'd and no two Brains could ever talk. Wire them.
+            self._app.router.add_post("/fleet/message", self._handle_fleet_message)
+            self._app.router.add_get("/fleet/status", self._handle_fleet_status)
+            self._app.router.add_post("/fleet/checkin", self._handle_fleet_checkin)
+
             # Start background sweep to clean up orphaned (unconsumed) run streams
             sweep_task = asyncio.create_task(self._sweep_orphaned_runs())
             try:

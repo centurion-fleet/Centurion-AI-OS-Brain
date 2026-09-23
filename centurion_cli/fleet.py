@@ -218,6 +218,217 @@ def _add_fleet_subcommands(
     p_dep.add_argument("--install-path", help="Custom install path")
     p_dep.set_defaults(func=fleet_deploy)
 
+    _add_fleet_peer_subcommands(sub)
+
+
+# ── Fleet peer pairing (brain-to-brain) ──────────────────────────────
+#
+# Added 23 Sep 2026, for Adrian's Australian customers.
+#
+# Before this there was NO CLI at all for registering a peer address — the
+# only route was hand-writing ~/.centurion/fleet/peers.json, which is not
+# something a customer can be asked to do. Combined with the API server's
+# fleet routes never being registered, and those routes never checking
+# auth, brain-to-brain was triply unfinished. This is the last piece: two
+# Brains become connectable with one command, and the command *proves* the
+# link rather than assuming it.
+#
+# Deliberately fail-visible: `connect` does not print success unless it has
+# actually reached the other Brain and been accepted by it.
+
+
+def _peer_http(url: str, token: str, payload: dict | None = None, timeout: float = 12.0):
+    """Call a peer's fleet endpoint. Returns (ok, status, body_dict_or_text)."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    data = _json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "X-Centurion-Auth": token or "",
+            "X-Centurion-ID": os.environ.get("CENTURION_ID", "this-brain"),
+        },
+        method="POST" if data is not None else "GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode("utf-8", errors="replace")
+            try:
+                return True, r.status, _json.loads(raw)
+            except Exception:
+                return True, r.status, raw
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        try:
+            return False, e.code, _json.loads(body)
+        except Exception:
+            return False, e.code, body
+    except Exception as e:
+        return False, 0, f"{type(e).__name__}: {e}"
+
+
+def fleet_peer_list(args: argparse.Namespace) -> None:
+    from centurion.fleet.peers import FleetPeers
+
+    peers = FleetPeers().list_all()
+    if not peers:
+        print("No fleet peers registered.")
+        print()
+        print("Connect one with:")
+        print("  centurion fleet peer connect <http://their-address:port> --token <shared-secret>")
+        return
+    print(f"{'ID':<22} {'NAME':<20} {'STATUS':<10} ADDRESS")
+    for p in peers:
+        print(f"{p.centurion_id:<22} {(p.name or '-'):<20} {(p.status or 'unknown'):<10} {p.address}")
+
+
+def fleet_peer_add(args: argparse.Namespace) -> None:
+    from centurion.fleet.peers import FleetPeer, FleetPeers
+
+    address = args.address.rstrip("/")
+    peers = FleetPeers()
+    peers.register(
+        FleetPeer(
+            centurion_id=args.centurion_id,
+            name=args.name or args.centurion_id,
+            address=address,
+            auth_token=args.token or "",
+            status="unknown",
+        )
+    )
+    print(f"Registered '{args.centurion_id}' at {address}.")
+    print("Run 'centurion fleet peer test %s' to prove the link." % args.centurion_id)
+
+
+def fleet_peer_remove(args: argparse.Namespace) -> None:
+    from centurion.fleet.peers import FleetPeers
+
+    ok = FleetPeers().remove(args.centurion_id)
+    print(f"{'Removed' if ok else 'Not found:'} {args.centurion_id}")
+
+
+def fleet_peer_test(args: argparse.Namespace) -> None:
+    from centurion.fleet.peers import FleetPeers
+
+    peer = FleetPeers().get(args.centurion_id)
+    if not peer:
+        print(f"No such peer: {args.centurion_id}")
+        print("Run 'centurion fleet peer list' to see who is registered.")
+        return
+
+    ok, status, body = _peer_http(f"{peer.address.rstrip('/')}/fleet/status", peer.auth_token)
+    if ok:
+        count = body.get("count") if isinstance(body, dict) else "?"
+        print(f"REACHABLE — {peer.name} answered (HTTP {status}, {count} peer(s) on their side).")
+    elif status == 401:
+        print(f"REFUSED (401) — reached {peer.name}, but our token was not accepted.")
+        print("Check that both machines were given the same shared secret.")
+    else:
+        print(f"UNREACHABLE — {peer.name} did not answer at {peer.address}")
+        print(f"  detail: {body}")
+
+
+def fleet_peer_connect(args: argparse.Namespace) -> None:
+    """Pair with another Brain: prove the link, then remember it."""
+    import json as _json
+    import socket as _sock
+
+    from centurion.fleet.peers import FleetPeer, FleetPeers
+
+    address = args.address.rstrip("/")
+    if not address.startswith("http"):
+        address = f"http://{address}"
+    token = args.token or os.environ.get("CENTURION_FLEET_TOKEN", "")
+
+    print(f"Pairing with {address} …")
+
+    # 1. Can we reach it at all?
+    ok, status, body = _peer_http(f"{address}/fleet/status", token)
+    if not ok:
+        if status == 401:
+            print("  ✗ Reached the machine, but it refused our token.")
+            print("    Both Brains must be given the SAME shared secret (--token).")
+        elif status == 404:
+            print("  ✗ Reached the machine, but it has no fleet endpoint.")
+            print("    That Brain is running an older build — it needs the update first.")
+        elif status == 0:
+            print(f"  ✗ Could not reach it: {body}")
+            print("    Check the address, and that port forwarding is set up on their router.")
+        else:
+            print(f"  ✗ Unexpected reply (HTTP {status}): {body}")
+        return
+
+    # 2. Introduce ourselves so the pairing is mutual and provable.
+    my_id = args.centurion_id or os.environ.get("CENTURION_ID") or _sock.gethostname()
+    my_name = args.name or my_id
+    ok2, status2, body2 = _peer_http(
+        f"{address}/fleet/checkin",
+        token,
+        {"centurion_id": my_id, "name": my_name, "version": args.version or ""},
+    )
+    if not ok2:
+        print(f"  ✗ Their endpoint answered, but rejected our check-in (HTTP {status2}): {body2}")
+        return
+
+    # 3. Only now is it real — record it.
+    peers = FleetPeers()
+    peers.register(
+        FleetPeer(
+            centurion_id=args.peer_id or address,
+            name=args.peer_name or address,
+            address=address,
+            auth_token=token,
+            status="online",
+            last_seen=__import__("time").time(),
+        )
+    )
+    print("  ✓ Link proven — they answered and accepted us.")
+    print(f"  ✓ Saved as peer '{args.peer_id or address}'.")
+    print()
+    print("Next: run 'centurion fleet status' to see the pair.")
+
+
+def _add_fleet_peer_subcommands(sub) -> None:
+    p_peer = sub.add_parser("peer", help="Connect this Brain to another Brain")
+    peer_sub = p_peer.add_subparsers(dest="peer_command")
+
+    p_pl = peer_sub.add_parser("list", help="Show connected Brains")
+    p_pl.set_defaults(func=fleet_peer_list)
+
+    p_pa = peer_sub.add_parser("add", help="Register a Brain by address")
+    p_pa.add_argument("centurion_id")
+    p_pa.add_argument("address", help="e.g. http://192.168.1.20:18789")
+    p_pa.add_argument("--name", default=None)
+    p_pa.add_argument("--token", default=None, help="Shared secret")
+    p_pa.set_defaults(func=fleet_peer_add)
+
+    p_pr = peer_sub.add_parser("remove", help="Forget a Brain")
+    p_pr.add_argument("centurion_id")
+    p_pr.set_defaults(func=fleet_peer_remove)
+
+    p_pt = peer_sub.add_parser("test", help="Check whether a connected Brain answers")
+    p_pt.add_argument("centurion_id")
+    p_pt.set_defaults(func=fleet_peer_test)
+
+    p_pc = peer_sub.add_parser(
+        "connect",
+        help="Pair with another Brain — reach it, prove the link, remember it",
+    )
+    p_pc.add_argument("address", help="Their address, e.g. 203.0.113.9:18789")
+    p_pc.add_argument("--token", default=None, help="The shared secret both Brains use")
+    p_pc.add_argument("--peer-id", dest="peer_id", default=None, help="Name to save them under")
+    p_pc.add_argument("--peer-name", dest="peer_name", default=None)
+    p_pc.add_argument("--centurion-id", dest="centurion_id", default=None, help="Our own ID")
+    p_pc.add_argument("--name", dest="name", default=None, help="Our own display name")
+    p_pc.add_argument("--version", default=None)
+    p_pc.set_defaults(func=fleet_peer_connect)
+
+    p_peer.set_defaults(func=lambda a: p_peer.print_help())
+
 
 def build_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     """Register ``centurion fleet`` on the main CLI argparse tree."""
@@ -234,7 +445,7 @@ def fleet_command(args: argparse.Namespace) -> int:
     """Dispatch ``centurion fleet <subcommand>``."""
     func = getattr(args, "func", None)
     if func is None:
-        print("Usage: centurion fleet <status|list|show|checkin|policies|deploy>")
+        print("Usage: centurion fleet <status|list|show|checkin|policies|deploy|peer>")
         return 1
     func(args)
     return 0
