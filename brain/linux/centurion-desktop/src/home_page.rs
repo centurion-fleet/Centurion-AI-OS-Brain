@@ -14,7 +14,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::chat_page::{run_bridge_action, DiscussTopic};
+use crate::bridge_actions::run_bridge_action;
+use crate::discuss::DiscussTopic;
 
 #[derive(Clone)]
 pub struct HomeHooks {
@@ -1272,7 +1273,7 @@ fn run_async_then<F>(
 }
 
 fn pulse_seen_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home()).join("brain_pulse_seen.json")
+    std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home()).join("brain_pulse_seen.json")
 }
 
 fn load_pulse_seen() -> Value {
@@ -1501,7 +1502,7 @@ pub fn show_mission_edit_dialog(
     if current.is_empty() {
         let entry_fill = entry.clone();
         let dialog_fill = dialog.clone();
-        crate::chat_page::run_bridge_action_async(
+        crate::bridge_actions::run_bridge_action_async(
             "mission_get",
             serde_json::json!({}),
             move |payload| {
@@ -1550,7 +1551,7 @@ fn find_app_window(widget: &impl IsA<gtk::Widget>) -> Option<adw::ApplicationWin
 }
 
 fn load_decision_first_pref() -> bool {
-    let path = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+    let path = std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
         .join("brain_decision_first");
     std::fs::read_to_string(path)
         .map(|s| s.trim() == "1" || s.trim().eq_ignore_ascii_case("true"))
@@ -2185,7 +2186,7 @@ pub fn show_form_swarm_dialog(parent: &impl IsA<gtk::Widget>, refresh: Rc<dyn Fn
             btn.set_sensitive(false);
             let hint_lbl = hint_lbl.clone();
             let btn = btn.clone();
-            crate::chat_page::run_bridge_action_async(
+            crate::bridge_actions::run_bridge_action_async(
                 "gateway_start",
                 serde_json::json!({}),
                 move |payload| {

@@ -34,7 +34,8 @@ mod bridge_client;
     clippy::needless_pass_by_value,
     clippy::too_many_lines
 )]
-mod chat_page;
+mod bridge_actions;
+mod discuss;
 #[cfg(target_os = "linux")]
 #[allow(
     dead_code,
@@ -346,7 +347,7 @@ mod linux {
                 .stderr(Stdio::inherit())
                 .env(
                     "CENTURION_HOME",
-                    crate::chat_page::resolve_centurion_home(),
+                    crate::bridge_actions::resolve_centurion_home(),
                 )
                 .spawn()
                 .map_err(|error| {
@@ -696,7 +697,7 @@ mod linux {
     /// Full-screen QR pairing page: scan-first UX with auto-rotated tokens.
     /// Minting stays on the GTK main thread (no idle_add / Send wrappers).
     fn brain_welcome_marker_path() -> std::path::PathBuf {
-        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("brain_welcome_seen")
     }
 
@@ -713,12 +714,12 @@ mod linux {
     }
 
     fn smooth_transfer_pending_path() -> std::path::PathBuf {
-        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("smooth_transfer_pending")
     }
 
     fn smooth_transfer_seen_path() -> std::path::PathBuf {
-        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("smooth_transfer_seen")
     }
 
@@ -744,7 +745,7 @@ mod linux {
     /// rebuild from — updates arrive via the portal — so the in-app
     /// Check/Rebuild controls are hidden.
     fn is_smooth_transfer_install() -> bool {
-        let stamp = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        let stamp = std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("desktop-build.json");
         let Ok(text) = std::fs::read_to_string(&stamp) else {
             return false;
@@ -758,7 +759,7 @@ mod linux {
     /// from a 5.2.115 source tree), falling back to the baked binary version
     /// for dev builds with no stamp.
     fn installed_version() -> String {
-        let stamp = std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        let stamp = std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("desktop-build.json");
         if let Ok(text) = std::fs::read_to_string(&stamp) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
@@ -1826,8 +1827,6 @@ The Brain here is the product; the phone is the remote.",
         bind_you_link(&help_link, &you_nav, "help");
         let settings_scroll = you_nav;
 
-        let (chat, chat_handle) = build_chat_page();
-
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
             .transition_duration(80)
@@ -1835,30 +1834,17 @@ The Brain here is the product; the phone is the remote.",
             .hexpand(true)
             .build();
 
-        chat_handle.set_on_open_focus(Rc::new({
-            let stack = stack.clone();
-            move || {
-                stack.set_visible_child_name("missions");
-            }
-        }));
-
         let attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
             Rc::new(RefCell::new(Rc::new(|_: u32| {})));
         let collab_attention_sink: Rc<RefCell<Rc<dyn Fn(u32)>>> =
             Rc::new(RefCell::new(Rc::new(|_: u32| {})));
         let (home, home_handle) = {
-            let stack = stack.clone();
-            let chat_handle = chat_handle.clone();
             let attention_sink_for_hooks = attention_sink.clone();
             // Mission Deck (React / WebKit) replaces the legacy GTK Missions surface.
             crate::mission_deck_page::build(crate::home_page::HomeHooks {
-                on_ask_about: Rc::new(
-                    move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
-                        // Switch first so Discuss never waits on Chat session I/O.
-                        stack.set_visible_child_name("chat");
-                        chat_handle.seed_discuss_topic(topic, &kickoff);
-                    },
-                ),
+                // Chat was removed from the Brain in v6.0.0. The deck still emits
+                // its "discuss" affordance; it is intentionally inert for now.
+                on_ask_about: Rc::new(|_topic: crate::discuss::DiscussTopic, _kickoff: String| {}),
                 on_attention_changed: Rc::new(move |n: u32| {
                     (attention_sink_for_hooks.borrow())(n);
                 }),
@@ -1866,28 +1852,19 @@ The Brain here is the product; the phone is the remote.",
         };
 
         let (collab, collab_handle) = {
-            let stack = stack.clone();
-            let chat_handle = chat_handle.clone();
             let collab_attention_sink = collab_attention_sink.clone();
             crate::mission_deck_page::build_collab(crate::home_page::HomeHooks {
-                on_ask_about: Rc::new(
-                    move |topic: crate::chat_page::DiscussTopic, kickoff: String| {
-                        stack.set_visible_child_name("chat");
-                        chat_handle.seed_discuss_topic(topic, &kickoff);
-                    },
-                ),
+                on_ask_about: Rc::new(|_topic: crate::discuss::DiscussTopic, _kickoff: String| {}),
                 on_attention_changed: Rc::new(move |n: u32| {
                     (collab_attention_sink.borrow())(n);
                 }),
             })
         };
 
-        stack.add_titled(&chat, Some("chat"), "Chat");
         stack.add_titled(&home, Some("missions"), "Focus");
         stack.add_titled(&collab, Some("collab"), "Collab");
         stack.add_titled(&settings_scroll, Some("settings"), "You");
-        stack.set_visible_child_name("chat");
-        chat.set_vexpand(true);
+        stack.set_visible_child_name("missions");
         home.set_vexpand(true);
         collab.set_vexpand(true);
         settings_scroll.set_vexpand(true);
@@ -1896,7 +1873,6 @@ The Brain here is the product; the phone is the remote.",
         let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
             &stack,
             &[
-                ("chat", "Chat"),
                 ("missions", "Focus"),
                 ("collab", "Collab"),
                 ("settings", "You"),
@@ -2004,28 +1980,14 @@ The Brain here is the product; the phone is the remote.",
                 });
             }) as Rc<dyn Fn()>
         };
-        let refresh_chat_badge = {
-            let tab_badges_ui = tab_badges_ui.clone();
-            let chat_handle = chat_handle.clone();
-            Rc::new(move || {
-                let n = chat_handle.attention_count();
-                if n > 0 {
-                    tab_badges_ui.set_badge("chat", Some("!"));
-                } else {
-                    tab_badges_ui.set_badge("chat", None);
-                }
-            }) as Rc<dyn Fn()>
-        };
         let refresh_stack_badges = {
             let refresh_home_badge = refresh_home_badge.clone();
             let refresh_collab_badge = refresh_collab_badge.clone();
             let refresh_settings_badge = refresh_settings_badge.clone();
-            let refresh_chat_badge = refresh_chat_badge.clone();
             Rc::new(move || {
                 refresh_home_badge();
                 refresh_collab_badge();
                 refresh_settings_badge();
-                refresh_chat_badge();
             }) as Rc<dyn Fn()>
         };
         *attention_sink.borrow_mut() = {
@@ -2040,12 +2002,6 @@ The Brain here is the product; the phone is the remote.",
                 refresh_collab_badge();
             })
         };
-        chat_handle.set_on_attention_changed({
-            let refresh_chat_badge = refresh_chat_badge.clone();
-            Rc::new(move |_n: u32| {
-                refresh_chat_badge();
-            })
-        });
         refresh_stack_badges();
 
         // Update check is deferred off critical path — only hourly after first
@@ -2101,7 +2057,6 @@ The Brain here is the product; the phone is the remote.",
         let tab_devices_fp = devices_fp.clone();
         let tab_home_badge = refresh_home_badge.clone();
         let tab_collab_badge = refresh_collab_badge.clone();
-        let tab_chat_badge = refresh_chat_badge.clone();
         let tab_home_handle = home_handle.clone();
         let tab_collab_handle = collab_handle.clone();
         let tab_settings_rows = settings_rows.clone();
@@ -2123,7 +2078,6 @@ The Brain here is the product; the phone is the remote.",
             }
             tab_home_badge();
             tab_collab_badge();
-            tab_chat_badge();
         });
         home_handle.notify_tab_visible(false);
         collab_handle.notify_tab_visible(false);
@@ -2228,7 +2182,7 @@ The Brain here is the product; the phone is the remote.",
                 let button = button.clone();
                 let thinking_settings_row = thinking_settings_row.clone();
                 let thinking_detail = thinking_detail.clone();
-                crate::chat_page::run_bridge_async(
+                crate::bridge_actions::run_bridge_async(
                     || {
                         let response = run_provider_command(&["restore"]);
                         let status = run_provider_command(&["status", "--skip-probe"]);
@@ -2395,20 +2349,8 @@ The Brain here is the product; the phone is the remote.",
         });
         skills_button.connect_clicked({
             let window = window.clone();
-            let stack = stack.clone();
-            let chat_handle = chat_handle.clone();
             move |_| {
-                show_skills_tools_dialog(
-                    &window,
-                    Rc::new({
-                        let stack = stack.clone();
-                        let chat_handle = chat_handle.clone();
-                        move |title: String, detail: String| {
-                            stack.set_visible_child_name("chat");
-                            chat_handle.seed_discuss(&title, &detail);
-                        }
-                    }),
-                )
+                show_skills_tools_dialog(&window, Rc::new(|_t: String, _d: String| {}))
             }
         });
         license_button.connect_clicked({
@@ -2509,24 +2451,8 @@ The Brain here is the product; the phone is the remote.",
         memory_horizon_button.connect_clicked({
             let window = window.clone();
             let memory_horizon_row = memory_horizon_row.clone();
-            let stack = stack.clone();
-            let chat_handle = chat_handle.clone();
             move |_| {
-                show_memory_horizon_dialog(
-                    &window,
-                    &memory_horizon_row,
-                    Rc::new({
-                        let stack = stack.clone();
-                        let chat_handle = chat_handle.clone();
-                        move |title: String, detail: String| {
-                            stack.set_visible_child_name("chat");
-                            chat_handle.seed_discuss_topic(
-                                crate::chat_page::DiscussTopic::horizon(&title, &detail),
-                                &detail,
-                            );
-                        }
-                    }),
-                )
+                show_memory_horizon_dialog(&window, &memory_horizon_row, Rc::new(|_t: String, _d: String| {}))
             }
         });
         oversight_button.connect_clicked({
@@ -2620,23 +2546,7 @@ The Brain here is the product; the phone is the remote.",
             }
         });
 
-        chat_handle.set_on_fix_thinking(Rc::new({
-            let window = window.clone();
-            let thinking_settings_row = thinking_settings_row.clone();
-            let thinking_detail = thinking_detail.clone();
-            move || {
-                show_change_thinking_dialog(&window, &thinking_settings_row, &thinking_detail);
-            }
-        }));
-
         window.present();
-    }
-
-    fn build_chat_page() -> (gtk::Box, crate::chat_page::ChatHandle) {
-        let (page, handle) = crate::chat_page::build();
-        page.set_vexpand(true);
-        page.set_hexpand(true);
-        (page, handle)
     }
 
     /// Explicit size controls — some Linux DEs only show Close on client-side
@@ -3135,12 +3045,12 @@ The Brain here is the product; the phone is the remote.",
     }
 
     fn centurion_binary() -> String {
-        crate::chat_page::resolve_centurion_cli()
+        crate::bridge_actions::resolve_centurion_cli()
     }
 
     fn prepare_centurion_cli() -> Command {
         let mut command = Command::new(centurion_binary());
-        command.env("CENTURION_HOME", crate::chat_page::resolve_centurion_home());
+        command.env("CENTURION_HOME", crate::bridge_actions::resolve_centurion_home());
         if let Ok(repo) = std::env::var("CENTURION_AI_REPO") {
             let trimmed = repo.trim();
             if !trimmed.is_empty() {
@@ -3325,7 +3235,7 @@ The Brain here is the product; the phone is the remote.",
     /// Prefer a richer blob for support: real rustc errors first, then log tail.
     fn enrich_update_error_for_support(raw: &str) -> String {
         let mut body = truncate_update_error(raw);
-        let log_path = PathBuf::from(crate::chat_page::resolve_centurion_home())
+        let log_path = PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("logs")
             .join("desktop-build.log");
         if let Ok(contents) = std::fs::read_to_string(&log_path) {
@@ -3435,7 +3345,7 @@ The Brain here is the product; the phone is the remote.",
                 script.display()
             ));
         }
-        let home = crate::chat_page::resolve_centurion_home();
+        let home = crate::bridge_actions::resolve_centurion_home();
         let script_arg = script.to_string_lossy().replace('\'', "'\\''");
         let repo_arg = repo_root.to_string_lossy().replace('\'', "'\\''");
         let home_arg = home.replace('\'', "'\\''");
@@ -3883,7 +3793,7 @@ The Brain here is the product; the phone is the remote.",
     }
 
     fn bridge_python() -> String {
-        crate::chat_page::resolve_bridge_python()
+        crate::bridge_actions::resolve_bridge_python()
     }
 
     
@@ -3942,7 +3852,7 @@ The Brain here is the product; the phone is the remote.",
     }
 
 fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
-        crate::chat_page::run_bridge_action(action, extra)
+        crate::bridge_actions::run_bridge_action(action, extra)
     }
 
     fn autonomy_label(level: &str) -> &'static str {
@@ -4675,7 +4585,7 @@ Being · Continuity\n\
         let autonomy_row = autonomy_row.clone();
         let oversight_row = oversight_row.clone();
         // Skeleton dialog appears after worker returns current level — never block UI.
-        crate::chat_page::run_bridge_action_async(
+        crate::bridge_actions::run_bridge_action_async(
             "oversight_get",
             serde_json::json!({}),
             move |payload| {
@@ -4718,9 +4628,9 @@ Being · Continuity\n\
                         let level = response.to_owned();
                         let autonomy_row = autonomy_row.clone();
                         let oversight_row = oversight_row.clone();
-                        crate::chat_page::run_bridge_async(
+                        crate::bridge_actions::run_bridge_async(
                             move || {
-                                crate::chat_page::run_bridge_action(
+                                crate::bridge_actions::run_bridge_action(
                                     "oversight_put",
                                     serde_json::json!({
                                         "oversight": { "autonomy_level": level },
@@ -4963,9 +4873,6 @@ Being · Continuity\n\
                     }),
                 ) {
                     Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        // Prior chat turns may have claimed Hermes — clear the
-                        // Brain session so the next message loads the new Soul cleanly.
-                        crate::chat_page::clear_desktop_chat_session();
                         refresh_soul_row(&soul_row);
                     }
                     Some(payload) => {
@@ -5337,7 +5244,7 @@ Being · Continuity\n\
     }
 
     fn decision_first_pref_path() -> std::path::PathBuf {
-        std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+        std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
             .join("brain_decision_first")
     }
 
@@ -5840,7 +5747,7 @@ Being · Continuity\n\
                     let status_row = status_row.clone();
                     let parent_w = parent_w.clone();
                     let sw = sw.clone();
-                    crate::chat_page::run_bridge_action_async(
+                    crate::bridge_actions::run_bridge_action_async(
                         "gateway_platform_set",
                         serde_json::json!({
                             "platform": platform_name,
@@ -5924,7 +5831,7 @@ The token stays in ~/.centurion/.env on this machine only.",
             let parent = parent.clone();
             let gateway_row = gateway_row.clone();
             let platform_list = platform_list.clone();
-            crate::chat_page::run_bridge_action_async(
+            crate::bridge_actions::run_bridge_action_async(
                 "telegram_configure",
                 serde_json::json!({
                     "token": token,
@@ -6190,7 +6097,7 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
                 pairing_started.set(true);
                 let qr_status = qr_status.clone();
                 let regenerate_btn = regenerate_btn.clone();
-                crate::chat_page::run_bridge_action_async(
+                crate::bridge_actions::run_bridge_action_async(
                     "whatsapp_pair_start",
                     serde_json::json!({ "clear_session": clear }),
                     move |payload: Option<serde_json::Value>| {
@@ -6248,7 +6155,7 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
         let poll_in_flight_c = poll_in_flight.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(1200), move || {
             if !win_c.is_visible() {
-                crate::chat_page::run_bridge_action_async(
+                crate::bridge_actions::run_bridge_action_async(
                     "whatsapp_pair_cancel",
                     serde_json::json!({}),
                     |_| {},
@@ -6278,7 +6185,7 @@ waits until Connected ✓ appears, then registers WhatsApp as a home channel.",
             let poll_active_c = poll_active_c.clone();
             let tick_c = tick_c.clone();
             let poll_in_flight_c = poll_in_flight_c.clone();
-            crate::chat_page::run_bridge_action_async(
+            crate::bridge_actions::run_bridge_action_async(
                 "whatsapp_pair_status",
                 serde_json::json!({}),
                 move |payload: Option<serde_json::Value>| {
@@ -6330,7 +6237,7 @@ Messages to this account now route into your Centurion conversation."
                         status_c.set_label("Starting messaging gateway…");
                         refresh_gateway_ui_async(&parent_c, &gateway_row_c, &platform_list_c);
                         let status_c2 = status_c.clone();
-                        crate::chat_page::run_bridge_action_async(
+                        crate::bridge_actions::run_bridge_action_async(
                             "gateway_start",
                             serde_json::json!({}),
                             move |_| {
@@ -6365,7 +6272,7 @@ Messages to this account now route into your Centurion conversation."
                         status_c.set_label(
                             "Pairing timed out. Tap Regenerate QR to try again, or Close and return later.",
                         );
-                        crate::chat_page::run_bridge_action_async(
+                        crate::bridge_actions::run_bridge_action_async(
                             "whatsapp_pair_cancel",
                             serde_json::json!({}),
                             |_| {},
@@ -6381,7 +6288,7 @@ Messages to this account now route into your Centurion conversation."
             let parent = parent.clone();
             let linked_display = linked_display.clone();
             move |_| {
-                crate::chat_page::run_bridge_action_async(
+                crate::bridge_actions::run_bridge_action_async(
                     "gateway_start",
                     serde_json::json!({}),
                     |_| {},
@@ -6417,7 +6324,7 @@ Messages to this account now route into your Centurion conversation."
             let stack = stack.clone();
             move |_| {
                 if stack.visible_child_name().as_deref() != Some("done") {
-                    crate::chat_page::run_bridge_action_async(
+                    crate::bridge_actions::run_bridge_action_async(
                         "whatsapp_pair_cancel",
                         serde_json::json!({}),
                         |_| {},
@@ -6430,7 +6337,7 @@ Messages to this account now route into your Centurion conversation."
             let stack = stack.clone();
             move |_| {
                 if stack.visible_child_name().as_deref() != Some("done") {
-                    crate::chat_page::run_bridge_action_async(
+                    crate::bridge_actions::run_bridge_action_async(
                         "whatsapp_pair_cancel",
                         serde_json::json!({}),
                         |_| {},
@@ -7222,7 +7129,7 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
 
         let parent = parent.clone();
         let row = row.clone();
-        crate::chat_page::run_bridge_async(
+        crate::bridge_actions::run_bridge_async(
             || run_provider_command(&["catalog"]),
             move |connectors_raw| {
                 if cancelled.get() {
@@ -7419,7 +7326,7 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 row.set_subtitle("Clearing backup thinking service…");
                 let row = row.clone();
                 let reopen_with_error = reopen_with_error.clone();
-                crate::chat_page::run_bridge_async(
+                crate::bridge_actions::run_bridge_async(
                     move || match run_provider_command(&[
                         "remove-backup",
                         "--slot",
@@ -7461,7 +7368,7 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
             dialog.close();
             row.set_subtitle("Setting backup thinking service…");
             let row = row.clone();
-            crate::chat_page::run_bridge_async(
+            crate::bridge_actions::run_bridge_async(
                 move || {
                     if !access_code.is_empty() {
                         match run_provider_save_key(&connector_id, &access_code) {
@@ -7654,7 +7561,7 @@ The key stays in ~/.centurion/.env on this machine only.",
             let row = row.clone();
             let button = button.clone();
             let parent = parent.clone();
-            crate::chat_page::run_bridge_action_async(
+            crate::bridge_actions::run_bridge_action_async(
                 "tool_env_set",
                 serde_json::json!({
                     "key": "FIRECRAWL_API_KEY",
@@ -7723,7 +7630,7 @@ The key stays in ~/.centurion/.env on this machine only.",
         let parent = parent.clone();
         let settings_row = settings_row.clone();
         let detail = detail.clone();
-        crate::chat_page::run_bridge_async(
+        crate::bridge_actions::run_bridge_async(
             || run_provider_command(&["catalog"]),
             move |connectors_raw| {
                 if cancelled.get() {
@@ -7944,7 +7851,7 @@ The key stays in ~/.centurion/.env on this machine only.",
             settings_row.set_subtitle("Applying thinking service…");
             let settings_row = settings_row.clone();
             let detail = detail.clone();
-            crate::chat_page::run_bridge_async(
+            crate::bridge_actions::run_bridge_async(
                 move || {
                     if !access_code.is_empty() {
                         match run_provider_save_key(&connector_id, &access_code) {

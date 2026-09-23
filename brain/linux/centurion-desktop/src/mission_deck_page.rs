@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::chat_page::DiscussTopic;
+use crate::discuss::DiscussTopic;
 use crate::home_page::{HomeHandle, HomeHooks};
 
 const DECK_HOST: &str = "127.0.0.1";
@@ -51,7 +51,7 @@ fn focus_attention_count() -> u32 {
 }
 
 fn collab_seen_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(crate::chat_page::resolve_centurion_home())
+    std::path::PathBuf::from(crate::bridge_actions::resolve_centurion_home())
         .join("brain_collab_seen.json")
 }
 
@@ -86,7 +86,7 @@ fn parse_iso_unix(raw: &str) -> u64 {
 }
 
 fn count_open_decisions() -> u32 {
-    crate::chat_page::run_bridge_action(
+    crate::bridge_actions::run_bridge_action(
         "life_decisions_list",
         serde_json::json!({ "limit": 200 }),
     )
@@ -107,7 +107,7 @@ fn count_open_decisions() -> u32 {
 }
 
 fn count_pending_plans() -> u32 {
-    crate::chat_page::run_bridge_action(
+    crate::bridge_actions::run_bridge_action(
         "plans_list",
         serde_json::json!({ "status": "pending_review" }),
     )
@@ -132,7 +132,7 @@ fn count_pending_plans() -> u32 {
 /// Collab tab badge: items newer than the last time the user opened Collab.
 fn swarm_attention_count() -> u32 {
     let last_seen = load_collab_seen_unix();
-    crate::chat_page::run_bridge_action("swarm_snapshot", serde_json::json!({}))
+    crate::bridge_actions::run_bridge_action("swarm_snapshot", serde_json::json!({}))
         .as_ref()
         .and_then(|b| b.get("swarms"))
         .and_then(|v| v.as_array())
@@ -392,7 +392,7 @@ impl DeckSupervisor {
             .env("CENTURION_DECK_SSE_MS", "15000")
             .env(
                 "CENTURION_HOME",
-                crate::chat_page::resolve_centurion_home(),
+                crate::bridge_actions::resolve_centurion_home(),
             )
             .env(
                 "CENTURION_BRIDGE_SOCKET",

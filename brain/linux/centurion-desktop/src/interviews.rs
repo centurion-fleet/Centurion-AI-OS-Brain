@@ -10,7 +10,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::chat_page::{clear_desktop_chat_session, run_bridge_action};
+use crate::bridge_actions::run_bridge_action;
 
 struct Question {
     id: &'static str,
@@ -448,14 +448,11 @@ pub fn show_soul_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dyn Fn(
                 .as_ref()
                 .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
                 .unwrap_or(false);
-            if ok {
-                clear_desktop_chat_session();
-            }
             let message = response
                 .as_ref()
                 .and_then(|p| p.get("message").and_then(|v| v.as_str()))
                 .unwrap_or(if ok {
-                    "Soul saved. Next Chat uses this identity."
+                    "Soul saved. Your Sovereign will use this identity."
                 } else {
                     "Could not save Soul."
                 })
@@ -531,7 +528,7 @@ pub fn show_about_you_interview(parent: &adw::ApplicationWindow, on_saved: Rc<dy
 
 /// Privacy & Trust copy aligned with Adrian knowledge pillars (local brain, not cloud chat).
 pub fn show_privacy_trust_dialog(parent: &adw::ApplicationWindow) {
-    let body = "Your Centurion lives on this computer. Chat, Soul, mission, and memory stay here \
+    let body = "Your Centurion lives on this computer. Soul, mission, and memory stay here \
 unless you choose to share something with support.\n\n\
 • Private partnership — you remain the decision-maker; the Sovereign follows your mission and Soul.\n\
 • Not a cloud chatbot — thinking may use an AI service you configure, but your desk Brain owns the relationship.\n\

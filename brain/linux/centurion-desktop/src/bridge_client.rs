@@ -14,7 +14,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::chat_page::{
+use crate::bridge_actions::{
     configure_bridge_command, parse_bridge_stdout, resolve_bridge_python, resolve_centurion_home,
 };
 
