@@ -392,9 +392,175 @@ def fleet_peer_connect(args: argparse.Namespace) -> None:
     print("Next: run 'centurion fleet status' to see the pair.")
 
 
+def _centurion_home() -> str:
+    return os.environ.get("CENTURION_HOME", os.path.expanduser("~/.centurion"))
+
+
+def _api_server_node(cfg, create: bool = False):
+    """
+    Return the live api_server config node.
+
+    ⚠️ The real location is `gateway.platforms.api_server`. A stale top-level
+    `platforms:` key also exists in some configs and contains only whatsapp —
+    writing there silently does nothing while appearing to succeed. Always
+    prefer the gateway node.
+    """
+    gw = cfg.get("gateway")
+    if isinstance(gw, dict):
+        plats = gw.get("platforms")
+        if isinstance(plats, dict):
+            if "api_server" in plats or create:
+                return plats.setdefault("api_server", {}) if create else plats.get("api_server")
+    if create:
+        gw = cfg.setdefault("gateway", {})
+        plats = gw.setdefault("platforms", {})
+        return plats.setdefault("api_server", {})
+    plats = cfg.get("platforms")
+    if isinstance(plats, dict):
+        return plats.get("api_server")
+    return None
+
+
+def fleet_peer_enable(args: argparse.Namespace) -> None:
+    """
+    Make this Brain reachable by other Brains.
+
+    A Brain ships listening on 127.0.0.1 only, so out of the box no other
+    machine can reach it. This turns that on and sets the two secrets the
+    gateway insists on before it will accept network traffic.
+
+    Deliberately prints everything the customer needs to finish the job
+    (what to forward on the router, and the secret to share) because the
+    part we cannot do for them is the router.
+    """
+    import secrets as _secrets
+    import socket as _sock
+
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        print("ruamel.yaml is required to edit config safely. Install it first.")
+        return
+
+    home = _centurion_home()
+    cfg_path = os.path.join(home, "config.yaml")
+    env_path = os.path.join(home, ".env")
+    if not os.path.exists(cfg_path):
+        print(f"No config at {cfg_path} — is this a Centurion Brain?")
+        return
+
+    token = args.token or _secrets.token_hex(16)
+    port = args.port or 18789
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    with open(cfg_path) as fh:
+        cfg = yaml.load(fh)
+
+    api = _api_server_node(cfg, create=True)
+    if api is None:
+        print("✗ Could not locate the api_server config node. Nothing has changed.")
+        return
+    api["enabled"] = True
+    extra = api.setdefault("extra", {})
+    extra["host"] = "0.0.0.0"
+    extra["port"] = port
+    extra["fleet_token"] = token
+
+    with open(cfg_path, "w") as fh:
+        yaml.dump(cfg, fh)
+
+    # Read back and verify, rather than trusting the write.
+    with open(cfg_path) as fh:
+        check = yaml.load(fh)
+    verified = ((_api_server_node(check) or {}).get("extra") or {}).get("host")
+    if verified != "0.0.0.0":
+        print(f"✗ Could not set the listen address (found {verified!r}). Nothing has changed.")
+        print("  Send this to Adrian along with your config.yaml — do not hand-edit it.")
+        return
+
+    # The gateway refuses to bind a network address without a real API key.
+    api_key = ""
+    if os.path.exists(env_path):
+        for line in open(env_path):
+            if line.startswith("API_SERVER_KEY="):
+                api_key = line.split("=", 1)[1].strip()
+    if len(api_key) < 8:
+        api_key = _secrets.token_hex(24)
+        with open(env_path, "a") as fh:
+            fh.write(f"\nAPI_SERVER_KEY={api_key}\n")
+
+    # Best-effort: show them the address to give the other side.
+    try:
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan = s.getsockname()[0]
+        s.close()
+    except Exception:
+        lan = "unknown"
+
+    print("This Brain is now reachable by other Brains.")
+    print()
+    print(f"  Listening on : 0.0.0.0:{port}")
+    print(f"  This machine : {lan}")
+    print()
+    print("  SHARED SECRET — give this to the other person, and nobody else:")
+    print(f"      {token}")
+    print()
+    print("  Two things still to do:")
+    print(f"   1. Restart the Brain so it picks this up.")
+    print(f"   2. On your ROUTER, forward port {port} to this machine ({lan}).")
+    print()
+    print("  Once both sides have done this, pair them with:")
+    print(f"      centurion fleet peer connect <their-public-address>:{port} --token <shared secret>")
+
+
+def fleet_peer_status(args: argparse.Namespace) -> None:
+    """Show whether this Brain is reachable and what its secret situation is."""
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        print("ruamel.yaml is required to read config safely.")
+        return
+
+    cfg_path = os.path.join(_centurion_home(), "config.yaml")
+    if not os.path.exists(cfg_path):
+        print(f"No config at {cfg_path}")
+        return
+    with open(cfg_path) as fh:
+        cfg = YAML().load(fh)
+
+    extra = (_api_server_node(cfg) or {}).get("extra") or {}
+    host = extra.get("host", "127.0.0.1")
+    port = extra.get("port", 18789)
+    token = extra.get("fleet_token") or os.environ.get("CENTURION_FLEET_TOKEN", "")
+
+    if host in ("127.0.0.1", "localhost", None):
+        print("NOT REACHABLE — this Brain only listens on itself.")
+        print("Run:  centurion fleet peer enable")
+    else:
+        print(f"REACHABLE on {host}:{port}")
+        print("Shared secret is set." if token else "No shared secret set — remote Brains will be refused.")
+    print()
+    from centurion.fleet.peers import FleetPeers
+
+    peers = FleetPeers().list_all()
+    print(f"Connected Brains: {len(peers)}")
+    for p in peers:
+        print(f"  {p.centurion_id:<22} {(p.name or '-'):<20} {p.status or 'unknown'}")
+
+
 def _add_fleet_peer_subcommands(sub) -> None:
     p_peer = sub.add_parser("peer", help="Connect this Brain to another Brain")
     peer_sub = p_peer.add_subparsers(dest="peer_command")
+
+    p_ps = peer_sub.add_parser("status", help="Is this Brain reachable, and who is it connected to?")
+    p_ps.set_defaults(func=fleet_peer_status)
+
+    p_pe = peer_sub.add_parser("enable", help="Make this Brain reachable by other Brains")
+    p_pe.add_argument("--token", default=None, help="Shared secret (generated if omitted)")
+    p_pe.add_argument("--port", type=int, default=None, help="Port (default 18789)")
+    p_pe.set_defaults(func=fleet_peer_enable)
 
     p_pl = peer_sub.add_parser("list", help="Show connected Brains")
     p_pl.set_defaults(func=fleet_peer_list)
