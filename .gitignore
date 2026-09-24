@@ -91,3 +91,14 @@ brain/linux/dist/
 
 brain/web-dashboard/node_modules/
 brain/web-dashboard/dist/
+
+# ── Stale desktop build directories — never commit ─────────────────────────
+# desktop/ and desktop-native/ are superseded: the live Rust shell is
+# brain/linux/centurion-desktop/ and the old Tauri app is archived under
+# archive/desktop-tauri/. Both directories held nothing but cargo build output.
+# An accidental `git add -A` swept 4,086 files / ~4GB into history once and
+# blocked the push to GitHub on the 100MB blob limit. Ignored wholesale so it
+# cannot recur. Nothing tracked lives under either path; both are safe to
+# delete from disk.
+desktop/
+desktop-native/
