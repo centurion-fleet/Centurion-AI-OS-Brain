@@ -17,26 +17,33 @@ interface PeerStatus extends BridgeOk {
   port: number;
   address: string;
   has_secret: boolean;
+  /** Returned so the owner can hand it over. Empty when no secret is set. */
+  secret: string;
   peers: PeerRow[];
   peer_count: number;
   message?: string | null;
 }
 
 /**
- * Connect this Brain to another Brain.
+ * Invite another owner onto this Brain — or join one that invited you.
  *
- * Two halves of one job: make *this* Brain reachable, then pair with a peer.
- * The reachable half only binds after a Brain restart, so we say that plainly
+ * Two halves of one job: this Brain has to be reachable before anyone can reach
+ * it, and the listener only binds after a Brain restart, so we say that plainly
  * rather than implying the link is already live.
+ *
+ * The invite is deliberately built from two things the owner can read straight
+ * off this screen — an address and a shared secret. The secret is shown here
+ * because without it an owner who enabled last week has nothing to hand over,
+ * and an invite nobody can act on is not an invite.
  */
 export function CollabBrains() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<PeerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [secret, setSecret] = useState<string | null>(null);
   const [justEnabled, setJustEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const [address, setAddress] = useState("");
   const [token, setToken] = useState("");
@@ -57,6 +64,33 @@ export function CollabBrains() {
     void load();
   }, [open, load]);
 
+  async function copy(text: string, which: string) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // WebKitGTK can refuse the async clipboard API. Fall back to a selection
+      // based copy so the button still does something on the shipped WebView.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        setError("Could not copy automatically — select the text and copy it.");
+        document.body.removeChild(ta);
+        return;
+      }
+      document.body.removeChild(ta);
+    }
+    setCopied(which);
+    window.setTimeout(() => setCopied(null), 2000);
+  }
+
   async function enable() {
     setBusy(true);
     setError(null);
@@ -69,7 +103,6 @@ export function CollabBrains() {
         secret?: string;
         message?: string;
       }>("fleet_peer_enable");
-      if (res.secret) setSecret(res.secret);
       setJustEnabled(true);
       setNote(
         res.message ||
@@ -84,8 +117,10 @@ export function CollabBrains() {
   }
 
   async function connect() {
-    if (!address.trim()) {
-      setError("Enter the other Brain's address, like 192.168.10.42:18789.");
+    if (!address.trim() || !token.trim()) {
+      setError(
+        "Enter both the other Brain's address and the shared secret they gave you.",
+      );
       return;
     }
     setBusy(true);
@@ -127,6 +162,14 @@ export function CollabBrains() {
 
   const peers = status?.peers ?? [];
 
+  const handOver =
+    status && status.reachable && status.has_secret && status.secret
+      ? [
+          { which: "address", label: "Address", value: status.address, secret: false },
+          { which: "secret", label: "Shared secret", value: status.secret, secret: true },
+        ]
+      : [];
+
   return (
     <section className="mb-6">
       <button
@@ -134,7 +177,9 @@ export function CollabBrains() {
         className="min-h-11 rounded-full px-4 text-sm font-semibold glass text-ink"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? "Hide Brains" : `Connect another Brain · ${peers.length}`}
+        {open
+          ? "Hide invite & join"
+          : `Invite another owner · join a collaboration · ${peers.length}`}
       </button>
 
       {open && (
@@ -148,57 +193,86 @@ export function CollabBrains() {
             </p>
           )}
 
-          {status && (
-            <p className="text-sm text-muted">
-              {status.message ||
-                (status.reachable
-                  ? `This Brain is reachable at ${status.address}.`
-                  : "This Brain currently only listens on itself — no other Brain can reach it yet.")}
-            </p>
+          {/* ── Invite: produce the two details the other person needs ── */}
+          <p className="text-sm font-semibold text-ink">Invite to collaboration</p>
+          <p className="mt-1 text-xs text-muted">
+            Bring another owner in. Give them the two details below — they enter
+            them on their own Brain under “Join a collaboration”.
+          </p>
+
+          {status && !status.reachable && (
+            <>
+              <p className="mt-3 text-sm text-muted">
+                {status.message ||
+                  "This Brain only listens on itself, so nobody can reach it yet."}
+              </p>
+              <button
+                type="button"
+                className="mt-3 inline-flex min-h-11 items-center rounded-full bg-accent px-4 text-sm font-semibold text-[var(--on-accent)]"
+                onClick={() => void enable()}
+                disabled={busy}
+              >
+                {busy ? "Opening…" : "Make this Brain reachable"}
+              </button>
+            </>
+          )}
+
+          {handOver.length > 0 && (
+            <>
+              <div className="mt-3 flex flex-col gap-2">
+                {handOver.map((row) => (
+                  <div
+                    key={row.which}
+                    className="rounded-xl border border-border bg-canvas px-3 py-2"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                      {row.label}
+                    </p>
+                    <div className="mt-1 flex items-start justify-between gap-3">
+                      <p
+                        className={`select-all break-all font-mono text-sm text-ink ${
+                          row.secret ? "" : ""
+                        }`}
+                      >
+                        {row.value}
+                      </p>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold text-muted hover:bg-accent/15 hover:text-ink"
+                        onClick={() => void copy(row.value, row.which)}
+                      >
+                        {copied === row.which ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Keep the secret private. Anyone holding both of these can reach
+                this Brain.
+              </p>
+            </>
           )}
 
           {status && status.reachable && !status.listening && (
-            <p className="mt-2 text-xs text-muted">
-              Nothing is accepting connections on port {status.port} yet. Give the
-              other Brain this address once the Brain has restarted:{" "}
-              <span className="select-all font-mono">{status.address}</span>
+            <p className="mt-2 text-sm text-ink">
+              Nothing is accepting connections on port {status.port} yet. Restart
+              the Brain — the address above only goes live after that.
             </p>
           )}
 
-          {status && !status.reachable && (
-            <button
-              type="button"
-              className="mt-3 inline-flex min-h-11 items-center rounded-full bg-accent px-4 text-sm font-semibold text-[var(--on-accent)]"
-              onClick={() => void enable()}
-              disabled={busy}
-            >
-              {busy ? "Opening…" : "Make this Brain reachable"}
-            </button>
+          {justEnabled && status?.listening === false && (
+            <p className="mt-2 text-xs text-muted">
+              Restart the Brain so it starts listening.
+            </p>
           )}
 
-          {secret && (
-            <div className="mt-4 rounded-xl border border-border bg-canvas px-3 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-                Shared secret
-              </p>
-              <p className="mt-1 select-all break-all font-mono text-sm text-ink">
-                {secret}
-              </p>
-              <p className="mt-2 text-xs text-muted">
-                Give this to the other person and nobody else. Both Brains need
-                the same one.
-              </p>
-              {justEnabled && (
-                <p className="mt-2 text-xs text-muted">
-                  Restart the Brain so it starts listening.
-                </p>
-              )}
-            </div>
-          )}
-
+          {/* ── Join: enter what the other person gave you ── */}
           <div className="mt-5 border-t border-border pt-5">
-            <p className="text-sm font-semibold text-ink">
-              Pair with a Brain that is already reachable
+            <p className="text-sm font-semibold text-ink">Join a collaboration</p>
+            <p className="mt-1 text-xs text-muted">
+              Enter the address and shared secret another owner gave you. The
+              link is only saved once their Brain actually answers.
             </p>
             <div className="mt-3 flex flex-col gap-2">
               <input
@@ -215,7 +289,7 @@ export function CollabBrains() {
               />
               <input
                 className="w-full rounded-xl border border-border bg-canvas px-3 py-2 text-sm text-ink"
-                placeholder="Name it — ASTRA (optional)"
+                placeholder="Name it — Eve (optional)"
                 value={peerName}
                 onChange={(e) => setPeerName(e.target.value)}
               />
@@ -226,7 +300,7 @@ export function CollabBrains() {
               onClick={() => void connect()}
               disabled={busy}
             >
-              {busy ? "Pairing…" : "Pair"}
+              {busy ? "Joining…" : "Join collaboration"}
             </button>
           </div>
 

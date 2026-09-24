@@ -19,7 +19,7 @@ export function Collab() {
   const [formError, setFormError] = useState<string | null>(null);
   const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
   const [gatewayHint, setGatewayHint] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const formingRef = useRef(false);
 
   const selected = useMemo(() => {
@@ -107,7 +107,7 @@ export function Collab() {
       }
       if (!snap?.swarms?.length) {
         setFormError(
-          "The collaboration was created but the board did not appear. Try Form swarm again.",
+          "The collaboration was created but the board did not appear. Try Form collaboration again.",
         );
         return;
       }
@@ -209,8 +209,6 @@ export function Collab() {
           setGoal={setGoal}
           busy={busy}
           onForm={() => void formSwarm()}
-          showAdvanced={showAdvanced}
-          setShowAdvanced={setShowAdvanced}
         />
       ) : (
         <>
@@ -235,21 +233,19 @@ export function Collab() {
             <button
               type="button"
               className="min-h-11 rounded-full px-4 text-sm font-semibold glass text-ink"
-              onClick={() => setShowAdvanced((v) => !v)}
+              onClick={() => setShowForm((v) => !v)}
             >
-              Form swarm
+              Form collaboration
             </button>
           </div>
 
-          {showAdvanced && (
+          {showForm && (
             <div className="mb-6">
               <FirstRunForm
                 goal={goal}
                 setGoal={setGoal}
                 busy={busy}
                 onForm={() => void formSwarm()}
-                showAdvanced={showAdvanced}
-                setShowAdvanced={setShowAdvanced}
                 compact
               />
             </div>
@@ -274,16 +270,12 @@ function FirstRunForm({
   setGoal,
   busy,
   onForm,
-  showAdvanced,
-  setShowAdvanced,
   compact = false,
 }: {
   goal: string;
   setGoal: (v: string) => void;
   busy: boolean;
   onForm: () => void;
-  showAdvanced: boolean;
-  setShowAdvanced: (v: boolean) => void;
   compact?: boolean;
 }) {
   return (
@@ -326,79 +318,14 @@ function FirstRunForm({
             onForm();
           }}
         >
-          {busy ? "Forming…" : "Form swarm"}
-        </button>
-        <button
-          type="button"
-          className="cursor-pointer text-sm font-medium text-muted underline-offset-4 hover:underline"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? "Hide advanced" : "Join another owner (Mission Control)"}
+          {busy ? "Forming…" : "Form collaboration"}
         </button>
       </div>
-      {showAdvanced && <AdvancedJoin />}
-    </form>
-  );
-}
-
-function AdvancedJoin() {
-  const [token, setToken] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [installId, setInstallId] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function join() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await bridgeCall("swarm_connect", {
-        token: token.trim(),
-        project_id: projectId.trim(),
-        install_id: installId.trim(),
-      });
-      setMessage("Joined.");
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mt-5 space-y-3 border-t border-border pt-5">
-      <p className="text-sm text-muted">
-        Paste a Mission Control project token. A down portal shows an error — it
-        does not save a silent empty board.
+      <p className="mt-3 text-xs text-muted">
+        To bring another owner in, or to join one who invited you, use “Invite
+        another owner” above.
       </p>
-      <input
-        className="w-full rounded-xl border border-border bg-canvas px-3 py-2 text-sm text-ink"
-        placeholder="ctk_proj_…"
-        value={token}
-        onChange={(e) => setToken(e.target.value)}
-      />
-      <input
-        className="w-full rounded-xl border border-border bg-canvas px-3 py-2 text-sm text-ink"
-        placeholder="Project id"
-        value={projectId}
-        onChange={(e) => setProjectId(e.target.value)}
-      />
-      <input
-        className="w-full rounded-xl border border-border bg-canvas px-3 py-2 text-sm text-ink"
-        placeholder="Install id"
-        value={installId}
-        onChange={(e) => setInstallId(e.target.value)}
-      />
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center rounded-full glass px-4 text-sm font-semibold text-ink"
-        disabled={busy}
-        onClick={() => void join()}
-      >
-        Join collaboration
-      </button>
-      {message && <p className="text-sm text-ink">{message}</p>}
-    </div>
+    </form>
   );
 }
 

@@ -5155,6 +5155,11 @@ def _handle_fleet_peer_status(request_id: str) -> dict[str, Any]:
             "port": cfg["port"],
             "address": cfg["address"],
             "has_secret": cfg["has_secret"],
+            # The secret is returned deliberately. Without it there is no way to
+            # recover the value after enabling, so an owner who enabled last week
+            # cannot invite anyone — which is exactly the hole this fills. The
+            # bridge serves the owner's own machine on loopback only.
+            "secret": cfg["token"] if cfg["has_secret"] else "",
             "peers": peers,
             "peer_count": len(peers),
             "message": message,
