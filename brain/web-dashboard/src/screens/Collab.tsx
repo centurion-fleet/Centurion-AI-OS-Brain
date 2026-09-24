@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDeckVisible } from "../hooks/useDeckVisible";
 import { useCollab } from "../hooks/useCollab";
 import { bridgeCall } from "../hooks/useBridge";
+import { CollabBrains } from "../components/CollabBrains";
 import {
   COLUMNS,
   type CollabCard,
@@ -138,6 +139,24 @@ export function Collab() {
     }
   }
 
+  async function archiveSwarm(swarmId: string) {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const res = await bridgeCall<{ ok: true; snapshot?: unknown }>(
+        "swarm_archive",
+        { board: swarmId },
+      );
+      setSelectedId(null);
+      if (res?.snapshot) applySnapshot(res.snapshot);
+      await refresh();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const empty = swarms.length === 0;
 
   return (
@@ -154,6 +173,8 @@ export function Collab() {
           must be running on the desk for live dispatch.
         </p>
       </header>
+
+      <CollabBrains />
 
       {gatewayRunning === false && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
@@ -239,6 +260,7 @@ export function Collab() {
               swarm={selected}
               busy={busy}
               onMove={moveCard}
+              onArchive={() => void archiveSwarm(selected.id)}
             />
           )}
         </>
@@ -384,18 +406,58 @@ function Board({
   swarm,
   busy,
   onMove,
+  onArchive,
 }: {
   swarm: CollabSwarm;
   busy: boolean;
   onMove: (card: CollabCard, column: CollabColumn) => void;
+  onArchive: () => void;
 }) {
   const cards = swarm.cards || [];
+  const [confirming, setConfirming] = useState(false);
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-medium text-ink">{swarm.display_name}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">{swarm.objective}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {confirming ? (
+            <>
+              <span className="text-sm text-muted">
+                Archive this collaboration? It leaves this screen.
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                className="min-h-11 rounded-full bg-accent px-4 text-sm font-semibold text-[var(--on-accent)]"
+                onClick={() => {
+                  setConfirming(false);
+                  onArchive();
+                }}
+              >
+                {busy ? "Archiving…" : "Archive"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="min-h-11 rounded-full px-4 text-sm font-semibold glass text-ink"
+                onClick={() => setConfirming(false)}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              className="min-h-11 rounded-full px-4 text-sm font-semibold glass text-ink"
+              onClick={() => setConfirming(true)}
+            >
+              Archive
+            </button>
+          )}
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

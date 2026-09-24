@@ -776,6 +776,39 @@ def create_collaboration_board(
     }
 
 
+def archive_collaboration_board(*, board: str) -> dict[str, Any]:
+    """Archive a local collaboration board so it leaves the Collab screen.
+
+    The board directory is *moved* to ``kanban/boards/_archived/<slug>-<ts>/``
+    — recoverable, never destroyed. The default board is refused. Returns the
+    fresh snapshot so the caller can re-render without a second round trip.
+    """
+    slug = str(board or "").strip()
+    if not slug:
+        return {"ok": False, "error": "A collaboration id is required."}
+
+    try:
+        from centurion_cli import kanban_db
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        result = kanban_db.remove_board(slug, archive=True)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    snapshot = get_swarm_snapshot()
+    return {
+        "ok": True,
+        "swarm_id": result.get("slug") or slug,
+        "new_path": result.get("new_path") or "",
+        "snapshot": snapshot,
+        "message": f"Collaboration “{slug}” archived. It is recoverable.",
+    }
+
+
 def create_local_swarm(
     *,
     goal: str,

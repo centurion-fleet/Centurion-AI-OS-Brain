@@ -117,6 +117,8 @@ def handle_request(
         return _handle_swarm_create(request, request_id)
     if action == "swarm_move_card":
         return _handle_swarm_move_card(request, request_id)
+    if action == "swarm_archive":
+        return _handle_swarm_archive(request, request_id)
     if action == "profiles_list":
         return _handle_profiles_list(request_id)
     if action == "beneficiary_snapshot":
@@ -283,6 +285,14 @@ def handle_request(
         return _handle_fleet_ping(request, request_id)
     if action == "fleet_peer_put":
         return _handle_fleet_peer_put(request, request_id)
+    if action == "fleet_peer_status":
+        return _handle_fleet_peer_status(request_id)
+    if action == "fleet_peer_enable":
+        return _handle_fleet_peer_enable(request, request_id)
+    if action == "fleet_peer_connect":
+        return _handle_fleet_peer_connect(request, request_id)
+    if action == "fleet_peer_remove":
+        return _handle_fleet_peer_remove(request, request_id)
     if action == "plugin_list":
         return _handle_plugin_list(request_id)
     if action == "tools_skills_snapshot":
@@ -1026,6 +1036,32 @@ def _handle_swarm_create_board(request: dict[str, Any], request_id: str) -> dict
         }
     except Exception as exc:
         return _error_response(request_id, action="swarm_create_board", exc=exc)
+
+
+def _handle_swarm_archive(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Archive a local collaboration board so it leaves the Collab screen."""
+    try:
+        from centurion_cli.swarm_state import archive_collaboration_board
+
+        board = str(
+            request.get("board")
+            or request.get("swarm_id")
+            or request.get("id")
+            or ""
+        ).strip()
+        result = archive_collaboration_board(board=board)
+        return {
+            "id": request_id,
+            "ok": bool(result.get("ok")),
+            "action": "swarm_archive",
+            "message": result.get("message") or result.get("error"),
+            "code": result.get("code"),
+            "result": result,
+            "snapshot": result.get("snapshot"),
+            "swarm_id": result.get("swarm_id"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="swarm_archive", exc=exc)
 
 
 def _handle_swarm_create(request: dict[str, Any], request_id: str) -> dict[str, Any]:
@@ -5010,6 +5046,352 @@ def _handle_fleet_peer_put(request: dict[str, Any], request_id: str) -> dict[str
         }
     except Exception as exc:
         return _error_response(request_id, action="fleet_peer_put", exc=exc)
+
+
+def _lan_address() -> str:
+    """Best-effort LAN IP of this machine, or 'unknown'."""
+    import socket as _sock
+
+    try:
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "unknown"
+
+
+def _fleet_home() -> str:
+    """Profile-aware Centurion home, for fleet config paths."""
+    from centurion_constants import get_centurion_home
+
+    return str(get_centurion_home())
+
+
+def _read_peer_config() -> dict[str, Any]:
+    """Read this Brain's fleet-listener config. Never writes."""
+    import os
+
+    from centurion_cli.fleet import _api_server_node
+
+    try:
+        from ruamel.yaml import YAML
+    except ImportError as exc:
+        raise RuntimeError("ruamel.yaml is required to read config.") from exc
+
+    cfg_path = os.path.join(_fleet_home(), "config.yaml")
+    if not os.path.exists(cfg_path):
+        raise RuntimeError(f"No config at {cfg_path} — is this a Centurion Brain?")
+
+    with open(cfg_path) as fh:
+        cfg = YAML().load(fh)
+
+    extra = (_api_server_node(cfg) or {}).get("extra") or {}
+    host = str(extra.get("host") or "127.0.0.1")
+    port = int(extra.get("port") or 18789)
+    token = str(extra.get("fleet_token") or os.environ.get("CENTURION_FLEET_TOKEN", "") or "")
+    reachable = host not in ("127.0.0.1", "localhost", "")
+    return {
+        "host": host,
+        "port": port,
+        "token": token,
+        "has_secret": bool(token),
+        "reachable": reachable,
+        "address": f"http://{_lan_address()}:{port}",
+    }
+
+
+def _port_listening(host: str, port: int, timeout: float = 1.5) -> bool:
+    """Is something actually accepting connections on this port right now?
+
+    Config saying 0.0.0.0 is a promise; this is the fact. The listener only
+    binds after a Brain restart, so the two can disagree.
+    """
+    import socket as _sock
+
+    target = "127.0.0.1" if host in ("0.0.0.0", "", "localhost") else host
+    try:
+        with _sock.create_connection((target, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _handle_fleet_peer_status(request_id: str) -> dict[str, Any]:
+    """Is this Brain reachable by other Brains, and who is it linked to?"""
+    try:
+        from centurion.fleet.peers import FleetPeers
+
+        cfg = _read_peer_config()
+        listening = _port_listening(cfg["host"], cfg["port"])
+        peers = []
+        for p in FleetPeers().list_all():
+            peers.append(
+                {
+                    "id": p.centurion_id,
+                    "name": p.name,
+                    "address": p.address,
+                    "status": p.status or "unknown",
+                    "has_token": bool(p.auth_token),
+                }
+            )
+        if not cfg["reachable"]:
+            message = "Not reachable — this Brain only listens on itself."
+        elif not listening:
+            message = (
+                f"Configured for {cfg['host']}:{cfg['port']}, but nothing is "
+                "listening yet. Restart the Brain."
+            )
+        else:
+            message = f"Reachable on {cfg['host']}:{cfg['port']}."
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_peer_status",
+            "reachable": cfg["reachable"],
+            "listening": listening,
+            "host": cfg["host"],
+            "port": cfg["port"],
+            "address": cfg["address"],
+            "has_secret": cfg["has_secret"],
+            "peers": peers,
+            "peer_count": len(peers),
+            "message": message,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_peer_status", exc=exc)
+
+
+def _handle_fleet_peer_enable(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Make this Brain reachable by other Brains and hand back the secret.
+
+    Mirrors ``centurion fleet peer enable``. The listener only binds after the
+    Brain restarts, so the response says so explicitly rather than implying
+    the link is already live.
+    """
+    try:
+        import os
+        import secrets as _secrets
+
+        from centurion_cli.fleet import _api_server_node
+
+        try:
+            from ruamel.yaml import YAML
+        except ImportError as exc:
+            raise RuntimeError("ruamel.yaml is required to edit config safely.") from exc
+
+        cfg_path = os.path.join(_fleet_home(), "config.yaml")
+        if not os.path.exists(cfg_path):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_enable",
+                "code": "NO_CONFIG",
+                "error": f"No config at {cfg_path}",
+                "message": "This does not look like a Centurion Brain.",
+            }
+
+        requested_port = request.get("port")
+        try:
+            port = int(requested_port) if requested_port else 18789
+        except (TypeError, ValueError):
+            port = 18789
+
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        with open(cfg_path) as fh:
+            cfg = yaml.load(fh)
+
+        existing = _read_peer_config()
+        token = str(request.get("token") or existing["token"] or _secrets.token_hex(16))
+
+        api = _api_server_node(cfg, create=True)
+        if api is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_enable",
+                "code": "NO_NODE",
+                "error": "Could not locate the api_server config node.",
+                "message": "Nothing has changed.",
+            }
+        api["enabled"] = True
+        extra = api.setdefault("extra", {})
+        extra["host"] = "0.0.0.0"
+        extra["port"] = port
+        extra["fleet_token"] = token
+
+        with open(cfg_path, "w") as fh:
+            yaml.dump(cfg, fh)
+
+        # Read back rather than trusting the write.
+        after = _read_peer_config()
+        if after["host"] != "0.0.0.0":
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_enable",
+                "code": "WRITE_FAILED",
+                "error": f"Could not set the listen address (found {after['host']!r}).",
+                "message": "Nothing has changed.",
+            }
+
+        # The gateway refuses to bind a network address without a real API key.
+        env_path = os.path.join(_fleet_home(), ".env")
+        api_key = ""
+        if os.path.exists(env_path):
+            for line in open(env_path):
+                if line.startswith("API_SERVER_KEY="):
+                    api_key = line.split("=", 1)[1].strip()
+        if len(api_key) < 8:
+            api_key = _secrets.token_hex(24)
+            with open(env_path, "a") as fh:
+                fh.write(f"\nAPI_SERVER_KEY={api_key}\n")
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_peer_enable",
+            "address": after["address"],
+            "host": after["host"],
+            "port": after["port"],
+            "secret": token,
+            "restart_required": True,
+            "message": (
+                "This Brain will accept other Brains. "
+                "Restart the Brain to start listening."
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_peer_enable", exc=exc)
+
+
+def _handle_fleet_peer_connect(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Pair with another Brain: prove the link, then remember it."""
+    try:
+        from centurion_cli.fleet import _peer_http
+        from centurion.fleet.peers import FleetPeer, FleetPeers
+
+        address = str(request.get("address") or "").strip().rstrip("/")
+        if not address:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_connect",
+                "code": "INVALID_REQUEST",
+                "error": "The other Brain's address is required.",
+                "message": "Enter an address like 192.168.10.42:18789.",
+            }
+        if not address.startswith("http"):
+            address = f"http://{address}"
+
+        token = str(request.get("token") or os.environ.get("CENTURION_FLEET_TOKEN", "") or "")
+
+        ok, status, body = _peer_http(f"{address}/fleet/status", token)
+        if not ok:
+            if status == 401:
+                msg = "Reached the machine, but it refused our token. Both Brains need the SAME shared secret."
+            elif status == 404:
+                msg = "Reached the machine, but it has no fleet endpoint. That Brain needs the update first."
+            elif status == 0:
+                msg = (
+                    "Could not reach it. If you are on the same WiFi, check that the other Brain "
+                    "ran 'Make this Brain reachable' and restarted."
+                )
+            else:
+                msg = f"Unexpected reply (HTTP {status})."
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_connect",
+                "code": "UNREACHABLE",
+                "http_status": status,
+                "error": msg,
+                "message": msg,
+            }
+
+        import socket as _sock
+
+        my_id = os.environ.get("CENTURION_ID") or _sock.gethostname()
+        my_name = str(request.get("self_name") or my_id)
+        ok2, status2, body2 = _peer_http(
+            f"{address}/fleet/checkin",
+            token,
+            {"centurion_id": my_id, "name": my_name, "version": request.get("version") or ""},
+        )
+        if not ok2:
+            msg = f"Their endpoint answered, but rejected our check-in (HTTP {status2})."
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_connect",
+                "code": "CHECKIN_REJECTED",
+                "http_status": status2,
+                "error": msg,
+                "message": msg,
+            }
+
+        peer_id = str(request.get("peer_id") or "").strip() or address
+        peer_name = str(request.get("peer_name") or "").strip()
+        if not peer_name:
+            peer_name = str((body or {}).get("name") or "") if isinstance(body, dict) else ""
+        peer_name = peer_name or address
+
+        peers = FleetPeers()
+        peers.register(
+            FleetPeer(
+                centurion_id=peer_id,
+                name=peer_name,
+                address=address,
+                auth_token=token,
+                status="online",
+                last_seen=__import__("time").time(),
+            )
+        )
+        _ensure_fleet_toolset_enabled()
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_peer_connect",
+            "peer": {
+                "id": peer_id,
+                "name": peer_name,
+                "address": address,
+                "status": "online",
+                "has_token": bool(token),
+            },
+            "message": f"Link proven — {peer_name} answered and accepted us.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_peer_connect", exc=exc)
+
+
+def _handle_fleet_peer_remove(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Forget a connected Brain."""
+    try:
+        from centurion.fleet.peers import FleetPeers
+
+        peer_id = str(request.get("peer_id") or request.get("id") or "").strip()
+        if not peer_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_peer_remove",
+                "code": "INVALID_REQUEST",
+                "error": "peer_id is required",
+                "message": "peer_id is required",
+            }
+        removed = FleetPeers().remove(peer_id)
+        return {
+            "id": request_id,
+            "ok": bool(removed),
+            "action": "fleet_peer_remove",
+            "peer_id": peer_id,
+            "message": f"Forgot {peer_id}." if removed else f"No such Brain: {peer_id}.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_peer_remove", exc=exc)
 
 
 def _handle_plugin_list(request_id: str) -> dict[str, Any]:
