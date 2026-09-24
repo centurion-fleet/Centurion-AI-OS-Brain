@@ -50,7 +50,7 @@ Adrian is an optional online help guide for setup and support. Adrian works via 
 
 **PRIVACY IS THE PRODUCT**
 
-Centurion Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream. See Help: *Local, Remote anywhere, or Telegram — privacy choices*.
+Centurion AI Agent Limited does not receive your private Crypto Chat to train shared models. Adrian help is separate and never reads that private stream. See Help: *Local, Remote anywhere, or Telegram — privacy choices*.
 
 **OWN IT ONCE**
 

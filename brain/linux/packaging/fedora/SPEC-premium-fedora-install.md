@@ -42,7 +42,7 @@ Non-technical customers must never touch a terminal. This is the ranked-#1 path 
 - [ ] One prominent **Download for Fedora** button → serves the signed RPM for the current release
 - [ ] OS/arch auto-detect (User-Agent) with manual override (Fedora 39–44, x86_64; aarch64 when available)
 - [ ] Show: version, release date, release-notes link, **SHA256 checksum** (copy button)
-- [ ] Publisher fingerprint shown (GPG key ID) — "Signed by Centurion Limited"
+- [ ] Publisher fingerprint shown (GPG key ID) — "Signed by Centurion AI Agent Limited"
 - [ ] Power-user one-liner (collapsed): `sudo dnf install ./centurion-brain-5.2.115.fc44.x86_64.rpm`
 - [ ] Fallback link: AppImage (once we ship one) for non-Fedora/other distros
 - [ ] **Artifact source: GitHub Releases** (public artifacts on the repo even if repo is private — approved in distribution-strategy.md). Portal links to the release asset + checksum; does NOT host binaries itself.
@@ -86,7 +86,7 @@ release.py / release ritual
 
 ## 6. Acceptance criteria
 
-- [ ] Fresh Fedora 44 VM (no dev tools installed, no `~/.centurion`) → download RPM from portal → double-click → GNOME Software shows "Centurion Limited" verified publisher → Install → menu shows **Sovereign AI Brain**
+- [ ] Fresh Fedora 44 VM (no dev tools installed, no `~/.centurion`) → download RPM from portal → double-click → GNOME Software shows "Centurion AI Agent Limited" verified publisher → Install → menu shows **Sovereign AI Brain**
 - [ ] First launch: activation screen → license activates → Chat works → `systemctl --user is-active centurion-remote` = active
 - [ ] `rpm -K centurion-brain-*.rpm` = OK (GPG verified)
 - [ ] Portal page shows version + SHA256 that match the artifact
