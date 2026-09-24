@@ -347,11 +347,11 @@ cp -f "${RPM_BUILT}" "${OUT_RPM}"
   fi
 )
 
-# Signing — the pipeline is sign-CAPABLE, but the Centurion release key is an org
-# decision that has not yet been made (no GPG secret key exists on the build box).
-# When the key lands, set CENTURION_RPM_SIGN=<keyid> (and %_gpg_name in ~/.rpmmacros);
-# the build will then sign with `rpm --addsign`. Until then the default stays
-# unsigned and we say so loudly instead of shipping it silently.
+# Signing — set CENTURION_RPM_SIGN=<keyid> (plus %_gpg_name in ~/.rpmmacros) and the
+# build signs with `rpm --addsign`. The Centurion release key exists (Organisation:
+# Centurion AI Agent Limited, RPM release signing key <support@1human1ai.com>,
+# fingerprint 25CB4090…8FA41F8F) and should ALWAYS be passed for a customer build:
+# an unsigned RPM is what makes GNOME Software say "Potentially Unsafe".
 if [[ -n "${CENTURION_RPM_SIGN:-}" ]]; then
   SIGBIN="$(command -v rpmsign 2>/dev/null || command -v rpm 2>/dev/null || true)"
   if [[ -n "${SIGBIN}" ]]; then
@@ -368,6 +368,18 @@ else
   echo "WARNING: RPM is UNSIGNED (CENTURION_RPM_SIGN not set — no release key configured)." >&2
   echo "         GNOME Software will show 'Potentially Unsafe / Provided by a third party'." >&2
 fi
+
+# Recompute the checksum AFTER signing. Signing rewrites the file in place, so a
+# checksum taken before this block describes an artifact that is not what ships —
+# a customer verifying the published hash would conclude the download is corrupt.
+(
+  cd "${DIST}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$(basename "${OUT_RPM}")" > "$(basename "${OUT_RPM}").sha256"
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$(basename "${OUT_RPM}")" > "$(basename "${OUT_RPM}").sha256"
+  fi
+)
 
 SIZE="$(wc -c < "${OUT_RPM}" | tr -d ' ')"
 echo
