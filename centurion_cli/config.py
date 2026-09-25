@@ -279,15 +279,37 @@ def get_managed_update_command() -> Optional[str]:
     return None
 
 
+def is_brain_install(project_root: Optional[Path] = None) -> bool:
+    """True when this copy is a packaged Sovereign AI Brain (Get Brain / RPM).
+
+    Such an install has no git checkout and was not installed by pip, so any
+    update path that assumes either will give it the wrong answer — and tell
+    the customer to open a Terminal.
+    """
+    try:
+        if (get_centurion_home() / "desktop-build.json").is_file():
+            return True
+    except OSError:
+        pass
+    root = project_root
+    if root is None:
+        root = Path(__file__).parent.parent.resolve()
+    try:
+        return str(root).startswith("/usr/lib/centurion/")
+    except OSError:
+        return False
+
+
 def detect_install_method(project_root: Optional[Path] = None) -> str:
-    """Detect how Centurion was installed: 'docker', 'nixos', 'homebrew', 'git', or 'pip'.
+    """Detect how Centurion was installed: 'docker', 'nixos', 'homebrew', 'git', 'brain', or 'pip'.
 
     Resolution order:
     1. Stamped ``~/.centurion/.install_method`` file (written by installers)
     2. CENTURION_MANAGED env / .managed marker (NixOS, Homebrew)
     3. Container detection (/.dockerenv, /run/.containerenv, cgroup)
     4. .git directory presence -> 'git'
-    5. Fallback -> 'pip'
+    5. Packaged Brain layout -> 'brain'
+    6. Fallback -> 'pip'
     """
     stamp = get_centurion_home() / ".install_method"
     try:
@@ -306,6 +328,10 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
         project_root = Path(__file__).parent.parent.resolve()
     if (project_root / ".git").is_dir():
         return "git"
+    # Checked AFTER .git so a developer working in a checkout still gets the
+    # git path, while an installed Brain (which has no .git) is recognised.
+    if is_brain_install(project_root):
+        return "brain"
     return "pip"
 
 
@@ -327,6 +353,10 @@ def recommended_update_command_for_method(method: str) -> str:
         return "brew upgrade centurion-os"
     if method == "docker":
         return "docker pull ghcr.io/centurion-fleet/centurion-os:latest"
+    if method == "brain":
+        # A packaged Brain updates from inside the app. Deliberately no
+        # terminal command — the customer must never be sent to one.
+        return ""
     if method == "pip":
         import shutil
 

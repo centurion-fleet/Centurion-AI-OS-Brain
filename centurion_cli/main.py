@@ -8717,6 +8717,56 @@ def _cmd_update_check(args=None):
         return
 
     method = detect_install_method(update_root)
+    if method == "brain":
+        # A packaged Brain (Get Brain / RPM) is not a pip install and has no
+        # git checkout. Asking PyPI about it could never answer, and the
+        # recommended "fix" was a Terminal command. Ask our own release
+        # channel instead — the same one the account page serves.
+        from centurion_cli.brain_release import (
+            STATUS_UPDATE_AVAILABLE,
+            STATUS_UP_TO_DATE,
+            check_brain_release,
+        )
+
+        result = check_brain_release(__version__)
+        status = result["status"]
+        latest = result.get("latest_version")
+        base["method"] = "brain"
+        base["screen_installed_version"] = __version__
+        base["screen_checkout_version"] = latest if status == STATUS_UPDATE_AVAILABLE else None
+        # Never hand a Brain customer a terminal step.
+        base["recommended_command"] = ""
+        base["update_action"] = "brain_update"
+
+        if status == STATUS_UPDATE_AVAILABLE:
+            emit(
+                {
+                    **base,
+                    "status": STATUS_UPDATE_AVAILABLE,
+                    "behind": 1,
+                    "message": result["message"],
+                }
+            )
+        elif status == STATUS_UP_TO_DATE:
+            emit(
+                {
+                    **base,
+                    "status": STATUS_UP_TO_DATE,
+                    "message": result["message"],
+                }
+            )
+        else:
+            emit(
+                {
+                    **base,
+                    "ok": False,
+                    "status": "unavailable",
+                    "message": result["message"],
+                },
+                exit_code=1,
+            )
+        return
+
     if method == "pip":
         from centurion_cli.banner import check_via_pypi
 
