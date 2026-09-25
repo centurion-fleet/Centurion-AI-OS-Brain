@@ -1569,11 +1569,11 @@ The Brain here is the product; the phone is the remote.",
         this_brain_group.add(&firecrawl_row);
 
         let fleet_peer_row = adw::ActionRow::builder()
-            .title("Fleet peer")
-            .subtitle("Reach another Centurion on your network (shared FLEET_AUTH_TOKEN).")
+            .title("Connect another Centurion")
+            .subtitle("Link two Centurions on the same network so they can work together.")
             .icon_name("network-server-symbolic")
             .build();
-        let fleet_peer_button = gtk::Button::with_label("Configure");
+        let fleet_peer_button = gtk::Button::with_label("Connect");
         fleet_peer_button.set_valign(gtk::Align::Center);
         fleet_peer_row.add_suffix(&fleet_peer_button);
         this_brain_group.add(&fleet_peer_row);
@@ -6800,173 +6800,389 @@ What capability should the skill cover?\n\n"
         dialog.present(Some(parent));
     }
 
-    fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {
-        let form = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        let peers_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
-        if let Some(resp) = run_bridge_action("fleet_status", serde_json::json!({})) {
-            if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                let peers = resp
-                    .get("peers")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                if peers.is_empty() {
-                    peers_box.append(
-                        &gtk::Label::builder()
-                            .label(
-                                "No peers yet. To link another Brain, press “Add a peer”. It needs \
-two details from that Brain — its address and its shared secret. Get them from \
-Collaborations → “Invite another owner” → “Make this Brain reachable” on the other \
-machine, then send your own two details back the same way.",
-                            )
-                            .wrap(true)
-                            .xalign(0.0)
-                            .css_classes(["dim-label"])
-                            .build(),
-                    );
-                } else {
-                    for peer in peers.iter().take(12) {
-                        let name = peer
-                            .get("name")
-                            .or_else(|| peer.get("id"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("peer");
-                        let status = peer
-                            .get("status")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        let address = peer
-                            .get("address")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        let peer_id = peer
-                            .get("id")
-                            .or_else(|| peer.get("name"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(name)
-                            .to_owned();
-                        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                        row.append(
-                            &gtk::Label::builder()
-                                .label(&format!("{name} · {status}"))
-                                .xalign(0.0)
-                                .hexpand(true)
-                                .wrap(true)
-                                .build(),
-                        );
-                        if !address.is_empty() {
-                            row.set_tooltip_text(Some(address));
-                        }
-                        let ping = gtk::Button::with_label("Ping");
-                        ping.add_css_class("flat");
-                        let parent_w = parent.clone();
-                        ping.connect_clicked(move |_| {
-                            let payload = run_bridge_action(
-                                "fleet_ping",
-                                serde_json::json!({ "peer_id": peer_id }),
-                            );
-                            let ok = payload
-                                .as_ref()
-                                .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
-                                .unwrap_or(false);
-                            let message = payload
-                                .as_ref()
-                                .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                                .unwrap_or(if ok {
-                                    "Ping sent."
-                                } else {
-                                    "Ping failed."
-                                })
-                                .to_owned();
-                            let result = adw::AlertDialog::builder()
-                                .heading(if ok { "Ping" } else { "Ping failed" })
-                                .body(&message)
-                                .close_response("ok")
-                                .build();
-                            result.add_response("ok", "OK");
-                            result.present(Some(&parent_w));
-                        });
-                        row.append(&ping);
-                        peers_box.append(&row);
-                    }
-                }
+    /// Group a secret into fours so it can be read aloud over a phone line
+    /// without losing your place. Display only — Copy takes the raw value.
+    fn group_for_reading(value: &str) -> String {
+        let mut out = String::with_capacity(value.len() + value.len() / 4);
+        for (i, ch) in value.chars().enumerate() {
+            if i > 0 && i % 4 == 0 {
+                out.push(' ');
             }
+            out.push(ch);
         }
-        form.append(&peers_box);
-        form.append(
+        out
+    }
+
+    fn section_heading(text: &str) -> gtk::Label {
+        gtk::Label::builder()
+            .label(text)
+            .xalign(0.0)
+            .css_classes(["heading"])
+            .build()
+    }
+
+    fn hint(text: &str) -> gtk::Label {
+        gtk::Label::builder()
+            .label(text)
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build()
+    }
+
+    /// A row showing one value with a Copy button. The label shows the readable
+    /// form; Copy takes the raw value, because a secret with spaces in it will
+    /// not be accepted on the other side.
+    fn secret_row(title: &str, raw: &str, readable: bool) -> gtk::Box {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.set_hexpand(true);
+        let labels = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        labels.set_hexpand(true);
+        labels.append(
             &gtk::Label::builder()
-                .label("Add a peer")
+                .label(title)
+                .css_classes(["dim-label"])
                 .xalign(0.0)
-                .css_classes(["heading"])
                 .build(),
         );
-        let id_entry = gtk::Entry::builder()
-            .placeholder_text("Peer id (e.g. cent-002)")
-            .hexpand(true)
-            .build();
+        let shown = if readable { group_for_reading(raw) } else { raw.to_owned() };
+        labels.append(
+            &gtk::Label::builder()
+                .label(&shown)
+                .selectable(true)
+                .wrap(true)
+                .xalign(0.0)
+                .build(),
+        );
+        row.append(&labels);
+        let copy = gtk::Button::with_label("Copy");
+        copy.add_css_class("flat");
+        copy.set_valign(gtk::Align::Center);
+        let raw_owned = raw.to_owned();
+        copy.connect_clicked(move |_| copy_to_clipboard(&raw_owned));
+        row.append(&copy);
+        row
+    }
+
+    /// Restart the Brain's gateway so settings saved from this screen take
+    /// effect. The listener only binds when the gateway starts, so without this
+    /// the values sit on disk and nothing changes until the customer restarts.
+    fn restart_gateway_best_effort() -> bool {
+        for unit in ["centurion-gateway.service", "centurion-gateway"] {
+            let ok = std::process::Command::new("systemctl")
+                .args(["--user", "restart", unit])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if ok {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Connect another Centurion on the same network.
+    ///
+    /// One screen, two halves: what THIS Brain hands out, and where the other
+    /// Brain's details go. The previous dialog only accepted peer details and
+    /// told the customer to fetch them from "Collaborations → Invite another
+    /// owner → Make this Brain reachable" — a screen that does not exist — so
+    /// neither side could produce the two values, and a live call had nowhere
+    /// to go.
+    fn show_fleet_peer_dialog(parent: &adw::ApplicationWindow) {
+        let form = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        form.set_width_request(560);
+
+        let status = run_bridge_action("fleet_peer_status", serde_json::json!({}));
+        let get_str = |key: &str| -> String {
+            status
+                .as_ref()
+                .and_then(|p| p.get(key).and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_owned()
+        };
+        let my_address = get_str("address");
+        let my_secret = get_str("secret");
+        let listening = status
+            .as_ref()
+            .and_then(|p| p.get("listening").and_then(|v| v.as_bool()))
+            .unwrap_or(false);
+
+        // ---- 1. What this Centurion gives out ---------------------------
+        form.append(&section_heading("1 · Give these two values to the other person"));
+        if my_address.is_empty() {
+            form.append(&hint(
+                "This Brain has not been made reachable yet. Press the button below first.",
+            ));
+        } else {
+            form.append(&secret_row("Address", &my_address, false));
+        }
+        if my_secret.is_empty() {
+            form.append(&hint("No shared secret yet — press the button below to create one."));
+        } else {
+            form.append(&secret_row("Secret", &my_secret, true));
+            form.append(&hint(
+                "The secret is shown in groups of four so it can be read aloud. Copy takes \
+the whole thing. Both Centurions must use the same secret.",
+            ));
+        }
+
+        let status_line = hint(if listening {
+            "This Centurion is reachable on your network."
+        } else {
+            "Not reachable yet — press the button below, and leave the Brain open."
+        });
+        form.append(&status_line);
+
+        let enable_button = gtk::Button::with_label("Make this Centurion reachable");
+        enable_button.add_css_class("suggested-action");
+        enable_button.set_halign(gtk::Align::Start);
+        enable_button.set_visible(!listening);
+        form.append(&enable_button);
+
+        // ---- 2. The other Centurion's values ----------------------------
+        form.append(&section_heading("2 · Enter the other person's two values"));
+        form.append(&hint(
+            "They give you the same two values from the same screen on their machine. \
+The name is just so you can tell your Centurions apart — anything readable will do.",
+        ));
         let name_entry = gtk::Entry::builder()
-            .placeholder_text("Display name (e.g. Eve)")
+            .placeholder_text("Their name (e.g. Eve)")
             .hexpand(true)
             .build();
         let address_entry = gtk::Entry::builder()
-            .placeholder_text("Address (http://host:18789)")
+            .placeholder_text("Their address (e.g. http://192.168.10.42:18789)")
             .hexpand(true)
             .build();
-        let token_entry = gtk::PasswordEntry::builder()
-            .placeholder_text("Shared FLEET_AUTH_TOKEN")
+        let secret_entry = gtk::PasswordEntry::builder()
+            .placeholder_text("Their secret (spaces are ignored)")
             .show_peek_icon(true)
             .hexpand(true)
             .build();
-        form.append(&id_entry);
         form.append(&name_entry);
         form.append(&address_entry);
-        form.append(&token_entry);
+        form.append(&secret_entry);
+
+        // ---- Existing peers ---------------------------------------------
+        if let Some(resp) = run_bridge_action("fleet_status", serde_json::json!({})) {
+            let peers = resp
+                .get("peers")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            if !peers.is_empty() {
+                form.append(&section_heading("Already connected"));
+                for peer in peers.iter().take(12) {
+                    let name = peer
+                        .get("name")
+                        .or_else(|| peer.get("id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("peer");
+                    let peer_status = peer
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    let peer_id = peer
+                        .get("id")
+                        .or_else(|| peer.get("name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(name)
+                        .to_owned();
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                    row.append(
+                        &gtk::Label::builder()
+                            .label(&format!("{name} · {peer_status}"))
+                            .xalign(0.0)
+                            .hexpand(true)
+                            .wrap(true)
+                            .build(),
+                    );
+                    let ping = gtk::Button::with_label("Test");
+                    ping.add_css_class("flat");
+                    let parent_w = parent.clone();
+                    ping.connect_clicked(move |_| {
+                        let payload = run_bridge_action(
+                            "fleet_ping",
+                            serde_json::json!({ "peer_id": peer_id }),
+                        );
+                        let ok = payload
+                            .as_ref()
+                            .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+                            .unwrap_or(false);
+                        let message = payload
+                            .as_ref()
+                            .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                            .unwrap_or(if ok {
+                                "That Centurion answered."
+                            } else {
+                                "No answer. Check both machines are on the same network."
+                            })
+                            .to_owned();
+                        let result = adw::AlertDialog::builder()
+                            .heading(if ok { "Reachable" } else { "Not reachable" })
+                            .body(&message)
+                            .close_response("ok")
+                            .build();
+                        result.add_response("ok", "OK");
+                        result.present(Some(&parent_w));
+                    });
+                    row.append(&ping);
+                    form.append(&row);
+                }
+            }
+        }
+
         let dialog = adw::AlertDialog::builder()
-            .heading("Fleet peer")
+            .heading("Connect another Centurion")
             .body(
-                "Get the two details from the other Brain: open Collaborations → \
-“Invite another owner” → “Make this Brain reachable”. It shows an address \
-(http://host:18789) and a shared secret. Enter those below — both Brains must \
-use the SAME secret. Peer id and display name are just labels so you can tell \
-your Brains apart; anything readable will do. Ping after saving to confirm.",
+                "Two Centurions on the same network can work together. Swap the two values \
+above with the other person — one set each way — then press Connect.",
             )
             .extra_child(&form)
             .close_response("cancel")
-            .default_response("save")
+            .default_response("connect")
             .build();
-        dialog.add_response("cancel", "Cancel");
-        dialog.add_response("save", "Save");
-        dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+        dialog.add_response("cancel", "Close");
+        dialog.add_response("connect", "Connect");
+        dialog.set_response_appearance("connect", adw::ResponseAppearance::Suggested);
+
+        // Turning reachability on, then waiting for the listener to actually
+        // bind. The restart happens off the main thread; the wait polls so the
+        // window stays responsive.
+        enable_button.connect_clicked({
+            let status_line = status_line.clone();
+            let enable_button = enable_button.clone();
+            move |_| {
+                enable_button.set_sensitive(false);
+                status_line.set_label("Turning this on — the Brain will restart in a moment…");
+                let _ = run_bridge_action("fleet_peer_enable", serde_json::json!({}));
+                std::thread::spawn(|| {
+                    restart_gateway_best_effort();
+                });
+                // The poll runs repeatedly, so it needs its own handles.
+                let status_line_inner = status_line.clone();
+                let enable_button_inner = enable_button.clone();
+                let ticks = std::cell::Cell::new(0u32);
+                glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+                    ticks.set(ticks.get() + 1);
+                    if let Some(p) = run_bridge_action("fleet_peer_status", serde_json::json!({}))
+                    {
+                        if p.get("listening").and_then(|v| v.as_bool()) == Some(true) {
+                            status_line_inner.set_label(
+                                "This Centurion is reachable. Give the two values above to \
+the other person.",
+                            );
+                            enable_button_inner.set_visible(false);
+                            return glib::ControlFlow::Break;
+                        }
+                    }
+                    if ticks.get() >= 45 {
+                        status_line_inner.set_label(
+                            "Still not reachable. Quit the Brain completely, reopen it, and \
+press the button again.",
+                        );
+                        enable_button_inner.set_sensitive(true);
+                        return glib::ControlFlow::Break;
+                    }
+                    glib::ControlFlow::Continue
+                });
+            }
+        });
+
         let parent_for_result = parent.clone();
         dialog.connect_response(None, move |_d, response| {
-            if response != "save" {
+            if response != "connect" {
                 return;
             }
-            let peer_id = id_entry.text().trim().to_string();
             let name = name_entry.text().trim().to_string();
             let address = address_entry.text().trim().to_string();
-            let token = token_entry.text().trim().to_string();
+            // Spaces are how the secret reads aloud; strip them before saving.
+            let secret = secret_entry
+                .text()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>();
+            if address.is_empty() || secret.is_empty() {
+                let missing = adw::AlertDialog::builder()
+                    .heading("Two values needed")
+                    .body(
+                        "Enter the other Centurion's address and secret — both come from the \
+same screen on their machine, under “1 · Give these two values to the other person”.",
+                    )
+                    .close_response("ok")
+                    .build();
+                missing.add_response("ok", "OK");
+                missing.present(Some(&parent_for_result));
+                return;
+            }
+            // The peer id is an internal label; derive it rather than asking.
+            let derived_id = if name.is_empty() {
+                address
+                    .trim_start_matches("http://")
+                    .trim_start_matches("https://")
+                    .replace([':', '/', '.'], "-")
+            } else {
+                name.to_lowercase().replace(' ', "-")
+            };
             let payload = run_bridge_action(
                 "fleet_peer_put",
                 serde_json::json!({
-                    "peer_id": peer_id,
-                    "name": name,
+                    "peer_id": derived_id,
+                    "name": if name.is_empty() { derived_id.clone() } else { name.clone() },
                     "address": address,
-                    "auth_token": token,
+                    "auth_token": secret,
                 }),
             );
-            let message = payload
-                .as_ref()
-                .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                .unwrap_or("Could not save fleet peer.")
-                .to_owned();
-            let ok = payload
+            let saved = payload
                 .as_ref()
                 .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
                 .unwrap_or(false);
+            if !saved {
+                let message = payload
+                    .as_ref()
+                    .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                    .unwrap_or("Could not save that Centurion.")
+                    .to_owned();
+                let failed = adw::AlertDialog::builder()
+                    .heading("Could not connect")
+                    .body(&message)
+                    .close_response("ok")
+                    .build();
+                failed.add_response("ok", "OK");
+                failed.present(Some(&parent_for_result));
+                return;
+            }
+            // Saved — now prove the link rather than assuming it.
+            let ping = run_bridge_action(
+                "fleet_ping",
+                serde_json::json!({ "peer_id": derived_id }),
+            );
+            let reached = ping
+                .as_ref()
+                .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
+                .unwrap_or(false);
+            let detail = ping
+                .as_ref()
+                .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_owned();
+            let body = if reached {
+                format!(
+                    "{} is connected and answered. Both Centurions can reach each other now.",
+                    if name.is_empty() { "The other Centurion" } else { &name }
+                )
+            } else {
+                format!(
+                    "Saved, but it did not answer{}. Check both machines are on the same \
+network, and that the other person has pressed “Make this Centurion reachable”.",
+                    if detail.is_empty() { String::new() } else { format!(" — {detail}") }
+                )
+            };
             let result = adw::AlertDialog::builder()
-                .heading(if ok { "Peer saved" } else { "Could not save peer" })
-                .body(&message)
+                .heading(if reached { "Connected" } else { "Saved, not yet answering" })
+                .body(&body)
                 .close_response("ok")
                 .build();
             result.add_response("ok", "OK");
