@@ -7034,6 +7034,162 @@ The name is just so you can tell your Centurions apart — anything readable wil
             }
         }
 
+        // ---- Messages from other Centurions --------------------------------
+        let inbox_resp = run_bridge_action("fleet_inbox", serde_json::json!({ "limit": 25 }));
+        let messages = inbox_resp
+            .as_ref()
+            .and_then(|p| p.get("messages").and_then(|v| v.as_array()))
+            .cloned()
+            .unwrap_or_default();
+        let unread = inbox_resp
+            .as_ref()
+            .and_then(|p| p.get("unread").and_then(|v| v.as_u64()))
+            .unwrap_or(0);
+
+        form.append(&section_heading(&if unread > 0 {
+            format!("Messages from other Centurions — {unread} new")
+        } else {
+            "Messages from other Centurions".to_owned()
+        }));
+
+        if messages.is_empty() {
+            form.append(&hint(
+                "Nothing here yet. When another Centurion sends you something, it arrives on \
+        this screen.",
+            ));
+        } else {
+            for msg in messages.iter().take(10) {
+                let from = msg
+                    .get("sender_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("another Centurion");
+                let subject = msg
+                    .get("subject")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("(no subject)");
+                let body = msg.get("body").and_then(|v| v.as_str()).unwrap_or("");
+                let mid = msg
+                    .get("message_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned();
+                let is_read = msg.get("read").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                let shown = if body.trim().is_empty() {
+                    format!("{from} · {subject}")
+                } else {
+                    format!("{from} · {subject}\n{}", body.trim())
+                };
+                let label = gtk::Label::builder()
+                    .label(&shown)
+                    .xalign(0.0)
+                    .hexpand(true)
+                    .wrap(true)
+                    .build();
+                if !is_read {
+                    label.add_css_class("heading");
+                }
+                row.append(&label);
+                if !is_read {
+                    let done = gtk::Button::with_label("Got it");
+                    done.add_css_class("flat");
+                    done.set_valign(gtk::Align::Start);
+                    done.connect_clicked(move |b| {
+                        let _ = run_bridge_action(
+                            "fleet_mark_read",
+                            serde_json::json!({ "message_id": mid }),
+                        );
+                        b.set_sensitive(false);
+                        b.set_label("Read");
+                    });
+                    row.append(&done);
+                }
+                form.append(&row);
+            }
+        }
+
+        // ---- Send something -------------------------------------------------
+        let peers_resp = run_bridge_action("fleet_status", serde_json::json!({}));
+        let peer_names: Vec<String> = peers_resp
+            .as_ref()
+            .and_then(|p| p.get("peers").and_then(|v| v.as_array()))
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if !peer_names.is_empty() {
+            form.append(&section_heading("Send something to the other Centurion"));
+            let name_refs: Vec<&str> = peer_names.iter().map(String::as_str).collect();
+            let picker = gtk::DropDown::from_strings(&name_refs);
+            let subject_entry = gtk::Entry::builder()
+                .placeholder_text("Subject (e.g. Check the pricing sheet)")
+                .hexpand(true)
+                .build();
+            let body_view = gtk::TextView::builder()
+                .wrap_mode(gtk::WrapMode::WordChar)
+                .build();
+            body_view.set_size_request(-1, 90);
+            let body_frame = gtk::Frame::builder().child(&body_view).build();
+            form.append(&picker);
+            form.append(&subject_entry);
+            form.append(&body_frame);
+            let send_button = gtk::Button::with_label("Send");
+            send_button.add_css_class("suggested-action");
+            send_button.set_halign(gtk::Align::Start);
+            form.append(&send_button);
+            let send_status = hint("");
+            form.append(&send_status);
+
+            let parent_for_send = parent.clone();
+            let peer_names_for_send = peer_names.clone();
+            send_button.connect_clicked(move |b| {
+                let to = peer_names_for_send
+                    .get(picker.selected() as usize)
+                    .cloned()
+                    .unwrap_or_default();
+                let subject = subject_entry.text().trim().to_owned();
+                let buf = body_view.buffer();
+                let body = buf
+                    .text(&buf.start_iter(), &buf.end_iter(), false)
+                    .trim()
+                    .to_owned();
+                if body.is_empty() {
+                    send_status.set_label("Write the message first.");
+                    return;
+                }
+                b.set_sensitive(false);
+                let payload = run_bridge_action(
+                    "fleet_send",
+                    serde_json::json!({ "peer_id": to, "subject": subject, "body": body }),
+                );
+                let delivered = payload
+                    .as_ref()
+                    .and_then(|p| p.get("delivered").and_then(|v| v.as_bool()))
+                    .unwrap_or(false);
+                let message = payload
+                    .as_ref()
+                    .and_then(|p| p.get("message").and_then(|v| v.as_str()))
+                    .unwrap_or("Could not send.")
+                    .to_owned();
+                send_status.set_label(&message);
+                // Only celebrate a delivery the Brain can prove.
+                if delivered {
+                    let ok_dialog = adw::AlertDialog::builder()
+                        .heading("Sent")
+                        .body(&message)
+                        .close_response("ok")
+                        .build();
+                    ok_dialog.add_response("ok", "OK");
+                    ok_dialog.present(Some(&parent_for_send));
+                }
+                b.set_sensitive(true);
+            });
+        }
+
         let dialog = adw::AlertDialog::builder()
             .heading("Connect another Centurion")
             .body(
