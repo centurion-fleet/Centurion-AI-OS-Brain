@@ -1061,30 +1061,68 @@ class APIServerAdapter(BasePlatformAdapter):
             return ""
 
     async def _handle_fleet_message(self, request: "web.Request") -> "web.Response":
-        """POST /fleet/message — receive message from another Centurion."""
+        """POST /fleet/message — receive a message from another Centurion.
+
+        The message is written to the fleet inbox BEFORE this endpoint claims
+        success. It used to look for a transport that is never constructed, fall
+        back to a log line, and return {"status": "received"} — telling the
+        sender the message had landed when it had been discarded, and giving no
+        human any way to read it. A false acknowledgement is worse than a
+        refusal: the sender stops retrying.
+        """
         ok, why = self._fleet_authorize(request)
         if not ok:
             logger.warning(f"Fleet message REJECTED from {request.remote}: {why}")
             return web.json_response({"status": "unauthorized", "detail": why}, status=401)
+
         try:
             payload = await request.json()
-            sender_id = payload.get("sender_id", "")
-            sender_name = payload.get("sender_name", sender_id)
-
-            from centurion.fleet.transport import FleetMessageEnvelope
-            envelope = FleetMessageEnvelope(**payload)
-
-            transport = getattr(self, "_fleet_transport", None)
-            if transport:
-                result = transport.receive_message(envelope)
-            else:
-                logger.info(f"Fleet message from {sender_name} ({sender_id}): {payload.get('subject', '(no subject)')}")
-                result = {"status": "received", "message_id": payload.get("message_id", "")}
-
-            return web.json_response(result, status=200)
         except Exception as e:
             logger.error(f"Fleet message handler error: {e}")
             return web.json_response({"status": "error", "detail": str(e)}, status=400)
+
+        if not isinstance(payload, dict):
+            return web.json_response(
+                {"status": "error", "detail": "expected a JSON object"}, status=400
+            )
+
+        sender_id = str(payload.get("sender_id") or "")
+        sender_name = str(payload.get("sender_name") or sender_id or "another Centurion")
+
+        # Store first. Nothing below may report success unless this worked.
+        try:
+            from centurion.fleet.inbox import store_message
+
+            path = store_message(payload)
+        except Exception as e:
+            logger.error(
+                f"Fleet message could NOT be stored from {sender_name} ({sender_id}): {e}"
+            )
+            return web.json_response(
+                {"status": "error", "detail": f"message not stored: {e}"}, status=500
+            )
+
+        logger.info(
+            f"Fleet message stored from {sender_name} ({sender_id}): "
+            f"{payload.get('subject', '(no subject)')} -> {path}"
+        )
+
+        # Keep the sender's record fresh so the humans can see the link is alive.
+        try:
+            from centurion.fleet.peers import FleetPeers
+
+            FleetPeers().update_status(sender_id, status="online", last_seen=time.time())
+        except Exception as e:
+            logger.debug(f"Fleet message: could not refresh peer status for {sender_id}: {e}")
+
+        return web.json_response(
+            {
+                "status": "stored",
+                "message_id": payload.get("message_id", ""),
+                "timestamp": time.time(),
+            },
+            status=200,
+        )
 
     async def _handle_fleet_status(self, request: "web.Request") -> "web.Response":
         """GET /fleet/status — list fleet peers and their connection status."""

@@ -293,6 +293,12 @@ def handle_request(
         return _handle_fleet_peer_connect(request, request_id)
     if action == "fleet_peer_remove":
         return _handle_fleet_peer_remove(request, request_id)
+    if action == "fleet_send":
+        return _handle_fleet_send(request, request_id)
+    if action == "fleet_inbox":
+        return _handle_fleet_inbox(request, request_id)
+    if action == "fleet_mark_read":
+        return _handle_fleet_mark_read(request, request_id)
     if action == "plugin_list":
         return _handle_plugin_list(request_id)
     if action == "tools_skills_snapshot":
@@ -4996,6 +5002,153 @@ def _handle_fleet_ping(request: dict[str, Any], request_id: str) -> dict[str, An
         }
     except Exception as exc:
         return _error_response(request_id, action="fleet_ping", exc=exc)
+
+
+def _resolve_peer(peer_ref: str):
+    """Find a peer by id, falling back to its display name.
+
+    The humans know their Centurions as Eve and Mikki, not as eve-4b30cc, so a
+    name has to work wherever an id does.
+    """
+    from centurion.fleet.peers import FleetPeers
+
+    peers = FleetPeers()
+    peer = peers.get(peer_ref)
+    if peer is not None:
+        return peer
+    for candidate in peers.list_all():
+        if candidate.name.lower() == peer_ref.lower():
+            return candidate
+    return None
+
+
+def _handle_fleet_send(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Send a message to another Centurion.
+
+    Reports what actually happened. A message that could not be delivered is
+    queued and SAID to be queued — never dressed up as sent. The fleet used to
+    answer "received" for messages it discarded, and that is worse than a
+    failure because the sender stops trying.
+    """
+    try:
+        from centurion.fleet.identity import build_transport
+
+        peer_ref = str(request.get("peer_id") or request.get("to") or "").strip()
+        subject = str(request.get("subject") or "").strip() or "(no subject)"
+        body = str(request.get("body") or "").strip()
+        priority = str(request.get("priority") or "normal").strip() or "normal"
+
+        if not peer_ref:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_send",
+                "code": "NO_PEER",
+                "message": "Which Centurion? Give the name or id from your list.",
+            }
+        if not body:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_send",
+                "code": "EMPTY",
+                "message": "There is nothing to send — write the message first.",
+            }
+
+        peer = _resolve_peer(peer_ref)
+        if peer is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_send",
+                "code": "UNKNOWN_PEER",
+                "message": f'No Centurion called "{peer_ref}" is connected yet.',
+            }
+
+        transport = build_transport()
+        if transport is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_send",
+                "code": "NO_TRANSPORT",
+                "message": "Could not prepare the fleet connection.",
+            }
+
+        delivered = bool(
+            transport.send_message(
+                recipient_id=peer.centurion_id,
+                subject=subject,
+                body=body,
+                priority=priority,
+            )
+        )
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_send",
+            "delivered": delivered,
+            "queued": not delivered,
+            "peer": {"id": peer.centurion_id, "name": peer.name},
+            "message": (
+                f"Sent to {peer.name}."
+                if delivered
+                else f"{peer.name} did not take it — queued and will be retried."
+            ),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_send", exc=exc)
+
+
+def _handle_fleet_inbox(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """What other Centurions have sent to this one."""
+    try:
+        from centurion.fleet.inbox import list_messages, unread_count
+
+        try:
+            limit = int(request.get("limit") or 50)
+        except (TypeError, ValueError):
+            limit = 50
+        limit = max(1, min(limit, 200))
+        unread_only = bool(request.get("unread_only"))
+
+        messages = list_messages(limit=limit, unread_only=unread_only)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_inbox",
+            "messages": messages,
+            "count": len(messages),
+            "unread": unread_count(),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_inbox", exc=exc)
+
+
+def _handle_fleet_mark_read(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Mark one received message as read."""
+    try:
+        from centurion.fleet.inbox import mark_read, unread_count
+
+        message_id = str(request.get("message_id") or "").strip()
+        if not message_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_mark_read",
+                "code": "NO_MESSAGE_ID",
+                "message": "Which message?",
+            }
+        found = mark_read(message_id)
+        return {
+            "id": request_id,
+            "ok": found,
+            "action": "fleet_mark_read",
+            "unread": unread_count(),
+            "message": "Marked as read." if found else "That message is no longer there.",
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_mark_read", exc=exc)
 
 
 def _handle_fleet_peer_put(request: dict[str, Any], request_id: str) -> dict[str, Any]:

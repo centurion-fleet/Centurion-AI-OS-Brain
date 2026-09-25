@@ -44,13 +44,44 @@ def test_send_message_queues_when_peer_missing_address(transport):
 
 @patch("urllib.request.urlopen")
 def test_send_message_delivers_over_http(mock_urlopen, transport):
+    """Delivery now requires the receiver to say it STORED the message.
+
+    This test previously mocked only `status = 200` and asserted delivery, which
+    encoded the contract that let a discarded message be reported as received.
+    The receiver was changed to answer {"status": "stored"} only when it has
+    written the message, so 200 alone is no longer success.
+    """
     response = MagicMock()
     response.status = 200
+    response.read.return_value = b'{"status": "stored", "message_id": "m1"}'
     response.__enter__.return_value = response
     mock_urlopen.return_value = response
 
     assert transport.send_message("peer-1", "Hello", "world") is True
     mock_urlopen.assert_called_once()
+
+
+@patch("urllib.request.urlopen")
+def test_received_receipt_is_not_delivery(mock_urlopen, transport):
+    """The old lie: "received" for a message that was thrown away."""
+    response = MagicMock()
+    response.status = 200
+    response.read.return_value = b'{"status": "received", "message_id": "m1"}'
+    response.__enter__.return_value = response
+    mock_urlopen.return_value = response
+
+    assert transport.send_message("peer-1", "Hello", "world") is False
+
+
+@patch("urllib.request.urlopen")
+def test_non_json_receipt_is_not_delivery(mock_urlopen, transport):
+    response = MagicMock()
+    response.status = 200
+    response.read.return_value = b"<html>proxy error</html>"
+    response.__enter__.return_value = response
+    mock_urlopen.return_value = response
+
+    assert transport.send_message("peer-1", "Hello", "world") is False
 
 
 def test_receive_message_invokes_callback(transport):

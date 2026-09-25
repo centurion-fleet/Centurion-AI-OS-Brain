@@ -169,20 +169,33 @@ class FleetTransport:
             )
 
             with urllib.request.urlopen(req, timeout=DEFAULT_REQUEST_TIMEOUT) as resp:
-                if resp.status == 200:
-                    # Update peer status
-                    self.peers.update_status(
-                        peer.centurion_id,
-                        status="online",
-                        last_seen=time.time(),
-                    )
-                    logger.info(f"Message {envelope.message_id} delivered to {peer.name}")
-                    return True
-                else:
+                body_bytes = resp.read()
+                if resp.status != 200:
+                    logger.warning(f"Peer {peer.name} returned HTTP {resp.status}")
+                    return False
+
+                # HTTP 200 alone is NOT delivery. The receiver used to answer
+                # {"status": "received"} after discarding the message, so ask it
+                # what it actually did rather than trusting the status code.
+                try:
+                    receipt = json.loads(body_bytes.decode("utf-8", errors="replace"))
+                except ValueError:
+                    logger.warning(f"Peer {peer.name} returned a non-JSON receipt")
+                    return False
+
+                if not isinstance(receipt, dict) or receipt.get("status") != "stored":
                     logger.warning(
-                        f"Peer {peer.name} returned HTTP {resp.status}"
+                        f"Peer {peer.name} did not store the message: {receipt!r}"
                     )
                     return False
+
+                self.peers.update_status(
+                    peer.centurion_id,
+                    status="online",
+                    last_seen=time.time(),
+                )
+                logger.info(f"Message {envelope.message_id} delivered to {peer.name}")
+                return True
 
         except (urllib.error.URLError, urllib.error.HTTPError,
                 ConnectionRefusedError, TimeoutError, OSError) as e:
