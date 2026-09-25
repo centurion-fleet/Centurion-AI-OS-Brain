@@ -6814,8 +6814,10 @@ What capability should the skill cover?\n\n"
                     peers_box.append(
                         &gtk::Label::builder()
                             .label(
-                                "No peers yet. Add another Centurion’s reachable address \
-(LAN or public) and the same FLEET_AUTH_TOKEN both sides use.",
+                                "No peers yet. To link another Brain, press “Add a peer”. It needs \
+two details from that Brain — its address and its shared secret. Get them from \
+Collaborations → “Invite another owner” → “Make this Brain reachable” on the other \
+machine, then send your own two details back the same way.",
                             )
                             .wrap(true)
                             .xalign(0.0)
@@ -6907,7 +6909,7 @@ What capability should the skill cover?\n\n"
             .hexpand(true)
             .build();
         let address_entry = gtk::Entry::builder()
-            .placeholder_text("Address (http://host:8642)")
+            .placeholder_text("Address (http://host:18789)")
             .hexpand(true)
             .build();
         let token_entry = gtk::PasswordEntry::builder()
@@ -6922,9 +6924,11 @@ What capability should the skill cover?\n\n"
         let dialog = adw::AlertDialog::builder()
             .heading("Fleet peer")
             .body(
-                "Cross-machine collaboration uses a reachable fleet peer — not portal tokens. \
-Both Brains need the same FLEET_AUTH_TOKEN and an address you can reach \
-(http://host:8642). Ping after saving to confirm.",
+                "Get the two details from the other Brain: open Collaborations → \
+“Invite another owner” → “Make this Brain reachable”. It shows an address \
+(http://host:18789) and a shared secret. Enter those below — both Brains must \
+use the SAME secret. Peer id and display name are just labels so you can tell \
+your Brains apart; anything readable will do. Ping after saving to confirm.",
             )
             .extra_child(&form)
             .close_response("cancel")

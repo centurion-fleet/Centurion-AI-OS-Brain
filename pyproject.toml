@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "centurionai-os"
-version = "6.0.3"
+version = "6.0.4"
 description = "Centurion AI OS — The self-improving sovereign AI agent that runs on your own hardware"
 readme = "README.md"
 requires-python = ">=3.11"

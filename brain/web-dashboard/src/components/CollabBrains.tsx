@@ -60,6 +60,15 @@ export function CollabBrains() {
   }, []);
 
   useEffect(() => {
+    // Load even while collapsed. This panel sits behind a toggle, so a bridge that
+    // cannot answer previously failed in total silence: the control that would have
+    // appeared simply never rendered, leaving the owner with nothing to explain it.
+    // Adrian, 25 Sep 2026 — he went hunting for a button that was never going to be
+    // drawn, because an un-restarted Brain serves an older bridge than its deck.
+    void load();
+  }, [load]);
+
+  useEffect(() => {
     if (!open) return;
     void load();
   }, [open, load]);
@@ -179,7 +188,9 @@ export function CollabBrains() {
       >
         {open
           ? "Hide invite & join"
-          : `Invite another owner · join a collaboration · ${peers.length}`}
+          : error
+            ? "Invite another owner · join a collaboration — this Brain did not answer (tap to see why)"
+            : `Invite another owner · join a collaboration · ${peers.length}`}
       </button>
 
       {open && (
