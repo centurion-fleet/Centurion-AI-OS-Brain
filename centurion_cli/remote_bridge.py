@@ -5242,8 +5242,26 @@ def _handle_fleet_peer_enable(request: dict[str, Any], request_id: str) -> dict[
                 "message": "Nothing has changed.",
             }
 
-        # The gateway refuses to bind a network address without a real API key.
+        # Write the settings through .env as well as config.yaml.
+        #
+        # gateway.platforms.api_server.extra (written just above) is NOT read by
+        # the gateway's config loader — that assembles platform config from the
+        # top-level `platforms:` block plus environment variables. Without these
+        # the listener binds its 127.0.0.1 defaults and no peer can reach it,
+        # however many times the customer is told to restart.
+        from centurion_cli.fleet import write_env_settings
+
         env_path = os.path.join(_fleet_home(), ".env")
+        write_env_settings(env_path, {
+            "API_SERVER_ENABLED": "true",
+            "API_SERVER_HOST": "0.0.0.0",
+            "API_SERVER_PORT": str(port),
+            # Must match the token advertised to peers, or the Brain publishes
+            # one secret and accepts none.
+            "CENTURION_FLEET_TOKEN": token,
+        })
+
+        # The gateway refuses to bind a network address without a real API key.
         api_key = ""
         if os.path.exists(env_path):
             for line in open(env_path):

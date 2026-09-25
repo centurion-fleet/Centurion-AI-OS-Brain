@@ -424,6 +424,34 @@ def _api_server_node(cfg, create: bool = False):
     return None
 
 
+def write_env_settings(env_path: str, values: dict[str, str]) -> None:
+    """Set keys in a .env file, replacing any existing line for each key.
+
+    The gateway's config loader builds its platform configuration from the
+    top-level ``platforms:`` block plus environment variables — it does NOT
+    read ``gateway.platforms.*``. Anything the fleet feature needs the gateway
+    to honour must therefore be written here as well, not only into
+    config.yaml. Writing the config node alone is what left the peer listener
+    bound to its 127.0.0.1 defaults and unreachable by every other Brain.
+    """
+    lines: list[str] = []
+    if os.path.exists(env_path):
+        with open(env_path) as fh:
+            lines = fh.readlines()
+    for key, value in values.items():
+        prefix = f"{key}="
+        for i, line in enumerate(lines):
+            if line.startswith(prefix):
+                lines[i] = f"{key}={value}\n"
+                break
+        else:
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.append(f"{key}={value}\n")
+    with open(env_path, "w") as fh:
+        fh.writelines(lines)
+
+
 def fleet_peer_enable(args: argparse.Namespace) -> None:
     """
     Make this Brain reachable by other Brains.
@@ -481,6 +509,24 @@ def fleet_peer_enable(args: argparse.Namespace) -> None:
         print(f"✗ Could not set the listen address (found {verified!r}). Nothing has changed.")
         print("  Send this to Adrian along with your config.yaml — do not hand-edit it.")
         return
+
+    # Write the settings through .env as well as config.yaml.
+    #
+    # gateway.platforms.api_server.extra (written above) is NOT read by the
+    # gateway's config loader — that assembles platform config from the
+    # top-level `platforms:` block plus environment variables. Writing only the
+    # config.yaml node left the listener bound to its defaults on
+    # 127.0.0.1:8642, so no peer could ever reach it, and the UI reported
+    # "nothing is listening yet. Restart the Brain" no matter how many times
+    # the customer restarted. These env vars are the path the loader honours.
+    write_env_settings(env_path, {
+        "API_SERVER_ENABLED": "true",
+        "API_SERVER_HOST": "0.0.0.0",
+        "API_SERVER_PORT": str(port),
+        # Must match the token advertised to peers, or the Brain publishes
+        # one secret and accepts none.
+        "CENTURION_FLEET_TOKEN": token,
+    })
 
     # The gateway refuses to bind a network address without a real API key.
     api_key = ""
