@@ -1598,7 +1598,7 @@ The Brain here is the product; the phone is the remote.",
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
             .subtitle(
-                "Local boards on this Brain. Open Collab to form a swarm; Join or Invite uses Mission Control when you have a token.",
+                "Local boards on this Brain, plus Brain-to-Brain linking over your network. Open Collab to form a board or invite another Brain.",
             )
             .icon_name("system-users-symbolic")
             .build();

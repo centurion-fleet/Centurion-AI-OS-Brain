@@ -92,12 +92,32 @@ fn ping_bridge_version(path: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The version this binary was built as. The bridge daemon ships in the same RPM
+/// as the app, so a mismatch means the daemon predates the install.
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 fn orphan_is_current(path: &Path) -> bool {
-    // A live, responding listener is preferable to a forced recycle. Exact
-    // version mismatch used to kill a healthy daemon and could leave Chat stuck
-    // when the replacement spawn raced the old process. Lockstep releases keep
-    // Brain and Python close enough for Chat/settings.
-    ping_bridge_version(path).is_some()
+    // A live, responding listener is preferable to a forced recycle — but ONLY
+    // when it is the daemon this build expects.
+    //
+    // An RPM upgrade replaces the Python on disk and restarts NOTHING, so a
+    // pre-update daemon keeps the socket, answers `bridge_ping` perfectly, and
+    // implements an older action set. This function used to accept any answer and
+    // throw the reported version away, so the UI ended up talking to a mismatched
+    // backend and controls vanished with no error — the customer-visible
+    // "Bridge empty response (code -1)" seen on a real machine 25 Sep 2026.
+    //
+    // An exact-match check was tried before and REVERTED, because recycling on
+    // mismatch could leave Chat stuck when the replacement spawn raced the old
+    // process. That race is what `recycle_orphan_listener` now closes: it waits
+    // for the socket to actually be released and escalates, instead of sleeping a
+    // fixed 150ms and hoping. Do not reintroduce this check without that ordering.
+    match ping_bridge_version(path) {
+        Some(version) => version == app_version(),
+        None => false,
+    }
 }
 
 fn bridge_stderr_path() -> PathBuf {
@@ -163,29 +183,58 @@ fn spawn_daemon(socket_path: &Path) -> Result<Child, String> {
         .map_err(|e| format!("Could not start Centurion bridge daemon: {e}"))
 }
 
+/// True once nothing is holding the socket any more.
+fn socket_released(socket_path: &Path) -> bool {
+    !socket_path.exists() || !socket_connectable(socket_path)
+}
+
+/// Wait (bounded) for the listener to actually let go of the socket.
+fn wait_socket_released(socket_path: &Path, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if socket_released(socket_path) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    socket_released(socket_path)
+}
+
+fn signal_bridge_daemons(signal: &str) {
+    let _ = Command::new("pkill")
+        .args([signal, "-f", "centurion_cli.remote_bridge.*--serve"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
 fn stop_listener_on_socket(socket_path: &Path) {
-    // Best-effort: remove the sock so the next bind wins. If something is still
-    // connected we also try to shut it down by connecting and closing.
-    if socket_connectable(socket_path) {
+    // Closing the socket is NOT the same as stopping the listener. This used to
+    // unlink the path, sleep a fixed 150ms, and unlink again — which leaves the
+    // old process alive holding the old fd. Measured in the field 25 Sep 2026:
+    // the next spawn then died with `OSError: [Errno 98] Address already in use`,
+    // and the customer saw "Bridge empty response (code -1)" with no way forward.
+    // Kill it properly (see recycle_orphan_listener); this just frees the path.
+    if socket_path.exists() {
         if let Ok(stream) = UnixStream::connect(socket_path) {
             let _ = stream.shutdown(Shutdown::Both);
         }
-        // Give an orphan a moment to exit after EOF; then force-remove the path.
-        thread::sleep(Duration::from_millis(150));
-    }
-    if socket_path.exists() {
         let _ = std::fs::remove_file(socket_path);
     }
 }
 
 fn recycle_orphan_listener(path: &Path) {
     stop_listener_on_socket(path);
-    let _ = Command::new("pkill")
-        .args(["-f", "centurion_cli.remote_bridge.*--serve"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    thread::sleep(Duration::from_millis(250));
+    signal_bridge_daemons("-TERM");
+    if wait_socket_released(path, Duration::from_secs(3)) {
+        stop_listener_on_socket(path);
+        return;
+    }
+    // Still held after a graceful stop: escalate. A wedged daemon will not honour
+    // SIGTERM, and leaving it in place all but guarantees the next bind fails — so
+    // the retry loop in ensure_bridge_daemon spins and the feature stays dead.
+    signal_bridge_daemons("-9");
+    let _ = wait_socket_released(path, Duration::from_secs(2));
     stop_listener_on_socket(path);
 }
 
@@ -233,7 +282,10 @@ pub fn ensure_bridge_daemon() -> Result<PathBuf, String> {
         }
     }
 
-    if socket_connectable(&path) {
+    // Only accept a listener that is OUR daemon. A mismatched one answers the
+    // socket perfectly and implements the wrong action set, so the surface
+    // silently does nothing rather than reporting a fault.
+    if socket_connectable(&path) && orphan_is_current(&path) {
         return Ok(path);
     }
 
