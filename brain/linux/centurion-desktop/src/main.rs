@@ -68,6 +68,10 @@ mod mission_deck_page;
 mod interviews;
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code, unused_imports, clippy::too_many_lines)]
+mod service_freshness;
+
+#[cfg(target_os = "linux")]
 #[allow(
     dead_code,
     unused_imports,
@@ -378,6 +382,10 @@ mod linux {
             gtk::Window::set_default_icon_name(APP_ID);
         });
         application.connect_activate(move |application| {
+            // An upgrade replaces the files but does not restart the services
+            // that are already in memory. Do that here rather than asking the
+            // owner to reboot.
+            crate::service_freshness::refresh_services_in_background(installed_version());
             build_window(application, supervisor.clone());
         });
         application.run();
