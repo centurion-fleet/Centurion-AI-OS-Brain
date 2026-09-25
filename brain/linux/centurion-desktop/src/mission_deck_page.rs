@@ -803,6 +803,72 @@ fn apply_deck_suspend(webview: &webkit6::WebView, suspended: bool) {
     webview.evaluate_javascript(&script, None, None, gio::Cancellable::NONE, |_| {});
 }
 
+/// Drop the WebView's on-disk cache when the installed version changes.
+///
+/// Vite emits content-hashed chunk names and each release **replaces** them, so a
+/// persistent WebKit cache left over from the previous version holds a page that
+/// points at assets which no longer exist. The component's JS 404s and the whole
+/// panel silently fails to mount — no error reaches the screen, the feature is
+/// simply absent. That is how a Brain-to-Brain invite panel goes missing straight
+/// after an update, and it reads to the customer as "the feature isn't there".
+///
+/// Clearing it on a version change makes the update self-healing instead of
+/// relying on someone knowing to delete a cache directory by hand.
+///
+/// Runs once per process, before the first WebView is constructed.
+fn ensure_fresh_deck_cache() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+
+    ONCE.call_once(|| {
+        let version = env!("CARGO_PKG_VERSION");
+        let home = crate::bridge_actions::resolve_centurion_home();
+        let stamp = std::path::PathBuf::from(&home).join("deck-cache-version");
+
+        // Same version as last run — the cached assets are still valid.
+        if std::fs::read_to_string(&stamp)
+            .map(|s| s.trim() == version)
+            .unwrap_or(false)
+        {
+            return;
+        }
+
+        let cache_root = std::env::var_os("XDG_CACHE_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".cache"))
+            });
+
+        if let Some(root) = cache_root {
+            // WebKit derives its default data dir from the program name, which is
+            // the executable's basename — derive it the same way rather than
+            // hard-coding, so a renamed binary still finds its own cache.
+            let exe_name = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_else(|| "centurion-desktop".to_owned());
+            let app_dir = root.join(exe_name);
+
+            for sub in ["WebKitCache", "CacheStorage"] {
+                let dir = app_dir.join(sub);
+                if dir.exists() {
+                    match std::fs::remove_dir_all(&dir) {
+                        Ok(()) => eprintln!(
+                            "deck cache: cleared {dir:?} (version changed to {version})"
+                        ),
+                        Err(e) => {
+                            eprintln!("deck cache: could not clear {dir:?}: {e}")
+                        }
+                    }
+                }
+            }
+        }
+
+        let _ = std::fs::write(&stamp, format!("{version}\n"));
+    });
+}
+
 fn attach_webview(
     root: &gtk::Box,
     hooks: Rc<HomeHooks>,
@@ -811,6 +877,10 @@ fn attach_webview(
     deck_role: &'static str,
 ) -> Option<webkit6::WebView> {
     use webkit6::prelude::*;
+
+    // Clear a stale deck cache BEFORE the first WebView exists, so a version
+    // change can never leave the deck pointing at assets the release deleted.
+    ensure_fresh_deck_cache();
 
     let ucm = webkit6::UserContentManager::new();
     let _ = ucm.register_script_message_handler("centurion", None);
