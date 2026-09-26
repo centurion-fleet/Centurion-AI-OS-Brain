@@ -5375,10 +5375,22 @@ def _port_listening(host: str, port: int, timeout: float = 1.5) -> bool:
 
     Config saying 0.0.0.0 is a promise; this is the fact. The listener only
     binds after a Brain restart, so the two can disagree.
+
+    Probe the address we are about to hand to the other person, not loopback.
+    A listener bound to 127.0.0.1 alone satisfies a loopback probe while being
+    unreachable from the other desk — so a loopback check would report
+    "reachable", the customer would read the two values out to the other person,
+    and the pairing would fail with nothing on screen to explain it. That false
+    comfort is worse than no check, because it also suppresses the restart advice
+    that would have fixed it.
     """
     import socket as _sock
 
-    target = "127.0.0.1" if host in ("0.0.0.0", "", "localhost") else host
+    if host in ("0.0.0.0", "", "localhost"):
+        lan = _lan_address()
+        target = lan if lan and lan != "unknown" else "127.0.0.1"
+    else:
+        target = host
     try:
         with _sock.create_connection((target, port), timeout=timeout):
             return True
