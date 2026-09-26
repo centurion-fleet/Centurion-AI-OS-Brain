@@ -272,6 +272,22 @@ if lines_to_add:
 PY
 }
 
+# Has a Centurion actually been used on this machine? This is the honest test for
+# whether there is anything to transfer. A fresh install has nothing, and telling a
+# first-time owner that their "Soul, chats and settings are still on this machine"
+# is a false statement — it also suppresses the first-run Welcome, because the
+# transfer confirmation marks the Welcome as seen. Checked BEFORE any seeding.
+home_has_prior_use() {
+  local home_dir="$1"
+  [[ -s "${home_dir}/config.yaml" ]] && return 0
+  [[ -s "${home_dir}/.env" ]] && return 0
+  [[ -f "${home_dir}/agent_name" ]] && return 0
+  [[ -d "${home_dir}/memories" ]] && return 0
+  [[ -d "${home_dir}/vault" ]] && return 0
+  [[ -d "${home_dir}/sessions" ]] && return 0
+  return 1
+}
+
 stamp_smooth_transfer() {
   local home_dir="$1"
   local repo="$2"
@@ -282,7 +298,8 @@ stamp_smooth_transfer() {
   fi
   mkdir -p "${home_dir}"
   local stamp="${home_dir}/desktop-build.json"
-  if [[ ! -f "${stamp}" ]] || ! grep -q '"install": "smooth-transfer"' "${stamp}" 2>/dev/null; then
+  if { [[ ! -f "${stamp}" ]] || ! grep -q '"install": "smooth-transfer"' "${stamp}" 2>/dev/null; } \
+     && home_has_prior_use "${home_dir}"; then
     printf '1\n' > "${home_dir}/smooth_transfer_pending"
   fi
   local built_at

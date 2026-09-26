@@ -808,11 +808,21 @@ with the QR on this desk (same Wi‑Fi). Linux Brain remains the desk product.";
     }
 
     /// First-run narrative: what a Centurion *is* (partner), not pairing theatre.
+    ///
+    /// This is the only orientation a new owner gets, so it names the two setup
+    /// steps that make the Centurion theirs — and offers them from here rather
+    /// than leaving them buried in Settings. Shaping the Sovereign first is what
+    /// turns an appliance into a partner; a new owner who never finds it runs a
+    /// stranger's Centurion.
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
 keeps your data here, and stays on your mission.\n\n\
 Chat is the conversation. Focus is the command center: mission stack, Missions, and decisions. \
 Settings is how you shape Soul, memory, and thinking.\n\n\
+Two short interviews come first, and you can start either from here: Shape your Sovereign \\
+(its story and values) and Mission Discovery (what you are building toward). Both also live \\
+in Settings, under Soul and Focus. Everything else already works — your licence is on this \\
+machine and nothing else needs setting up.
 An iPhone remote is optional later — only when you want the Brain in your pocket. \
 For now, sit here and meet your Centurion.";
         let dialog = adw::AlertDialog::builder()
@@ -822,13 +832,17 @@ For now, sit here and meet your Centurion.";
             .default_response("begin")
             .build();
         dialog.add_response("begin", "Begin");
+        dialog.add_response("shape", "Shape your Sovereign");
         dialog.add_response("pair", "Pair iPhone later");
-        dialog.set_response_appearance("begin", adw::ResponseAppearance::Suggested);
+        dialog.set_response_appearance("shape", adw::ResponseAppearance::Suggested);
         let parent_for_pair = parent.clone();
+        let parent_for_shape = parent.clone();
         dialog.connect_response(None, move |_d, response| {
             mark_brain_welcome_seen();
             if response == "pair" {
                 show_pairing_qr_window(&parent_for_pair);
+            } else if response == "shape" {
+                crate::interviews::show_soul_interview(&parent_for_shape, Rc::new(|| {}));
             }
         });
         dialog.present(Some(parent));
