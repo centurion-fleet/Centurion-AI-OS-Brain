@@ -316,30 +316,89 @@ class FleetTransport:
 
     # ── Health / Check-in ────────────────────────────────────────────
 
-    def send_heartbeat(self, peer_id: str, version: str = "") -> bool:
-        """
-        Send a health check-in to a fleet peer.
-        Lightweight — confirms this Centurion is alive and reachable.
-        """
-        return self.send_message(
-            recipient_id=peer_id,
-            subject="[HEARTBEAT]",
-            body=json.dumps({
-                "type": "heartbeat",
-                "version": version or "0.3.0",
-                "timestamp": time.time(),
-            }),
-            priority="low",
-        )
+    def announce(
+        self,
+        peer_id: str,
+        version: str = "",
+        activity: Optional[dict] = None,
+    ) -> bool:
+        """Tell a peer this Centurion is alive, and what it is working on.
 
-    def broadcast_heartbeat(self, version: str = ""):
-        """Send heartbeat to all known peers."""
-        for peer in self.peers.list_all():
-            if peer.address:
+        Posts to ``/fleet/checkin``, not ``/fleet/message``. Presence is not a
+        message: routing heartbeats through the inbox would fill the owner's
+        unread list with them until they stopped trusting the count. And a
+        check-in that reports success while being dropped is worse than one that
+        admits failure, so the receipt is checked rather than the status code.
+        """
+        peer = self.peers.get(peer_id)
+        if not peer or not peer.address:
+            return False
+
+        payload: dict = {
+            "centurion_id": self.centurion_id,
+            "name": self.centurion_name,
+            "status": "active",
+            "version": version,
+        }
+        if activity:
+            payload["activity"] = activity
+
+        try:
+            import urllib.request
+            import urllib.error
+
+            req = urllib.request.Request(
+                f"{peer.address.rstrip('/')}/fleet/checkin",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Centurion-ID": self.centurion_id,
+                    "X-Centurion-Auth": self.auth_token,
+                },
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req, timeout=DEFAULT_REQUEST_TIMEOUT) as resp:
+                body = resp.read()
+                if resp.status != 200:
+                    logger.warning(f"Peer {peer.name} returned HTTP {resp.status}")
+                    return False
                 try:
-                    self.send_heartbeat(peer.centurion_id, version)
-                except Exception:
-                    pass
+                    receipt = json.loads(body.decode("utf-8", errors="replace"))
+                except ValueError:
+                    logger.warning(f"Peer {peer.name} returned a non-JSON check-in receipt")
+                    return False
+                if not isinstance(receipt, dict) or receipt.get("status") != "acknowledged":
+                    logger.warning(f"Peer {peer.name} did not acknowledge: {receipt!r}")
+                    return False
+
+            self.peers.update_status(
+                peer.centurion_id, status="online", last_seen=time.time()
+            )
+            return True
+
+        except Exception as e:
+            logger.warning(f"Check-in to {peer.name} failed: {e}")
+            self.peers.update_status(peer.centurion_id, status="offline")
+            return False
+
+    def send_heartbeat(self, peer_id: str, version: str = "") -> bool:
+        """A heartbeat is a check-in, not a message — see `announce`."""
+        return self.announce(peer_id, version=version)
+
+    def broadcast_checkin(self, version: str = "", activity: Optional[dict] = None) -> int:
+        """Check in with every peer that has an address. Returns how many answered."""
+        answered = 0
+        for peer in self.peers.list_all():
+            if not peer.address:
+                continue
+            if self.announce(peer.centurion_id, version=version, activity=activity):
+                answered += 1
+        return answered
+
+    def broadcast_heartbeat(self, version: str = "") -> int:
+        """Kept for callers; forwards to `broadcast_checkin`."""
+        return self.broadcast_checkin(version=version)
 
     # ── Peer Discovery ───────────────────────────────────────────────
 

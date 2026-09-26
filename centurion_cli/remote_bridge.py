@@ -299,6 +299,8 @@ def handle_request(
         return _handle_fleet_inbox(request, request_id)
     if action == "fleet_mark_read":
         return _handle_fleet_mark_read(request, request_id)
+    if action == "fleet_announce":
+        return _handle_fleet_announce(request, request_id)
     if action == "plugin_list":
         return _handle_plugin_list(request_id)
     if action == "tools_skills_snapshot":
@@ -5100,6 +5102,58 @@ def _handle_fleet_send(request: dict[str, Any], request_id: str) -> dict[str, An
         return _error_response(request_id, action="fleet_send", exc=exc)
 
 
+def _handle_fleet_announce(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Tell every linked Centurion what this one is working on.
+
+    This is where the shared board gets its data. Without a caller the board
+    would always be empty — and an empty board reads as "nothing is happening"
+    when the truth is "nobody has said anything yet". The two are not the same,
+    so the response reports how many peers actually answered.
+    """
+    try:
+        from centurion.fleet.activity import local_activity
+        from centurion.fleet.identity import build_transport
+
+        transport = build_transport()
+        if transport is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_announce",
+                "code": "NO_TRANSPORT",
+                "message": "Could not prepare the fleet connection.",
+            }
+
+        activity = local_activity()
+        linked = [p for p in transport.peers.list_all() if p.address]
+        answered = transport.broadcast_checkin(
+            version=str(activity.get("version") or ""),
+            activity=activity,
+        )
+
+        if not linked:
+            message = "No other Centurion is linked yet."
+        elif answered == len(linked):
+            message = f"Shared with {answered} of {len(linked)} linked Centurion(s)."
+        else:
+            message = (
+                f"{answered} of {len(linked)} linked Centurion(s) answered — "
+                "the rest are switched off or unreachable."
+            )
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "fleet_announce",
+            "answered": answered,
+            "linked": len(linked),
+            "activity": activity,
+            "message": message,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="fleet_announce", exc=exc)
+
+
 def _handle_fleet_inbox(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     """What other Centurions have sent to this one."""
     try:
@@ -5287,6 +5341,11 @@ def _handle_fleet_peer_status(request_id: str) -> dict[str, Any]:
                     "address": p.address,
                     "status": p.status or "unknown",
                     "has_token": bool(p.auth_token),
+                    # The humans need more than a green dot: when we last heard
+                    # from this Centurion, and what it is working on.
+                    "last_seen": p.last_seen,
+                    "version": p.version,
+                    "activity": p.activity or {},
                 }
             )
         if not cfg["reachable"]:

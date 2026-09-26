@@ -40,6 +40,11 @@ class FleetPeer:
     status: str = "unknown"      # "online", "offline", "unknown"
     version: str = ""            # Last known Centurion OS version
     latency_ms: float = 0.0      # Last measured round-trip time
+    # What the peer last told us it was working on, with the time it said so.
+    # Kept after the peer goes quiet, so the board shows the last known state
+    # rather than emptying whenever the other machine sleeps. Default is empty
+    # so existing peers.json files keep loading.
+    activity: dict = field(default_factory=dict)
 
 
 class FleetPeers:

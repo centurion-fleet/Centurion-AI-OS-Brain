@@ -1142,6 +1142,10 @@ class APIServerAdapter(BasePlatformAdapter):
                 "last_seen": p.last_seen,
                 "address": p.address,
                 "telegram_handle": p.telegram_handle,
+                # Presence without work is a green dot. The humans directing two
+                # Centurions need to see what each one is actually doing.
+                "version": p.version,
+                "activity": p.activity or {},
             })
         return web.json_response({
             "peers": peer_list,
@@ -1167,7 +1171,19 @@ class APIServerAdapter(BasePlatformAdapter):
                                 last_seen=__import__("time").time(),
                                 version=version)
 
-            return web.json_response({"status": "acknowledged", "centurion_id": centurion_id}, status=200)
+            # A check-in carries what the sender is working on, not just a pulse.
+            # Record it so the humans can see the other Centurion's actual work.
+            recorded = False
+            if payload.get("activity"):
+                from centurion.fleet.activity import record_peer_activity
+
+                recorded = record_peer_activity(centurion_id, payload.get("activity"))
+
+            return web.json_response({
+                "status": "acknowledged",
+                "centurion_id": centurion_id,
+                "activity_recorded": recorded,
+            }, status=200)
         except Exception as e:
             logger.error(f"Fleet check-in error: {e}")
             return web.json_response({"status": "error", "detail": str(e)}, status=400)

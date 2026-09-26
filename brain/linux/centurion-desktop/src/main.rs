@@ -6872,6 +6872,37 @@ What capability should the skill cover?\n\n"
         row
     }
 
+    /// Redraw the two values this Centurion hands out.
+    ///
+    /// Called once when the screen opens, and again the moment reachability is
+    /// switched on. Without the redraw the customer presses the button, the
+    /// Brain starts listening, and the values they are supposed to read out
+    /// stay blank — indistinguishable from a dead button.
+    fn fill_peer_values(container: &gtk::Box, address: &str, secret: &str) {
+        while let Some(child) = container.first_child() {
+            container.remove(&child);
+        }
+        if address.is_empty() {
+            container.append(&hint(
+                "This Centurion is not reachable yet — press the button below, and \
+leave the Brain open.",
+            ));
+        } else {
+            container.append(&secret_row("Address", address, false));
+        }
+        if secret.is_empty() {
+            container.append(&hint(
+                "No shared secret yet — press the button below to create one.",
+            ));
+        } else {
+            container.append(&secret_row("Secret", secret, true));
+            container.append(&hint(
+                "The secret is shown in groups of four so it can be read aloud. Copy takes \
+the whole thing. Both Centurions must use the same secret.",
+            ));
+        }
+    }
+
     /// Restart the Brain's gateway so settings saved from this screen take
     /// effect. The listener only binds when the gateway starts, so without this
     /// the values sit on disk and nothing changes until the customer restarts.
@@ -6919,23 +6950,16 @@ What capability should the skill cover?\n\n"
             .unwrap_or(false);
 
         // ---- 1. What this Centurion gives out ---------------------------
+        //
+        // Built into its own box and refreshed in place: the values only exist
+        // AFTER the button is pressed, so a screen that renders them once at
+        // open shows "not reachable yet" for ever — the customer presses the
+        // button, the Brain starts listening, and the two values they need are
+        // still blank. That reads as "the button does nothing".
         form.append(&section_heading("1 · Give these two values to the other person"));
-        if my_address.is_empty() {
-            form.append(&hint(
-                "This Brain has not been made reachable yet. Press the button below first.",
-            ));
-        } else {
-            form.append(&secret_row("Address", &my_address, false));
-        }
-        if my_secret.is_empty() {
-            form.append(&hint("No shared secret yet — press the button below to create one."));
-        } else {
-            form.append(&secret_row("Secret", &my_secret, true));
-            form.append(&hint(
-                "The secret is shown in groups of four so it can be read aloud. Copy takes \
-the whole thing. Both Centurions must use the same secret.",
-            ));
-        }
+        let values_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        form.append(&values_box);
+        fill_peer_values(&values_box, &my_address, &my_secret);
 
         let status_line = hint(if listening {
             "This Centurion is reachable on your network."
@@ -7218,21 +7242,49 @@ above with the other person — one set each way — then press Connect.",
         enable_button.connect_clicked({
             let status_line = status_line.clone();
             let enable_button = enable_button.clone();
+            let values_box = values_box.clone();
             move |_| {
                 enable_button.set_sensitive(false);
                 status_line.set_label("Turning this on — the Brain will restart in a moment…");
-                let _ = run_bridge_action("fleet_peer_enable", serde_json::json!({}));
+
+                // Write the settings, and show what came back immediately. The
+                // two values only exist after this call, so without the redraw
+                // the customer presses the button and the screen still says
+                // "not reachable yet" — which reads as a dead button.
+                let enable = run_bridge_action("fleet_peer_enable", serde_json::json!({}));
+                if let Some(ref resp) = enable {
+                    let address = resp.get("address").and_then(|v| v.as_str()).unwrap_or("");
+                    let secret = resp.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+                    fill_peer_values(&values_box, address, secret);
+                    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                        let detail = resp
+                            .get("message")
+                            .or_else(|| resp.get("error"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("It did not say why.");
+                        status_line.set_label(&format!("Could not turn this on — {detail}"));
+                        enable_button.set_sensitive(true);
+                        return;
+                    }
+                }
+
                 std::thread::spawn(|| {
                     restart_gateway_best_effort();
                 });
                 // The poll runs repeatedly, so it needs its own handles.
                 let status_line_inner = status_line.clone();
                 let enable_button_inner = enable_button.clone();
+                let values_box_inner = values_box.clone();
                 let ticks = std::cell::Cell::new(0u32);
+                let retried = std::cell::Cell::new(false);
                 glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
                     ticks.set(ticks.get() + 1);
-                    if let Some(p) = run_bridge_action("fleet_peer_status", serde_json::json!({}))
-                    {
+                    if let Some(p) = run_bridge_action("fleet_peer_status", serde_json::json!({})) {
+                        let address = p.get("address").and_then(|v| v.as_str()).unwrap_or("");
+                        let secret = p.get("secret").and_then(|v| v.as_str()).unwrap_or("");
+                        if !address.is_empty() || !secret.is_empty() {
+                            fill_peer_values(&values_box_inner, address, secret);
+                        }
                         if p.get("listening").and_then(|v| v.as_bool()) == Some(true) {
                             status_line_inner.set_label(
                                 "This Centurion is reachable. Give the two values above to \
@@ -7242,10 +7294,18 @@ the other person.",
                             return glib::ControlFlow::Break;
                         }
                     }
-                    if ticks.get() >= 45 {
+                    // The first restart can land while the old gateway is still
+                    // shutting down, so give it one more try before giving up.
+                    if ticks.get() == 15 && !retried.get() {
+                        retried.set(true);
+                        std::thread::spawn(|| {
+                            restart_gateway_best_effort();
+                        });
+                    }
+                    if ticks.get() >= 90 {
                         status_line_inner.set_label(
-                            "Still not reachable. Quit the Brain completely, reopen it, and \
-press the button again.",
+                            "Still not reachable. The two values above are saved. Open Settings \
+→ This Brain, press Restart next to Gateway, then reopen this screen.",
                         );
                         enable_button_inner.set_sensitive(true);
                         return glib::ControlFlow::Break;
