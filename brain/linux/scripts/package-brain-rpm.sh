@@ -193,6 +193,14 @@ X-GNOME-UsesNotifications=true
 EOF
 chmod 0644 "${STAGE}/usr/share/applications/com.centurion.desktop.desktop"
 
+# The phone tunnel's systemd unit must ship INSIDE this package.
+# Why it is here and not left to an install script: the unit ends up in the
+# owner's home once adopted, so an upgrade alone can never correct a stale one —
+# the launcher does that at startup. But a machine that has never had a unit
+# needs the package to carry one, or the tunnel has nothing to run at all.
+install -Dm0644 "${BRAIN}/linux/packaging/systemd/centurion-remote.service" \
+  "${STAGE}/usr/lib/systemd/user/centurion-remote.service"
+
 cat > "${STAGE}/usr/share/doc/centurion-brain/README.txt" <<EOF
 Sovereign AI Brain ${VERSION} — full Centurion AI OS (Fedora RPM)
 
@@ -298,6 +306,7 @@ fi
 %files
 %{_bindir}/centurion-desktop
 %{_bindir}/centurion-remote
+%{_userunitdir}/centurion-remote.service
 %{_bindir}/sovereign-ai-brain
 %{_bindir}/centurion
 %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh

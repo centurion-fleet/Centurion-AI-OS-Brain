@@ -108,12 +108,12 @@ FIG2 = """
   __ROWS__
   <text x="0" y="150" font-family="Liberation Sans" font-size="8" fill="#5E534A">The bronze dot means something is waiting on you in that project — you see it without switching.</text>
 </svg>
-<figcaption>Three projects, one person, three sets of hands. The selected one fills the screen.</figcaption>
+<figcaption>Example. Three projects, one person, three sets of hands. The selected one fills the screen.</figcaption>
 </figure>
 """.replace("__ROWS__",
-    project_row(22, "Medical listing site", "Steve White · Kim", "Eve · Mikki", False)
-    + project_row(60, "Centurion AU rollout", "Steve White · Adrian Barkus", "Eve · Titus", True)
-    + project_row(98, "With Mike", "Steve White · Mike", "Eve · Picard", False))
+    project_row(22, "Website project", "You \u00b7 Anna", "Yours \u00b7 Aria", False)
+    + project_row(60, "Rollout project", "You \u00b7 Ben", "Yours \u00b7 Bram", True)
+    + project_row(98, "Research project", "You \u00b7 Chloe", "Yours \u00b7 Circe", False))
 
 # ---------------------------------------------------------------- figure 3
 def verb(y: int, label: str, colour: str, flow: list) -> str:
@@ -160,7 +160,7 @@ P1 = """
 <div class="sub">Watching two Centurions work one intention &mdash; without having to keep up.</div>
 <div class="rule"></div>
 
-<p>Humans are slow and hold the vision. Centurions are fast and hold the hands. Conjunction keeps you
+<p>Humans are slow but hold the vision and the decision making skills. Centurions are fast and hold the hands. Conjunction keeps you
 in the only seat that matters &mdash; <b>the decisions</b> &mdash; while the work moves at a pace no
 person can follow line by line. It shows four things, and nothing else.</p>
 

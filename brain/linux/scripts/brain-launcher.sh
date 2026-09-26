@@ -338,6 +338,64 @@ mkdir -p "${LOG_DIR}" 2>/dev/null || true
   echo "=== brain-launcher $(date -u +"%Y-%m-%dT%H:%M:%SZ") ==="
 } >> "${LOG_FILE}" 2>/dev/null || true
 
+# ------------------------------------------------------------ phone tunnel unit
+# Defect fixed 26 Sep 2026 (Steve White, both machines, via Adrian):
+# The phone-tunnel unit can be left on disk by an older install — pointing at a
+# user-local binary and a development interpreter. Nothing ever corrected it, so
+# the service kept running old code while the packaged binary sat unread, and
+# every reinstall met the same dead button. Reinstalling the package does not fix
+# this: the unit lives in the owner's home, not in the package.
+#
+# A unit is only ours to correct in its ExecStart *target*. Anything the owner's
+# install added — advertise host, working directory, ReadWritePaths — is left
+# exactly as written, and the previous file is kept beside it.
+REMOTE_UNIT_NAME="centurion-remote.service"
+REMOTE_UNIT_SHIPPED="/usr/lib/systemd/user/${REMOTE_UNIT_NAME}"
+REMOTE_UNIT_USER="${HOME}/.config/systemd/user/${REMOTE_UNIT_NAME}"
+REMOTE_UNIT_EXEC='/usr/bin/centurion-remote serve --name "Sovereign AI Brain"'
+
+refresh_remote_unit() {
+  local changed=0
+  if [[ ! -f "${REMOTE_UNIT_USER}" ]]; then
+    # No unit of the owner's own: adopt the packaged one so the tunnel exists.
+    [[ -r "${REMOTE_UNIT_SHIPPED}" ]] || return 0
+    mkdir -p "$(dirname "${REMOTE_UNIT_USER}")" 2>/dev/null || return 0
+    cp -f "${REMOTE_UNIT_SHIPPED}" "${REMOTE_UNIT_USER}" 2>/dev/null || return 0
+    changed=1
+  elif grep -qE '^ExecStart=/usr/bin/centurion-remote' "${REMOTE_UNIT_USER}"; then
+    return 0
+  else
+    local tmp
+    tmp="$(mktemp)" || return 0
+    awk -v exec="${REMOTE_UNIT_EXEC}" '
+      /^ExecStart=/ && length($0) > length("ExecStart=") { print "ExecStart=" exec; next }
+      { print }
+    ' "${REMOTE_UNIT_USER}" > "${tmp}" 2>/dev/null || { rm -f "${tmp}"; return 0; }
+    # Refuse to write a file that still has no packaged ExecStart in it.
+    if ! grep -qE '^ExecStart=/usr/bin/centurion-remote' "${tmp}"; then
+      rm -f "${tmp}"
+      return 0
+    fi
+    cp -f "${REMOTE_UNIT_USER}" "${REMOTE_UNIT_USER}.pre-refresh.bak" 2>/dev/null || true
+    cat "${tmp}" > "${REMOTE_UNIT_USER}" 2>/dev/null || { rm -f "${tmp}"; return 0; }
+    rm -f "${tmp}"
+    changed=1
+  fi
+
+  [[ "${changed}" -eq 1 ]] || return 0
+
+  # The file on disk is the fix; systemd only needs telling when it can be
+  # reached. Without a session bus the next login picks the file up anyway.
+  if systemctl --user show-environment >/dev/null 2>&1; then
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+    systemctl --user try-restart "${REMOTE_UNIT_NAME}" >/dev/null 2>&1 || true
+  fi
+  printf '%s remote unit refreshed -> %s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${REMOTE_UNIT_EXEC}" >> "${LOG_FILE}" 2>/dev/null || true
+}
+
+refresh_remote_unit || true
+
 # Drop leftover Smooth Transfer user .desktop so this system Brain is what
 # the menu/dash actually launches (otherwise an older ~/.local binary wins).
 if [[ -x /usr/libexec/centurion/cleanup-user-brain-launcher.sh ]]; then
