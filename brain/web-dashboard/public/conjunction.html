@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Conjunction</title>
+<style>
+/* ============================================================
+   CONJUNCTION · field 03
+   Discipline: three signals, one accent, and the accent always
+   carries a SHAPE as well as a colour — so it survives greyscale,
+   colour-blindness and a phone screen at arm's length.
+     BRONZE (matte, engraved) = one Centurion
+     STEEL  (matte, engraved) = the other Centurion
+     AMBER  (hot, and never a plain dot) = the human. Reserved.
+   Type scale is deliberately 5 steps, no more.
+   ============================================================ */
+:root{
+  --void:#0A0B0D; --plate:#14161C; --plate-hi:#1C1F27;
+  --hair:rgba(237,231,220,.11); --hair-hi:rgba(237,231,220,.24);
+  --engrave:#F0EAE0; --dim:rgba(240,234,224,.60); --faint:rgba(240,234,224,.34);
+  --bronze:#B08D57; --bronze-lt:#DCBA80; --bronze-dp:#6E5630;
+  --steel:#8C93A0; --steel-lt:#C2C8D2; --steel-dp:#565C66;
+  --amber:#FFB454; --amber-hi:#FFCC84; --amber-dp:#3A2709;
+  --serif:"Instrument Serif","Iowan Old Style",Palatino,Georgia,serif;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+/* The product's own typefaces, self-hosted beside the page — no network, no
+   CDN, and the same voice the rest of the Brain speaks in. */
+@font-face{font-family:"Instrument Serif";font-style:normal;font-weight:400;
+  font-display:swap;src:url("/fonts/conjunction-serif-400.woff2") format("woff2")}
+@font-face{font-family:"Instrument Sans";font-style:normal;font-weight:400;
+  font-display:swap;src:url("/fonts/conjunction-sans-400.woff2") format("woff2")}
+@font-face{font-family:"Instrument Sans";font-style:normal;font-weight:500;
+  font-display:swap;src:url("/fonts/conjunction-sans-500.woff2") format("woff2")}
+@font-face{font-family:"Instrument Sans";font-style:normal;font-weight:600;
+  font-display:swap;src:url("/fonts/conjunction-sans-600.woff2") format("woff2")}
+@font-face{font-family:"Instrument Sans";font-style:normal;font-weight:700;
+  font-display:swap;src:url("/fonts/conjunction-sans-700.woff2") format("woff2")}
+body{
+  background:radial-gradient(125% 95% at 50% -18%, #1A1E26 0%, #0E1015 46%, var(--void) 100%),var(--void);
+  color:var(--engrave);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;
+}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;opacity:.045;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/></filter><rect width='260' height='260' filter='url(%23n)' opacity='.6'/></svg>");}
+.wrap{max-width:1500px;margin:0 auto;padding:60px 64px 84px;position:relative;z-index:2}
+
+/* ---------------- masthead ---------------- */
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:48px;margin-bottom:46px}
+.eyebrow{font-size:11px;letter-spacing:.44em;text-transform:uppercase;color:var(--faint);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:62px;line-height:.96;font-weight:400;letter-spacing:.13em;text-transform:uppercase}
+h1 em{font-style:normal;color:var(--bronze-lt)}
+.sub{margin-top:20px;font-size:14.5px;color:var(--dim);max-width:56ch;line-height:1.72}
+.stamp{text-align:right;font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--faint);line-height:2.1;white-space:nowrap}
+.stamp b{color:var(--dim);font-weight:400}
+
+/* ---------------- legend: glyph first, word second ---------------- */
+.legend{display:flex;align-items:center;gap:40px;flex-wrap:wrap;border-top:1px solid var(--hair);
+  border-bottom:1px solid var(--hair);padding:20px 0;margin-bottom:60px}
+.key{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim)}
+.key.amber{color:var(--amber)}
+.key.amber b{color:var(--amber);font-weight:600}
+
+/* ---------------- instrument ---------------- */
+#orrery{width:100%;height:auto;display:block;max-width:1040px;margin:0 auto}
+.caption{text-align:center;font-size:11.5px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--faint);margin:6px 0 40px}
+
+/* ---------------- readout ---------------- */
+.readout{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;max-width:1040px;margin:0 auto 60px;
+  border:1px solid var(--hair);border-radius:3px;overflow:hidden;background:var(--hair)}
+.cell{background:linear-gradient(180deg,var(--plate-hi),var(--plate));padding:30px 34px 28px}
+.cell .n{font-family:var(--serif);font-size:54px;line-height:1;letter-spacing:.01em}
+.cell .l{margin-top:14px;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
+.cell.a .n{color:var(--bronze-lt)} .cell.b .n{color:var(--steel-lt)} .cell.c .n{color:var(--amber-hi)}
+.cell.c{box-shadow:inset 0 2px 0 rgba(255,180,84,.5)}
+
+/* ---------------- registers ---------------- */
+.registers{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:30px;margin-bottom:60px}
+.plate{background:linear-gradient(180deg,var(--plate-hi) 0%,var(--plate) 64%);border:1px solid var(--hair);
+  border-radius:3px;padding:34px 32px 36px;
+  box-shadow:0 22px 44px -30px rgba(0,0,0,.95),inset 0 1px 0 rgba(240,234,224,.05)}
+.plate.side{grid-column:1/-1}
+.plate h2{font-size:11px;letter-spacing:.36em;text-transform:uppercase;font-weight:600;color:var(--dim);
+  display:flex;align-items:baseline;gap:14px;margin-bottom:10px}
+.plate h2 .count{font-family:var(--serif);font-size:24px;letter-spacing:0;color:var(--engrave)}
+.plate .note{font-size:12.5px;color:var(--faint);margin-bottom:30px;line-height:1.62;max-width:52ch}
+
+/* struck — accumulated seals, newest last */
+.seals{display:flex;flex-wrap:wrap;gap:11px;margin-bottom:8px}
+.seal{width:48px;height:48px;border-radius:50%;position:relative;flex:none;
+  background:radial-gradient(circle at 34% 27%, #CEA874 0%, #9A7642 48%, #6B5330 100%);
+  border:1px solid rgba(220,186,128,.4);
+  box-shadow:0 7px 14px -7px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.2)}
+.seal::after{content:"";position:absolute;left:50%;top:50%;width:1.2px;height:19px;
+  background:rgba(18,14,8,.5);transform:translate(-50%,-50%) rotate(28deg)}
+.seal.s{background:radial-gradient(circle at 34% 27%, #B4BAC5 0%, #7C838F 48%, #565C66 100%);
+  border-color:rgba(194,200,210,.34)}
+.seal.last{box-shadow:0 0 0 1px rgba(255,180,84,.5),0 7px 16px -6px rgba(255,180,84,.35),
+  inset 0 1px 0 rgba(255,255,255,.25)}
+
+/* in hand — two named hands */
+.hands{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.hand{border-top:2px solid var(--hair);padding-top:22px}
+.hand.bronze{border-top-color:var(--bronze)} .hand.steel{border-top-color:var(--steel)}
+.hand .who{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+.hand .who .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.hand.bronze .dot{background:var(--bronze);box-shadow:0 0 14px rgba(176,141,87,.9)}
+.hand.steel .dot{background:var(--steel);box-shadow:0 0 14px rgba(140,147,160,.75)}
+.hand .who .nm{font-size:13px;letter-spacing:.26em;text-transform:uppercase}
+.hand .who .st{margin-left:auto;font-size:10.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+.item{display:flex;gap:15px;padding:15px 0;border-bottom:1px solid var(--hair)}
+.item:last-child{border-bottom:0;padding-bottom:0}
+.item .ring{flex:none;margin-top:1px}
+.item .tx{font-size:14.5px;line-height:1.5}
+.item .meta{margin-top:8px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.item.stop .tx{color:var(--amber-hi)}
+
+/* next in sequence */
+.ghost{display:flex;align-items:center;gap:15px;padding:14px 0;border-bottom:1px dashed var(--hair)}
+.ghost:last-child{border-bottom:0}
+.ghost .sq{width:12px;height:12px;border:1.4px solid var(--faint);border-radius:2px;flex:none}
+.ghost .tx{font-size:14px;color:var(--dim)}
+.ghost .seq{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+/* ---------- the one panel that may shout ---------- */
+.needs{border:1px solid rgba(255,180,84,.42);border-radius:3px;
+  background:linear-gradient(180deg,rgba(255,180,84,.10),rgba(255,180,84,.025));
+  padding:34px 32px 36px;box-shadow:0 26px 52px -34px rgba(255,180,84,.42)}
+.needs h2{color:var(--amber)} .needs h2 .count{color:var(--amber-hi)}
+.needs .note{color:rgba(255,204,132,.68)}
+.ask{border-top:1px solid rgba(255,180,84,.22);padding:22px 0 20px}
+.ask:first-of-type{border-top:0;padding-top:2px}
+.ask .q{font-size:15.5px;line-height:1.58}
+.ask .ctx{margin-top:10px;font-size:10.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+.verbs{display:flex;gap:12px;margin-top:20px;align-items:center}
+.verb{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;padding:11px 20px;border-radius:2px;
+  border:1px solid rgba(255,180,84,.42);color:var(--amber-hi);background:transparent;cursor:pointer}
+.verb.solid{background:var(--amber);color:var(--amber-dp);border-color:var(--amber);font-weight:600}
+.verb.quiet{border-color:transparent;color:var(--dim);padding:11px 6px}
+.verb:hover{background:rgba(255,180,84,.18)}
+.verb.solid:hover{background:var(--amber-hi)}
+.more{margin-top:22px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,204,132,.7)}
+.verdict{margin-left:4px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber-hi)}
+.verdict.bad{color:#FF9C9C}
+.notein{width:100%;margin-top:14px;padding:12px 14px;background:rgba(0,0,0,.35);
+  border:1px solid rgba(255,180,84,.34);border-radius:2px;color:var(--engrave);
+  font-family:var(--sans);font-size:13.5px;outline:none}
+.notein::placeholder{color:var(--faint)}
+.ask.decided{opacity:.5}
+.ask.decided .verb{display:none}
+button.verb{font:inherit}
+button.verb[disabled]{opacity:.35;cursor:default}
+
+/* register */
+.ledger svg{width:100%;height:170px;display:block}
+.ledger .axis{display:flex;justify-content:space-between;margin-top:14px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.16em;color:var(--faint)}
+
+footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display:flex;
+  justify-content:space-between;gap:30px;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
+.proto{font-family:var(--mono);letter-spacing:.14em}
+.door{margin-top:10px}
+.door a,.item a{color:var(--bronze-lt);text-decoration:none;
+  border-bottom:1px solid rgba(220,186,128,.4);padding-bottom:1px;letter-spacing:.16em}
+.door a:hover,.item a:hover{color:#F0D9AC;border-bottom-color:#F0D9AC}
+@keyframes rise{from{opacity:0;transform:scale(.972)}to{opacity:1;transform:scale(1)}}
+@keyframes flare{0%,42%{opacity:0}100%{opacity:1}}
+@keyframes breathe{0%,100%{opacity:.14}50%{opacity:.38}}
+@keyframes drift{from{transform:rotate(-2.2deg)}to{transform:rotate(0deg)}}
+.instrument-in{animation:rise 1.15s cubic-bezier(.22,.8,.24,1) both;transform-origin:520px 340px}
+.ring-in{animation:drift 2.2s cubic-bezier(.16,.9,.2,1) both;transform-origin:520px 340px}
+.flare{animation:flare 2s ease-out both}
+.halo{animation:breathe 3.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+@media (max-width:1240px){
+  .registers{grid-template-columns:1fr}.wrap{padding:36px 26px 56px}h1{font-size:40px}
+  .hands{grid-template-columns:1fr}.readout{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <div>
+      <div class="eyebrow">Two Centurions · one purpose</div>
+      <h1>Con<em>junc</em>tion</h1>
+      <p class="sub">Two minds, on two machines, working the same intention — and one human
+      holding the decisions. This is the state of that alignment: what has been struck,
+      what is in hand and by whom, what comes next, and what is waiting on you.</p>
+    </div>
+    <div class="stamp">
+      <div id="stamp-align">ALIGNED <b>·</b></div>
+      <div id="stamp-state">STATE <b>·</b></div>
+      <div class="proto" id="stamp-field">CONJUNCTION · LIVE</div>
+      <div class="door"><a href="/collab">Boards &amp; pairing &nbsp;→</a></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="8" fill="#B08D57"/></svg>Struck</span>
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="7.2" fill="none" stroke="#B08D57" stroke-width="2.6"/></svg>In hand</span>
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="6.6" fill="none" stroke="rgba(240,234,224,.4)" stroke-width="1.4" stroke-dasharray="2.4 3.4"/></svg>Next</span>
+    <span class="key amber"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 3 L19 11 L11 19 L3 11 Z" fill="none" stroke="#FFB454" stroke-width="2"/><circle cx="11" cy="11" r="2.4" fill="#FFB454"/></svg><b>Waiting on you</b></span>
+    <span class="key" style="margin-left:auto;color:var(--faint)">Bronze · one Centurion &nbsp;·&nbsp; Steel · the other</span>
+  </div>
+
+  <svg id="orrery" viewBox="0 0 1040 660" role="img" aria-label="Two rings of work in conjunction, centred on the human"></svg>
+  <p class="caption" id="caption">reading…</p>
+
+  <div class="readout">
+    <div class="cell a"><div class="n" id="r-struck">·</div><div class="l" id="l-struck">Struck · delivered</div></div>
+    <div class="cell b"><div class="n" id="r-hand">·</div><div class="l" id="l-hand">In hand now</div></div>
+    <div class="cell c"><div class="n" id="r-wait">·</div><div class="l">Waiting on the humans</div></div>
+  </div>
+
+  <div class="registers">
+
+    <section class="plate">
+      <h2><span class="count" id="c-struck">·</span> Struck</h2>
+      <p class="note">One seal per completed piece of work, struck in the order it was earned.
+      Nothing is sealed on a claim — every one was verified first.</p>
+      <div class="seals" id="seals"></div>
+    </section>
+
+    <section class="plate">
+      <h2><span class="count" id="c-hand">·</span> In hand</h2>
+      <p class="note">Who holds what, at this moment. A circle is moving; a diamond has stopped
+      and is waiting on a person.</p>
+      <div class="hands">
+        <div class="hand bronze">
+          <div class="who"><span class="dot"></span><span class="nm" id="hand-a-name">This Brain</span><span class="st" id="hand-a-state">·</span></div>
+          <div id="items-bronze"></div>
+        </div>
+        <div class="hand steel">
+          <div class="who"><span class="dot"></span><span class="nm" id="hand-b-name">Second ring</span><span class="st" id="hand-b-state">·</span></div>
+          <div id="items-steel"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="needs">
+      <h2><span class="count" id="c-wait">·</span> Waiting on you</h2>
+      <p class="note">Only a human can take these. Everything else continues without them.</p>
+      <div id="asks"></div>
+      <div class="more" id="more"></div>
+    </section>
+
+    <section class="plate side">
+      <h2><span class="count" id="c-next">·</span> Next in sequence</h2>
+      <p class="note">Agreed and ordered. This is what moves the counters above.</p>
+      <div class="next" id="next"></div>
+    </section>
+  </div>
+
+  <section class="plate ledger">
+    <h2><span class="count" id="c-reg">·</span> Register of decisions</h2>
+    <p class="note">Every decision taken, earliest at the left. A bronze pillar is decided and
+    closed. A hollow amber diamond is still open — the same mark as above.</p>
+    <svg id="register" viewBox="0 0 1500 170" role="img" aria-label="Register of decisions"></svg>
+    <div class="axis"><span>11 AUG</span><span>ONE MARK · ONE DECISION</span><span>26 SEP</span></div>
+  </section>
+
+  <footer>
+    <span>Centurion · two minds, one intention</span>
+    <span class="proto" id="provenance">·</span>
+  </footer>
+</div>
+
+<script>
+
+/* ============================================================
+   CONJUNCTION — live. Everything on this page is read from this
+   Brain's own record through its bridge. Nothing is illustrative.
+   ============================================================ */
+const NS="http://www.w3.org/2000/svg";
+const API="/api/bridge";
+const $=id=>document.getElementById(id);
+function el(n,at){const e=document.createElementNS(NS,n);for(const k in at)e.setAttribute(k,at[k]);return e;}
+async function ask(payload){
+  const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||j.ok===false) throw new Error(j.error||j.message||("bridge "+r.status));
+  return j;
+}
+const DAY=86400000;
+function daysSince(iso){const t=Date.parse(iso||"");return isNaN(t)?null:Math.max(0,Math.round((Date.now()-t)/DAY));}
+function shortDate(iso){const t=Date.parse(iso||"");if(isNaN(t))return"";
+  return new Date(t).toLocaleDateString(undefined,{day:"2-digit",month:"short"}).toUpperCase();}
+function cut(s,n){s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1).trimEnd()+"…":s;}
+function setState(msg){$("caption").textContent=msg;}
+
+async function load(){
+  let plans=[],decisions=[],stack={},swarms=[],peers=[],errors=[];
+  try{plans=(await ask({action:"plans_list"})).plans||[];}catch(e){errors.push("plans");}
+  try{decisions=(await ask({action:"life_decisions_list"})).decisions||[];}catch(e){errors.push("decisions");}
+  try{stack=(await ask({action:"life_stack_get"})).stack||{};}catch(e){errors.push("missions");}
+  try{const s=await ask({action:"swarm_snapshot"});swarms=(s.snapshot&&s.snapshot.swarms)||s.swarms||[];}catch(e){errors.push("boards");}
+  let localName="This Brain";
+  try{const so=await ask({action:"soul_get"});localName=(so.soul&&so.soul.name)||localName;}catch(e){}
+  try{peers=(await ask({action:"fleet_peer_status"})).peers||[];}catch(e){errors.push("fleet");}
+
+  const cards=[]; swarms.forEach(b=>(b.cards||[]).forEach(c=>cards.push(Object.assign({board:b.display_name||b.id},c))));
+  const by=s=>cards.filter(c=>c.status===s);
+  const done=by("done"), running=by("running"), blocked=by("blocked"), todo=by("todo");
+
+  const targets=((stack.primary||{}).targets)||[];
+  const tDone=targets.filter(t=>t.status==="complete");
+  const tDoing=targets.filter(t=>t.status==="in_progress");
+  const tNext=targets.filter(t=>t.status==="not_started")
+    .sort((a,b)=>(a.sequence_number||99)-(b.sequence_number||99));
+
+  const pWait=plans.filter(p=>p.status==="pending_review"||p.status==="held");
+  const pGo=plans.filter(p=>p.status==="proceeded");
+  const pDone=plans.filter(p=>p.status==="completed");
+
+  const peer=peers[0]||null;
+  const peerActs=peer&&peer.activity&&Array.isArray(peer.activity.items)?peer.activity.items:[];
+
+  const struck=done.length+pDone.length+tDone.length;
+  return{
+    struck, struckPeer:peerActs.length,
+    inHand:running.length+pGo.length+tDoing.length,
+    waiting:pWait.length, openDecisions:decisions.filter(d=>!(d.human_said||d.chosen)).length,
+    next:tNext.slice(0,7).map(t=>({t:cut(t.title,74),seq:t.sequence_number})),
+    handItems:running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false})),
+    stopItems:blocked.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · stopped",stop:true})),
+    todo:todo.slice(0,2),
+    asks:pWait.slice(0,4).map(p=>({id:p.id,q:cut(p.title,88),goal:cut(p.goal,400),
+      ctx:"waiting "+(daysSince(p.created_at)!=null?daysSince(p.created_at)+" days":"—")
+        +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")})),
+    more:Math.max(0,pWait.length-4),
+    decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
+      .map(d=>({t:cut(d.title,88),taken:shortDate(d.created_at),answered:!!(d.human_said||d.chosen)})),
+    peer, peerActs:peerActs, peers:peers.length, errors, localName
+  };
+}
+
+/* ---------- the instrument ---------- */
+function build(S){
+  const svg=$("orrery"), CX=520, CY=340, RX=312, RY=158;
+  svg.innerHTML="";
+  svg.appendChild(Object.assign(el("defs"),{innerHTML:`
+    <radialGradient id="core" cx="50%" cy="42%" r="64%">
+      <stop offset="0%" stop-color="#42351F" stop-opacity=".95"/>
+      <stop offset="50%" stop-color="#171A20" stop-opacity=".9"/>
+      <stop offset="100%" stop-color="#0A0B0D" stop-opacity="0"/></radialGradient>
+    <radialGradient id="floor" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000" stop-opacity=".72"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <radialGradient id="beam" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F0EAE0" stop-opacity=".30"/>
+      <stop offset="100%" stop-color="#F0EAE0" stop-opacity="0"/></radialGradient>
+    <linearGradient id="ringB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F0D9AC"/><stop offset="34%" stop-color="#C89E63"/>
+      <stop offset="72%" stop-color="#9A7A45"/><stop offset="100%" stop-color="#6B5330"/></linearGradient>
+    <linearGradient id="ringS" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#DBE0E8"/><stop offset="34%" stop-color="#9AA1AD"/>
+      <stop offset="72%" stop-color="#767D88"/><stop offset="100%" stop-color="#4E535C"/></linearGradient>
+    <filter id="soft" x="-45%" y="-45%" width="190%" height="190%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="soft2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.2"/></filter>
+    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`}));
+
+  svg.appendChild(el("ellipse",{cx:CX,cy:CY+126,rx:452,ry:74,fill:"url(#floor)"}));
+  svg.appendChild(el("ellipse",{cx:CX,cy:CY+6,rx:434,ry:300,fill:"url(#core)"}));
+  const g=el("g",{class:"instrument-in"}); svg.appendChild(g);
+  const place=(rot,f)=>{const a=f*Math.PI*2,x0=Math.cos(a)*RX,y0=Math.sin(a)*RY,r=rot*Math.PI/180;
+    return [CX+(x0*Math.cos(r)-y0*Math.sin(r)),CY+(x0*Math.sin(r)+y0*Math.cos(r))];};
+  const arc=(rot,f0,f1,steps)=>{let d="";for(let i=0;i<=steps;i++){const f=f0+(f1-f0)*(i/steps);
+    const p=place(rot,f);d+=(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)+" ";}return d.trim();};
+
+  /* outer register — one mark per decision in the record */
+  const R=322, D=S.decisions;
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:R,fill:"none",stroke:"rgba(240,234,224,.085)","stroke-width":1}));
+  if(D.length){
+    D.forEach((d,i)=>{
+      const a=-Math.PI*.74+(i/(Math.max(1,D.length-1)))*Math.PI*1.48;
+      const rot=(a*180/Math.PI)+90, grp=el("g",{transform:"rotate("+rot+" "+CX+" "+CY+")"});
+      if(d.answered){
+        grp.appendChild(el("rect",{x:CX-1.5,y:CY-R-15,width:3,height:15,rx:1.5,fill:"rgba(220,186,128,.55)"}));
+      }else{
+        grp.appendChild(el("path",{d:"M "+CX+" "+(CY-R-23)+" l 6.4 6.4 l -6.4 6.4 l -6.4 -6.4 Z",
+          fill:"none",stroke:"var(--amber)","stroke-width":2}));
+      }
+      g.appendChild(grp);
+    });
+  }
+
+  /* ring A — this Brain. always occupied. */
+  const ring=(rot,grad,glowHi,hi,dim)=>{
+    const grp=el("g",{class:"ring-in"});
+    grp.appendChild(el("path",{d:arc(rot,.5,1,64),fill:"none",stroke:grad,"stroke-width":1.3,
+      opacity:dim?.18:.40,"stroke-linecap":"round","stroke-dasharray":dim?"4 6":""}));
+    grp.appendChild(el("path",{d:arc(rot,.53,.62,20),fill:"none",stroke:hi,"stroke-width":2.6,
+      opacity:dim?.12:.5,filter:"url(#soft2)","stroke-linecap":"round"}));
+    grp.appendChild(el("path",{d:arc(rot,0,.5,64),fill:"none",stroke:glowHi,"stroke-width":8,
+      opacity:dim?.05:.13,filter:"url(#soft)","stroke-linecap":"round"}));
+    grp.appendChild(el("path",{d:arc(rot,0,.5,64),fill:"none",stroke:grad,"stroke-width":dim?1.6:2.9,
+      opacity:dim?.5:1,"stroke-linecap":"round","stroke-dasharray":dim?"5 7":"",
+      class:dim?"halo":""}));
+    g.appendChild(grp);
+  };
+  ring(-19,"url(#ringB)","#B08D57","rgba(255,238,205,.85)",false);
+  ring( 19,"url(#ringS)","#8C93A0","rgba(232,238,248,.62)",!S.peer);
+
+  /* what ring A carries: in hand, then what has stopped */
+  const carried=S.handItems.concat(S.stopItems).slice(0,5);
+  carried.forEach((it,i)=>{
+    const p=place(-19,.055+i*.135);
+    if(it.stop){
+      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:17,fill:"var(--amber)",class:"halo",filter:"url(#soft)"}));
+      g.appendChild(el("path",{d:"M "+p[0]+" "+(p[1]-10)+" l 10 10 l -10 10 l -10 -10 Z",
+        fill:"none",stroke:"var(--amber)","stroke-width":2.8}));
+    }else{
+      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:9,fill:"#0E1015",stroke:"var(--bronze-lt)","stroke-width":3}));
+      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:2.8,fill:"var(--bronze-lt)"}));
+    }
+  });
+  /* sealed work: one bead per delivery, newer larger, capped so the ring stays a ring */
+  const beads=Math.min(18,S.struck), beadsPeer=Math.min(10,S.struckPeer);
+  for(let i=0;i<beads;i++){const p=place(-19,.545+i*(.40/Math.max(1,beads)));
+    g.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+ (i/beads)*3.6,fill:"url(#ringB)"}));}
+  for(let i=0;i<beadsPeer;i++){const p=place(19,.60+i*(.34/Math.max(1,beadsPeer)));
+    g.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+(i/Math.max(1,beadsPeer))*3.6,fill:"url(#ringS)"}));}
+
+  /* the conjunction — lit when two minds are actually on this network */
+  const cross=[[-19,.755],[19,.245]].map(f=>place(f[0],f[1]));
+  g.appendChild(el("line",{x1:cross[0][0],y1:cross[0][1],x2:cross[1][0],y2:cross[1][1],
+    stroke:S.peer?"rgba(240,234,224,.22)":"rgba(240,234,224,.09)","stroke-width":1,
+    "stroke-dasharray":S.peer?"":"5 6"}));
+  cross.forEach((p,i)=>{
+    const f=el("g",{class:"flare",style:"animation-delay:"+(0.7+i*0.1)+"s"});
+    if(S.peer){
+      f.appendChild(el("circle",{cx:p[0],cy:p[1],r:34,fill:"url(#beam)"}));
+      f.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.6,fill:"#FFFDF7",filter:"url(#glow)"}));
+      f.appendChild(el("circle",{cx:p[0],cy:p[1],r:13,fill:"none",stroke:"rgba(240,234,224,.55)","stroke-width":1}));
+      f.appendChild(el("circle",{cx:p[0],cy:p[1],r:21,fill:"none",stroke:"rgba(240,234,224,.22)","stroke-width":1}));
+    }else{
+      f.appendChild(el("circle",{cx:p[0],cy:p[1],r:5,fill:"none",stroke:"rgba(240,234,224,.34)","stroke-width":1.2}));
+    }
+    g.appendChild(f);
+  });
+  const mx=(cross[0][0]+cross[1][0])/2, my=(cross[0][1]+cross[1][1])/2;
+  const ang=Math.atan2(cross[1][1]-cross[0][1],cross[1][0]-cross[0][0])*180/Math.PI;
+  const cl=el("text",{x:mx,y:my-9,"text-anchor":"middle","font-size":"11","letter-spacing":"6.4",
+    fill:S.peer?"rgba(240,234,224,.5)":"rgba(240,234,224,.26)","font-family":"var(--sans)",
+    transform:"rotate("+ang+" "+mx+" "+my+")",class:"flare",style:"animation-delay:1s"});
+  cl.textContent="CONJUNCTION"; g.appendChild(cl);
+
+  /* the still centre */
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:30,fill:"rgba(240,234,224,.045)"}));
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:30,fill:"none",stroke:"rgba(240,234,224,.30)","stroke-width":1}));
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:9,fill:"none",stroke:"rgba(240,234,224,.22)","stroke-width":1}));
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:3.6,fill:"#FFFDF7"}));
+  g.appendChild(el("line",{x1:CX,y1:CY-30,x2:CX,y2:CY-62,stroke:"rgba(240,234,224,.20)","stroke-width":1}));
+  const cap=el("text",{x:CX,y:CY-74,"text-anchor":"middle","font-size":"11.5","letter-spacing":"5.4",
+    fill:"rgba(240,234,224,.66)","font-family":"var(--sans)"});
+  cap.textContent="THE STILL CENTRE — YOU"; g.appendChild(cap);
+
+  const lab=(x,y,txt,col)=>{
+    const t=el("text",{x:x,y:y,"text-anchor":"middle","font-size":"12.5","letter-spacing":"4.6",
+      fill:col,"font-family":"var(--sans)"});t.textContent=txt;return t;};
+  g.appendChild(lab(190,296,"THIS BRAIN · "+S.inHand+" IN HAND","rgba(232,203,150,.95)"));
+  g.appendChild(lab(852,296,S.peer? (String(S.peer.name||"SECOND").toUpperCase()+" · "+S.struckPeer+" DELIVERED")
+                                  : "NO SECOND CENTURION YET",
+    S.peer?"rgba(206,213,224,.88)":"rgba(206,213,224,.42)"));
+}
+
+/* ---------- the registers ---------- */
+function seals(S){
+  const b=$("seals"); b.innerHTML="";
+  const total=S.struck+S.struckPeer, put=(n,cls)=>{for(let i=0;i<n;i++){
+    const d=document.createElement("div");d.className="seal "+(i===n-1?"last ":"")+cls;b.appendChild(d);}};
+  put(Math.min(24,S.struck),"");
+  if(S.struckPeer) put(Math.min(10,S.struckPeer),"s");
+}
+function items(S){
+  const b=$("items-bronze"), s=$("items-steel");
+  b.innerHTML=""; s.innerHTML="";
+  const RING={hand:'<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#DCBA80" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#DCBA80"/></svg>',
+    stop:'<svg width="24" height="24"><path d="M12 3.4 L20.6 12 L12 20.6 L3.4 12 Z" fill="none" stroke="#FFB454" stroke-width="2.6"/><circle cx="12" cy="12" r="2.4" fill="#FFB454"/></svg>',
+    steel:'<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#C2C8D2" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#C2C8D2"/></svg>'};
+  S.handItems.concat(S.stopItems).slice(0,4).forEach(it=>{
+    const d=document.createElement("div");d.className="item"+(it.stop?" stop":"");
+    d.innerHTML='<span class="ring">'+(it.stop?RING.stop:RING.hand)+'</span><span><span class="tx">'+it.t+'</span><span class="meta">'+it.meta+'</span></span>';
+    b.appendChild(d);});
+  if(!S.handItems.length&&!S.stopItems.length){
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML='<span class="ring">'+RING.hand+'</span><span><span class="tx">Nothing in hand — every board lane is clear.</span></span>';
+    b.appendChild(d);}
+  if(S.peer){
+    (S.peerActs||[]).slice(0,4).forEach(a=>{
+      const d=document.createElement("div");d.className="item";
+      d.innerHTML='<span class="ring">'+RING.steel+'</span><span><span class="tx">'+cut(a.title||a,70)+'</span><span class="meta">'+String(S.peer.name||"peer")+' · peer</span></span>';
+      s.appendChild(d);});
+    if(!(S.peerActs||[]).length){
+      const d=document.createElement("div");d.className="item";
+      d.innerHTML='<span class="ring">'+RING.steel+'</span><span><span class="tx">Paired, and nothing reported in hand.</span></span>';
+      s.appendChild(d);}
+  }else{
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML='<span class="ring">'+RING.steel+'</span><span><span class="tx">No second Centurion yet.</span>'
+      +'<span class="meta"><a href="/collab">Pair a second Centurion →</a></span></span>';
+    s.appendChild(d);}
+}
+function next(S){
+  const b=$("next"); b.innerHTML="";
+  (S.next||[]).forEach((t,i)=>{const d=document.createElement("div");d.className="ghost";
+    d.innerHTML='<span class="sq"></span><span class="tx">'+t.t+'</span><span class="seq">'+
+      String(t.seq!=null?t.seq:i+1).padStart(2,"0")+'</span>';b.appendChild(d);});
+  if(!(S.next||[]).length){const d=document.createElement("div");d.className="ghost";
+    d.innerHTML='<span class="sq"></span><span class="tx">Nothing queued in the sequence.</span>';b.appendChild(d);}
+}
+function asks(S){
+  const b=$("asks"); b.innerHTML="";
+  (S.asks||[]).forEach(a=>{
+    const d=document.createElement("div");d.className="ask";
+    d.innerHTML='<div class="q">'+a.q+'</div><div class="ctx">'+a.ctx+'</div>'
+      +'<div class="verbs">'
+      +'<button class="verb solid" data-v="approve">Proceed</button>'
+      +'<button class="verb" data-v="request_changes">Discuss</button>'
+      +'<button class="verb quiet" data-v="hold">Hold</button>'
+      +'<span class="verdict" aria-live="polite"></span></div>';
+    d.querySelectorAll("[data-v]").forEach(btn=>{
+      btn.addEventListener("click",()=>decide(a,btn.dataset.v,d));});
+    b.appendChild(d);});
+  if(!(S.asks||[]).length){const d=document.createElement("div");d.className="ask";
+    d.innerHTML='<div class="q">Nothing is waiting on you.</div><div class="ctx">every open question is answered</div>';b.appendChild(d);}
+  $("more").textContent = S.more ? (S.more+" further "+(S.more===1?"item waits":"items wait")+" behind these") : "";
+}
+function register(S){
+  const s=$("register"); s.innerHTML="";
+  const D=S.decisions||[]; const pad=54, W=1500, base=112, n=Math.max(1,D.length);
+  s.appendChild(el("line",{x1:pad,y1:base,x2:W-pad,y2:base,stroke:"rgba(240,234,224,.12)","stroke-width":1}));
+  D.forEach((d,i)=>{
+    const x=pad+(i/(n-1||1))*(W-2*pad), h=30+((i*11)%34);
+    if(d.answered){
+      s.appendChild(el("rect",{x:x-2.2,y:base-h,width:4.4,height:h,rx:2.2,fill:"rgba(220,186,128,.5)"}));
+      s.appendChild(el("circle",{cx:x,cy:base-h-6,r:3.4,fill:"rgba(220,186,128,.95)"}));
+    }else{
+      s.appendChild(el("path",{d:"M "+x+" "+(base-46)+" l 9 9 l -9 9 l -9 -9 Z",fill:"none",
+        stroke:"var(--amber)","stroke-width":2.2}));
+      s.appendChild(el("line",{x1:x,y1:base,x2:x,y2:base-26,stroke:"rgba(255,180,84,.45)","stroke-width":1.2}));
+    }
+    const t=el("title"); t.textContent=(d.answered?"decided · ":"open · ")+d.taken+" — "+d.t; 
+    s.appendChild(Object.assign(el("g"),{})).appendChild(t);
+  });
+  if(D.length){
+    const marks=[[0,"start"],[Math.round((D.length-1)*.42),"middle"],[Math.round((D.length-1)*.74),"middle"],[D.length-1,"end"]];
+    marks.forEach(([idx,an])=>{
+      const d=D[Math.max(0,Math.min(D.length-1,idx))];
+      const x=pad+(idx/(n-1||1))*(W-2*pad);
+      const e=el("text",{x:x,y:base+30,"text-anchor":an,"font-size":"11","letter-spacing":"1.6",
+        fill:"rgba(240,234,224,.34)","font-family":"var(--sans)"});
+      e.textContent=d.taken; s.appendChild(e);
+    });
+  }
+}
+
+/* ---------- deciding, from the page ----------
+   Proceed / Discuss / Hold call plan_decide on this Brain's own bridge. That
+   handler records a life decision — so answering a question here engraves a
+   new mark on the register below. The page is the control, not a report. */
+async function decide(a, choice, el){
+  const verdict=el.querySelector(".verdict");
+  const btns=[...el.querySelectorAll("[data-v]")];
+  if(choice==="request_changes"){
+    let field=el.querySelector(".notein");
+    if(!field){
+      field=document.createElement("input");
+      field.className="notein"; field.type="text";
+      field.placeholder="What needs to change?  (then press Enter)";
+      el.appendChild(field);
+      field.addEventListener("keydown",async ev=>{
+        if(ev.key!=="Enter") return;
+        const note=field.value.trim(); if(!note) return;
+        await send(a,"request_changes",note,el);});
+      field.focus();
+      return;
+    }
+    const note=field.value.trim(); if(!note) return;
+  }
+  btns.forEach(b=>b.disabled=true);
+  verdict.className="verdict"; verdict.textContent="sending…";
+  await send(a,choice,undefined,el);
+}
+async function send(a,choice,note,el){
+  const verdict=el.querySelector(".verdict");
+  const btns=[...el.querySelectorAll("[data-v]")];
+  try{
+    await ask({action:"plan_decide",plan_id:a.id,choice:choice,note:note||undefined});
+    el.classList.add("decided");
+    verdict.className="verdict";
+    verdict.textContent = choice==="approve" ? "proceeding · struck on the register"
+      : choice==="request_changes" ? "changes requested"
+      : "held";
+    setTimeout(()=>{load().then(paint).catch(()=>{});},1400);
+  }catch(e){
+    btns.forEach(b=>b.disabled=false);
+    verdict.className="verdict bad";
+    verdict.textContent="not accepted — "+e.message;
+  }
+}
+
+/* ---------- fill the page ---------- */
+function paint(S){
+  $("r-struck").textContent=S.struck; $("c-struck").textContent=S.struck;
+  $("r-hand").textContent=S.inHand;   $("c-hand").textContent=S.inHand;
+  $("r-wait").textContent=S.waiting;  $("c-wait").textContent=S.waiting;
+  $("c-next").textContent=(S.next||[]).length;
+  $("c-reg").textContent=(S.decisions||[]).length;
+  $("hand-a-name").textContent=S.localName;
+  $("hand-a-state").textContent=S.struck+" struck";
+  $("hand-b-name").textContent=S.peer?(S.peer.name||"Second Centurion"):"No second Centurion";
+  $("hand-b-state").textContent=S.peer?"linked":"the empty seat";
+
+  const st=$("stamp-align");
+  if(S.peer){ st.innerHTML="ALIGNED <b>SINCE "+shortDate(S.peer.last_seen||new Date().toISOString())+"</b>"; }
+  else { st.innerHTML="ONE RING OCCUPIED <b>AWAITING THE SECOND</b>"; }
+  $("stamp-state").innerHTML="READ <b>"+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+"</b>";
+  $("caption").textContent = S.peer
+    ? "The crossing is where one mind hands work to the other"
+    : "The second ring is empty — no other Centurion is reachable on this network yet";
+  $("provenance").textContent = S.errors&&S.errors.length
+    ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
+    : "READ FROM THIS BRAIN'S OWN RECORD";
+  build(S); seals(S); items(S); next(S); asks(S); register(S);
+}
+
+load().then(paint).catch(e=>{
+  setState("Could not read this Brain's record — "+e.message);
+  $("provenance").textContent="READ FROM THIS BRAIN'S OWN RECORD · FAILED";
+});
+setInterval(()=>{ load().then(paint).catch(()=>{}); }, 60000);
+
+</script>
+</body>
+</html>

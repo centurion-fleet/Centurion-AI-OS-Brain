@@ -22,7 +22,7 @@ use crate::home_page::{HomeHandle, HomeHooks};
 const DECK_HOST: &str = "127.0.0.1";
 const DECK_PORT: u16 = 9120;
 const DECK_URL: &str = "http://127.0.0.1:9120/";
-const COLLAB_URL: &str = "http://127.0.0.1:9120/collab";
+const COLLAB_URL: &str = "http://127.0.0.1:9120/conjunction.html";
 
 #[derive(Clone, Copy)]
 enum DeckAttention {
@@ -442,7 +442,8 @@ pub fn build(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     build_inner(hooks, DECK_URL, DeckAttention::LifeDecisions)
 }
 
-/// Collaborate tab — same Mission Deck server, `/collab` Kanban route.
+/// Conjunction tab — the collaboration instrument, served by the same deck.
+/// The page itself links on to the boards and pairing screens at `/collab`.
 pub fn build_collab(hooks: HomeHooks) -> (gtk::Box, HomeHandle) {
     build_inner(hooks, COLLAB_URL, DeckAttention::SwarmWaiting)
 }

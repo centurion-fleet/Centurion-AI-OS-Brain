@@ -1613,7 +1613,7 @@ The Brain here is the product; the phone is the remote.",
         let collab_connect_row = adw::ActionRow::builder()
             .title("Collaborations")
             .subtitle(
-                "Local boards on this Brain, plus Brain-to-Brain linking over your network. Open Collab to form a board or invite another Brain.",
+                "The instrument: what has been struck, what is in hand and by whom, and what is waiting on you. Open it to decide; boards, pairing and invite are one tap inside.",
             )
             .icon_name("system-users-symbolic")
             .build();
@@ -1877,7 +1877,7 @@ The Brain here is the product; the phone is the remote.",
         };
 
         stack.add_titled(&home, Some("missions"), "Focus");
-        stack.add_titled(&collab, Some("collab"), "Collab");
+        stack.add_titled(&collab, Some("collab"), "Conjunction");
         stack.add_titled(&settings_scroll, Some("settings"), "You");
         stack.set_visible_child_name("missions");
         home.set_vexpand(true);
@@ -1889,7 +1889,7 @@ The Brain here is the product; the phone is the remote.",
             &stack,
             &[
                 ("missions", "Focus"),
-                ("collab", "Collab"),
+                ("collab", "Conjunction"),
                 ("settings", "You"),
             ],
         );
