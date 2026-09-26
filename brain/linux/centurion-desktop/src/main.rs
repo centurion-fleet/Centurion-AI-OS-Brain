@@ -5378,6 +5378,32 @@ computer if you need more detail."
         let _ = std::fs::write(path, if enabled { b"1\n" as &[u8] } else { b"0\n" });
     }
 
+    /// Platform error text arrives from the gateway. Some of it still names a
+    /// terminal command (e.g. WhatsApp's "run `centurion whatsapp` to pair"),
+    /// and our own rule is that no customer journey contains a terminal step.
+    /// Keep the honest state, drop the command, and point at the in-app control
+    /// that does the same job (the Connect WhatsApp wizard behind the row's
+    /// Connect / Reconnect button).
+    fn translate_platform_error(error_message: &str) -> String {
+        let lower = error_message.to_ascii_lowercase();
+        let names_command = lower.contains("centurion whatsapp")
+            || lower.contains("centurion telegram")
+            || lower.contains("centurion gateway")
+            || error_message.contains("run `");
+        if !names_command {
+            return error_message.to_owned();
+        }
+        if lower.contains("whatsapp") {
+            return if lower.contains("pair") {
+                "WhatsApp is enabled but not paired — tap Connect to link your phone."
+                    .to_owned()
+            } else {
+                "WhatsApp needs attention — tap Connect to link your phone again.".to_owned()
+            };
+        }
+        "This channel needs attention — open its settings here to fix it.".to_owned()
+    }
+
     fn gateway_platform_subtitle(
         configured: bool,
         connected: bool,
@@ -5410,7 +5436,7 @@ computer if you need more detail."
             "Not connected".to_owned()
         };
         if !error_message.is_empty() && !connected {
-            format!("{primary} · {error_message}")
+            format!("{primary} · {}", translate_platform_error(error_message))
         } else if !status.is_empty()
             && status != primary
             && status != "enabled"
@@ -6764,22 +6790,60 @@ What capability should the skill cover?\n\n"
                 done.present(Some(&parent_for_cb));
             }
             "trial" => {
-                let result = run_bridge_action(
+                let outcome = run_bridge_action_result(
                     "license_activate",
                     serde_json::json!({ "tier": "trial", "days": 14 }),
                 );
-                let msg = result
-                    .as_ref()
-                    .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                    .unwrap_or("Trial activation finished.")
-                    .to_owned();
-                let done = adw::AlertDialog::builder()
-                    .heading("Trial")
-                    .body(&msg)
-                    .close_response("ok")
-                    .build();
-                done.add_response("ok", "OK");
-                done.present(Some(&parent_for_cb));
+                let payload = match outcome {
+                    Ok(payload) => payload,
+                    Err(reason) => {
+                        let fail = adw::AlertDialog::builder()
+                            .heading("Trial could not start")
+                            .body(format!(
+                                "{reason}\n\nOpen Get Help in Settings and create a Support Code, \
+then support can check the licence service on this machine and you can try again."
+                            ))
+                            .close_response("ok")
+                            .build();
+                        fail.add_response("ok", "OK");
+                        fail.present(Some(&parent_for_cb));
+                        return;
+                    }
+                };
+                let ok = payload
+                    .get("ok")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if ok {
+                    let msg = payload
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Trial activation finished.")
+                        .to_owned();
+                    let done = adw::AlertDialog::builder()
+                        .heading("Trial")
+                        .body(&msg)
+                        .close_response("ok")
+                        .build();
+                    done.add_response("ok", "OK");
+                    done.present(Some(&parent_for_cb));
+                } else {
+                    let reason = payload
+                        .get("message")
+                        .or_else(|| payload.get("error"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("The Brain did not confirm the trial was started.");
+                    let fail = adw::AlertDialog::builder()
+                        .heading("Trial could not start")
+                        .body(format!(
+                            "{reason}\n\nOpen Get Help in Settings and create a Support Code, \
+then support can check the licence service on this machine and you can try again."
+                        ))
+                        .close_response("ok")
+                        .build();
+                    fail.add_response("ok", "OK");
+                    fail.present(Some(&parent_for_cb));
+                }
             }
             "activate" | "redeem" => {
                 let is_activate = response == "activate";
@@ -6811,34 +6875,77 @@ What capability should the skill cover?\n\n"
                         return;
                     }
                     let code = entry.text().trim().to_string();
-                    let result = if is_activate {
-                        run_bridge_action(
+                    let outcome = if is_activate {
+                        run_bridge_action_result(
                             "license_activate",
                             // Code-driven: server returns real tier/state (not a synthetic "paid").
                             serde_json::json!({ "tier": "code", "code": code }),
                         )
                     } else {
-                        run_bridge_action(
+                        run_bridge_action_result(
                             "license_redeem",
                             serde_json::json!({ "token": code }),
                         )
                     };
-                    let msg = result
-                        .as_ref()
-                        .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                        .unwrap_or(if is_activate {
-                            "Activation finished."
-                        } else {
-                            "Redeem finished."
-                        })
-                        .to_owned();
-                    let done = adw::AlertDialog::builder()
-                        .heading(if is_activate { "Activate" } else { "Redeem" })
-                        .body(&msg)
-                        .close_response("ok")
-                        .build();
-                    done.add_response("ok", "OK");
-                    done.present(Some(&parent_for_redeem));
+                    let verb = if is_activate { "activate" } else { "redeem" };
+                    let payload = match outcome {
+                        Ok(payload) => payload,
+                        Err(reason) => {
+                            let fail = adw::AlertDialog::builder()
+                                .heading(format!("Could not {verb} the license"))
+                                .body(format!(
+                                    "{reason}\n\nCheck the code was copied complete, then try \
+again. If it still fails, open Get Help in Settings and create a Support Code."
+                                ))
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.present(Some(&parent_for_redeem));
+                            return;
+                        }
+                    };
+                    let ok = payload
+                        .get("ok")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    if ok {
+                        let msg = payload
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(if is_activate {
+                                "Activation finished."
+                            } else {
+                                "Redeem finished."
+                            })
+                            .to_owned();
+                        let done = adw::AlertDialog::builder()
+                            .heading(if is_activate { "Activate" } else { "Redeem" })
+                            .body(&msg)
+                            .close_response("ok")
+                            .build();
+                        done.add_response("ok", "OK");
+                        done.present(Some(&parent_for_redeem));
+                    } else {
+                        let reason = payload
+                            .get("message")
+                            .or_else(|| payload.get("error"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(if is_activate {
+                                "The Brain did not confirm the activation."
+                            } else {
+                                "The Brain did not confirm the redeem."
+                            });
+                        let fail = adw::AlertDialog::builder()
+                            .heading(format!("Could not {verb} the license"))
+                            .body(format!(
+                                "{reason}\n\nCheck the code was copied complete, then try again. \
+If it still fails, open Get Help in Settings and create a Support Code."
+                            ))
+                            .close_response("ok")
+                            .build();
+                        fail.add_response("ok", "OK");
+                        fail.present(Some(&parent_for_redeem));
+                    }
                 });
                 redeem.present(Some(&parent_for_present));
             }
@@ -7728,13 +7835,13 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         let parent = parent.clone();
         let row = row.clone();
         crate::bridge_actions::run_bridge_async(
-            || run_provider_command(&["catalog"]),
-            move |connectors_raw| {
+            || run_provider_command_result(&["catalog"]),
+            move |catalog_result| {
                 if cancelled.get() {
                     return;
                 }
                 loading.close();
-                show_backup_thinking_dialog_loaded(&parent, &row, initial_error, connectors_raw);
+                show_backup_thinking_dialog_loaded(&parent, &row, initial_error, catalog_result);
             },
         );
     }
@@ -7743,10 +7850,12 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
         parent: &adw::ApplicationWindow,
         row: &adw::ActionRow,
         initial_error: Option<String>,
-        connectors_raw: Option<ProviderCliResponse>,
+        catalog_result: Result<ProviderCliResponse, String>,
     ) {
-        let connectors: Vec<ThinkingConnectorOption> = connectors_raw
-            .and_then(|response| response.catalog)
+        let connectors: Vec<ThinkingConnectorOption> = catalog_result
+            .as_ref()
+            .ok()
+            .and_then(|response| response.catalog.as_ref())
             .and_then(|catalog| {
                 catalog
                     .get("text_models")
@@ -7759,11 +7868,15 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
             .collect();
 
         if connectors.is_empty() {
+            let reason = match &catalog_result {
+                Ok(_) => "Centurion did not return any thinking services.".to_owned(),
+                Err(reason) => reason.clone(),
+            };
             let dialog = adw::AlertDialog::builder()
                 .heading("Backup Thinking")
-                .body(
-                    "Could not load the curated thinking-service catalog. Is Centurion AI OS installed?",
-                )
+                .body(format!(
+                    "Could not load the curated thinking-service catalog.\n\n{reason}"
+                ))
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
@@ -7925,16 +8038,17 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 let row = row.clone();
                 let reopen_with_error = reopen_with_error.clone();
                 crate::bridge_actions::run_bridge_async(
-                    move || match run_provider_command(&[
+                    move || match run_provider_command_result(&[
                         "remove-backup",
                         "--slot",
                         slot_str.as_str(),
                     ]) {
-                        Some(clear_response) if clear_response.ok => Ok(backup_thinking_subtitle()),
-                        Some(clear_response) => Err(clear_response
+                        Ok(clear_response) if clear_response.ok => Ok(backup_thinking_subtitle()),
+                        Ok(clear_response) => Err(clear_response
                             .message
+                            .filter(|text| !text.trim().is_empty())
                             .unwrap_or_else(|| "Could not clear backup slot.".to_owned())),
-                        None => Err("Could not clear backup slot.".to_owned()),
+                        Err(reason) => Err(format!("Could not clear backup slot — {reason}")),
                     },
                     move |result: Result<String, String>| match result {
                         Ok(subtitle) => row.set_subtitle(&subtitle),
@@ -7988,8 +8102,11 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                         "--slot",
                         slot_str.as_str(),
                     ];
-                    let Some(apply_response) = run_provider_command(&apply_args) else {
-                        return Err("Could not set backup thinking service.".to_owned());
+                    let apply_response = match run_provider_command_result(&apply_args) {
+                        Ok(response) => response,
+                        Err(reason) => {
+                            return Err(format!("Could not set backup thinking service — {reason}"));
+                        }
                     };
                     let ok = apply_response.ok;
                     let message = apply_response
@@ -8231,8 +8348,8 @@ The key stays in ~/.centurion/.env on this machine only.",
         let settings_row = settings_row.clone();
         let detail = detail.clone();
         crate::bridge_actions::run_bridge_async(
-            || run_provider_command(&["catalog"]),
-            move |connectors_raw| {
+            || run_provider_command_result(&["catalog"]),
+            move |catalog_result| {
                 if cancelled.get() {
                     return;
                 }
@@ -8242,7 +8359,7 @@ The key stays in ~/.centurion/.env on this machine only.",
                     &settings_row,
                     &detail,
                     initial_error,
-                    connectors_raw,
+                    catalog_result,
                 );
             },
         );
@@ -8253,16 +8370,19 @@ The key stays in ~/.centurion/.env on this machine only.",
         settings_row: &adw::ActionRow,
         detail: &gtk::Label,
         initial_error: Option<String>,
-        connectors_raw: Option<ProviderCliResponse>,
+        catalog_result: Result<ProviderCliResponse, String>,
     ) {
-        let active_connector_id = connectors_raw
+        let active_connector_id = catalog_result
             .as_ref()
+            .ok()
             .and_then(|response| response.catalog.as_ref())
             .and_then(|catalog| catalog.get("active_connector_id"))
             .and_then(|value| value.as_str())
             .map(str::to_owned);
-        let connectors: Vec<ThinkingConnectorOption> = connectors_raw
-            .and_then(|response| response.catalog)
+        let connectors: Vec<ThinkingConnectorOption> = catalog_result
+            .as_ref()
+            .ok()
+            .and_then(|response| response.catalog.as_ref())
             .and_then(|catalog| {
                 catalog
                     .get("text_models")
@@ -8275,9 +8395,15 @@ The key stays in ~/.centurion/.env on this machine only.",
             .collect();
 
         if connectors.is_empty() {
+            let reason = match &catalog_result {
+                Ok(_) => "Centurion did not return any thinking services.".to_owned(),
+                Err(reason) => reason.clone(),
+            };
             let dialog = adw::AlertDialog::builder()
                 .heading("Change thinking service")
-                .body("Could not load the curated thinking-service catalog. Is Centurion AI OS installed?")
+                .body(format!(
+                    "Could not load the curated thinking-service catalog.\n\n{reason}"
+                ))
                 .close_response("ok")
                 .build();
             dialog.add_response("ok", "OK");
@@ -8466,10 +8592,14 @@ The key stays in ~/.centurion/.env on this machine only.",
                             }
                         }
                     }
-                    let Some(apply_response) =
-                        run_provider_command(&["apply-connector", connector_id.as_str(), "--json"])
-                    else {
-                        return Err("Could not apply thinking service change.".to_owned());
+                    let apply_response = match run_provider_command_result(&[
+                        "apply-connector",
+                        connector_id.as_str(),
+                    ]) {
+                        Ok(response) => response,
+                        Err(reason) => {
+                            return Err(format!("Could not apply thinking service change — {reason}"));
+                        }
                     };
                     let ok = apply_response.ok;
                     let message = apply_response
@@ -8516,21 +8646,22 @@ The key stays in ~/.centurion/.env on this machine only.",
         thinking_settings_row: &adw::ActionRow,
         thinking_detail: &gtk::Label,
     ) {
-        let health_body = if let Some(response) = run_support_command(&["health"]) {
-            let ok = response.ok;
-            response
-                .message
-                .or(response.summary)
-                .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| {
-                    if ok {
-                        "Health check completed.".to_owned()
-                    } else {
-                        "Health check could not complete.".to_owned()
-                    }
-                })
-        } else {
-            "Could not run health check. Is Centurion AI OS installed?".to_owned()
+        let health_body = match run_support_command_result(&["health"]) {
+            Ok(response) => {
+                let ok = response.ok;
+                response
+                    .message
+                    .or(response.summary)
+                    .filter(|text| !text.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if ok {
+                            "Health check completed.".to_owned()
+                        } else {
+                            "Health check could not complete.".to_owned()
+                        }
+                    })
+            }
+            Err(reason) => reason,
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Get Help")
@@ -8558,21 +8689,22 @@ The key stays in ~/.centurion/.env on this machine only.",
     }
 
     fn show_support_health_dialog(parent: &adw::ApplicationWindow) {
-        let body = if let Some(response) = run_support_command(&["health"]) {
-            let ok = response.ok;
-            response
-                .message
-                .or(response.summary)
-                .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| {
-                    if ok {
-                        "Health check completed.".to_owned()
-                    } else {
-                        "Health check could not complete.".to_owned()
-                    }
-                })
-        } else {
-            "Could not run health check. Is Centurion AI OS installed?".to_owned()
+        let body = match run_support_command_result(&["health"]) {
+            Ok(response) => {
+                let ok = response.ok;
+                response
+                    .message
+                    .or(response.summary)
+                    .filter(|text| !text.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if ok {
+                            "Health check completed.".to_owned()
+                        } else {
+                            "Health check could not complete.".to_owned()
+                        }
+                    })
+            }
+            Err(reason) => reason,
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Health Check")
@@ -8584,28 +8716,40 @@ The key stays in ~/.centurion/.env on this machine only.",
     }
 
     fn show_support_bundle_dialog(parent: &adw::ApplicationWindow) {
-        let (heading, body) = if let Some(response) = run_support_command(&["bundle"]) {
-            if let Some(code) = response.code {
-                (
-                    "Support Code".to_owned(),
-                    format!(
-                        "{}\n\nShare this code with your advisor:\n\n{code}",
-                        response
-                            .message
-                            .unwrap_or_else(|| "Support bundle created.".to_owned())
-                    ),
-                )
-            } else {
-                (
-                    "Support Bundle".to_owned(),
-                    "Could not create a support code.".to_owned(),
-                )
+        let (heading, body) = match run_support_command_result(&["bundle"]) {
+            Ok(response) => {
+                if let Some(code) = response.code {
+                    (
+                        "Support Code".to_owned(),
+                        format!(
+                            "{}\n\nShare this code with your advisor:\n\n{code}",
+                            response
+                                .message
+                                .unwrap_or_else(|| "Support bundle created.".to_owned())
+                        ),
+                    )
+                } else {
+                    (
+                        "Support Bundle".to_owned(),
+                        match response.message.filter(|text| !text.trim().is_empty()) {
+                            Some(reason) => format!(
+                                "Could not create a support code — {reason}\n\nTry again in a \
+moment. If it keeps failing, ask your advisor for help."
+                            ),
+                            None => "Could not create a support code. Try again in a moment, then \
+ask your advisor for help."
+                                .to_owned(),
+                        },
+                    )
+                }
             }
-        } else {
-            (
+            Err(reason) => (
                 "Support Bundle".to_owned(),
-                "Could not create a support code.".to_owned(),
-            )
+                format!(
+                    "Could not create a support code — {reason}\n\nTry again in a moment, then \
+ask your advisor for help."
+                ),
+            ),
         };
         let dialog = adw::AlertDialog::builder()
             .heading(&heading)
@@ -8635,8 +8779,8 @@ The key stays in ~/.centurion/.env on this machine only.",
                 return;
             }
             let code = code_entry.text().to_string();
-            let result_dialog = match run_support_command(&["show", &code]) {
-                Some(cli_response) if cli_response.ok => {
+            let result_dialog = match run_support_command_result(&["show", &code]) {
+                Ok(cli_response) if cli_response.ok => {
                     let body = cli_response
                         .message
                         .filter(|text| !text.trim().is_empty())
@@ -8655,7 +8799,7 @@ The key stays in ~/.centurion/.env on this machine only.",
                         .close_response("ok")
                         .build()
                 }
-                Some(cli_response) => adw::AlertDialog::builder()
+                Ok(cli_response) => adw::AlertDialog::builder()
                     .heading("Support Code Not Found")
                     .body(
                         cli_response
@@ -8665,9 +8809,12 @@ The key stays in ~/.centurion/.env on this machine only.",
                     )
                     .close_response("ok")
                     .build(),
-                None => adw::AlertDialog::builder()
+                Err(reason) => adw::AlertDialog::builder()
                     .heading("Support Code Not Found")
-                    .body("That code is missing or has expired.")
+                    .body(format!(
+                        "Could not look up that code — {reason}\n\nCheck the code was copied \
+complete, then try again."
+                    ))
                     .close_response("ok")
                     .build(),
             };
