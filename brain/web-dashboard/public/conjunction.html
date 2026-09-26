@@ -357,7 +357,18 @@ async function load(){
     inHand:running.length+pGo.length+tDoing.length,
     waiting:pWait.length, openDecisions:decisions.filter(d=>!(d.human_said||d.chosen)).length,
     next:tNext.slice(0,7).map(t=>({t:cut(t.title,74),seq:t.sequence_number})),
-    handItems:running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false})),
+    /* Approved plans ARE in hand — the human's hand and the Centurion's. They have
+       to be named here, otherwise the counter says 22 while the list shows board
+       cards, and the section reads as somebody else's plumbing instead of your own
+       approved work. Approved first (newest first), then moving board cards. */
+    handItems:[].concat(
+      pGo.slice().sort((a,b)=>Date.parse(b.updated_at||b.updatedAt||0)-Date.parse(a.updated_at||a.updatedAt||0))
+        .slice(0,3).map(p=>{const dd=daysSince(p.updated_at||p.updatedAt);return{
+          t:cut(p.title,70),
+          meta:"approved"+(dd==null?"":dd===0?" today":" "+dd+" day"+(dd===1?"":"s")+" ago")
+            +" · with your Centurion",
+          stop:false};}),
+      running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false}))),
     stopItems:blocked.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · stopped",stop:true})),
     todo:todo.slice(0,2),
     asks:pWait.slice(0,4).map(p=>{const adj=p.status==="adjusted",dn=daysSince(p.created_at);
