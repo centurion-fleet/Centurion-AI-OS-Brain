@@ -279,6 +279,16 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
    ============================================================ */
 const NS="http://www.w3.org/2000/svg";
 const API="/api/bridge";
+
+/* Boards that are this Brain's OWN operating record — division lanes, internal
+   strategy — never appear on this page. Conjunction is the owner's window on
+   their own work; the organisation's own board is not that work. Verified live
+   26 Sep 2026: the org board's cards carry division assignments
+   ("div6-sales — Work the pipeline…"), which is exactly what must not surface
+   in a client demo or on film. Add to this list to hold more back. */
+const INTERNAL_BOARDS=["centurion-org"];
+const boardId=b=>String((b&&(b.id||b.kanban_board_slug))||"").toLowerCase();
+const isInternal=b=>INTERNAL_BOARDS.includes(boardId(b));
 const $=id=>document.getElementById(id);
 function el(n,at){const e=document.createElementNS(NS,n);for(const k in at)e.setAttribute(k,at[k]);return e;}
 async function ask(payload){
@@ -296,11 +306,15 @@ function cut(s,n){s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s
 function setState(msg){$("caption").textContent=msg;}
 
 async function load(){
-  let plans=[],decisions=[],stack={},swarms=[],peers=[],errors=[];
+  let plans=[],decisions=[],stack={},swarms=[],peers=[],errors=[],held=0;
   try{plans=(await ask({action:"plans_list"})).plans||[];}catch(e){errors.push("plans");}
   try{decisions=(await ask({action:"life_decisions_list"})).decisions||[];}catch(e){errors.push("decisions");}
   try{stack=(await ask({action:"life_stack_get"})).stack||{};}catch(e){errors.push("missions");}
-  try{const s=await ask({action:"swarm_snapshot"});swarms=(s.snapshot&&s.snapshot.swarms)||s.swarms||[];}catch(e){errors.push("boards");}
+  try{const s=await ask({action:"swarm_snapshot"});
+    const all=(s.snapshot&&s.snapshot.swarms)||s.swarms||[];
+    const kept=all.filter(b=>!isInternal(b));
+    held=all.length-kept.length;
+    swarms=kept;}catch(e){errors.push("boards");}
   let localName="This Brain";
   try{const so=await ask({action:"soul_get"});localName=(so.soul&&so.soul.name)||localName;}catch(e){}
   try{peers=(await ask({action:"fleet_peer_status"})).peers||[];}catch(e){errors.push("fleet");}
@@ -337,7 +351,7 @@ async function load(){
     more:Math.max(0,pWait.length-4),
     decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
       .map(d=>({t:cut(d.title,88),taken:shortDate(d.created_at),answered:!!(d.human_said||d.chosen)})),
-    peer, peerActs:peerActs, peers:peers.length, errors, localName
+    peer, peerActs:peerActs, peers:peers.length, errors, localName, held, boards:swarms.length
   };
 }
 
@@ -627,9 +641,13 @@ function paint(S){
   $("caption").textContent = S.peer
     ? "The crossing is where one mind hands work to the other"
     : "The second ring is empty — no other Centurion is reachable on this network yet";
+  /* Say what is held back, rather than silently dropping it. */
+  const scope = S.held
+    ? " · "+(S.boards||0)+" BOARD"+((S.boards||0)===1?"":"S")+", "+S.held+" HELD INTERNAL"
+    : "";
   $("provenance").textContent = S.errors&&S.errors.length
     ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
-    : "READ FROM THIS BRAIN'S OWN RECORD";
+    : "READ FROM THIS BRAIN'S OWN RECORD"+scope;
   build(S); seals(S); items(S); next(S); asks(S); register(S);
 }
 
