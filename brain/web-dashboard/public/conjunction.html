@@ -363,11 +363,19 @@ async function load(){
        approved work. Approved first (newest first), then moving board cards. */
     handItems:[].concat(
       pGo.slice().sort((a,b)=>Date.parse(b.updated_at||b.updatedAt||0)-Date.parse(a.updated_at||a.updatedAt||0))
-        .slice(0,3).map(p=>{const dd=daysSince(p.updated_at||p.updatedAt);return{
-          t:cut(p.title,70),
-          meta:"approved"+(dd==null?"":dd===0?" today":" "+dd+" day"+(dd===1?"":"s")+" ago")
-            +" · with your Centurion",
-          stop:false};}),
+        .slice(0,3).map(p=>{const dd=daysSince(p.updated_at||p.updatedAt);
+          const h=p.handover||{}, st=String(h.state||"");
+          const when=dd==null?"":dd===0?" today":" "+dd+" day"+(dd===1?"":"s")+" ago";
+          /* Approving HANDS THE WORK OVER, so say where it actually is. "queued" is the
+             honest state for work nobody has claimed yet — the page must not imply it
+             started just because a status changed. */
+          const meta = st==="queued" ? "approved"+when+" · waiting to be picked up"
+            : st==="picked_up" ? "approved"+when+" · picked up by your Centurion"
+            : st==="working" ? "in progress · with your Centurion"
+            : st==="returned" ? "returned to you — it needs something from you"
+            : st==="delivered" ? "delivered — waiting to seal"
+            : "approved"+when+" · with your Centurion";
+          return{t:cut(p.title,70),meta:meta,stop:(st==="returned")};}),
       running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false}))),
     stopItems:blocked.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · stopped",stop:true})),
     todo:todo.slice(0,2),

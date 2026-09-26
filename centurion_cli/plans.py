@@ -39,6 +39,9 @@ _STATUS_ALIASES = {
 }
 RISK_LEVELS = ("low", "medium", "high")
 DECIDE_CHOICES = ("approve", "reject", "request_changes", "hold")
+# A handed-over plan is work in the Centurion's hands, not a filing. Approving creates
+# the handover; only the Centurion moves it on; "delivered" is what seals a bead.
+HANDOVER_STATES = ("queued", "picked_up", "working", "delivered", "returned")
 
 _HIGH_RISK_RE = re.compile(
     r"\b(rm\s+-rf|sudo|drop\s+table|delete\s+from|credential|password|api[_\s-]?key|"
@@ -201,6 +204,19 @@ def _normalize_plan(raw: dict[str, Any], *, plan_id: str | None = None) -> dict[
     reviewers = share.get("reviewers") if isinstance(share.get("reviewers"), list) else []
     comments = share.get("comments") if isinstance(share.get("comments"), list) else []
 
+    handover = raw.get("handover") if isinstance(raw.get("handover"), dict) else None
+    if handover is not None:
+        ho_state = str(handover.get("state") or "").strip().lower()
+        handover = {
+            "state": ho_state if ho_state in HANDOVER_STATES else "queued",
+            "to": str(handover.get("to") or "centurion").strip() or "centurion",
+            "at": str(handover.get("at") or _now_iso()),
+            "picked_up_at": handover.get("picked_up_at"),
+            "delivered_at": handover.get("delivered_at"),
+            "attempts": int(handover.get("attempts") or 0),
+            "note": handover.get("note"),
+        }
+
     created = str(raw.get("created_at") or raw.get("createdAt") or _now_iso())
     updated = str(raw.get("updated_at") or raw.get("updatedAt") or created)
 
@@ -217,6 +233,7 @@ def _normalize_plan(raw: dict[str, Any], *, plan_id: str | None = None) -> dict[
             raw.get("open_questions") or raw.get("openQuestions")
         ),
         "requirements": _as_str_list(raw.get("requirements")),
+        "handover": handover,
         "reasoning": str(raw.get("reasoning") or "").strip(),
         "related_mission": (
             str(raw.get("related_mission") or raw.get("relatedMission") or "").strip() or None
@@ -378,6 +395,19 @@ def decide_plan(
 
     if decision == "approve":
         plan["status"] = "proceeded"
+        # Proceed HANDS THE WORK OVER. Without this the item only changed status:
+        # it left the human's queue and nobody was told, so nothing ever happened.
+        prior = plan.get("handover") if isinstance(plan.get("handover"), dict) else {}
+        keep = prior.get("state") if prior.get("state") in ("picked_up", "working") else "queued"
+        plan["handover"] = {
+            "state": keep,
+            "to": str(prior.get("to") or "centurion"),
+            "at": prior.get("at") or now,
+            "picked_up_at": prior.get("picked_up_at"),
+            "delivered_at": prior.get("delivered_at"),
+            "attempts": int(prior.get("attempts") or 0),
+            "note": prior.get("note"),
+        }
         if note_text:
             plan["requirements"] = list(plan.get("requirements") or []) + [note_text]
     elif decision == "reject":
@@ -423,6 +453,59 @@ def decide_plan(
         plan.setdefault("share", _empty_share())
         plan["share"]["reviewers"] = reviewers
 
+    _write_json(_plan_path(plan["id"]), plan)
+    _upsert_index(plan)
+    return _plan_to_ios(plan)
+
+
+def list_handovers(*, state: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    """Plans whose work is in a Centurion's hands, or waiting to be picked up.
+
+    This is the handover queue the Conjunction page's "in hand" column and the
+    over-the-gateway briefing both read. Newest approval first.
+    """
+    want = str(state or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for plan in list_plans(status="proceeded"):
+        ho = plan.get("handover")
+        if not isinstance(ho, dict):
+            continue
+        if want and str(ho.get("state") or "").lower() != want:
+            continue
+        out.append(plan)
+    out.sort(key=lambda p: str((p.get("handover") or {}).get("at") or ""), reverse=True)
+    return out[:limit]
+
+
+def set_handover_state(plan_id: str, state: str, *, note: str | None = None) -> dict[str, Any]:
+    """Move a handed-over plan through the Centurion's hands.
+
+    ``picked_up`` / ``working`` — the Centurion has it. ``delivered`` — the work is
+    done, which is the only thing that lets a bead seal on the page. ``returned`` —
+    it came back to the human because something was missing.
+    """
+    target = str(state or "").strip().lower()
+    if target not in HANDOVER_STATES:
+        raise ValueError(f"invalid handover state: {state}")
+    plan = get_plan(plan_id)
+    if plan is None:
+        raise KeyError(f"plan not found: {plan_id}")
+    ho = plan.get("handover") if isinstance(plan.get("handover"), dict) else None
+    if ho is None:
+        raise ValueError("plan has no handover — it was never approved")
+    now = _now_iso()
+    ho = dict(ho)
+    ho["state"] = target
+    if target == "picked_up" and not ho.get("picked_up_at"):
+        ho["picked_up_at"] = now
+    if target == "delivered":
+        ho["delivered_at"] = now
+    if note:
+        ho["note"] = str(note).strip()
+    plan["handover"] = ho
+    plan["updated_at"] = now
+    if target == "delivered":
+        plan["outcome_summary"] = str(note or plan.get("outcome_summary") or "").strip() or None
     _write_json(_plan_path(plan["id"]), plan)
     _upsert_index(plan)
     return _plan_to_ios(plan)

@@ -227,6 +227,10 @@ def handle_request(
         return _handle_plan_share(request, request_id)
     if action == "plan_comment":
         return _handle_plan_comment(request, request_id)
+    if action == "handover_list":
+        return _handle_handover_list(request, request_id)
+    if action == "handover_set":
+        return _handle_handover_set(request, request_id)
     if action == "plan_templates_list":
         return _handle_plan_templates_list(request_id)
     if action == "plan_template_instantiate":
@@ -4787,6 +4791,63 @@ def _handle_plan_share(request: dict[str, Any], request_id: str) -> dict[str, An
         }
     except Exception as exc:
         return _error_response(request_id, action="plan_share", exc=exc)
+
+
+def _handle_handover_list(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """The handover queue: approved work sitting in a Centurion's hands."""
+    try:
+        from centurion_cli.plans import list_handovers
+
+        state = str(request.get("state") or "").strip() or None
+        rows = list_handovers(state=state, limit=int(request.get("limit") or 50))
+        out = []
+        for p in rows:
+            ho = p.get("handover") if isinstance(p.get("handover"), dict) else {}
+            out.append({
+                "id": p.get("id"),
+                "title": p.get("title"),
+                "goal": p.get("goal"),
+                "risk": p.get("risk"),
+                "steps": p.get("steps") or [],
+                "state": ho.get("state"),
+                "at": ho.get("at"),
+                "picked_up_at": ho.get("picked_up_at"),
+                "delivered_at": ho.get("delivered_at"),
+                "note": ho.get("note"),
+            })
+        return {"id": request_id, "ok": True, "action": "handover_list", "handovers": out}
+    except Exception as exc:
+        return _error_response(request_id, action="handover_list", exc=exc)
+
+
+def _handle_handover_set(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Move a handed-over plan through the Centurion's hands (picked_up/delivered)."""
+    try:
+        from centurion_cli.plans import set_handover_state
+
+        plan_id = str(request.get("plan_id") or "").strip()
+        state = str(request.get("state") or "").strip()
+        if not plan_id or not state:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "handover_set",
+                "code": "INVALID_REQUEST",
+                "error": "plan_id and state are required",
+                "message": "plan_id and state are required",
+            }
+        plan = set_handover_state(plan_id, state, note=request.get("note"))
+        ho = plan.get("handover") if isinstance(plan.get("handover"), dict) else {}
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "handover_set",
+            "plan_id": plan_id,
+            "state": ho.get("state"),
+            "delivered_at": ho.get("delivered_at"),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="handover_set", exc=exc)
 
 
 def _handle_plan_comment(request: dict[str, Any], request_id: str) -> dict[str, Any]:
