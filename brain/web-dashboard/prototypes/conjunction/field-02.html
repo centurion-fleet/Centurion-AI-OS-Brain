@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Conjunction</title>
+<style>
+/* ============================================================
+   CONJUNCTION · field 02
+   Discipline: three signals, one accent, and the accent always
+   carries a SHAPE as well as a colour — so it survives greyscale,
+   colour-blindness and a phone screen at arm's length.
+     BRONZE (matte, engraved) = one Centurion
+     STEEL  (matte, engraved) = the other Centurion
+     AMBER  (hot, and never a plain dot) = the human. Reserved.
+   Type scale is deliberately 5 steps, no more.
+   ============================================================ */
+:root{
+  --void:#0A0B0D; --plate:#14161C; --plate-hi:#1C1F27;
+  --hair:rgba(237,231,220,.11); --hair-hi:rgba(237,231,220,.24);
+  --engrave:#F0EAE0; --dim:rgba(240,234,224,.60); --faint:rgba(240,234,224,.34);
+  --bronze:#B08D57; --bronze-lt:#DCBA80; --bronze-dp:#6E5630;
+  --steel:#8C93A0; --steel-lt:#C2C8D2; --steel-dp:#565C66;
+  --amber:#FFB454; --amber-hi:#FFCC84; --amber-dp:#3A2709;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:radial-gradient(125% 95% at 50% -18%, #1A1E26 0%, #0E1015 46%, var(--void) 100%),var(--void);
+  color:var(--engrave);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;
+}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9;opacity:.045;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/></filter><rect width='260' height='260' filter='url(%23n)' opacity='.6'/></svg>");}
+.wrap{max-width:1500px;margin:0 auto;padding:60px 64px 84px;position:relative;z-index:2}
+
+/* ---------------- masthead ---------------- */
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:48px;margin-bottom:46px}
+.eyebrow{font-size:11px;letter-spacing:.44em;text-transform:uppercase;color:var(--faint);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:62px;line-height:.96;font-weight:400;letter-spacing:.13em;text-transform:uppercase}
+h1 em{font-style:normal;color:var(--bronze-lt)}
+.sub{margin-top:20px;font-size:14.5px;color:var(--dim);max-width:56ch;line-height:1.72}
+.stamp{text-align:right;font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--faint);line-height:2.1;white-space:nowrap}
+.stamp b{color:var(--dim);font-weight:400}
+
+/* ---------------- legend: glyph first, word second ---------------- */
+.legend{display:flex;align-items:center;gap:40px;flex-wrap:wrap;border-top:1px solid var(--hair);
+  border-bottom:1px solid var(--hair);padding:20px 0;margin-bottom:60px}
+.key{display:flex;align-items:center;gap:12px;font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--dim)}
+.key.amber{color:var(--amber)}
+.key.amber b{color:var(--amber);font-weight:600}
+
+/* ---------------- instrument ---------------- */
+#orrery{width:100%;height:auto;display:block;max-width:1040px;margin:0 auto}
+.caption{text-align:center;font-size:11.5px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--faint);margin:6px 0 40px}
+
+/* ---------------- readout ---------------- */
+.readout{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;max-width:1040px;margin:0 auto 60px;
+  border:1px solid var(--hair);border-radius:3px;overflow:hidden;background:var(--hair)}
+.cell{background:linear-gradient(180deg,var(--plate-hi),var(--plate));padding:30px 34px 28px}
+.cell .n{font-family:var(--serif);font-size:54px;line-height:1;letter-spacing:.01em}
+.cell .l{margin-top:14px;font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
+.cell.a .n{color:var(--bronze-lt)} .cell.b .n{color:var(--steel-lt)} .cell.c .n{color:var(--amber-hi)}
+.cell.c{box-shadow:inset 0 2px 0 rgba(255,180,84,.5)}
+
+/* ---------------- registers ---------------- */
+.registers{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:30px;margin-bottom:60px}
+.plate{background:linear-gradient(180deg,var(--plate-hi) 0%,var(--plate) 64%);border:1px solid var(--hair);
+  border-radius:3px;padding:34px 32px 36px;
+  box-shadow:0 22px 44px -30px rgba(0,0,0,.95),inset 0 1px 0 rgba(240,234,224,.05)}
+.plate.side{grid-column:1/-1}
+.plate h2{font-size:11px;letter-spacing:.36em;text-transform:uppercase;font-weight:600;color:var(--dim);
+  display:flex;align-items:baseline;gap:14px;margin-bottom:10px}
+.plate h2 .count{font-family:var(--serif);font-size:24px;letter-spacing:0;color:var(--engrave)}
+.plate .note{font-size:12.5px;color:var(--faint);margin-bottom:30px;line-height:1.62;max-width:52ch}
+
+/* struck — accumulated seals, newest last */
+.seals{display:flex;flex-wrap:wrap;gap:11px;margin-bottom:8px}
+.seal{width:48px;height:48px;border-radius:50%;position:relative;flex:none;
+  background:radial-gradient(circle at 34% 27%, #CEA874 0%, #9A7642 48%, #6B5330 100%);
+  border:1px solid rgba(220,186,128,.4);
+  box-shadow:0 7px 14px -7px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.2)}
+.seal::after{content:"";position:absolute;left:50%;top:50%;width:1.2px;height:19px;
+  background:rgba(18,14,8,.5);transform:translate(-50%,-50%) rotate(28deg)}
+.seal.s{background:radial-gradient(circle at 34% 27%, #B4BAC5 0%, #7C838F 48%, #565C66 100%);
+  border-color:rgba(194,200,210,.34)}
+.seal.last{box-shadow:0 0 0 1px rgba(255,180,84,.5),0 7px 16px -6px rgba(255,180,84,.35),
+  inset 0 1px 0 rgba(255,255,255,.25)}
+
+/* in hand — two named hands */
+.hands{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.hand{border-top:2px solid var(--hair);padding-top:22px}
+.hand.bronze{border-top-color:var(--bronze)} .hand.steel{border-top-color:var(--steel)}
+.hand .who{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+.hand .who .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.hand.bronze .dot{background:var(--bronze);box-shadow:0 0 14px rgba(176,141,87,.9)}
+.hand.steel .dot{background:var(--steel);box-shadow:0 0 14px rgba(140,147,160,.75)}
+.hand .who .nm{font-size:13px;letter-spacing:.26em;text-transform:uppercase}
+.hand .who .st{margin-left:auto;font-size:10.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+.item{display:flex;gap:15px;padding:15px 0;border-bottom:1px solid var(--hair)}
+.item:last-child{border-bottom:0;padding-bottom:0}
+.item .ring{flex:none;margin-top:1px}
+.item .tx{font-size:14.5px;line-height:1.5}
+.item .meta{margin-top:8px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.item.stop .tx{color:var(--amber-hi)}
+
+/* next in sequence */
+.ghost{display:flex;align-items:center;gap:15px;padding:14px 0;border-bottom:1px dashed var(--hair)}
+.ghost:last-child{border-bottom:0}
+.ghost .sq{width:12px;height:12px;border:1.4px solid var(--faint);border-radius:2px;flex:none}
+.ghost .tx{font-size:14px;color:var(--dim)}
+.ghost .seq{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+/* ---------- the one panel that may shout ---------- */
+.needs{border:1px solid rgba(255,180,84,.42);border-radius:3px;
+  background:linear-gradient(180deg,rgba(255,180,84,.10),rgba(255,180,84,.025));
+  padding:34px 32px 36px;box-shadow:0 26px 52px -34px rgba(255,180,84,.42)}
+.needs h2{color:var(--amber)} .needs h2 .count{color:var(--amber-hi)}
+.needs .note{color:rgba(255,204,132,.68)}
+.ask{border-top:1px solid rgba(255,180,84,.22);padding:22px 0 20px}
+.ask:first-of-type{border-top:0;padding-top:2px}
+.ask .q{font-size:15.5px;line-height:1.58}
+.ask .ctx{margin-top:10px;font-size:10.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+.verbs{display:flex;gap:12px;margin-top:20px;align-items:center}
+.verb{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;padding:11px 20px;border-radius:2px;
+  border:1px solid rgba(255,180,84,.42);color:var(--amber-hi);background:transparent;cursor:pointer}
+.verb.solid{background:var(--amber);color:var(--amber-dp);border-color:var(--amber);font-weight:600}
+.verb.quiet{border-color:transparent;color:var(--dim);padding:11px 6px}
+.verb:hover{background:rgba(255,180,84,.18)}
+.verb.solid:hover{background:var(--amber-hi)}
+.more{margin-top:22px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,204,132,.7)}
+
+/* register */
+.ledger svg{width:100%;height:170px;display:block}
+.ledger .axis{display:flex;justify-content:space-between;margin-top:14px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.16em;color:var(--faint)}
+
+footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display:flex;
+  justify-content:space-between;gap:30px;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
+.proto{font-family:var(--mono);letter-spacing:.14em}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+@media (max-width:1240px){
+  .registers{grid-template-columns:1fr}.wrap{padding:36px 26px 56px}h1{font-size:40px}
+  .hands{grid-template-columns:1fr}.readout{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <div>
+      <div class="eyebrow">Two Centurions · one purpose</div>
+      <h1>Con<em>junc</em>tion</h1>
+      <p class="sub">Two minds, on two machines, working the same intention — and one human
+      holding the decisions. This is the state of that alignment: what has been struck,
+      what is in hand and by whom, what comes next, and what is waiting on you.</p>
+    </div>
+    <div class="stamp">
+      <div>ALIGNED <b>SINCE 14 SEP 2026</b></div>
+      <div>STATE <b>LIVE · 26 SEP 12:24</b></div>
+      <div class="proto">FIELD 02</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="8" fill="#B08D57"/></svg>Struck</span>
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="7.2" fill="none" stroke="#B08D57" stroke-width="2.6"/></svg>In hand</span>
+    <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="6.6" fill="none" stroke="rgba(240,234,224,.4)" stroke-width="1.4" stroke-dasharray="2.4 3.4"/></svg>Next</span>
+    <span class="key amber"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 3 L19 11 L11 19 L3 11 Z" fill="none" stroke="#FFB454" stroke-width="2"/><circle cx="11" cy="11" r="2.4" fill="#FFB454"/></svg><b>Waiting on you</b></span>
+    <span class="key" style="margin-left:auto;color:var(--faint)">Bronze · one Centurion &nbsp;·&nbsp; Steel · the other</span>
+  </div>
+
+  <svg id="orrery" viewBox="0 0 1040 660" role="img" aria-label="Two rings of work in conjunction, centred on the human"></svg>
+  <p class="caption">The crossing is where one mind hands work to the other</p>
+
+  <div class="readout">
+    <div class="cell a"><div class="n">18</div><div class="l">Struck · delivered</div></div>
+    <div class="cell b"><div class="n">6</div><div class="l">In hand now</div></div>
+    <div class="cell c"><div class="n">4</div><div class="l">Waiting on the humans</div></div>
+  </div>
+
+  <div class="registers">
+
+    <section class="plate">
+      <h2><span class="count">18</span> Struck</h2>
+      <p class="note">One seal per completed piece of work, struck in the order it was earned.
+      Nothing is sealed on a claim — every one was verified first.</p>
+      <div class="seals" id="seals"></div>
+    </section>
+
+    <section class="plate">
+      <h2><span class="count">6</span> In hand</h2>
+      <p class="note">Who holds what, at this moment. A circle is moving; a diamond has stopped
+      and is waiting on a person.</p>
+      <div class="hands">
+        <div class="hand bronze">
+          <div class="who"><span class="dot"></span><span class="nm">Titus</span><span class="st">This desk</span></div>
+          <div id="items-bronze"></div>
+        </div>
+        <div class="hand steel">
+          <div class="who"><span class="dot"></span><span class="nm">Eve</span><span class="st">Ballina</span></div>
+          <div id="items-steel"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="needs">
+      <h2><span class="count">4</span> Waiting on you</h2>
+      <p class="note">Only a human can take these. Everything else continues without them.</p>
+      <div id="asks"></div>
+      <div class="more">1 further item waits behind these</div>
+    </section>
+
+    <section class="plate side">
+      <h2><span class="count">7</span> Next in sequence</h2>
+      <p class="note">Agreed and ordered. This is what moves the counters above.</p>
+      <div class="next" id="next"></div>
+    </section>
+  </div>
+
+  <section class="plate ledger">
+    <h2><span class="count">23</span> Register of decisions</h2>
+    <p class="note">Every decision taken, earliest at the left. A bronze pillar is decided and
+    closed. A hollow amber diamond is still open — the same mark as above.</p>
+    <svg id="register" viewBox="0 0 1500 170" role="img" aria-label="Register of decisions"></svg>
+    <div class="axis"><span>11 AUG</span><span>ONE MARK · ONE DECISION</span><span>26 SEP</span></div>
+  </section>
+
+  <footer>
+    <span>Centurion · two minds, one intention</span>
+    <span class="proto">PROTOTYPE · SAMPLE STATE, REAL SHAPE</span>
+  </footer>
+</div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const DATA={
+  hands:[
+    { key:"bronze", name:"Titus", items:[
+      {t:"Fleet pairing screen — values redraw, honest failure", s:"hand", meta:"verified · committed"},
+      {t:"Failure dialogs carry the reason · 13 sites", s:"hand", meta:"verified · committed"},
+      {t:"6.0.11 signed, waiting to publish", s:"stop", meta:"needs you · blocked"}
+    ]},
+    { key:"steel", name:"Eve", items:[
+      {t:"Medical listing project · Ballina", s:"hand", meta:"in hand · day 4"},
+      {t:"Kim's Brain — pairing rehearsal", s:"hand", meta:"in hand"},
+      {t:"Client intake sheet — first pass", s:"hand", meta:"in hand"}
+    ]}
+  ],
+  next:[
+    "Wire Conjunction to the live bridge",
+    "Collab demo hygiene — our board off the customer surface",
+    "Focus: triage for answered-nothing decisions",
+    "The four remaining client checklists",
+    "Steve & Kim live, witnessed",
+    "VFP6 fine public — the movement channel",
+    "Referral ask at every onboarding"
+  ],
+  asks:[
+    {q:"Publish 6.0.11 — eleven fixes are signed and stuck on one missing key.", ctx:"waiting 2 days · blocks every machine"},
+    {q:"Retire the 14-units-a-month target — it contradicts the €10M model.", ctx:"waiting 14 days · three exits in one record"},
+    {q:"Settle Steve White's override in writing.", ctx:"waiting 9 days · unresolved since July"},
+    {q:"Move our internal board off the Collab tab.", ctx:"waiting 1 day · demo risk"}
+  ],
+  decisions:(()=>{const a=[];for(let i=0;i<19;i++)a.push({filled:true});
+    for(let i=0;i<4;i++)a.push({filled:false});return a;})()
+};
+function el(n,at){const e=document.createElementNS(NS,n);for(const k in at)e.setAttribute(k,at[k]);return e;}
+
+/* ---------------- the instrument ---------------- */
+function build(){
+  const svg=document.getElementById("orrery"), CX=520, CY=340;
+  svg.appendChild(Object.assign(el("defs"),{innerHTML:`
+    <radialGradient id="core" cx="50%" cy="44%" r="62%">
+      <stop offset="0%" stop-color="#3E3220" stop-opacity=".95"/>
+      <stop offset="52%" stop-color="#171A20" stop-opacity=".92"/>
+      <stop offset="100%" stop-color="#0A0B0D" stop-opacity="0"/></radialGradient>
+    <linearGradient id="ringB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#EBD3A6"/><stop offset="48%" stop-color="#B08D57"/>
+      <stop offset="100%" stop-color="#6B5330"/></linearGradient>
+    <linearGradient id="ringS" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#D2D7E0"/><stop offset="48%" stop-color="#8C93A0"/>
+      <stop offset="100%" stop-color="#4E535C"/></linearGradient>
+    <filter id="soft" x="-45%" y="-45%" width="190%" height="190%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`}));
+  const g=el("g"); svg.appendChild(g);
+
+  g.appendChild(el("ellipse",{cx:CX,cy:CY+8,rx:430,ry:296,fill:"url(#core)"}));
+
+  /* outer register ring — 23 marks, amber diamonds for what is still open */
+  const R=316;
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:R,fill:"none",stroke:"rgba(240,234,224,.09)","stroke-width":1}));
+  DATA.decisions.forEach((d,i)=>{
+    const a=-Math.PI*.74+(i/(DATA.decisions.length-1))*Math.PI*1.48;
+    const rot=(a*180/Math.PI)+90;
+    const grp=el("g",{transform:`rotate(${rot} ${CX} ${CY})`});
+    if(d.filled){
+      grp.appendChild(el("rect",{x:CX-1.6,y:CY-R-16,width:3.2,height:d.filled?15:12,rx:1.6,
+        fill:"rgba(220,186,128,.62)"}));
+    } else {
+      grp.appendChild(el("path",{d:`M ${CX} ${CY-R-22} l 6.6 6.6 l -6.6 6.6 l -6.6 -6.6 Z`,
+        fill:"none",stroke:"var(--amber)","stroke-width":2}));
+      grp.appendChild(el("circle",{cx:CX,cy:CY-R-15.4,r:2,fill:"var(--amber)"}));
+    }
+    g.appendChild(grp);
+  });
+
+  /* the two rings, thick enough to read at a glance, counter-tilted */
+  [[-19,"url(#ringB)","#B08D57"],[19,"url(#ringS)","#8C93A0"]].forEach(([rot,grad,glow])=>{
+    g.appendChild(el("ellipse",{cx:CX,cy:CY,rx:312,ry:158,fill:"none",stroke:glow,
+      "stroke-width":7,transform:`rotate(${rot} ${CX} ${CY})`,opacity:.15,filter:"url(#soft)"}));
+    g.appendChild(el("ellipse",{cx:CX,cy:CY,rx:312,ry:158,fill:"none",stroke:grad,
+      "stroke-width":2.6,transform:`rotate(${rot} ${CX} ${CY})`}));
+  });
+
+  /* work carried on the rings */
+  const place=(rot,f)=>{const a=f*Math.PI*2,x0=Math.cos(a)*312,y0=Math.sin(a)*158,rad=rot*Math.PI/180;
+    return [CX+(x0*Math.cos(rad)-y0*Math.sin(rad)),CY+(x0*Math.sin(rad)+y0*Math.cos(rad))];};
+  DATA.hands[0].items.forEach((it,i)=>{
+    const [x,y]=place(-19,.06+i*.17);
+    if(it.s==="stop"){
+      g.appendChild(el("circle",{cx:x,cy:y,r:14,fill:"var(--amber)",opacity:.16,filter:"url(#soft)"}));
+      g.appendChild(el("path",{d:`M ${x} ${y-9} l 9 9 l -9 9 l -9 -9 Z`,fill:"none",stroke:"var(--amber)","stroke-width":2.6}));
+    } else {
+      g.appendChild(el("circle",{cx:x,cy:y,r:8.4,fill:"none",stroke:"var(--bronze-lt)","stroke-width":2.8}));
+      g.appendChild(el("circle",{cx:x,cy:y,r:2.6,fill:"var(--bronze-lt)"}));
+    }
+  });
+  DATA.hands[1].items.forEach((it,i)=>{
+    const [x,y]=place(19,.12+i*.19);
+    g.appendChild(el("circle",{cx:x,cy:y,r:8.4,fill:"none",stroke:"var(--steel-lt)","stroke-width":2.8}));
+    g.appendChild(el("circle",{cx:x,cy:y,r:2.6,fill:"var(--steel-lt)"}));
+  });
+  /* struck work: sealed beads, bronze on one ring, steel on the other */
+  for(let i=0;i<11;i++){const [x,y]=place(-19,.58+i*.031);
+    g.appendChild(el("circle",{cx:x,cy:y,r:8,fill:"url(#ringB)"}));}
+  for(let i=0;i<5;i++){const [x,y]=place(19,.66+i*.032);
+    g.appendChild(el("circle",{cx:x,cy:y,r:8,fill:"url(#ringS)"}));}
+
+  /* crossings = handoffs */
+  [[-19,.755],[19,.245]].forEach(([rot,f])=>{
+    const [x,y]=place(rot,f);
+    g.appendChild(el("circle",{cx:x,cy:y,r:22,fill:"#F0EAE0",opacity:.08,filter:"url(#soft)"}));
+    g.appendChild(el("circle",{cx:x,cy:y,r:5.4,fill:"#F0EAE0",filter:"url(#glow)"}));
+    g.appendChild(el("circle",{cx:x,cy:y,r:11,fill:"none",stroke:"rgba(240,234,224,.5)","stroke-width":1}));
+  });
+
+  /* the still centre — the human. anchored, not floating. */
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:26,fill:"rgba(240,234,224,.05)"}));
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:26,fill:"none",stroke:"rgba(240,234,224,.28)","stroke-width":1}));
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:6.4,fill:"rgba(240,234,224,.85)"}));
+  g.appendChild(el("line",{x1:CX,y1:CY-26,x2:CX,y2:CY-58,stroke:"rgba(240,234,224,.22)","stroke-width":1}));
+  const cap=el("text",{x:CX,y:CY-70,"text-anchor":"middle","font-size":"11.5","letter-spacing":"5.4",
+    fill:"rgba(240,234,224,.62)","font-family":"var(--sans)"});
+  cap.textContent="THE STILL CENTRE — YOU"; g.appendChild(cap);
+
+  /* direct labels ON the rings, where the eye already is */
+  const lab=(x,y,txt,col)=>{
+    const t=el("text",{x:x,y:y,"text-anchor":"middle","font-size":"12.5","letter-spacing":"4.6",
+      fill:col,"font-family":"var(--sans)"});t.textContent=txt;return t;};
+  g.appendChild(lab(196,300,"TITUS · 3 IN HAND","rgba(220,186,128,.92)"));
+  g.appendChild(lab(846,300,"EVE · 3 IN HAND","rgba(194,200,210,.84)"));
+}
+
+/* ---------------- registers ---------------- */
+function seals(){
+  const b=document.getElementById("seals");
+  for(let i=0;i<18;i++){const d=document.createElement("div");
+    d.className="seal"+(i===17?" last":"");b.appendChild(d);}
+}
+const RING={hand:`<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#DCBA80" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#DCBA80"/></svg>`,
+  steel:`<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#C2C8D2" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#C2C8D2"/></svg>`,
+  stop:`<svg width="24" height="24"><path d="M12 3.4 L20.6 12 L12 20.6 L3.4 12 Z" fill="none" stroke="#FFB454" stroke-width="2.6"/><circle cx="12" cy="12" r="2.4" fill="#FFB454"/></svg>`};
+function items(){
+  const b=document.getElementById("items-bronze"),s=document.getElementById("items-steel");
+  DATA.hands[0].items.forEach(it=>{
+    const d=document.createElement("div");d.className="item"+(it.s==="stop"?" stop":"");
+    d.innerHTML=`<span class="ring">${it.s==="stop"?RING.stop:RING.hand}</span>
+      <span><span class="tx">${it.t}</span><span class="meta">${it.meta}</span></span>`;b.appendChild(d);});
+  DATA.hands[1].items.forEach(it=>{
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML=`<span class="ring">${RING.steel}</span>
+      <span><span class="tx">${it.t}</span><span class="meta">${it.meta}</span></span>`;s.appendChild(d);});
+}
+function next(){
+  const b=document.getElementById("next");
+  DATA.next.forEach((t,i)=>{const d=document.createElement("div");d.className="ghost";
+    d.innerHTML=`<span class="sq"></span><span class="tx">${t}</span><span class="seq">${String(i+1).padStart(2,"0")}</span>`;
+    b.appendChild(d);});
+}
+function asks(){
+  const b=document.getElementById("asks");
+  DATA.asks.forEach(a=>{const d=document.createElement("div");d.className="ask";
+    d.innerHTML=`<div class="q">${a.q}</div><div class="ctx">${a.ctx}</div>
+      <div class="verbs"><span class="verb solid">Proceed</span><span class="verb">Discuss</span><span class="verb quiet">Hold</span></div>`;
+    b.appendChild(d);});
+}
+function register(){
+  const s=document.getElementById("register"),pad=54,W=1500,base=112,n=DATA.decisions.length;
+  s.appendChild(el("line",{x1:pad,y1:base,x2:W-pad,y2:base,stroke:"rgba(240,234,224,.12)","stroke-width":1}));
+  DATA.decisions.forEach((d,i)=>{
+    const x=pad+(i/(n-1))*(W-2*pad);
+    if(d.filled){
+      s.appendChild(el("rect",{x:x-2.2,y:base-30-((i*11)%34),width:4.4,height:30+((i*11)%34),
+        rx:2.2,fill:"rgba(220,186,128,.5)"}));
+      s.appendChild(el("circle",{cx:x,cy:base-30-((i*11)%34)-6,r:3.4,fill:"rgba(220,186,128,.95)"}));
+    } else {
+      s.appendChild(el("path",{d:`M ${x} ${base-46} l 9 9 l -9 9 l -9 -9 Z`,fill:"none",
+        stroke:"var(--amber)","stroke-width":2.2}));
+      s.appendChild(el("line",{x1:x,y1:base,x2:x,y2:base-26,stroke:"rgba(255,180,84,.45)","stroke-width":1.2}));
+    }
+  });
+  [["11 AUG",pad],["26 AUG",pad+(W-2*pad)*.42],["09 SEP",pad+(W-2*pad)*.74],["26 SEP",W-pad]].forEach(([t,x])=>{
+    const e=el("text",{x:x,y:base+30,"text-anchor":x===pad?"start":(x===W-pad?"end":"middle"),
+      "font-size":"11","letter-spacing":"1.6",fill:"rgba(240,234,224,.34)","font-family":"var(--sans)"});
+    e.textContent=t;s.appendChild(e);});
+}
+build();seals();items();next();asks();register();
+</script>
+</body>
+</html>

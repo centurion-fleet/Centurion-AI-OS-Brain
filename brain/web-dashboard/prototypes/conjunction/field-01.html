@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Conjunction</title>
+<style>
+/* ============================================================
+   CONJUNCTION — the collaboration instrument
+   Colour discipline (Kennedy Rule 2): three signals, one accent.
+     BRONZE  = one Centurion      STEEL = the other Centurion
+     AMBER   = the human. Reserved. Nothing else may use it.
+   ============================================================ */
+:root{
+  --void:#0A0B0D;
+  --ink:#12141A;
+  --plate:#14161C;
+  --plate-hi:#1B1E26;
+  --hair:rgba(237,231,220,.10);
+  --hair-hi:rgba(237,231,220,.22);
+  --engrave:#EDE7DC;      /* warm ivory — engraved text */
+  --engrave-dim:rgba(237,231,220,.52);
+  --engrave-faint:rgba(237,231,220,.30);
+  --bronze:#B08D57;
+  --bronze-lt:#D8B67C;
+  --steel:#8C93A0;
+  --steel-lt:#B6BCC7;
+  --amber:#E0A458;
+  --amber-hi:#F2C078;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(120% 90% at 50% -20%, #191C23 0%, #0E1015 45%, var(--void) 100%),
+    var(--void);
+  color:var(--engrave);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+/* hammered-metal grain: one SVG turbulence, laid over everything */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9;opacity:.05;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='240' height='240' filter='url(%23n)' opacity='.55'/></svg>");
+  mix-blend-mode:overlay;
+}
+.wrap{max-width:1440px;margin:0 auto;padding:54px 56px 72px;position:relative;z-index:2}
+
+/* ---------- masthead ---------- */
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:40px;margin-bottom:44px}
+.eyebrow{
+  font-size:10.5px;letter-spacing:.42em;text-transform:uppercase;
+  color:var(--engrave-faint);margin-bottom:14px;
+}
+h1{
+  font-family:var(--serif);font-size:56px;line-height:1;font-weight:400;
+  letter-spacing:.14em;text-transform:uppercase;
+}
+h1 em{font-style:normal;color:var(--bronze-lt)}
+.sub{margin-top:16px;font-size:13.5px;color:var(--engrave-dim);max-width:52ch;line-height:1.65}
+.stamp{
+  text-align:right;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;
+  color:var(--engrave-faint);line-height:2;white-space:nowrap;
+}
+.stamp b{color:var(--engrave-dim);font-weight:400}
+
+/* ---------- legend: glyphs, not words ---------- */
+.legend{display:flex;align-items:center;gap:34px;flex-wrap:wrap;
+  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);
+  padding:16px 0;margin-bottom:52px}
+.key{display:flex;align-items:center;gap:11px;font-size:11.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--engrave-dim)}
+.key svg{flex:none}
+
+/* ---------- the instrument ---------- */
+.instrument{position:relative;display:grid;grid-template-columns:1fr;place-items:center;
+  margin:0 auto 8px;max-width:1000px}
+#orrery{width:100%;height:auto;display:block}
+.readout{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:2px;max-width:1000px;margin:0 auto 30px;
+  border:1px solid var(--hair);border-radius:3px;overflow:hidden;background:var(--hair);
+}
+.cell{background:linear-gradient(180deg,var(--plate-hi),var(--plate));padding:26px 30px 24px}
+.cell .n{font-family:var(--serif);font-size:46px;line-height:1;letter-spacing:.02em}
+.cell .l{margin-top:12px;font-size:10.5px;letter-spacing:.30em;text-transform:uppercase;
+  color:var(--engrave-faint)}
+.cell.a .n{color:var(--bronze-lt)} .cell.b .n{color:var(--steel-lt)}
+.cell.c .n{color:var(--amber-hi)}
+
+/* ---------- registers ---------- */
+.registers{display:grid;grid-template-columns:1.15fr 1.25fr .95fr;gap:26px;margin-bottom:52px}
+.plate{
+  background:linear-gradient(180deg,var(--plate-hi) 0%,var(--plate) 62%);
+  border:1px solid var(--hair);border-radius:3px;padding:28px 26px 30px;
+  box-shadow:0 18px 38px -26px rgba(0,0,0,.9), inset 0 1px 0 rgba(237,231,220,.045);
+}
+.plate.side{grid-column:1/-1}
+.plate h2{
+  font-size:10.5px;letter-spacing:.34em;text-transform:uppercase;font-weight:600;
+  color:var(--engrave-dim);display:flex;align-items:baseline;gap:12px;margin-bottom:6px;
+}
+.plate h2 .count{font-family:var(--serif);font-size:20px;letter-spacing:0;color:var(--engrave)}
+.plate .note{font-size:11.5px;color:var(--engrave-faint);margin-bottom:24px;letter-spacing:.03em}
+
+/* delivered: accumulated seals */
+.seals{display:flex;flex-wrap:wrap;gap:9px}
+.seal{
+  width:44px;height:44px;border-radius:50%;position:relative;flex:none;
+  background:radial-gradient(circle at 34% 28%, #C9A470 0%, #96734098 46%, #6E5630 100%);
+  border:1px solid rgba(216,182,124,.34);
+  box-shadow:0 6px 12px -6px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.16);
+}
+.seal::after{ /* struck tick */
+  content:"";position:absolute;left:50%;top:50%;width:1px;height:16px;background:rgba(20,16,10,.45);
+  transform:translate(-50%,-50%) rotate(28deg);
+}
+.seal.s{background:radial-gradient(circle at 34% 28%, #AEB4BF 0%, #7C838F8F 46%, #565C66 100%);
+  border-color:rgba(182,188,199,.28)}
+
+/* who is doing what: two hands side by side */
+.hands{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.hand{border-top:1px solid var(--hair);padding-top:18px}
+.hand.bronze{border-top-color:rgba(176,141,87,.55)}
+.hand.steel{border-top-color:rgba(140,147,160,.45)}
+.hand .who{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.hand .who .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.hand.bronze .dot{background:var(--bronze);box-shadow:0 0 12px rgba(176,141,87,.85)}
+.hand.steel .dot{background:var(--steel);box-shadow:0 0 12px rgba(140,147,160,.7)}
+.hand .who .nm{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--engrave)}
+.hand .who .st{margin-left:auto;font-size:10px;letter-spacing:.2em;color:var(--engrave-faint);
+  text-transform:uppercase}
+.item{display:flex;gap:13px;padding:13px 0;border-bottom:1px solid var(--hair)}
+.item:last-child{border-bottom:0}
+.item .ring{flex:none;margin-top:2px}
+.item .tx{font-size:13.5px;line-height:1.5;color:var(--engrave)}
+.item .meta{margin-top:6px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--engrave-faint)}
+
+/* planned: hollow */
+.next{display:grid;grid-template-columns:1fr;gap:0}
+.ghost{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px dashed var(--hair)}
+.ghost:last-child{border-bottom:0}
+.ghost .sq{width:11px;height:11px;border:1px solid var(--engrave-faint);border-radius:2px;flex:none}
+.ghost .tx{font-size:13px;color:var(--engrave-dim)}
+.ghost .seq{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--engrave-faint)}
+
+/* ---------- the one thing that may shout ---------- */
+.needs{
+  border:1px solid rgba(224,164,88,.30);border-radius:3px;
+  background:linear-gradient(180deg, rgba(224,164,88,.075), rgba(224,164,88,.02));
+  padding:28px 26px 30px;box-shadow:0 20px 44px -30px rgba(224,164,88,.34);
+}
+.needs h2{color:var(--amber)}
+.needs h2 .count{color:var(--amber-hi)}
+.ask{border-top:1px solid rgba(224,164,88,.18);padding:18px 0 16px}
+.ask:first-of-type{border-top:0;padding-top:6px}
+.ask .q{font-size:14.5px;line-height:1.55}
+.ask .ctx{margin-top:8px;font-size:11px;letter-spacing:.1em;color:var(--engrave-faint);
+  text-transform:uppercase}
+.verbs{display:flex;gap:10px;margin-top:16px}
+.verb{
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;padding:9px 16px;
+  border:1px solid rgba(224,164,88,.34);border-radius:2px;color:var(--amber-hi);
+  background:rgba(224,164,88,.05);cursor:pointer;
+}
+.verb.solid{background:var(--amber);color:#1A1206;border-color:var(--amber)}
+.verb:hover{background:rgba(224,164,88,.16)}
+.verb.solid:hover{background:var(--amber-hi)}
+
+/* ---------- ledger of decisions ---------- */
+.ledger{margin-bottom:26px}
+.ledger svg{width:100%;height:132px;display:block}
+.ledger .axis{display:flex;justify-content:space-between;margin-top:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--engrave-faint)}
+
+footer{
+  border-top:1px solid var(--hair);margin-top:34px;padding-top:22px;
+  display:flex;justify-content:space-between;align-items:center;gap:30px;
+  font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--engrave-faint);
+}
+.proto{font-family:var(--mono);letter-spacing:.14em}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:1180px){
+  .registers{grid-template-columns:1fr}
+  .wrap{padding:34px 26px 50px}
+  h1{font-size:38px}
+  .hands{grid-template-columns:1fr}
+  .readout{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <div>
+      <div class="eyebrow">Two Centurions · one purpose</div>
+      <h1>Con<em>junc</em>tion</h1>
+      <p class="sub">Two minds, on two machines, working the same intention —
+      and one human holding the decisions. Everything below is the current state
+      of that alignment: struck work, work in hand, work waiting, and what is
+      waiting on you.</p>
+    </div>
+    <div class="stamp">
+      <div>ALIGNED <b>SINCE 14 SEP 2026</b></div>
+      <div>STATE <b>LIVE · 26 SEP 12:12</b></div>
+      <div class="proto">CONJUNCTION · FIELD 01</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="key"><svg width="20" height="20"><circle cx="10" cy="10" r="7" fill="#B08D57"/></svg>Struck</span>
+    <span class="key"><svg width="20" height="20"><circle cx="10" cy="10" r="6.6" fill="none" stroke="#B08D57" stroke-width="1.7"/></svg>In hand</span>
+    <span class="key"><svg width="20" height="20"><circle cx="10" cy="10" r="6.2" fill="none" stroke="rgba(237,231,220,.34)" stroke-width="1.3" stroke-dasharray="2.2 3"/></svg>Next</span>
+    <span class="key"><svg width="20" height="20"><circle cx="10" cy="10" r="7" fill="#E0A458"/></svg>Waiting on you</span>
+    <span class="key" style="margin-left:auto;color:var(--engrave-faint)">Bronze · one Centurion &nbsp;&nbsp; Steel · the other</span>
+  </div>
+
+  <div class="instrument">
+    <svg id="orrery" viewBox="0 0 1000 620" role="img" aria-label="The instrument: two rings of work in conjunction"></svg>
+  </div>
+
+  <div class="readout">
+    <div class="cell a"><div class="n" id="n-owned">18</div><div class="l">Struck · delivered</div></div>
+    <div class="cell b"><div class="n" id="n-hand">6</div><div class="l">In hand now</div></div>
+    <div class="cell c"><div class="n" id="n-wait">4</div><div class="l">Waiting on the humans</div></div>
+  </div>
+
+  <div class="registers">
+
+    <!-- 1 · DELIVERED -->
+    <section class="plate">
+      <h2><span class="count" id="d-count">18</span> Struck</h2>
+      <p class="note">One seal per piece of work completed, newest struck last. Nothing here was claimed — each one was verified before it was struck.</p>
+      <div class="seals" id="seals"></div>
+    </section>
+
+    <!-- 2 · WHO IS DOING WHAT -->
+    <section class="plate">
+      <h2><span class="count" id="h-count">6</span> In hand</h2>
+      <p class="note">Who holds what, right now. A ring means moving; a red ring means it has stopped and needs a human.</p>
+      <div class="hands">
+        <div class="hand bronze" id="hand-bronze">
+          <div class="who"><span class="dot"></span><span class="nm">Titus</span><span class="st">This desk</span></div>
+          <div id="items-bronze"></div>
+        </div>
+        <div class="hand steel" id="hand-steel">
+          <div class="who"><span class="dot"></span><span class="nm">Eve</span><span class="st">Ballina</span></div>
+          <div id="items-steel"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 · WAITING ON THE HUMANS — the only amber on the page -->
+    <section class="needs" style="grid-column:3/4">
+      <h2><span class="count" id="w-count">4</span> Waiting on you</h2>
+      <p class="note">Decisions only a human can take. Everything else continues without them.</p>
+      <div id="asks"></div>
+    </section>
+
+    <!-- 4 · NEXT -->
+    <section class="plate side">
+      <h2><span class="count" id="p-count">7</span> Next in sequence</h2>
+      <p class="note">Agreed and ordered, in the order they will be taken. This is what changes the counters above.</p>
+      <div class="next" id="next"></div>
+    </section>
+  </div>
+
+  <!-- 5 · THE REGISTER -->
+  <section class="plate ledger">
+    <h2><span class="count" id="r-count">23</span> Register of decisions</h2>
+    <p class="note">Every decision taken, oldest at the left. A filled mark is decided. A hollow mark is still open — the same amber as above.</p>
+    <svg id="register" viewBox="0 0 1400 132" role="img" aria-label="Register of decisions"></svg>
+    <div class="axis"><span id="ax-from">11 AUG</span><span>EACH MARK IS ONE DECISION</span><span id="ax-to">26 SEP</span></div>
+  </section>
+
+  <footer>
+    <span>Centurion · two minds, one intention</span>
+    <span class="proto">CONJUNCTION — PROTOTYPE · SAMPLE STATE, REAL SHAPE</span>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   Sample state — the real shape, filled with observed figures so
+   the design can be judged before it is wired to the bridge.
+   ============================================================ */
+const DATA = {
+  hands: [
+    { key:"bronze", name:"Titus", items:[
+      { t:"Fleet pairing screen — values redraw, honest failure", s:"moving", meta:"verified · committed" },
+      { t:"Failure dialogs carry the reason · 13 sites", s:"moving", meta:"verified · committed" },
+      { t:"6.0.11 signed and waiting to publish", s:"stopped", meta:"blocked · needs you" }
+    ]},
+    { key:"steel", name:"Eve", items:[
+      { t:"Medical listing project · Ballina", s:"moving", meta:"in hand · day 4" },
+      { t:"Kim's Brain — Mikki, pairing rehearsal", s:"moving", meta:"in hand" },
+      { t:"Client intake sheet — first pass", s:"moving", meta:"in hand" }
+    ]}
+  ],
+  struck: 18, struckSteel: 5,
+  next: [
+    "Wire Conjunction to live bridge data",
+    "Collab demo hygiene — our own board off the customer surface",
+    "Focus: triage for decisions nobody has answered",
+    "Account setup kit — the remaining four sheets",
+    "Steve & Kim live and collaborating, witnessed",
+    "VFP6 fine public — the movement channel",
+    "Referral ask at every onboarding"
+  ],
+  asks: [
+    { q:"Publish 6.0.11? Eleven fixes are signed and stuck on one missing key.", ctx:"Waiting 2 days · blocks every machine" },
+    { q:"Retire the 14-units-a-month target? It contradicts the €10M ARR model.", ctx:"Waiting 14 days · the record carries three exits" },
+    { q:"Steve White — settle the 25% + 5% override in writing?", ctx:"Waiting 9 days · unresolved since July" },
+    { q:"Move the internal org board off the customer-facing Collab tab?", ctx:"Waiting 1 day · demo risk" }
+  ],
+  decisions: (()=>{ // 23 notches, last 4 hollow
+    const a=[]; for(let i=0;i<19;i++) a.push({filled:true, d:11+Math.floor(i*1.6)});
+    for(let i=0;i<4;i++) a.push({filled:false, d:26});
+    return a;
+  })()
+};
+
+/* ---------- the instrument ---------- */
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("orrery");
+const CX=500, CY=330;
+
+function el(n,attrs){const e=document.createElementNS(NS,n);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function defs(){
+  const d=el("defs");
+  d.innerHTML=`
+  <radialGradient id="core" cx="50%" cy="44%" r="60%">
+    <stop offset="0%" stop-color="#3A2F1E" stop-opacity=".95"/>
+    <stop offset="55%" stop-color="#16171D" stop-opacity=".9"/>
+    <stop offset="100%" stop-color="#0A0B0D" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="ringB" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#E0BE86"/><stop offset="45%" stop-color="#B08D57"/>
+    <stop offset="100%" stop-color="#6B5330"/>
+  </linearGradient>
+  <linearGradient id="ringS" x1="1" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#C3C8D2"/><stop offset="45%" stop-color="#8C93A0"/>
+    <stop offset="100%" stop-color="#575C66"/>
+  </linearGradient>
+  <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur stdDeviation="7"/>
+  </filter>
+  <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="3.4" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+  svg.appendChild(d);
+}
+function tick(cx,cy,a1,a2,len,w,col,op){
+  const p1=[cx+Math.cos(a1)*len, cy+Math.sin(a1)*len];
+  const p2=[cx+Math.cos(a2)*len, cy+Math.sin(a2)*len];
+  return el("line",{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],stroke:col,"stroke-width":w,
+    "stroke-linecap":"round",opacity:op});
+}
+/* an ellipse rendered as a rotated, squashed circle — gives the armillary its tilt */
+function beadOnRing(group,cx,cy,rx,ry,rot,frac,style){
+  const a=frac*Math.PI*2;
+  const x=Math.cos(a)*rx, y=Math.sin(a)*ry;
+  const rad=style==="struck"?7.6:null;
+  let node;
+  if(style==="struck"){
+    node=el("circle",{cx:x,cy:y,r:rad,fill:"url(#ringB)"});
+  } else if(style==="hand"){
+    node=el("circle",{cx:x,cy:y,r:6.4,fill:"none","stroke-width":2.1});
+  } else if(style==="stopped"){
+    node=el("circle",{cx:x,cy:y,r:6.6,fill:"none","stroke-width":2.3,stroke:"var(--amber)"});
+  } else {
+    node=el("circle",{cx:x,cy:y,r:5.4,fill:"none","stroke-width":1.2,
+      "stroke-dasharray":"2.4 3.4",stroke:"rgba(237,231,220,.34)"});
+  }
+  const wrap=el("g",{transform:`rotate(${rot} ${cx} ${cy})`});
+  wrap.appendChild(node);
+  group.appendChild(wrap);
+  return node;
+}
+function build(){
+  defs();
+  const g=el("g");
+  svg.appendChild(g);
+
+  // the floor shadow — light comes from above, so the instrument sits in its own dark
+  g.appendChild(el("ellipse",{cx:CX,cy:CY+6,rx:420,ry:288,fill:"url(#core)"}));
+
+  // outer register ring: 23 decision marks
+  const R=300;
+  const rr=el("g");
+  rr.appendChild(el("circle",{cx:CX,cy:CY,r:R,fill:"none",stroke:"rgba(237,231,220,.075)","stroke-width":1}));
+  const n=DATA.decisions.length;
+  DATA.decisions.forEach((d,i)=>{
+    const a=-Math.PI*0.72 + (i/(n-1))*Math.PI*1.44;
+    const inner=R-8, outer=R+ (d.filled?15:11);
+    const t=tick(CX,CY,a,a,1,1,"#000",1);
+    t.setAttribute("x1",CX+Math.cos(a)*inner); t.setAttribute("y1",CY+Math.sin(a)*inner);
+    t.setAttribute("x2",CX+Math.cos(a)*outer); t.setAttribute("y2",CY+Math.sin(a)*outer);
+    t.setAttribute("stroke", d.filled?"rgba(216,182,124,.62)":"var(--amber)");
+    t.setAttribute("stroke-width", d.filled?1.5:1.8);
+    t.setAttribute("opacity", d.filled?".5":"1");
+    rr.appendChild(t);
+  });
+  g.appendChild(rr);
+
+  // RING A — bronze. the whole ellipse, drawn as a path so we can light it
+  const ringA=el("ellipse",{cx:CX,cy:CY,rx:300,ry:150,fill:"none",stroke:"url(#ringB)",
+    "stroke-width":1.6,transform:`rotate(-19 ${CX} ${CY})`,opacity:.78});
+  const ringAglow=el("ellipse",{cx:CX,cy:CY,rx:300,ry:150,fill:"none",stroke:"#B08D57",
+    "stroke-width":5,transform:`rotate(-19 ${CX} ${CY})`,opacity:.14,filter:"url(#soft)"});
+  g.appendChild(ringAglow); g.appendChild(ringA);
+
+  // RING B — steel, counter-tilted. their conjunction is the crossing
+  const ringB=el("ellipse",{cx:CX,cy:CY,rx:300,ry:150,fill:"none",stroke:"url(#ringS)",
+    "stroke-width":1.6,transform:`rotate(19 ${CX} ${CY})`,opacity:.72});
+  const ringBglow=el("ellipse",{cx:CX,cy:CY,rx:300,ry:150,fill:"none",stroke:"#8C93A0",
+    "stroke-width":5,transform:`rotate(19 ${CX} ${CY})`,opacity:.12,filter:"url(#soft)"});
+  g.appendChild(ringBglow); g.appendChild(ringB);
+
+  // work carried on each ring
+  const AX=-19*Math.PI/180, BX=19*Math.PI/180;
+  DATA.hands[0].items.forEach((it,i)=>beadOnRing(g,CX,CY,300,150,-19,0.10+i*0.20,
+    it.s==="stopped"?"stopped":"hand"));
+  DATA.hands[1].items.forEach((it,i)=>beadOnRing(g,CX,CY,300,150, 19,0.16+i*0.22,
+    it.s==="stopped"?"stopped":"hand"));
+
+  // struck work gathers as a bright arc low on each ring — evidence, not decoration
+  for(let i=0;i<11;i++) beadOnRing(g,CX,CY,300,150,-19,0.60+i*0.030,"struck");
+  for(let i=0;i<5;i++)  beadOnRing(g,CX,CY,300,150, 19,0.66+i*0.030,"struck");
+
+  // the crossing: where the two rings meet, work has been handed over
+  [[-19,0.735],[19,0.235]].forEach(([rot,f])=>{
+    const a=f*Math.PI*2;
+    const x0=Math.cos(a)*300, y0=Math.sin(a)*150;
+    const rad=rot*Math.PI/180;
+    const x=CX+(x0*Math.cos(rad)-y0*Math.sin(rad));
+    const y=CY+(x0*Math.sin(rad)+y0*Math.cos(rad));
+    g.appendChild(el("circle",{cx:x,cy:y,r:16,fill:"#EDE7DC",opacity:.07,filter:"url(#soft)"}));
+    g.appendChild(el("circle",{cx:x,cy:y,r:4.4,fill:"#EDE7DC",opacity:.92,filter:"url(#glow)"}));
+  });
+
+  // the still centre — the humans. nothing moves here.
+  g.appendChild(el("circle",{cx:CX,cy:CY,r:2.6,fill:"rgba(237,231,220,.5)"}));
+  const cap=el("text",{x:CX,y:CY+108,"text-anchor":"middle","font-size":"10.5",
+    "letter-spacing":"5.2",fill:"rgba(237,231,220,.42)","font-family":"var(--sans)"});
+  cap.textContent="THE STILL CENTRE — YOU";
+  g.appendChild(cap);
+
+  // name the rings, low and small: the picture should not need them
+  const nmA=el("text",{x:196,y:582,"text-anchor":"middle","font-size":"11","letter-spacing":"5",
+    fill:"rgba(216,182,124,.72)","font-family":"var(--sans)"});
+  nmA.textContent="TITUS"; g.appendChild(nmA);
+  const nmB=el("text",{x:804,y:582,"text-anchor":"middle","font-size":"11","letter-spacing":"5",
+    fill:"rgba(182,188,199,.62)","font-family":"var(--sans)"});
+  nmB.textContent="EVE"; g.appendChild(nmB);
+
+  // the amber index: the one standing request, called out at the ring's edge
+  const idx=el("g");
+  idx.appendChild(el("circle",{cx:CX-176,cy:CY+300,r:22,fill:"#E0A458",opacity:.09,filter:"url(#soft)"}));
+  idx.appendChild(el("circle",{cx:CX-176,cy:CY+300,r:5.6,fill:"var(--amber)",filter:"url(#glow)"}));
+  g.appendChild(idx);
+}
+
+/* ---------- the registers ---------- */
+function seals(){
+  const box=document.getElementById("seals");
+  for(let i=0;i<13;i++){const d=document.createElement("div");d.className="seal";box.appendChild(d);}
+  for(let i=0;i<5;i++){const d=document.createElement("div");d.className="seal s";box.appendChild(d);}
+}
+const RING={
+  moving:`<svg width="22" height="22"><circle cx="11" cy="11" r="7.4" fill="none" stroke="#B08D57" stroke-width="2.2" stroke-dasharray="14 33"/><circle cx="11" cy="11" r="2.6" fill="#B08D57"/></svg>`,
+  stopped:`<svg width="22" height="22"><circle cx="11" cy="11" r="7.4" fill="none" stroke="#E0A458" stroke-width="2.2" stroke-dasharray="14 33"/><circle cx="11" cy="11" r="2.6" fill="#E0A458"/></svg>`,
+  steel:`<svg width="22" height="22"><circle cx="11" cy="11" r="7.4" fill="none" stroke="#8C93A0" stroke-width="2.2" stroke-dasharray="14 33"/><circle cx="11" cy="11" r="2.6" fill="#8C93A0"/></svg>`
+};
+function items(){
+  const b=document.getElementById("items-bronze"), s=document.getElementById("items-steel");
+  DATA.hands[0].items.forEach(it=>{
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML=`<span class="ring">${it.s==="stopped"?RING.stopped:RING.moving}</span>
+      <span><span class="tx">${it.t}</span><span class="meta">${it.meta}</span></span>`;
+    b.appendChild(d);
+  });
+  DATA.hands[1].items.forEach(it=>{
+    const d=document.createElement("div");d.className="item";
+    d.innerHTML=`<span class="ring">${RING.steel}</span>
+      <span><span class="tx">${it.t}</span><span class="meta">${it.meta}</span></span>`;
+    s.appendChild(d);
+  });
+}
+function next(){
+  const box=document.getElementById("next");
+  DATA.next.forEach((t,i)=>{
+    const d=document.createElement("div");d.className="ghost";
+    d.innerHTML=`<span class="sq"></span><span class="tx">${t}</span><span class="seq">${String(i+1).padStart(2,"0")}</span>`;
+    box.appendChild(d);
+  });
+}
+function asks(){
+  const box=document.getElementById("asks");
+  DATA.asks.forEach(a=>{
+    const d=document.createElement("div");d.className="ask";
+    d.innerHTML=`<div class="q">${a.q}</div><div class="ctx">${a.ctx}</div>
+      <div class="verbs"><span class="verb solid">Proceed</span><span class="verb">Discuss</span></div>`;
+    box.appendChild(d);
+  });
+}
+function register(){
+  const s=document.getElementById("register");
+  const NS="http://www.w3.org/2000/svg";
+  const n=DATA.decisions.length, pad=40, W=1400;
+  s.appendChild(el("line",{x1:pad,y1:86,x2:W-pad,y2:86,stroke:"rgba(237,231,220,.09)","stroke-width":1}));
+  DATA.decisions.forEach((d,i)=>{
+    const x=pad+(i/(n-1))*(W-2*pad);
+    const h=d.filled? (18+((i*7)%22)) : 26;
+    if(d.filled){
+      const r=el("rect",{x:x-1.1,y:86-h,width:2.2,height:h,rx:1.1,fill:"rgba(216,182,124,.42)"});
+      s.appendChild(r);
+      s.appendChild(el("circle",{cx:x,cy:86-h-5,r:2.1,fill:"rgba(216,182,124,.85)"}));
+    } else {
+      s.appendChild(el("circle",{cx:x,cy:86-16,r:6,fill:"none",stroke:"var(--amber)","stroke-width":1.7,opacity:.95}));
+      s.appendChild(el("line",{x1:x,y1:86,x2:x,y2:86-8,stroke:"rgba(224,164,88,.4)","stroke-width":1}));
+    }
+  });
+}
+
+build();seals();items();next();asks();register();
+</script>
+</body>
+</html>
