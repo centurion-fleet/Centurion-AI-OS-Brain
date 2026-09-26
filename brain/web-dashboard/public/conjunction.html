@@ -647,8 +647,9 @@ function paint(S){
     ? "The crossing is where one mind hands work to the other"
     : "The second ring is empty — no other Centurion is reachable on this network yet";
   /* Say what is held back, rather than silently dropping it. */
+  const nb=S.boards||0;
   const scope = S.held
-    ? " · "+(S.boards||0)+" BOARDS · "+S.held+" HELD INTERNAL"
+    ? " · "+nb+" BOARD"+(nb===1?"":"S")+" · "+S.held+" HELD INTERNAL"
     : "";
   $("provenance").textContent = S.errors&&S.errors.length
     ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
