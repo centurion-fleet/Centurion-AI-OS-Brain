@@ -647,7 +647,7 @@ fn map_feed(snapshot: &Value, plans: &[Value], mission: &Value) -> HomeFeed {
                     title
                 },
                 context: if summary.is_empty() {
-                    "Review this on Focus before your Sovereign continues.".to_owned()
+                    "Review this on Stillpoint before your Sovereign continues.".to_owned()
                 } else {
                     summary
                 },
@@ -3729,7 +3729,7 @@ fn mission_stack_row(
         });
     let focus_line = focus
         .and_then(|t| t.get("title").and_then(|v| v.as_str()))
-        .map(|t| format!("Focus · {t}"))
+        .map(|t| format!("Stillpoint · {t}"))
         .unwrap_or_default();
 
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);

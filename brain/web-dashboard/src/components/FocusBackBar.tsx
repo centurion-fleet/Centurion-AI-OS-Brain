@@ -15,7 +15,7 @@ export function FocusBackBar({
         className="inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-[var(--on-accent)] transition hover:brightness-110"
       >
         <span aria-hidden>←</span>
-        Back to Focus
+        Back to Stillpoint
       </Link>
       {(eyebrow || title) && (
         <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">

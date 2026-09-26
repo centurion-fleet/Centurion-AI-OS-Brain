@@ -21,10 +21,10 @@ import { missionProgress } from "../types/life";
 import type { Mission, MissionTarget } from "../types/life";
 
 /**
- * Focus — the Conjunction instrument for one pair.
+ * Stillpoint — the Conjunction instrument for one pair.
  *
  * Conjunction answers "what needs me across my projects": two Centurions, a
- * project switch, membership as the boundary. Focus answers a different
+ * project switch, membership as the boundary. Stillpoint answers a different
  * question, and that difference is the whole reason it exists separately:
  *
  *   am I working on the right thing at all?
@@ -291,7 +291,7 @@ export function Deck() {
             Centurion
           </p>
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-soft">
-            Focus
+            Stillpoint
           </p>
         </div>
         <div className="flex items-center gap-3 pb-1">
@@ -317,7 +317,7 @@ export function Deck() {
         </div>
       ) : !deckVisible && !stack ? (
         <div className="mt-16 text-center text-ink-dim">
-          Focus is paused while another Brain tab is active.
+          Stillpoint is paused while another Brain tab is active.
         </div>
       ) : empty ? (
         <motion.div

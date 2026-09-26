@@ -570,7 +570,7 @@ fn build_inner(
             let supervisor_bg = supervisor.borrow().clone();
             let Some(rx) = spawn_deck_warm(supervisor_bg, deck_ready.clone()) else {
                 if supervisor.borrow().is_none() {
-                    let err = "Focus is not available on this install yet. Reinstall the latest \
+                    let err = "Stillpoint is not available on this install yet. Reinstall the latest \
                                Sovereign AI Brain from Get Brain, or ask your advisor for an update."
                         .to_string();
                     *node_error.borrow_mut() = Some(err.clone());

@@ -817,11 +817,11 @@ with the QR on this desk (same Wi‑Fi). Linux Brain remains the desk product.";
     fn show_brain_welcome_dialog(parent: &adw::ApplicationWindow) {
         let body = "This computer is your Sovereign — a private partner that thinks with you, \
 keeps your data here, and stays on your mission.\n\n\
-Chat is the conversation. Focus is the command center: mission stack, Missions, and decisions. \
+Chat is the conversation. Stillpoint is the command center: mission stack, Missions, and decisions. \
 Settings is how you shape Soul, memory, and thinking.\n\n\
 Two short interviews come first, and you can start either from here: Shape your Sovereign \\
 (its story and values) and Mission Discovery (what you are building toward). Both also live \\
-in Settings, under Soul and Focus. Everything else already works — your licence is on this \\
+in Settings, under Soul and Stillpoint. Everything else already works — your licence is on this \\
 machine and nothing else needs setting up.
 An iPhone remote is optional later — only when you want the Brain in your pocket. \
 For now, sit here and meet your Centurion.";
@@ -1362,7 +1362,7 @@ The Brain here is the product; the phone is the remote.",
 
         let life_mission_row = adw::ActionRow::builder()
             .title("Life Mission")
-            .subtitle("What you're building toward — shown on Focus; edit here.")
+            .subtitle("What you're building toward — shown on Stillpoint; edit here.")
             .icon_name("emblem-favorite-symbolic")
             .build();
         let life_mission_edit_button = gtk::Button::with_label("Edit");
@@ -1402,7 +1402,7 @@ The Brain here is the product; the phone is the remote.",
         you_group.add(&autonomy_row);
         let mission_stack_row = adw::ActionRow::builder()
             .title("Mission Stack")
-            .subtitle("Primary, supporting, dreams — open the Focus tab")
+            .subtitle("Primary, supporting, dreams — open the Stillpoint tab")
             .icon_name("view-list-symbolic")
             .build();
         let mission_stack_button = gtk::Button::with_label("Open tab");
@@ -1463,8 +1463,8 @@ The Brain here is the product; the phone is the remote.",
         privacy_group.add(&privacy_row);
 
         let pulse_pref_row = adw::ActionRow::builder()
-            .title("Prefer Focus on decisions")
-            .subtitle("Open Focus when something needs your attention")
+            .title("Prefer Stillpoint on decisions")
+            .subtitle("Open Stillpoint when something needs your attention")
             .icon_name("emblem-important-symbolic")
             .build();
         let pulse_pref_switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
@@ -1890,7 +1890,7 @@ The Brain here is the product; the phone is the remote.",
             })
         };
 
-        stack.add_titled(&home, Some("missions"), "Focus");
+        stack.add_titled(&home, Some("missions"), "Stillpoint");
         stack.add_titled(&collab, Some("collab"), "Conjunction");
         stack.add_titled(&settings_scroll, Some("settings"), "You");
         stack.set_visible_child_name("missions");
@@ -1902,7 +1902,7 @@ The Brain here is the product; the phone is the remote.",
         let (tab_bar, tab_badges_ui) = build_attention_tab_bar(
             &stack,
             &[
-                ("missions", "Focus"),
+                ("missions", "Stillpoint"),
                 ("collab", "Conjunction"),
                 ("settings", "You"),
             ],
@@ -7706,7 +7706,7 @@ network, and that the other person has pressed “Make this Centurion reachable�
                     .unwrap_or_default();
                 if cron.is_empty() && kanban.is_empty() {
                     "No upcoming jobs or board tasks right now.\n\n\
-Schedule work with cron or kanban; this glance stays in Settings, not Focus."
+Schedule work with cron or kanban; this glance stays in Settings, not Stillpoint."
                         .to_owned()
                 } else {
                     if !cron.is_empty() {

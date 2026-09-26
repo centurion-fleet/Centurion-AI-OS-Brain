@@ -272,8 +272,8 @@ export function Discovery() {
             <Ceremony
               eyebrow="Ready"
               title="Primary is set — go live it"
-              body={`“${primaryTitle}” is your north star. Supporting work and dreams stay close on Focus.`}
-              cta="Open Focus"
+              body={`“${primaryTitle}” is your north star. Supporting work and dreams stay close on Stillpoint.`}
+              cta="Open Stillpoint"
               onCta={() => navigate("/")}
             />
           )}

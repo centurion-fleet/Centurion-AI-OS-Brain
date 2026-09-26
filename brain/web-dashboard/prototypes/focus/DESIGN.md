@@ -1,30 +1,55 @@
-# Focus — design note
+# Stillpoint — design note
 
-**Brief (Adrian, 26 Sep 2026):** Focus is the same instrument as Conjunction, for the work
-that involves one Centurion instead of two. It keeps its original intent — extracting the
-owner's life goals and purposes so the owner is helped on what they *should* be working on.
-Take a fresh look at it with what Conjunction taught.
+**Brief (Adrian, 26 Sep 2026):** the screen formerly called Focus is the same instrument as
+Conjunction, for the work that involves one Centurion instead of two. It keeps its original
+intent — extracting the owner's life goals and purposes so the owner is helped on what they
+*should* be working on. Take a fresh look at it with what Conjunction taught.
 
 Written after Conjunction shipped. Conjunction is the reference implementation; where this
 document and `prototypes/conjunction/DESIGN.md` disagree, the disagreement is deliberate and
-is named in "What Focus does not have".
+is named in "What Stillpoint does not have".
 
 ---
 
-## 1. What Focus is
+## Naming
+
+The tab was called **Focus**, which described an activity, not the thing itself. The pair now
+reads as one family:
+
+- **Conjunction** — when two bodies meet. Two Centurions, one project.
+- **Stillpoint** — the point that does not move. One Centurion, one life, held at the centre.
+
+Conjunction is the moment of meeting; Stillpoint is the centre it is measured from. Both are
+positions in the same instrument, which is the whole point: a person should feel they are
+looking at one device with two eyepieces, not two products.
+
+Stillpoint also names the product's actual claim — that the still centre is where the human
+belongs — and it is older language than the software: *the still point of the turning world*.
+A screen that tells you whether you are working on the right thing should be named for the
+place you judge it from.
+
+**Internal identifiers deliberately keep the old word.** The React screen is still `Deck.tsx`,
+the route is still `/`, the back bar is still `FocusBackBar`, and the bridge actions still say
+`focus`. Renaming plumbing to match a label buys nothing a reader can see and risks a broken
+build in the one area where the tab must never fail to open. The word a customer reads is
+Stillpoint; the word the code uses is a private matter.
+
+---
+
+## 1. What Stillpoint is
 
 One intention, one pair: the owner and their Centurion. Everything Conjunction does to keep a
-human in the decision seat, Focus does for a life rather than a project.
+human in the decision seat, Stillpoint does for a life rather than a project.
 
 The difference in one line:
 
-> **Conjunction answers "what needs me across my projects". Focus answers "am I working on
-> the right thing at all".**
+> **Conjunction answers "what needs me across my projects". Stillpoint answers "am I working
+> on the right thing at all".**
 
 That second question is not a project question, and it cannot be answered by a project view.
-It is the reason Focus exists separately.
+It is the reason this screen exists separately.
 
-## 2. What Focus keeps from Conjunction
+## 2. What Stillpoint keeps from Conjunction
 
 The instrument, unchanged in kind:
 
@@ -41,16 +66,16 @@ The instrument, unchanged in kind:
   error this screen exists to prevent.
 - The paper-and-bronze house style, and the shared implementation.
 
-## 3. What Focus has that Conjunction does not
+## 3. What Stillpoint has that Conjunction does not
 
-This is Focus's whole reason for being, and it is one additional layer.
+This is the screen's whole reason for being, and it is one additional layer.
 
 ### 3.1 The centre is written, not assumed
 
-Conjunction's still centre is *you, here, in this project*. Focus's centre is **your purpose**
-— a stated primary mission with a reason, arrived at on purpose through Discovery rather than
-inferred from whatever is busiest. A life view whose centre is implicit drifts toward whatever
-shouted last.
+Conjunction's still centre is *you, here, in this project*. Stillpoint's centre is **your
+purpose** — a stated primary mission with a reason, arrived at on purpose through Discovery
+rather than inferred from whatever is busiest. A life view whose centre is implicit drifts
+toward whatever shouted last.
 
 ### 3.2 The fifth register: ALIGNED
 
@@ -67,13 +92,20 @@ for a month while you were busy.
 ALIGNED is deliberately quiet when the answer is "everything traces". It is not a nag — it is
 the purpose check, and it should be able to say nothing.
 
+**ALIGNED must never count what the record cannot support.** On the live record, plans and
+decisions carry no mission link at all. Reading that absence as "no purpose attached" would be
+literally true and badly misleading, because the work serves the purpose perfectly well — the
+record simply does not say so. Unlinked is not untethered. When nothing links, the register
+says so and declines to judge; when some things link, the absence becomes informative and it
+counts them properly.
+
 ### 3.3 Dreams feed the centre
 
-Conjunction has no equivalent. In Focus, dreams are the raw material of purpose: they sit
+Conjunction has no equivalent. In Stillpoint, dreams are the raw material of purpose: they sit
 below the fold, and promoting one is how the centre changes. This is the mechanic that makes
 the centre *written* rather than *inherited*.
 
-## 4. What Focus does not have
+## 4. What Stillpoint does not have
 
 Named explicitly, because these are Conjunction features whose absence is the design:
 
@@ -97,27 +129,26 @@ change a setting?* If the latter, it is in the wrong app.
 
 ## 6. The rule that keeps it honest
 
-One dangerous mistake exists in Focus, and it is not the wrong-project mistake Conjunction has
-to defend against. It is **answering a purpose question with a task answer** — letting the
-register read as "you are busy, therefore you are aligned".
+One dangerous mistake exists here, and it is not the wrong-project mistake Conjunction has to
+defend against. It is **answering a purpose question with a task answer** — letting the register
+read as "you are busy, therefore you are aligned".
 
-So ALIGNED may only count work that traces to the stated purpose by name. Busy is not
-evidence. If the purpose is empty or never written, ALIGNED says so plainly instead of
-inferring one from activity.
+So ALIGNED may only count work that traces to the stated purpose by name. Busy is not evidence.
+If the purpose is empty or never written, ALIGNED says so plainly instead of inferring one from
+activity.
 
 ---
 
 ## Open question for Adrian
 
-**The fifth register.** Everything else here follows from Conjunction; ALIGNED is the one new
-idea. Options:
+**The verb sets still differ.** Conjunction offers Proceed / Discuss / Hold. The decision items
+on this screen (via `AttentionBanner`) offer Review / Proceed / Adjust / Hold — there is no
+Discuss. Section 2 claims "same three verbs", so that claim is false until the sets match.
 
-1. **ALIGNED as a fifth register** (recommended) — reads at a glance, same weight as the other
-   four, and gives the purpose a place to be visibly right or wrong.
-2. **Purpose as the still centre only** — no fifth register; the purpose is stated in the middle
-   and drift is left for the owner to notice.
-3. **Alignment folded into WAITING ON YOU** — drift surfaces as an item needing a decision,
-   rather than as a register. Cheaper, but it makes the purpose look like a task.
+Options:
 
-Recommendation: 1. Option 3 in particular hides the consequence that the thing being decided is
-your purpose, not a piece of work.
+1. **Add Discuss, keep Adjust** (recommended) — Discuss opens the same thread as Conjunction;
+   Adjust stays as the fast "changes requested" path, which is what most revisions actually are.
+2. **Three verbs exactly** — drop Adjust, so the two screens are identical.
+3. **Leave them different** — defensible only if the two screens are meant to feel different,
+   which contradicts the whole premise.

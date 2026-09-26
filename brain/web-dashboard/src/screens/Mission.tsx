@@ -120,7 +120,7 @@ export function Mission() {
           to="/"
           className="mt-4 inline-flex min-h-11 items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-[var(--on-accent)]"
         >
-          Back to Focus
+          Back to Stillpoint
         </Link>
       </div>
     );
@@ -322,7 +322,7 @@ export function Mission() {
           role="status"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-soft">
-            This is why Focus alerted you
+            This is why Stillpoint alerted you
           </p>
           <p className="mt-1 text-sm font-medium text-ink">
             {attentionDecision.title || attentionTitle || "Decisions needed"}
@@ -654,7 +654,7 @@ export function Mission() {
           <div className="surface mb-3 space-y-3 rounded-2xl p-4">
             <p className="text-xs text-ink-dim">
               Unassigned Scan imports live in Document library. Assign one to
-              this mission — or use Find documents on Focus.
+              this mission — or use Find documents on Stillpoint.
             </p>
             {attachBusy && (
               <p className="text-xs text-ink-dim">Loading library…</p>
@@ -665,7 +665,7 @@ export function Mission() {
             {!attachBusy && !attachError && libraryDocs.length === 0 && (
               <p className="text-sm text-ink-dim">
                 Library is empty. Scan this machine from Find documents on
-                Focus.
+                Stillpoint.
               </p>
             )}
             {libraryDocs.length > 0 && (
