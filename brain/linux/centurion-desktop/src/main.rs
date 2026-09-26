@@ -5839,16 +5839,39 @@ The token stays in ~/.centurion/.env on this machine only.",
             let parent = parent.clone();
             let gateway_row = gateway_row.clone();
             let platform_list = platform_list.clone();
-            crate::bridge_actions::run_bridge_action_async(
-                "telegram_configure",
-                serde_json::json!({
-                    "token": token,
-                    "restart": true,
-                }),
-                move |payload: Option<serde_json::Value>| {
+            crate::bridge_actions::run_bridge_async(
+                move || {
+                    crate::bridge_actions::run_bridge_action_result(
+                        "telegram_configure",
+                        serde_json::json!({
+                            "token": token,
+                            "restart": true,
+                        }),
+                    )
+                },
+                move |result: Result<serde_json::Value, String>| {
+                    // The reason matters. `run_bridge_action` drops it, which is
+                    // how a real client saw only "Could not save token" with no
+                    // cause: a bridge that never answered and a handler that
+                    // refused both arrived as the same shrug.
+                    let payload = match result {
+                        Ok(payload) => payload,
+                        Err(err) => {
+                            let fail = adw::AlertDialog::builder()
+                                .heading("Could not save token")
+                                .body(format!(
+                                    "{err}\n\nIf that came after a long pause the token may \
+already be saved — reopen this window and check the Telegram row before trying again."
+                                ))
+                                .close_response("ok")
+                                .build();
+                            fail.add_response("ok", "OK");
+                            fail.present(Some(&parent));
+                            return;
+                        }
+                    };
                     let ok = payload
-                        .as_ref()
-                        .and_then(|p| p.get("ok"))
+                        .get("ok")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
                     if ok {
@@ -5865,13 +5888,10 @@ The token stays in ~/.centurion/.env on this machine only.",
                         return;
                     }
                     let message = payload
-                        .as_ref()
-                        .and_then(|p| {
-                            p.get("message")
-                                .or_else(|| p.get("error"))
-                                .and_then(|v| v.as_str())
-                                .map(str::to_owned)
-                        })
+                        .get("message")
+                        .or_else(|| payload.get("error"))
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned)
                         .unwrap_or_else(|| "Could not save Telegram bot token.".to_owned());
                     let fail = adw::AlertDialog::builder()
                         .heading("Could not save token")

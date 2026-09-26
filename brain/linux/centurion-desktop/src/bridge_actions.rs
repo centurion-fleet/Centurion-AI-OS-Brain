@@ -321,6 +321,17 @@ pub fn run_bridge_action(action: &str, extra: Value) -> Option<Value> {
     crate::bridge_client::bridge_request_resilient(action, extra).ok()
 }
 
+/// Like `run_bridge_action`, but keeps the reason it failed.
+///
+/// The plain version drops the error string, and that is how a real client's
+/// screen ended up saying only "Could not save token" (David Clynch, 26 Sep
+/// 2026): a bridge that never answered and a handler that refused both arrive
+/// as the same shrug. Any dialog that reports failure must use this one, so the
+/// owner — and support — get the cause rather than a dead end.
+pub fn run_bridge_action_result(action: &str, extra: Value) -> Result<Value, String> {
+    crate::bridge_client::bridge_request_resilient(action, extra)
+}
+
 /// Spawn bridge I/O off the GTK thread and apply the result on the UI loop.
 ///
 /// Prefer this over `run_bridge_action` inside `connect_clicked` / dialog
