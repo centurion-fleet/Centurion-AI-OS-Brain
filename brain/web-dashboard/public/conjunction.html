@@ -152,6 +152,7 @@ h1 em{font-style:normal;color:var(--bronze-lt)}
 .notein::placeholder{color:var(--faint)}
 .ask.decided{opacity:.5}
 .ask.decided .verb{display:none}
+.ask .ctx.req{color:var(--bronze-lt)}
 button.verb{font:inherit}
 button.verb[disabled]{opacity:.35;cursor:default}
 
@@ -334,7 +335,11 @@ async function load(){
   const tNext=targets.filter(t=>t.status==="not_started")
     .sort((a,b)=>(a.sequence_number||99)-(b.sequence_number||99));
 
-  const pWait=plans.filter(p=>p.status==="pending_review"||p.status==="held");
+  /* `adjusted` is a "needs review" state everywhere else in this system —
+     plans.py treats pending_review + held + adjusted as ONE queue. The page
+     dropped it, so answering an item with Discuss made it vanish with nothing
+     on screen saying where it went. It stays here, marked. */
+  const pWait=plans.filter(p=>p.status==="pending_review"||p.status==="held"||p.status==="adjusted");
   const pGo=plans.filter(p=>p.status==="proceeded");
   const pDone=plans.filter(p=>p.status==="completed");
 
@@ -350,9 +355,11 @@ async function load(){
     handItems:running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false})),
     stopItems:blocked.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · stopped",stop:true})),
     todo:todo.slice(0,2),
-    asks:pWait.slice(0,4).map(p=>({id:p.id,q:cut(p.title,88),goal:cut(p.goal,400),
-      ctx:"waiting "+(daysSince(p.created_at)!=null?daysSince(p.created_at)+" days":"—")
-        +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")})),
+    asks:pWait.slice(0,4).map(p=>{const adj=p.status==="adjusted",dn=daysSince(p.created_at);return{
+      id:p.id,q:cut(p.title,88),goal:cut(p.goal,400),adj:adj,
+      ctx:(adj?"changes requested · revising · ":"waiting ")
+        +(dn!=null?dn+" day"+(dn===1?"":"s"):"—")
+        +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")};}),
     more:Math.max(0,pWait.length-4),
     decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
       .map(d=>({t:cut(d.title,88),taken:shortDate(d.created_at),answered:!!(d.human_said||d.chosen)})),
@@ -540,7 +547,7 @@ function asks(S){
   const b=$("asks"); b.innerHTML="";
   (S.asks||[]).forEach(a=>{
     const d=document.createElement("div");d.className="ask";
-    d.innerHTML='<div class="q">'+a.q+'</div><div class="ctx">'+a.ctx+'</div>'
+    d.innerHTML='<div class="q">'+a.q+'</div><div class="ctx'+(a.adj?' req':'')+'">'+a.ctx+'</div>' 
       +'<div class="verbs">'
       +'<button class="verb solid" data-v="approve">Proceed</button>'
       +'<button class="verb" data-v="request_changes">Discuss</button>'
