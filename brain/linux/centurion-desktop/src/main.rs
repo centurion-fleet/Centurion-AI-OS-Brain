@@ -691,8 +691,15 @@ mod linux {
                 }
             }
             Err(error) => {
-                let plain = if error.contains("not found") {
-                    "Could not create a pairing code. Is Centurion installed on this brain?"
+                // Say why, in plain English. The helper's own sentence already
+                // tells the owner what to do next; a flat "Could not …" made a
+                // half-installed Brain look identical to a passing hiccup.
+                let plain = if error.contains("not installed") || error.contains("Install Brain") {
+                    error
+                } else if error.contains("remote-pair failed") {
+                    "Could not create a pairing code — the pairing helper on this brain \
+refused. Try again in a moment; if it keeps happening, open Get Help and run a \
+health check."
                         .to_owned()
                 } else {
                     "Could not create a pairing code. Try again in a moment.".to_owned()
@@ -3077,7 +3084,12 @@ The Brain here is the product; the phone is the remote.",
         command
     }
 
-    fn run_provider_command(args: &[&str]) -> Option<ProviderCliResponse> {
+    /// Run one `provider` CLI command, keeping the reason it failed.
+    ///
+    /// The plain `run_provider_command` throws that reason away, which is how a
+    /// customer saw only "Could not set backup thinking service." with no cause.
+    /// Any dialog that reports failure must use this one.
+    fn run_provider_command_result(args: &[&str]) -> Result<ProviderCliResponse, String> {
         // `--json` belongs on the parent `provider` parser, before the subcommand.
         let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
         let mut command_args = vec!["provider", "--json"];
@@ -3085,28 +3097,59 @@ The Brain here is the product; the phone is the remote.",
         let output = prepare_centurion_cli()
             .args(command_args)
             .output()
-            .ok()?;
+            .map_err(|error| {
+                format!(
+                    "Centurion could not run its own thinking-service command on this brain \
+({error}).\n\nRe-run Install Brain from your Get Brain download, then try again."
+                )
+            })?;
         // Parse JSON even when exit status is non-zero so callers can show
         // structured failure messages (e.g. blocked OpenRouter, missing key).
-        serde_json::from_slice(&output.stdout).ok()
+        serde_json::from_slice::<ProviderCliResponse>(&output.stdout).map_err(|_| {
+            "Centurion's thinking-service command did not answer in a form the app could \
+read.\n\nRe-run Install Brain from your Get Brain download, then try again."
+                .to_owned()
+        })
     }
 
-    fn run_provider_save_key(connector_id: &str, access_code: &str) -> Option<ProviderCliResponse> {
+    fn run_provider_command(args: &[&str]) -> Option<ProviderCliResponse> {
+        run_provider_command_result(args).ok()
+    }
+
+    /// Save a thinking-service access code, keeping the reason if it fails.
+    fn run_provider_save_key(
+        connector_id: &str,
+        access_code: &str,
+    ) -> Result<ProviderCliResponse, String> {
         let mut child = prepare_centurion_cli()
             .args(["provider", "--json", "save-key", connector_id, "-"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .ok()?;
+            .map_err(|error| {
+                format!(
+                    "Centurion could not reach its own command on this brain ({error}).\n\n\
+Re-run Install Brain from your Get Brain download, then try again."
+                )
+            })?;
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(access_code.as_bytes());
         }
-        let output = child.wait_with_output().ok()?;
-        serde_json::from_slice(&output.stdout).ok()
+        let output = child.wait_with_output().map_err(|error| {
+            format!(
+                "Centurion could not finish saving the access code ({error}).\n\n\
+Try again in a moment."
+            )
+        })?;
+        serde_json::from_slice::<ProviderCliResponse>(&output.stdout).map_err(|_| {
+            "Centurion did not confirm the access code was saved.\n\nTry again in a moment."
+                .to_owned()
+        })
     }
 
-    fn run_support_command(args: &[&str]) -> Option<ProviderCliResponse> {
+    /// Run one `support` CLI command, keeping the reason it failed.
+    fn run_support_command_result(args: &[&str]) -> Result<ProviderCliResponse, String> {
         // `--json` belongs on the parent `support` parser, before the subcommand.
         let rest: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
         let mut command_args = vec!["support", "--json"];
@@ -3114,12 +3157,26 @@ The Brain here is the product; the phone is the remote.",
         let output = prepare_centurion_cli()
             .args(command_args)
             .output()
-            .ok()?;
+            .map_err(|error| {
+                format!(
+                    "Centurion could not run its own support command on this brain \
+({error}).\n\nIs Centurion installed? Re-run Install Brain from your Get Brain \
+download, then try again."
+                )
+            })?;
         // Parse even on non-zero exit so lookup/health can surface `message`.
-        serde_json::from_slice(&output.stdout).ok()
+        serde_json::from_slice::<ProviderCliResponse>(&output.stdout).map_err(|_| {
+            "Centurion's support command did not answer in a form the app could read.\n\n\
+Re-run Install Brain from your Get Brain download, then try again."
+                .to_owned()
+        })
     }
 
-    fn run_update_check() -> Option<UpdateCheckPayload> {
+    fn run_support_command(args: &[&str]) -> Option<ProviderCliResponse> {
+        run_support_command_result(args).ok()
+    }
+
+    fn run_update_check_result() -> Result<UpdateCheckPayload, String> {
         let screen_version = installed_version();
         let output = prepare_centurion_cli()
             .arg("update")
@@ -3128,9 +3185,23 @@ The Brain here is the product; the phone is the remote.",
             .arg("--screen-version")
             .arg(&screen_version)
             .output()
-            .ok()?;
+            .map_err(|error| {
+                format!(
+                    "Centurion could not run its own update checker on this brain \
+({error}).\n\nIs Centurion installed? Re-run Install Brain from your Get Brain \
+download, then try again."
+                )
+            })?;
         // Parse JSON even when exit status is non-zero (network / unavailable).
-        serde_json::from_slice(&output.stdout).ok()
+        serde_json::from_slice::<UpdateCheckPayload>(&output.stdout).map_err(|_| {
+            "Centurion's update checker did not answer in a form the app could read.\n\n\
+Is Centurion installed? Re-run Install Brain from your Get Brain download, then try again."
+                .to_owned()
+        })
+    }
+
+    fn run_update_check() -> Option<UpdateCheckPayload> {
+        run_update_check_result().ok()
     }
 
     /// Resolve the Centurion AI OS checkout that contains `install-user.sh`.
@@ -3507,7 +3578,7 @@ The Brain here is the product; the phone is the remote.",
         // on the main loop instead of glib::idle_add_once from the worker.
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = tx.send(run_update_check());
+            let _ = tx.send(run_update_check_result());
         });
         glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
             match rx.try_recv() {
@@ -3517,7 +3588,14 @@ The Brain here is the product; the phone is the remote.",
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    present_update_check_result(&parent, &update_row, None, on_attention.clone());
+                    present_update_check_result(
+                        &parent,
+                        &update_row,
+                        Err("The update check did not finish — the Brain stopped answering. \
+Close Settings and try Check for update again."
+                            .to_owned()),
+                        on_attention.clone(),
+                    );
                     glib::ControlFlow::Break
                 }
             }
@@ -3566,22 +3644,25 @@ The Brain here is the product; the phone is the remote.",
     fn present_update_check_result(
         parent: &adw::ApplicationWindow,
         update_row: &adw::ActionRow,
-        payload: Option<UpdateCheckPayload>,
+        payload: Result<UpdateCheckPayload, String>,
         on_attention: Rc<dyn Fn()>,
     ) {
-        let Some(payload) = payload else {
-            update_row.set_subtitle("Could not check for updates.");
-            let dialog = adw::AlertDialog::builder()
-                .heading("Check for update")
-                .body(
-                    "Could not check for updates on this brain.\n\n\
-                     Make sure Centurion is installed, then try again.",
-                )
-                .close_response("ok")
-                .build();
-            dialog.add_response("ok", "OK");
-            dialog.present(Some(parent));
-            return;
+        let payload = match payload {
+            Ok(payload) => payload,
+            Err(reason) => {
+                update_row.set_subtitle("Could not check for updates.");
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Check for update")
+                    .body(format!(
+                        "{reason}\n\nCould not check for updates on this brain. \
+Make sure Centurion is installed, then try again."
+                    ))
+                    .close_response("ok")
+                    .build();
+                dialog.add_response("ok", "OK");
+                dialog.present(Some(parent));
+                return;
+            }
         };
 
         remember_update_check(&payload);
@@ -3788,16 +3869,27 @@ The Brain here is the product; the phone is the remote.",
         });
     }
 
-    fn run_telegram_summary(args: &[&str]) -> Option<serde_json::Value> {
+    fn run_telegram_summary(args: &[&str]) -> Result<serde_json::Value, String> {
         let mut command_args = vec!["telegram", "import"];
         command_args.extend_from_slice(args);
         command_args.push("--json");
         let output = prepare_centurion_cli()
             .args(command_args)
             .output()
-            .ok()?;
+            .map_err(|error| {
+                format!(
+                    "Centurion could not run its own Telegram history reader on this brain \
+({error}).\n\nIs Centurion installed? Re-run Install Brain from your Get Brain \
+download, then try again."
+                )
+            })?;
         // Parse JSON even when exit status is non-zero (no Telegram history found).
-        serde_json::from_slice(&output.stdout).ok()
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).map_err(|_| {
+            "Centurion's Telegram history reader did not answer in a form the app could \
+read.\n\nIs Centurion installed? Re-run Install Brain from your Get Brain download, \
+then try again."
+                .to_owned()
+        })
     }
 
     fn bridge_python() -> String {
@@ -3861,6 +3953,15 @@ The Brain here is the product; the phone is the remote.",
 
 fn run_bridge_action(action: &str, extra: serde_json::Value) -> Option<serde_json::Value> {
         crate::bridge_actions::run_bridge_action(action, extra)
+    }
+
+    /// Like `run_bridge_action`, but keeps the reason it failed, so a dialog
+    /// can show the cause instead of a bare "Could not …" shrug.
+    fn run_bridge_action_result(
+        action: &str,
+        extra: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        crate::bridge_actions::run_bridge_action_result(action, extra)
     }
 
     fn autonomy_label(level: &str) -> &'static str {
@@ -4675,9 +4776,9 @@ Being · Continuity\n\
     }
 
     fn show_soul_dialog(parent: &adw::ApplicationWindow, soul_row: &adw::ActionRow) {
-        let payload = match run_bridge_action("soul_get", serde_json::json!({})) {
-            Some(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => payload,
-            Some(payload) => {
+        let payload = match run_bridge_action_result("soul_get", serde_json::json!({})) {
+            Ok(payload) if payload.get("ok").and_then(|v| v.as_bool()) == Some(true) => payload,
+            Ok(payload) => {
                 let message = payload
                     .get("message")
                     .or_else(|| payload.get("error"))
@@ -4695,14 +4796,13 @@ Being · Continuity\n\
                 fail.present(Some(parent));
                 return;
             }
-            None => {
+            Err(error) => {
                 let fail = adw::AlertDialog::builder()
                     .heading("Could not load Soul")
-                    .body(
-                        "The Brain bridge did not respond. Your Soul file on disk was not \
-                         changed — close Settings, run install-user.sh again if you just \
-                         updated, then reopen Soul.",
-                    )
+                    .body(format!(
+                        "{error}\n\nYour Soul file on disk was not changed — close Settings, \
+run install-user.sh again if you just updated, then reopen Soul."
+                    ))
                     .close_response("ok")
                     .build();
                 fail.add_response("ok", "OK");
@@ -5060,8 +5160,8 @@ Being · Continuity\n\
 
     fn show_telegram_history_dialog(parent: &adw::ApplicationWindow, row: &adw::ActionRow) {
         let preview = run_telegram_summary(&["--dry-run"]);
-        let (heading, body, can_bring) = match preview.as_ref() {
-            Some(value) if value.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+        let (heading, body, can_bring) = match &preview {
+            Ok(value) if value.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                 let messages = value
                     .get("message_count")
                     .and_then(|v| v.as_u64())
@@ -5091,7 +5191,7 @@ Being · Continuity\n\
                     true,
                 )
             }
-            Some(value) => (
+            Ok(value) => (
                 "No Telegram history found".to_owned(),
                 value
                     .get("message")
@@ -5100,10 +5200,12 @@ Being · Continuity\n\
                     .to_owned(),
                 false,
             ),
-            None => (
+            Err(error) => (
                 "Could not check Telegram history".to_owned(),
-                "Run `centurion telegram import --dry-run` on this computer if you need more detail."
-                    .to_owned(),
+                format!(
+                    "{error}\n\nRun `centurion telegram import --dry-run` on this \
+computer if you need more detail."
+                ),
                 false,
             ),
         };
@@ -5125,7 +5227,15 @@ Being · Continuity\n\
         let parent_for_cb = parent.clone();
         dialog.connect_response(None, move |_dialog, response| {
             if response == "bring" {
-                if let Some(result) = run_telegram_summary(&[]) {
+                let bring_result = run_telegram_summary(&[]);
+                if let Err(ref error) = bring_result {
+                    let first_line = error.split('\n').next().unwrap_or(error).trim();
+                    row.set_subtitle(&format!(
+                        "Could not bring over Telegram history: {first_line}"
+                    ));
+                    return;
+                }
+                if let Ok(result) = bring_result {
                     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                     let messages = result
                         .get("message_count")
@@ -5161,8 +5271,6 @@ Being · Continuity\n\
                             .unwrap_or("Bring-over failed.");
                         row.set_subtitle(message);
                     }
-                } else {
-                    row.set_subtitle("Could not bring over Telegram history.");
                 }
             }
         });
@@ -5317,7 +5425,7 @@ Being · Continuity\n\
 
     fn summarize_gateway_lifecycle(
         operation: &str,
-        life: Option<&serde_json::Value>,
+        life: Result<&serde_json::Value, &String>,
         status: Option<&serde_json::Value>,
     ) -> (String, String) {
         let verb = match operation {
@@ -5326,14 +5434,20 @@ Being · Continuity\n\
             _ => "restart",
         };
         let life_ok = life
+            .as_ref()
+            .ok()
             .and_then(|p| p.get("ok"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if !life_ok {
-            let msg = life
-                .and_then(|p| p.get("message").or_else(|| p.get("error")))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Could not complete the gateway request.");
+            let msg = match &life {
+                Ok(p) => p
+                    .get("message")
+                    .or_else(|| p.get("error"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Could not complete the gateway request."),
+                Err(error) => error.as_str(),
+            };
             return (
                 format!("Gateway {verb} failed"),
                 msg.to_owned(),
@@ -5435,11 +5549,11 @@ Being · Continuity\n\
         let op = operation.to_owned();
         let action = format!("gateway_{op}");
         let (tx, rx) = std::sync::mpsc::channel::<(
-            Option<serde_json::Value>,
+            Result<serde_json::Value, String>,
             Option<serde_json::Value>,
         )>();
         std::thread::spawn(move || {
-            let life = run_bridge_action(&action, serde_json::json!({}));
+            let life = run_bridge_action_result(&action, serde_json::json!({}));
             let mut last = run_bridge_action("gateway_status", serde_json::json!({}));
             for _ in 0..25 {
                 std::thread::sleep(std::time::Duration::from_secs(1));
@@ -6378,26 +6492,23 @@ Messages to this account now route into your Centurion conversation."
     }
 
     fn show_support_auto_fix_dialog(parent: &adw::ApplicationWindow) {
-        let payload = run_bridge_action("support_auto_fix", serde_json::json!({}));
+        let payload = run_bridge_action_result("support_auto_fix", serde_json::json!({}));
         let (heading, body) = match payload {
-            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => (
+            Ok(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => (
                 "Auto-fix finished",
                 p.get("message")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Recovery steps completed.")
                     .to_owned(),
             ),
-            Some(p) => (
+            Ok(p) => (
                 "Auto-fix could not finish",
                 p.get("message")
                     .and_then(|v| v.as_str())
                     .unwrap_or("See health check for details.")
                     .to_owned(),
             ),
-            None => (
-                "Auto-fix unavailable",
-                "Could not reach the support bridge.".to_owned(),
-            ),
+            Err(error) => ("Auto-fix unavailable", error),
         };
         let dialog = adw::AlertDialog::builder()
             .heading(heading)
@@ -6413,9 +6524,9 @@ Messages to this account now route into your Centurion conversation."
         parent: &adw::ApplicationWindow,
         open_chat: Rc<dyn Fn(String, String)>,
     ) {
-        let payload = run_bridge_action("tools_skills_snapshot", serde_json::json!({}));
+        let payload = run_bridge_action_result("tools_skills_snapshot", serde_json::json!({}));
         let (body, hub_blocked) = match payload {
-            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+            Ok(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                 let tools = p
                     .get("toolsets")
                     .and_then(|v| v.as_array())
@@ -6492,14 +6603,14 @@ Messages to this account now route into your Centurion conversation."
                 }
                 (lines.join("\n"), !allow_hub)
             }
-            Some(p) => (
+            Ok(p) => (
                 p.get("message")
                     .and_then(|v| v.as_str())
                     .unwrap_or("Could not list skills/tools.")
                     .to_owned(),
                 true,
             ),
-            None => ("Could not reach the bridge.".to_owned(), true),
+            Err(error) => (error, true),
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Skills &amp; tools")
@@ -6528,7 +6639,19 @@ What capability should the skill cover?\n\n"
     }
 
     fn show_license_dialog(parent: &adw::ApplicationWindow) {
-        let payload = run_bridge_action("license_status", serde_json::json!({}));
+        let payload = match run_bridge_action_result("license_status", serde_json::json!({})) {
+            Ok(payload) => Some(payload),
+            Err(error) => {
+                let dialog = adw::AlertDialog::builder()
+                    .heading("License")
+                    .body(format!("{error}\n\nCould not read license status."))
+                    .close_response("close")
+                    .build();
+                dialog.add_response("close", "Close");
+                dialog.present(Some(parent));
+                return;
+            }
+        };
         let can_redeem = payload
             .as_ref()
             .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
@@ -6725,8 +6848,12 @@ What capability should the skill cover?\n\n"
     }
 
     fn show_beneficiary_dialog(parent: &adw::ApplicationWindow) {
-        let snapshot = run_bridge_action("beneficiary_snapshot", serde_json::json!({}));
-        let summary = match snapshot.as_ref().and_then(|p| p.get("snapshot")).or(snapshot.as_ref())
+        let snapshot = run_bridge_action_result("beneficiary_snapshot", serde_json::json!({}));
+        let summary = match snapshot
+            .as_ref()
+            .ok()
+            .and_then(|p| p.get("snapshot"))
+            .or_else(|| snapshot.as_ref().ok())
         {
             Some(s) => {
                 let family = s
@@ -6750,7 +6877,10 @@ What capability should the skill cover?\n\n"
                 }
                 lines.join("\n")
             }
-            None => "Could not load Family Beneficiary state.".to_owned(),
+            None => match &snapshot {
+                Err(error) => format!("Could not load Family Beneficiary state — {error}"),
+                Ok(_) => "Could not load Family Beneficiary state.".to_owned(),
+            },
         };
         let first = gtk::Entry::builder()
             .placeholder_text("Family beneficiary first name")
@@ -7370,7 +7500,7 @@ same screen on their machine, under “1 · Give these two values to the other p
             } else {
                 name.to_lowercase().replace(' ', "-")
             };
-            let payload = run_bridge_action(
+            let payload = run_bridge_action_result(
                 "fleet_peer_put",
                 serde_json::json!({
                     "peer_id": derived_id,
@@ -7381,14 +7511,18 @@ same screen on their machine, under “1 · Give these two values to the other p
             );
             let saved = payload
                 .as_ref()
+                .ok()
                 .and_then(|p| p.get("ok").and_then(|v| v.as_bool()))
                 .unwrap_or(false);
             if !saved {
-                let message = payload
-                    .as_ref()
-                    .and_then(|p| p.get("message").and_then(|v| v.as_str()))
-                    .unwrap_or("Could not save that Centurion.")
-                    .to_owned();
+                let message = match &payload {
+                    Ok(p) => p
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Could not save that Centurion.")
+                        .to_owned(),
+                    Err(error) => error.clone(),
+                };
                 let failed = adw::AlertDialog::builder()
                     .heading("Could not connect")
                     .body(&message)
@@ -7436,8 +7570,8 @@ network, and that the other person has pressed “Make this Centurion reachable�
     }
 
     fn show_ops_glance_dialog(parent: &adw::ApplicationWindow) {
-        let body = match run_bridge_action("ops_glance", serde_json::json!({})) {
-            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+        let body = match run_bridge_action_result("ops_glance", serde_json::json!({})) {
+            Ok(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                 let mut lines = Vec::new();
                 let cron = p
                     .get("cron")
@@ -7497,12 +7631,12 @@ Schedule work with cron or kanban; this glance stays in Settings, not Focus."
                     lines.join("\n")
                 }
             }
-            Some(p) => p
+            Ok(p) => p
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Could not load ops glance.")
                 .to_owned(),
-            None => "Could not reach the ops bridge.".to_owned(),
+            Err(error) => error,
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Scheduled &amp; board")
@@ -7514,9 +7648,9 @@ Schedule work with cron or kanban; this glance stays in Settings, not Focus."
     }
 
     fn show_plugins_list_dialog(parent: &adw::ApplicationWindow) {
-        let payload = run_bridge_action("plugin_list", serde_json::json!({}));
+        let payload = run_bridge_action_result("plugin_list", serde_json::json!({}));
         let body = match payload {
-            Some(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
+            Ok(p) if p.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
                 let plugins = p
                     .get("plugins")
                     .and_then(|v| v.as_array())
@@ -7553,12 +7687,12 @@ they do not automatically add Brain UI. See developer-guide/client-plugins.md."
                     lines.join("\n")
                 }
             }
-            Some(p) => p
+            Ok(p) => p
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Could not list plugins.")
                 .to_owned(),
-            None => "Could not reach the plugin bridge.".to_owned(),
+            Err(error) => error,
         };
         let dialog = adw::AlertDialog::builder()
             .heading("Installed plugins")
@@ -7836,13 +7970,15 @@ so you can fix Thinking without being stuck.\n\nCurrently: {current_subtitle}"
                 move || {
                     if !access_code.is_empty() {
                         match run_provider_save_key(&connector_id, &access_code) {
-                            Some(save_response) if save_response.ok => {}
-                            Some(save_response) => {
+                            Ok(save_response) if save_response.ok => {}
+                            Ok(save_response) => {
                                 return Err(save_response
                                     .message
                                     .unwrap_or_else(|| "Could not save access code.".to_owned()));
                             }
-                            None => return Err("Could not save access code.".to_owned()),
+                            Err(reason) => {
+                                return Err(format!("Could not save access code — {reason}"))
+                            }
                         }
                     }
                     let apply_args = [
@@ -8319,13 +8455,15 @@ The key stays in ~/.centurion/.env on this machine only.",
                 move || {
                     if !access_code.is_empty() {
                         match run_provider_save_key(&connector_id, &access_code) {
-                            Some(save_response) if save_response.ok => {}
-                            Some(save_response) => {
+                            Ok(save_response) if save_response.ok => {}
+                            Ok(save_response) => {
                                 return Err(save_response
                                     .message
                                     .unwrap_or_else(|| "Could not save access code.".to_owned()));
                             }
-                            None => return Err("Could not save access code.".to_owned()),
+                            Err(reason) => {
+                                return Err(format!("Could not save access code — {reason}"))
+                            }
                         }
                     }
                     let Some(apply_response) =
