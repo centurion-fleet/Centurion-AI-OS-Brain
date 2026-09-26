@@ -21,7 +21,15 @@ use crate::home_page::{HomeHandle, HomeHooks};
 
 const DECK_HOST: &str = "127.0.0.1";
 const DECK_PORT: u16 = 9120;
-const DECK_URL: &str = "http://127.0.0.1:9120/";
+/*
+ * The Focus tab is STILLPOINT — the same instrument as Conjunction, for one
+ * Centurion and one life. It is served as its own page (public/stillpoint.html,
+ * built into dist/) for the same reason Conjunction is: a bespoke page can carry
+ * the design system and the self-hosted Instrument fonts, which the SPA root
+ * could not without dragging the whole app shell's typography with it. Before
+ * this the tab loaded the SPA root and looked like a different product.
+ */
+const DECK_URL: &str = "http://127.0.0.1:9120/stillpoint.html";
 const COLLAB_URL: &str = "http://127.0.0.1:9120/conjunction.html";
 
 #[derive(Clone, Copy)]

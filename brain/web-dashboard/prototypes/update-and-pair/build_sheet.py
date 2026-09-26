@@ -14,7 +14,7 @@ OUT = os.path.expanduser("~/.centurion/document_cache/update-and-pair.pdf")
 CSS = """
 @page {
   size: A4;
-  margin: 16mm 16mm 15mm 16mm;
+  margin: 13mm 14mm 12mm 14mm;
   @bottom-left  { content: "Centurion \\00b7 Update and pair"; font-family: "Liberation Sans", sans-serif;
                   font-size: 7.5pt; color: #968D86; }
   @bottom-right { content: "page " counter(page) " of " counter(pages);
@@ -23,7 +23,7 @@ CSS = """
 @page :first { @bottom-left { content: ""; } @bottom-right { content: ""; } }
 body { background: #FAFAF9; color: #110C09;
        font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif;
-       font-size: 9.1pt; line-height: 1.32; margin: 0; }
+       font-size: 8.9pt; line-height: 1.27; margin: 0; }
 h1 { font-family: "Liberation Serif", Georgia, serif; font-size: 21pt; line-height: 1.1;
      margin: 0 0 4px 0; }
 h2 { font-family: "Liberation Serif", Georgia, serif; font-size: 12pt; margin: 10px 0 2px 0;
@@ -47,6 +47,7 @@ td.n { width: 24px; color: #b08d57; font-family: "Liberation Serif", Georgia, se
        padding: 1px 4px; border-radius: 3px; }
 .quiet { color: #5E534A; font-size: 8.6pt; }
 .newpage { break-before: page; }
+.keep { break-inside: avoid; }
 .k { color: #b08d57; font-weight: bold; }
 """
 
@@ -58,6 +59,16 @@ P1 = """
 
 <p>This is everything, in order. Nothing here needs a terminal. If a step asks for your
 password, it is the Fedora installer asking, not the Brain.</p>
+
+<p class="quiet">Two machines: Steve's Centurion is <b>Eve</b>, Kim's is <b>Mikki</b>.</p>
+
+<div class="box">
+  <div class="t">Before you start &mdash; one thing to glance at</div>
+  <p style="margin:0">On each machine, open <b>Settings &rarr; This Brain</b> and look at the
+  <b>Gateway</b> row. It must show as running. Making a Brain reachable works by restarting that
+  service, so if it is not there to restart, nothing binds, and the button waits forever. If it is
+  not running, press <b>Start</b> next to it.</p>
+</div>
 
 <h2>1 &middot; Update the Brain</h2>
 
@@ -100,7 +111,10 @@ password, it is the Fedora installer asking, not the Brain.</p>
 machines are ever on different networks, a port must be forwarded &mdash; that is the one part
 Centurion cannot do for you.</p>
 
-<h2>3 &middot; Connect to theirs</h2>
+<h2>3 &middot; Connect to theirs &mdash; on both machines</h2>
+
+<p>Each machine has to connect to the other, so do this on <b>both</b>. One side alone is a
+half-link, and it behaves exactly like a broken one.</p>
 
 <table>
   <tr><td class="n">1</td><td>On the same screen, in the lower half, type the
@@ -122,17 +136,34 @@ Centurion cannot do for you.</p>
   not restarted since. Finish step 2 on <i>their</i> machine, then press Connect again here.</li>
 </ul>
 
+<div class="keep">
+<h2>4 &middot; Talk to each other</h2>
+
+<p>Once a Centurion is connected, that same screen &mdash; <b>Settings &rarr; Connect another
+Centurion</b> &mdash; grows two more sections underneath the pair. This is the collaboration.</p>
+
+<table>
+  <tr><td class="n">1</td><td><b>Messages from other Centurions</b> &mdash; what Eve or Mikki has
+  sent you. Anything new is in bold and carries a <b>Got it</b> button.</td></tr>
+  <tr><td class="n">2</td><td><b>Send something to the other Centurion</b> &mdash; pick them by
+  name, give it a subject, write the message, press <b>Send</b>.</td></tr>
+</table>
+
+<p class="quiet">The <b>Send</b> box only appears once you have connected to someone. If you
+cannot see it, step 3 is not finished &mdash; that is the order, not a fault.</p>
+
 <div class="box">
-  <div class="t">Before you start &mdash; one thing to glance at</div>
-  <p style="margin:0">On each machine, open <b>Settings &rarr; This Brain</b> and look at the
-  <b>Gateway</b> row. It must show as running. Making a Brain reachable works by restarting that
-  service, so if it is not there to restart, nothing binds and the screen waits forever. If it
-  is not running, press <b>Start</b> next to it.</p>
+  <div class="t">What this is &mdash; and what it is not</div>
+  <p style="margin:0">Your Centurions can <b>exchange messages that you read and act on</b>. A
+  message arrives in the inbox above, you read it, and you decide what happens next. What they do
+  not yet do is act on each other's messages by themselves &mdash; the hand on the wheel stays
+  yours. Say it that way if anyone asks, because the screen will not oversell it and neither
+  should we.</p>
+</div>
 </div>
 """
 
 P2 = """
-<div class="newpage"></div>
 <h2>What you now have</h2>
 
 <p>Two things, and they are one idea seen twice. <b>Conjunction</b> is for work that involves
@@ -156,6 +187,7 @@ instrument for your own life, where you and your Centurion work alone.</p>
   This is your decision queue, and the aim is for it to be short.</td></tr>
 </table>
 
+<div class="newpage"></div>
 <h2>Three words you will use every day</h2>
 
 <table>
