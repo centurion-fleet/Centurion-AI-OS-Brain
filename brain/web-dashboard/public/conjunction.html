@@ -161,7 +161,8 @@ button.verb[disabled]{opacity:.35;cursor:default}
   font-size:10.5px;letter-spacing:.16em;color:var(--faint)}
 
 footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display:flex;
-  justify-content:space-between;gap:30px;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
+  justify-content:space-between;flex-wrap:wrap;gap:14px 30px;font-size:11px;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
 .proto{font-family:var(--mono);letter-spacing:.14em}
 .door{margin-top:10px}
 .door a,.item a{color:var(--bronze-lt);text-decoration:none;
@@ -176,6 +177,10 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
 .flare{animation:flare 2s ease-out both}
 .halo{animation:breathe 3.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+@media (max-width:720px){
+  footer{flex-direction:column;gap:12px;align-items:flex-start}
+  .proto{letter-spacing:.1em}
+}
 @media (max-width:1240px){
   .registers{grid-template-columns:1fr}.wrap{padding:36px 26px 56px}h1{font-size:40px}
   .hands{grid-template-columns:1fr}.readout{grid-template-columns:1fr}
@@ -643,7 +648,7 @@ function paint(S){
     : "The second ring is empty — no other Centurion is reachable on this network yet";
   /* Say what is held back, rather than silently dropping it. */
   const scope = S.held
-    ? " · "+(S.boards||0)+" BOARD"+((S.boards||0)===1?"":"S")+", "+S.held+" HELD INTERNAL"
+    ? " · "+(S.boards||0)+" BOARDS · "+S.held+" HELD INTERNAL"
     : "";
   $("provenance").textContent = S.errors&&S.errors.length
     ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
