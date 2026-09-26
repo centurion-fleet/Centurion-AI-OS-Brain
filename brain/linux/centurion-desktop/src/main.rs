@@ -1413,7 +1413,7 @@ The Brain here is the product; the phone is the remote.",
 
         let collaborations_group = adw::PreferencesGroup::builder()
             .title("Collaborations")
-            .description("Local swarms on this Brain, plus Mission Control join/invite")
+            .description("Boards on this Brain, and linking to another Centurion over your network")
             .build();
         let family_group = adw::PreferencesGroup::builder()
             .title("Family &amp; friends")
