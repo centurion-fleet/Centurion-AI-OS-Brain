@@ -153,6 +153,11 @@ h1 em{font-style:normal;color:var(--bronze-lt)}
 .ask.decided{opacity:.5}
 .ask.decided .verb{display:none}
 .ask .ctx.req{color:var(--bronze-lt)}
+.thread{margin-top:14px;border-left:1px solid var(--hair);padding-left:14px}
+.cmt{display:block;margin:8px 0;font-size:12.5px;line-height:1.55;color:var(--dim)}
+.cmt .who{color:var(--bronze-lt);letter-spacing:.16em;text-transform:uppercase;font-size:10.5px;margin-right:8px}
+.cmt .when{color:var(--faint);font-family:var(--mono);font-size:10px;letter-spacing:.1em;margin-right:8px}
+.cmt .bd{display:block;margin-top:3px}
 button.verb{font:inherit}
 button.verb[disabled]{opacity:.35;cursor:default}
 
@@ -355,9 +360,14 @@ async function load(){
     handItems:running.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · moving",stop:false})),
     stopItems:blocked.slice(0,3).map(c=>({t:cut(c.title,70),meta:(c.assignee||"unassigned")+" · stopped",stop:true})),
     todo:todo.slice(0,2),
-    asks:pWait.slice(0,4).map(p=>{const adj=p.status==="adjusted",dn=daysSince(p.created_at);return{
+    asks:pWait.slice(0,4).map(p=>{const adj=p.status==="adjusted",dn=daysSince(p.created_at);
+      const cs=((p.share&&p.share.comments)||[]);
+      return{
       id:p.id,q:cut(p.title,88),goal:cut(p.goal,400),adj:adj,
-      ctx:(adj?"changes requested · revising · ":"waiting ")
+      comments:cs.slice(-3).map(c=>({who:c.author==="owner"?"you":(c.author||"your Centurion"),
+        t:cut(c.body,240),when:shortDate(c.at)})),
+      ctx:((cs.length?"in discussion · "+cs.length+" message"+(cs.length===1?"":"s")+" · ":""))
+        +(cs.length?"":(adj?"changes requested · ":"waiting "))
         +(dn!=null?dn+" day"+(dn===1?"":"s"):"—")
         +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")};}),
     more:Math.max(0,pWait.length-4),
@@ -547,7 +557,10 @@ function asks(S){
   const b=$("asks"); b.innerHTML="";
   (S.asks||[]).forEach(a=>{
     const d=document.createElement("div");d.className="ask";
-    d.innerHTML='<div class="q">'+a.q+'</div><div class="ctx'+(a.adj?' req':'')+'">'+a.ctx+'</div>' 
+    const th=(a.comments||[]).map(c=>'<div class="cmt"><span class="who">'+c.who+'</span>'
+      +'<span class="when">'+c.when+'</span><span class="bd">'+c.t+'</span></div>').join('');
+    d.innerHTML='<div class="q">'+a.q+'</div><div class="ctx'+(a.adj?' req':'')+'">'+a.ctx+'</div>'
+      +(th?'<div class="thread">'+th+'</div>':'')
       +'<div class="verbs">'
       +'<button class="verb solid" data-v="approve">Proceed</button>'
       +'<button class="verb" data-v="request_changes">Discuss</button>'
@@ -596,25 +609,40 @@ function register(S){
 async function decide(a, choice, el){
   const verdict=el.querySelector(".verdict");
   const btns=[...el.querySelectorAll("[data-v]")];
-  if(choice==="request_changes"){
-    let field=el.querySelector(".notein");
-    if(!field){
-      field=document.createElement("input");
-      field.className="notein"; field.type="text";
-      field.placeholder="What needs to change?  (then press Enter)";
-      el.appendChild(field);
-      field.addEventListener("keydown",async ev=>{
-        if(ev.key!=="Enter") return;
-        const note=field.value.trim(); if(!note) return;
-        await send(a,"request_changes",note,el);});
-      field.focus();
-      return;
-    }
-    const note=field.value.trim(); if(!note) return;
-  }
+  if(choice==="request_changes"){ openThread(a,el); return; }
   btns.forEach(b=>b.disabled=true);
   verdict.className="verdict"; verdict.textContent="sending…";
   await send(a,choice,undefined,el);
+}
+/* Discuss is a conversation, not a filing action. It adds a message to the plan's
+   OWN thread and leaves the item exactly where it is — still the human's to decide —
+   so the exchange is visible and the Centurion answers in the same thread. Proceed
+   and Hold ARE decisions, so those do move the item (Proceed lands it in "in hand").
+   Sending a note off to a field nobody reads is what made "Discuss" a lie. */
+function openThread(a,el){
+  const verdict=el.querySelector(".verdict");
+  let field=el.querySelector(".notein");
+  if(!field){
+    field=document.createElement("input");
+    field.className="notein"; field.type="text";
+    field.placeholder="Say it to your Centurion — then press Enter";
+    el.appendChild(field);
+    field.addEventListener("keydown",async ev=>{
+      if(ev.key!=="Enter") return;
+      const note=field.value.trim(); if(!note) return;
+      field.value="";
+      try{
+        await ask({action:"plan_comment",plan_id:a.id,body:note,author:"owner"});
+        verdict.className="verdict";
+        verdict.textContent="said — it stays here until you decide";
+        load().then(paint).catch(()=>{});
+      }catch(e){
+        verdict.className="verdict bad";
+        verdict.textContent="not sent — "+e.message;
+      }
+    });
+  }
+  field.focus();
 }
 async function send(a,choice,note,el){
   const verdict=el.querySelector(".verdict");
