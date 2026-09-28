@@ -35,6 +35,7 @@ mod bridge_client;
     clippy::too_many_lines
 )]
 mod bridge_actions;
+mod brain_update;
 mod discuss;
 #[cfg(target_os = "linux")]
 #[allow(
@@ -8917,6 +8918,27 @@ complete, then try again."
 
 #[cfg(target_os = "linux")]
 fn main() {
+    // ── Headless update dry run ───────────────────────────────────────────────
+    //   centurion-desktop --update-dry-run [--licence-code=XXXX]
+    //
+    // Exercises the updater's resolve → download → checksum → signature →
+    // predecessor steps against the real channel, installs nothing and stops
+    // nothing. A privileged installer that has only ever been compiled is not a
+    // tested installer; this is the entry point that makes steps 1–5 testable
+    // without touching the machine. `--licence-code` is needed for the download
+    // because the channel authenticates that route with a licence, not a session.
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--update-dry-run") {
+        let code = args
+            .iter()
+            .find_map(|a| a.strip_prefix("--licence-code="))
+            .map(str::to_owned);
+        let dir = std::env::temp_dir().join("centurion-update-dryrun");
+        let report = brain_update::dry_run(&dir, code.as_deref());
+        println!("{}", report.render());
+        // A non-zero exit on failure so a script can gate on it. Skips do not fail.
+        std::process::exit(if report.all_clear() { 0 } else { 1 });
+    }
     linux::run();
 }
 
