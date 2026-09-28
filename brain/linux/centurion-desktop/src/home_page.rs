@@ -2081,11 +2081,21 @@ fn load_profile_names() -> Vec<String> {
 
 fn gateway_running_hint() -> (bool, String) {
     let payload = run_bridge_action("gateway_status", serde_json::json!({}));
+    // ⚠️ The bridge nests this at `status.running` — see `remote_bridge.py`, which returns
+    // `{ ok, action, status: { running, ... } }`. This used to look for a bare `running`
+    // or for `result.running`; the bridge has never sent either, so `.unwrap_or(false)`
+    // won and this dialog reported "Gateway is not running" even when it was. On a
+    // support call that sends everyone down the wrong path. Verified 28 Sep 2026.
     let running = payload
         .as_ref()
         .and_then(|v| {
-            v.get("running")
-                .or_else(|| v.get("result").and_then(|r| r.get("running")))
+            v.get("status")
+                .and_then(|s| s.get("running"))
+                .or_else(|| {
+                    v.get("result")
+                        .and_then(|r| r.get("status"))
+                        .and_then(|s| s.get("running"))
+                })
                 .and_then(|x| x.as_bool())
         })
         .unwrap_or(false);

@@ -2451,6 +2451,11 @@ def _handle_gateway_status(request_id: str) -> dict[str, Any]:
                 "manager": snapshot.manager,
                 "pids": list(snapshot.gateway_pids),
                 "gateway_state": runtime.get("gateway_state"),
+                # WHY the gateway is not up. The gateway computes this and writes it to
+                # runtime state, but it was only ever printed by the CLI — so the
+                # desktop app could show "Stopped — startup_failed" and the owner had no
+                # way to learn the cause. Support calls died on that missing sentence.
+                "exit_reason": runtime.get("exit_reason"),
                 "platforms": platforms,
             },
         }

@@ -5747,15 +5747,33 @@ computer if you need more detail."
             .pointer("/status/running")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let service_installed = payload
+            .pointer("/status/service_installed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let state = payload
             .pointer("/status/gateway_state")
             .and_then(|v| v.as_str())
             .unwrap_or(if running { "running" } else { "stopped" });
-        row.set_subtitle(&format!(
-            "{} — {}",
-            if running { "Running" } else { "Stopped" },
-            state
-        ));
+        // Say WHAT is wrong, not only that something is. "Stopped — startup_failed" is a
+        // state token the owner cannot act on, and the gateway already computes a plain
+        // cause (exit_reason) that was being shown to the CLI and thrown away here.
+        let exit_reason = payload
+            .pointer("/status/exit_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        row.set_subtitle(&if running {
+            format!("Running — {state}")
+        } else if !service_installed {
+            "Not set up on this computer yet — the Brain sets this up the next time it \
+             starts."
+                .to_owned()
+        } else if !exit_reason.is_empty() {
+            format!("Stopped — last start failed: {exit_reason}")
+        } else {
+            format!("Stopped — {state}")
+        });
         // Settings only surfaces the three messaging surfaces we want end users
         // to manage here — Telegram, Centurion Remote Control (api_server), WhatsApp.
         const SETTINGS_GATEWAY_PLATFORMS: &[&str] = &["telegram", "api_server", "whatsapp"];
