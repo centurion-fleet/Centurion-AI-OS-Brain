@@ -174,6 +174,37 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
 .door a,.item a{color:var(--bronze-lt);text-decoration:none;
   border-bottom:1px solid rgba(220,186,128,.4);padding-bottom:1px;letter-spacing:.16em}
 .door a:hover,.item a:hover{color:#F0D9AC;border-bottom-color:#F0D9AC}
+
+/* ---------- one record, two views ----------
+   Every mark on this page is a door to its own item. It carries an accessible
+   name, a <title> for screen readers, and data attributes holding the record's
+   own words; hovering, tabbing or tapping it names the item and lights the
+   matching row below — and the reverse. Nothing is anonymous. */
+#tip{position:fixed;z-index:60;max-width:340px;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:linear-gradient(180deg,#1C1F27,#14161C);border:1px solid rgba(255,180,84,.5);border-radius:3px;
+  padding:12px 15px;box-shadow:0 22px 44px -20px rgba(0,0,0,.95);font-size:12.5px;line-height:1.55;color:var(--engrave)}
+#tip.on{opacity:1}
+#tip .tt{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--amber-hi);margin-bottom:6px}
+#tip .td{margin-top:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.mark{cursor:pointer;outline:none}
+svg .mark:focus,svg .mark.hot{filter:drop-shadow(0 0 7px rgba(255,204,132,.95))}
+.seal{cursor:pointer;outline:none}
+.seal:focus,.seal.hot{box-shadow:0 0 0 3px rgba(255,180,84,.6),0 7px 16px -6px rgba(255,180,84,.5),
+  inset 0 1px 0 rgba(255,255,255,.25)}
+.reglist{margin-top:20px;border-top:1px solid var(--hair)}
+.regrow{display:flex;gap:12px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid var(--hair);
+  cursor:pointer;font-size:13px;line-height:1.45;color:var(--dim);outline:none}
+.regrow:last-child{border-bottom:0}
+.regrow:focus,.regrow.hot{background:rgba(255,180,84,.08);color:var(--engrave)}
+.regrow .mdot{flex:none;width:13px;height:13px;margin-top:3px}
+.regrow .mtx{flex:1}
+.regrow .mmeta{flex:none;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+  white-space:nowrap;padding-top:2px}
+.legend.has-marks{margin-bottom:0;border-bottom:0}
+.legend.marks{margin-top:0;margin-bottom:56px;padding:18px 0;gap:30px}
+.legend.marks .key{font-size:11px;letter-spacing:.1em}
+.fbnote{margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,180,84,.22);
+  font-size:11.5px;line-height:1.7;color:rgba(255,204,132,.72)}
 @keyframes rise{from{opacity:0;transform:scale(.972)}to{opacity:1;transform:scale(1)}}
 @keyframes flare{0%,42%{opacity:0}100%{opacity:1}}
 @keyframes breathe{0%,100%{opacity:.14}50%{opacity:.38}}
@@ -212,12 +243,21 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
     </div>
   </div>
 
-  <div class="legend">
+  <div class="legend has-marks">
     <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="8" fill="#B08D57"/></svg>Struck</span>
     <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="7.2" fill="none" stroke="#B08D57" stroke-width="2.6"/></svg>In hand</span>
     <span class="key"><svg width="22" height="22"><circle cx="11" cy="11" r="6.6" fill="none" stroke="rgba(240,234,224,.4)" stroke-width="1.4" stroke-dasharray="2.4 3.4"/></svg>Next</span>
     <span class="key amber"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 3 L19 11 L11 19 L3 11 Z" fill="none" stroke="#FFB454" stroke-width="2"/><circle cx="11" cy="11" r="2.4" fill="#FFB454"/></svg><b>Waiting on you</b></span>
     <span class="key" style="margin-left:auto;color:var(--faint)">Bronze · one Centurion &nbsp;·&nbsp; Steel · the other</span>
+  </div>
+
+  <div class="legend marks" aria-label="What each mark on the dial and the register means">
+    <span class="key"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="8.2" y="2" width="3.6" height="16" rx="1.8" fill="rgba(220,186,128,.8)"/></svg>Pillar &nbsp;·&nbsp; decided</span>
+    <span class="key"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2 L18 10 L10 18 L2 10 Z" fill="none" stroke="#FFB454" stroke-width="2"/><circle cx="10" cy="10" r="2.2" fill="#FFB454"/></svg>Diamond &nbsp;·&nbsp; open</span>
+    <span class="key"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.4" fill="none" stroke="#DCBA80" stroke-width="2.6"/><circle cx="10" cy="10" r="2.2" fill="#DCBA80"/></svg>Circle &nbsp;·&nbsp; moving</span>
+    <span class="key amber"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2 L18 10 L10 18 L2 10 Z" fill="none" stroke="#FFB454" stroke-width="2"/></svg><b>Amber diamond &nbsp;·&nbsp; stopped</b></span>
+    <span class="key"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="#B08D57" stroke="rgba(220,186,128,.55)"/></svg>Seal &nbsp;·&nbsp; struck</span>
+    <span class="key" style="margin-left:auto;color:var(--faint)">Hover, tab or tap any mark to be told what it is</span>
   </div>
 
   <svg id="orrery" viewBox="0 0 1040 660" role="img" aria-label="Two rings of work in conjunction, centred on the human"></svg>
@@ -234,8 +274,10 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
     <section class="plate">
       <h2><span class="count" id="c-struck">·</span> Struck</h2>
       <p class="note">One seal per completed piece of work, struck in the order it was earned.
-      Nothing is sealed on a claim — every one was verified first.</p>
+      Nothing is sealed on a claim — every one was verified first. Hover, tab or tap a seal to
+      be told which piece of work it is; the list underneath names them all.</p>
       <div class="seals" id="seals"></div>
+      <div class="reglist" id="strucklist" role="list" aria-label="Struck work, named"></div>
     </section>
 
     <section class="plate">
@@ -259,6 +301,9 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
       <p class="note">Only a human can take these. Everything else continues without them.</p>
       <div id="asks"></div>
       <div class="more" id="more"></div>
+      <div class="fbnote">Discuss writes straight to your Centurion's own thread on that item —
+      your Centurion answers in the same thread, and the item stays exactly where it is until you
+      Proceed or Hold. A reply never moves it.</div>
     </section>
 
     <section class="plate side">
@@ -271,9 +316,11 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
   <section class="plate ledger">
     <h2><span class="count" id="c-reg">·</span> Register of decisions</h2>
     <p class="note">Every decision taken, earliest at the left. A bronze pillar is decided and
-    closed. A hollow amber diamond is still open — the same mark as above.</p>
+    closed. A hollow amber diamond is still open — the same mark as above. The list beneath names
+    each one, and lights the matching mark on the dial.</p>
     <svg id="register" viewBox="0 0 1500 170" role="img" aria-label="Register of decisions"></svg>
     <div class="axis"><span>11 AUG</span><span>ONE MARK · ONE DECISION</span><span>26 SEP</span></div>
+    <div class="reglist" id="reglist" role="list" aria-label="Register of decisions, named"></div>
   </section>
 
   <footer>
@@ -281,6 +328,8 @@ footer{border-top:1px solid var(--hair);margin-top:40px;padding-top:26px;display
     <span class="proto" id="provenance">·</span>
   </footer>
 </div>
+
+<div id="tip" role="tooltip" aria-hidden="true"></div>
 
 <script>
 
@@ -315,6 +364,84 @@ function shortDate(iso){const t=Date.parse(iso||"");if(isNaN(t))return"";
   return new Date(t).toLocaleDateString(undefined,{day:"2-digit",month:"short"}).toUpperCase();}
 function cut(s,n){s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1).trimEnd()+"…":s;}
 function setState(msg){$("caption").textContent=msg;}
+
+/* ============================================================
+   ONE RECORD, TWO VIEWS.
+   A mark with no name is a smudge. Every mark this page draws —
+   a decision on the dial, a decision on the register, a seal of
+   struck work — is built here, so each one carries:
+     · an accessible name (role=img + aria-label, plus a <title>)
+     · data-row, the key that ties it to its OTHER view
+     · data-tt / data-td, the record's own words for the popup
+   Hover, keyboard focus or tap names it; the matching row (or the
+   matching mark) lights up with it. One item, two places, linked.
+   ============================================================ */
+const MGLYPH={
+  pillar:'<svg viewBox="0 0 14 14" width="13" height="13"><rect x="5.7" y="1" width="2.6" height="12" rx="1.3" fill="rgba(220,186,128,.75)"/></svg>',
+  diamond:'<svg viewBox="0 0 14 14" width="13" height="13"><path d="M7 1 L13 7 L7 13 L1 7 Z" fill="none" stroke="#FFB454" stroke-width="1.8"/><circle cx="7" cy="7" r="1.6" fill="#FFB454"/></svg>',
+  circle:'<svg viewBox="0 0 14 14" width="13" height="13"><circle cx="7" cy="7" r="4.6" fill="none" stroke="#DCBA80" stroke-width="2"/><circle cx="7" cy="7" r="1.5" fill="#DCBA80"/></svg>',
+  stop:'<svg viewBox="0 0 14 14" width="13" height="13"><path d="M7 1 L13 7 L7 13 L1 7 Z" fill="none" stroke="#FFB454" stroke-width="2"/></svg>',
+  seal:'<svg viewBox="0 0 14 14" width="13" height="13"><circle cx="7" cy="7" r="5.4" fill="#B08D57" stroke="rgba(220,186,128,.55)"/></svg>'};
+
+/* Give any element (SVG group, seal, or list row) its name and its link. */
+function nameMark(node,row,label,title,detail,role){
+  node.setAttribute("class",((node.getAttribute("class")||"")+" mark").trim());
+  node.setAttribute("data-row",row);
+  node.setAttribute("data-tt",title||"");
+  node.setAttribute("data-ttlabel",label||"Mark");
+  node.setAttribute("data-td",detail||"");
+  node.setAttribute("tabindex","0");
+  node.setAttribute("role",role||"img");
+  const name=(label||"Mark")+": "+(title||"")+(detail?" — "+detail:"");
+  node.setAttribute("aria-label",name);
+  if(node.namespaceURI===NS){const t=document.createElementNS(NS,"title");t.textContent=name;node.appendChild(t);}
+  else{node.title=name;}
+  return node;
+}
+let tipPin=null;
+function tipShow(tt,title,detail,x,y){
+  const b=$("tip"); if(!b) return;
+  b.innerHTML='<div class="tt">'+tt+'</div><div>'+(title||"")+'</div>'+(detail?'<div class="td">'+detail+'</div>':'');
+  b.classList.add("on");
+  const r=b.getBoundingClientRect();
+  const left=Math.min(Math.max(10,x+16),Math.max(10,window.innerWidth-r.width-10));
+  let top=y-r.height-14; if(top<10) top=y+24;
+  b.style.left=left+"px"; b.style.top=top+"px";
+}
+function tipHide(){const b=$("tip"); if(b) b.classList.remove("on"); tipPin=null;}
+function markOn(m,scroll){
+  const key=m.getAttribute("data-row"); if(!key) return;
+  const group=document.querySelectorAll('[data-row="'+key+'"]');
+  group.forEach(e=>e.classList.add("hot"));
+  if(scroll&&group[0]&&group[0].scrollIntoView)
+    group[0].scrollIntoView({block:"nearest",inline:"nearest",behavior:"smooth"});
+  const r=m.getBoundingClientRect();
+  tipShow(m.getAttribute("data-ttlabel")||"Mark",m.getAttribute("data-tt"),m.getAttribute("data-td"),
+    r.left+r.width/2,r.top);
+}
+function markOff(m,key){
+  const k=key||(m&&m.getAttribute("data-row")); if(!k) return;
+  document.querySelectorAll('[data-row="'+k+'"]').forEach(e=>e.classList.remove("hot"));
+  tipHide();
+}
+/* Hover and focus both name a mark. Scrolling to the twin view happens on focus
+   and on tap — not on hover, because scrolling the page moves the mark out from
+   under the pointer and would snatch the popup away mid-read. */
+document.addEventListener("pointerover",e=>{const m=e.target.closest&&e.target.closest("[data-row]");
+  if(m&&!(e.relatedTarget&&m.contains&&m.contains(e.relatedTarget))) markOn(m,false);});
+document.addEventListener("pointerout",e=>{const m=e.target.closest&&e.target.closest("[data-row]");
+  if(m&&!(e.relatedTarget&&m.contains&&m.contains(e.relatedTarget))) markOff(m);});
+document.addEventListener("focusin",e=>{const m=e.target.closest&&e.target.closest("[data-row]");if(m) markOn(m,true);});
+document.addEventListener("focusout",e=>{const m=e.target.closest&&e.target.closest("[data-row]");if(m) markOff(m);});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){
+  document.querySelectorAll("[data-row].hot").forEach(x=>x.classList.remove("hot"));tipHide();}});
+document.addEventListener("click",e=>{
+  const m=e.target.closest&&e.target.closest("[data-row]"); if(!m) return;
+  if(m.tagName==="BUTTON"||m.tagName==="A") return;   /* verbs keep their own jobs */
+  const key=m.getAttribute("data-row"), again=tipPin===key;
+  markOff(null,key); if(again) return;                 /* tap again to dismiss */
+  tipPin=key; markOn(m,true);                          /* tap pins the name open */
+});
 
 async function load(){
   let plans=[],decisions=[],stack={},swarms=[],peers=[],errors=[],held=0;
@@ -354,6 +481,15 @@ async function load(){
   const struck=done.length+pDone.length+tDone.length;
   return{
     struck, struckPeer:peerActs.length,
+    /* NAMED SEALS. A wall of anonymous dots communicates nothing. Seal i is item
+       i of this list — read from the same record the counter counts, so the wall
+       and the number always agree. Peer deliveries are named too, off the peer's
+       own activity. */
+    struckItems:[].concat(
+      pDone.slice().map(p=>cut(p.title,80)),
+      done.slice().map(c=>cut(c.title,80)),
+      tDone.slice().map(t=>cut(t.title,80))),
+    peerStruckItems:peerActs.map(a=>cut(a.title||a,76)),
     inHand:running.length+pGo.length+tDoing.length,
     waiting:pWait.length, openDecisions:decisions.filter(d=>!(d.human_said||d.chosen)).length,
     next:tNext.slice(0,7).map(t=>({t:cut(t.title,74),seq:t.sequence_number})),
@@ -391,7 +527,8 @@ async function load(){
         +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")};}),
     more:Math.max(0,pWait.length-4),
     decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
-      .map(d=>({t:cut(d.title,88),taken:shortDate(d.created_at),answered:!!(d.human_said||d.chosen)})),
+      .map(d=>({id:d.id,t:cut(d.title,88),taken:shortDate(d.created_at),
+        answered:!!(d.human_said||d.chosen),said:cut(d.human_said||d.chosen||"",60)})),
     peer, peerActs:peerActs, peers:peers.length, errors, localName, held, boards:swarms.length
   };
 }
@@ -430,7 +567,8 @@ function build(S){
   const arc=(rot,f0,f1,steps)=>{let d="";for(let i=0;i<=steps;i++){const f=f0+(f1-f0)*(i/steps);
     const p=place(rot,f);d+=(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)+" ";}return d.trim();};
 
-  /* outer register — one mark per decision in the record */
+  /* outer register — one mark per decision in the record. Each mark is named:
+     it says which decision it is, on hover, on focus and on tap. */
   const R=322, D=S.decisions;
   g.appendChild(el("circle",{cx:CX,cy:CY,r:R,fill:"none",stroke:"rgba(240,234,224,.085)","stroke-width":1}));
   if(D.length){
@@ -443,6 +581,8 @@ function build(S){
         grp.appendChild(el("path",{d:"M "+CX+" "+(CY-R-23)+" l 6.4 6.4 l -6.4 6.4 l -6.4 -6.4 Z",
           fill:"none",stroke:"var(--amber)","stroke-width":2}));
       }
+      nameMark(grp,"dec:"+i,d.answered?"Decided":"Open decision",d.t,
+        (d.answered?"DECIDED":"OPEN")+" · "+d.taken+(d.said?" · “"+d.said+"”":""));
       g.appendChild(grp);
     });
   }
@@ -464,25 +604,35 @@ function build(S){
   ring(-19,"url(#ringB)","#B08D57","rgba(255,238,205,.85)",false);
   ring( 19,"url(#ringS)","#8C93A0","rgba(232,238,248,.62)",!S.peer);
 
-  /* what ring A carries: in hand, then what has stopped */
+  /* what ring A carries: in hand, then what has stopped — each named, and each
+     tied to its own row in the In hand register below. */
   const carried=S.handItems.concat(S.stopItems).slice(0,5);
   carried.forEach((it,i)=>{
-    const p=place(-19,.055+i*.135);
+    const p=place(-19,.055+i*.135), gm=el("g");
     if(it.stop){
-      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:17,fill:"var(--amber)",class:"halo",filter:"url(#soft)"}));
-      g.appendChild(el("path",{d:"M "+p[0]+" "+(p[1]-10)+" l 10 10 l -10 10 l -10 -10 Z",
+      gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:17,fill:"var(--amber)",class:"halo",filter:"url(#soft)"}));
+      gm.appendChild(el("path",{d:"M "+p[0]+" "+(p[1]-10)+" l 10 10 l -10 10 l -10 -10 Z",
         fill:"none",stroke:"var(--amber)","stroke-width":2.8}));
     }else{
-      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:9,fill:"#0E1015",stroke:"var(--bronze-lt)","stroke-width":3}));
-      g.appendChild(el("circle",{cx:p[0],cy:p[1],r:2.8,fill:"var(--bronze-lt)"}));
+      gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:9,fill:"#0E1015",stroke:"var(--bronze-lt)","stroke-width":3}));
+      gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:2.8,fill:"var(--bronze-lt)"}));
     }
+    nameMark(gm,"hand:"+i,it.stop?"Stopped":"In hand · moving",it.t,it.meta||"");
+    g.appendChild(gm);
   });
-  /* sealed work: one bead per delivery, newer larger, capped so the ring stays a ring */
+  /* sealed work: one bead per delivery, newer larger, capped so the ring stays a
+     ring — and now each bead names the delivery it stands for. */
   const beads=Math.min(18,S.struck), beadsPeer=Math.min(10,S.struckPeer);
-  for(let i=0;i<beads;i++){const p=place(-19,.545+i*(.40/Math.max(1,beads)));
-    g.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+ (i/beads)*3.6,fill:"url(#ringB)"}));}
-  for(let i=0;i<beadsPeer;i++){const p=place(19,.60+i*(.34/Math.max(1,beadsPeer)));
-    g.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+(i/Math.max(1,beadsPeer))*3.6,fill:"url(#ringS)"}));}
+  const sItems=S.struckItems||[], pItems=S.peerStruckItems||[];
+  for(let i=0;i<beads;i++){const p=place(-19,.545+i*(.40/Math.max(1,beads))), gm=el("g");
+    gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+ (i/beads)*3.6,fill:"url(#ringB)"}));
+    nameMark(gm,"str:"+i,"Seal "+(i+1)+" of "+beads,sItems[i]||"sealed work","STRUCK · DELIVERED AND VERIFIED");
+    g.appendChild(gm);}
+  for(let i=0;i<beadsPeer;i++){const p=place(19,.60+i*(.34/Math.max(1,beadsPeer))), gm=el("g");
+    gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+(i/Math.max(1,beadsPeer))*3.6,fill:"url(#ringS)"}));
+    nameMark(gm,"sstr:"+i,"Peer seal "+(i+1)+" of "+beadsPeer,pItems[i]||"peer delivery",
+      "THE SECOND CENTURION · DELIVERED");
+    g.appendChild(gm);}
 
   /* the conjunction — lit when two minds are actually on this network */
   const cross=[[-19,.755],[19,.245]].map(f=>place(f[0],f[1]));
@@ -530,10 +680,42 @@ function build(S){
 /* ---------- the registers ---------- */
 function seals(S){
   const b=$("seals"); b.innerHTML="";
-  const total=S.struck+S.struckPeer, put=(n,cls)=>{for(let i=0;i<n;i++){
-    const d=document.createElement("div");d.className="seal "+(i===n-1?"last ":"")+cls;b.appendChild(d);}};
-  put(Math.min(24,S.struck),"");
-  if(S.struckPeer) put(Math.min(10,S.struckPeer),"s");
+  const items=S.struckItems||[], pItems=S.peerStruckItems||[];
+  const N=Math.min(24,S.struck), NP=S.struckPeer?Math.min(10,S.struckPeer):0;
+  for(let i=0;i<N;i++){
+    const d=document.createElement("div"); d.className="seal"+(i===N-1?" last":"");
+    nameMark(d,"str:"+i,"Seal "+(i+1)+" of "+N,items[i]||"sealed work","STRUCK · DELIVERED AND VERIFIED");
+    b.appendChild(d);
+  }
+  for(let i=0;i<NP;i++){
+    const d=document.createElement("div"); d.className="seal s";
+    nameMark(d,"sstr:"+i,"Peer seal "+(i+1)+" of "+NP,pItems[i]||"peer delivery",
+      "THE SECOND CENTURION · DELIVERED");
+    b.appendChild(d);
+  }
+  /* The wall of dots, named. Same order as the seals, so a seal and its row are
+     the same delivery seen twice. */
+  const list=$("strucklist"); if(list){
+    list.innerHTML="";
+    if(!N&&!NP){const r=document.createElement("div");r.className="regrow";r.style.cursor="default";
+      r.innerHTML='<span class="mtx">Nothing struck yet.</span>';list.appendChild(r);}
+    for(let i=0;i<N;i++){
+      const r=document.createElement("div"), nm=items[i]||"sealed work";
+      r.className="regrow";
+      nameMark(r,"str:"+i,"Seal "+(i+1)+" of "+N,nm,"STRUCK · DELIVERED AND VERIFIED","listitem");
+      r.innerHTML='<span class="mdot">'+MGLYPH.seal+'</span><span class="mtx">'+nm+'</span>'
+        +'<span class="mmeta">struck</span>';
+      list.appendChild(r);
+    }
+    for(let i=0;i<NP;i++){
+      const r=document.createElement("div"), nm=pItems[i]||"peer delivery";
+      r.className="regrow";
+      nameMark(r,"sstr:"+i,"Peer seal "+(i+1)+" of "+NP,nm,"THE SECOND CENTURION · DELIVERED","listitem");
+      r.innerHTML='<span class="mdot">'+MGLYPH.seal+'</span><span class="mtx">'+nm+'</span>'
+        +'<span class="mmeta">the other Centurion</span>';
+      list.appendChild(r);
+    }
+  }
 }
 function items(S){
   const b=$("items-bronze"), s=$("items-steel");
@@ -541,8 +723,9 @@ function items(S){
   const RING={hand:'<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#DCBA80" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#DCBA80"/></svg>',
     stop:'<svg width="24" height="24"><path d="M12 3.4 L20.6 12 L12 20.6 L3.4 12 Z" fill="none" stroke="#FFB454" stroke-width="2.6"/><circle cx="12" cy="12" r="2.4" fill="#FFB454"/></svg>',
     steel:'<svg width="24" height="24"><circle cx="12" cy="12" r="7.8" fill="none" stroke="#C2C8D2" stroke-width="2.8"/><circle cx="12" cy="12" r="2.4" fill="#C2C8D2"/></svg>'};
-  S.handItems.concat(S.stopItems).slice(0,4).forEach(it=>{
+  S.handItems.concat(S.stopItems).slice(0,4).forEach((it,i)=>{
     const d=document.createElement("div");d.className="item"+(it.stop?" stop":"");
+    nameMark(d,"hand:"+i,it.stop?"Stopped":"In hand · moving",it.t,it.meta||"");
     d.innerHTML='<span class="ring">'+(it.stop?RING.stop:RING.hand)+'</span><span><span class="tx">'+it.t+'</span><span class="meta">'+it.meta+'</span></span>';
     b.appendChild(d);});
   if(!S.handItems.length&&!S.stopItems.length){
@@ -582,7 +765,7 @@ function asks(S){
       +(th?'<div class="thread">'+th+'</div>':'')
       +'<div class="verbs">'
       +'<button class="verb solid" data-v="approve">Proceed</button>'
-      +'<button class="verb" data-v="request_changes">Discuss</button>'
+      +'<button class="verb" data-v="request_changes" title="Write to your Centurion — the item stays until you decide" aria-label="Discuss — message your Centurion about this item; it stays until you decide">Discuss</button>'
       +'<button class="verb quiet" data-v="hold">Hold</button>'
       +'<span class="verdict" aria-live="polite"></span></div>';
     d.querySelectorAll("[data-v]").forEach(btn=>{
@@ -598,16 +781,21 @@ function register(S){
   s.appendChild(el("line",{x1:pad,y1:base,x2:W-pad,y2:base,stroke:"rgba(240,234,224,.12)","stroke-width":1}));
   D.forEach((d,i)=>{
     const x=pad+(i/(n-1||1))*(W-2*pad), h=30+((i*11)%34);
+    const grp=el("g");
     if(d.answered){
-      s.appendChild(el("rect",{x:x-2.2,y:base-h,width:4.4,height:h,rx:2.2,fill:"rgba(220,186,128,.5)"}));
-      s.appendChild(el("circle",{cx:x,cy:base-h-6,r:3.4,fill:"rgba(220,186,128,.95)"}));
+      grp.appendChild(el("rect",{x:x-2.2,y:base-h,width:4.4,height:h,rx:2.2,fill:"rgba(220,186,128,.5)"}));
+      grp.appendChild(el("circle",{cx:x,cy:base-h-6,r:3.4,fill:"rgba(220,186,128,.95)"}));
     }else{
-      s.appendChild(el("path",{d:"M "+x+" "+(base-46)+" l 9 9 l -9 9 l -9 -9 Z",fill:"none",
+      grp.appendChild(el("path",{d:"M "+x+" "+(base-46)+" l 9 9 l -9 9 l -9 -9 Z",fill:"none",
         stroke:"var(--amber)","stroke-width":2.2}));
-      s.appendChild(el("line",{x1:x,y1:base,x2:x,y2:base-26,stroke:"rgba(255,180,84,.45)","stroke-width":1.2}));
+      grp.appendChild(el("line",{x1:x,y1:base,x2:x,y2:base-26,stroke:"rgba(255,180,84,.45)","stroke-width":1.2}));
     }
-    const t=el("title"); t.textContent=(d.answered?"decided · ":"open · ")+d.taken+" — "+d.t; 
-    s.appendChild(Object.assign(el("g"),{})).appendChild(t);
+    /* Named, and tied by data-row to the same decision's mark on the dial above.
+       (The old code wrote a <title> into a bare <g> that belonged to no mark —
+       valid XML, invisible to every pointer and reader. That is the bug fixed.) */
+    nameMark(grp,"dec:"+i,d.answered?"Decided":"Open decision",d.t,
+      (d.answered?"DECIDED":"OPEN")+" · "+d.taken+(d.said?" · “"+d.said+"”":""));
+    s.appendChild(grp);
   });
   if(D.length){
     const marks=[[0,"start"],[Math.round((D.length-1)*.42),"middle"],[Math.round((D.length-1)*.74),"middle"],[D.length-1,"end"]];
@@ -619,6 +807,26 @@ function register(S){
       e.textContent=d.taken; s.appendChild(e);
     });
   }
+  reglist(S);
+}
+/* The register in words: the same decisions, in the same order, each one a row.
+   Hovering a row lights its mark on the dial; hovering a mark lights its row. */
+function reglist(S){
+  const b=$("reglist"); if(!b) return;
+  b.innerHTML="";
+  const D=S.decisions||[];
+  if(!D.length){const r=document.createElement("div");r.className="regrow";r.style.cursor="default";
+    r.innerHTML='<span class="mtx">No decisions on the record yet.</span>';b.appendChild(r);return;}
+  D.forEach((d,i)=>{
+    const r=document.createElement("div");
+    r.className="regrow";
+    nameMark(r,"dec:"+i,d.answered?"Decided":"Open decision",d.t,
+      (d.answered?"DECIDED":"OPEN")+" · "+d.taken+(d.said?" · “"+d.said+"”":""),"listitem");
+    r.innerHTML='<span class="mdot">'+(d.answered?MGLYPH.pillar:MGLYPH.diamond)+'</span>'
+      +'<span class="mtx">'+d.t+'</span>'
+      +'<span class="mmeta">'+(d.answered?"decided":"open")+' · '+d.taken+'</span>';
+    b.appendChild(r);
+  });
 }
 
 /* ---------- deciding, from the page ----------
@@ -644,7 +852,7 @@ function openThread(a,el){
   if(!field){
     field=document.createElement("input");
     field.className="notein"; field.type="text";
-    field.placeholder="Say it to your Centurion — then press Enter";
+    field.placeholder="Say it to your Centurion — the item stays until you decide";
     el.appendChild(field);
     field.addEventListener("keydown",async ev=>{
       if(ev.key!=="Enter") return;
