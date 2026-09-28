@@ -336,7 +336,7 @@ def soul_identity_fingerprint() -> str:
 
 CENTURION_AGENT_HELP_GUIDANCE = (
     "If the user asks about configuring, setting up, or using Centurion AI OS "
-    "itself, load the `centurion-os` skill with skill_view(name='centurion-os') "
+    "itself, load the `centurion-ai-os` skill with skill_view(name='centurion-ai-os') "
     "before answering. Docs: https://github.com/centurion-fleet/Centurion-AI-OS/tree/main/website/docs"
 )
 
@@ -1503,7 +1503,7 @@ def build_skills_system_prompt(
             "purpose — never skip a skill because its name is ambiguous.\n"
             "Whenever the user asks you to configure, set up, install, enable, disable, modify, "
             "or troubleshoot Centurion AI OS itself — its CLI, config, models, providers, tools, "
-            "skills, voice, gateway, plugins, or any feature — load the `centurion-os` skill "
+            "skills, voice, gateway, plugins, or any feature — load the `centurion-ai-os` skill "
             "first. It has the actual commands (e.g. `centurion config set …`, `centurion tools`, "
             "`centurion setup`) so you don't have to guess or invent workarounds.\n"
             "If a skill has issues, fix it with skill_manage(action='patch').\n"
