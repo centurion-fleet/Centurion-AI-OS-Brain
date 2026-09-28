@@ -55,6 +55,24 @@ def _version_key(value: str) -> tuple[int, ...]:
     return tuple(parts) or (0,)
 
 
+def _release_version(value: str) -> str:
+    """Return the version a customer reads, without the packaging release.
+
+    A published Brain can carry the RPM Release as a `-N` suffix (``7.0.0-5``). That is a
+    packaging revision of the *same* build, not a new version — and the owner's rule is
+    that the third digit moves every release instead (26 Sep 2026).
+
+    Stripping it here fixes a live defect: the installed ``__version__`` is ``7.0.0`` while
+    the channel served ``7.0.0-5``, so the old comparison read ``(7,0,0,5) > (7,0,0)`` and
+    told every Brain running the *newest* build that an update was available — to the build
+    it was already running. Verified against the live channel on 28 Sep 2026.
+
+    A non-numeric suffix (``6.0.7-rc1``) is left alone; that is part of the version.
+    """
+    cleaned = re.sub(r"-\d+$", "", value.strip())
+    return cleaned or value.strip()
+
+
 def fetch_latest_release(timeout: float = DEFAULT_TIMEOUT) -> dict | None:
     """Return the published release, or None if the channel cannot be reached."""
     req = urllib.request.Request(
@@ -90,7 +108,7 @@ def check_brain_release(current_version: str) -> dict:
             "message": "Could not reach the Centurion release channel to check for updates.",
         }
 
-    latest = str(release["version"]).strip()
+    latest = _release_version(str(release["version"]))
     if _version_key(latest) > _version_key(current_version):
         return {
             "status": STATUS_UPDATE_AVAILABLE,

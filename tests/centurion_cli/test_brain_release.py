@@ -48,6 +48,54 @@ def test_version_key_tolerates_junk():
     assert br._version_key("6.0.7-rc1") == (6, 0, 7)
 
 
+# --- the packaging release must not masquerade as a version -------------------
+
+@pytest.mark.parametrize(
+    "published,expected",
+    [
+        ("7.0.0-5", "7.0.0"),      # RPM Release suffix — packaging, not a version
+        ("7.0.1-1", "7.0.1"),
+        ("7.0.0", "7.0.0"),         # already clean
+        ("6.0.7-rc1", "6.0.7-rc1"),  # a non-numeric suffix IS part of the version
+    ],
+)
+def test_release_version_strips_only_the_packaging_release(published, expected):
+    assert br._release_version(published) == expected
+
+
+def test_newest_build_is_not_told_to_update_to_itself(monkeypatch):
+    """The live defect, 28 Sep 2026.
+
+    The installed ``__version__`` was ``7.0.0`` while the channel served ``7.0.0-5``. The
+    old comparison tupled the packaging release in — ``(7,0,0,5) > (7,0,0)`` — so every
+    Brain running the newest build was offered an update to the build it was already on.
+    """
+    monkeypatch.setattr(br, "fetch_latest_release", lambda *a, **k: {"version": "7.0.0-5"})
+    out = br.check_brain_release("7.0.0")
+    assert out["status"] == br.STATUS_UP_TO_DATE
+    assert out["latest_version"] == "7.0.0"
+
+
+def test_a_real_new_version_is_offered_without_the_packaging_suffix(monkeypatch):
+    monkeypatch.setattr(br, "fetch_latest_release", lambda *a, **k: {"version": "7.0.1-1"})
+    out = br.check_brain_release("7.0.0")
+    assert out["status"] == br.STATUS_UPDATE_AVAILABLE
+    assert out["latest_version"] == "7.0.1"
+    assert "7.0.1" in out["message"]
+    assert "7.0.1-1" not in out["message"]
+
+
+def test_a_republished_same_version_is_up_to_date(monkeypatch):
+    """Publishing 7.0.0-6 for 7.0.0-5 is a packaging revision of one build.
+
+    The owner's rule makes this unreachable in practice — the third digit moves every
+    release, and the publisher refuses a duplicate version — but the client must not
+    invent an update if it ever happens.
+    """
+    monkeypatch.setattr(br, "fetch_latest_release", lambda *a, **k: {"version": "7.0.0-6"})
+    assert br.check_brain_release("7.0.0")["status"] == br.STATUS_UP_TO_DATE
+
+
 # --- the check itself -----------------------------------------------------
 
 def test_up_to_date(monkeypatch):
