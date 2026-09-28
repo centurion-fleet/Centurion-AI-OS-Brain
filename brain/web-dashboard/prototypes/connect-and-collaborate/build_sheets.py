@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two owner-facing sheets, for Brain 7.0.3 ("Auris").
+"""Two owner-facing sheets, for Brain 7.0.4 ("Vox").
 
   1. connect-your-centurions.pdf  — hand to Steve: update, make reachable, connect.
   2. using-the-collaboration.pdf  — hand to both owners: what the link does once made.
@@ -21,7 +21,7 @@ CSS = """
 @page {
   size: A4;
   margin: 13mm 14mm 12mm 14mm;
-  @bottom-left  { content: "Centurion \\00b7 Sovereign AI Brain 7.0.3"; font-family: "Liberation Sans", sans-serif;
+  @bottom-left  { content: "Centurion \\00b7 Sovereign AI Brain 7.0.4"; font-family: "Liberation Sans", sans-serif;
                   font-size: 7.5pt; color: #968D86; }
   @bottom-right { content: "page " counter(page) " of " counter(pages);
                   font-family: "Liberation Sans", sans-serif; font-size: 7.5pt; color: #968D86; }
@@ -58,7 +58,7 @@ td.n { width: 24px; color: #b08d57; font-family: "Liberation Serif", Georgia, se
 
 # ── Sheet 1 ────────────────────────────────────────────────────────────────
 CONNECT = """
-<div class="mast">Centurion &middot; Sovereign AI Brain 7.0.3</div>
+<div class="mast">Centurion &middot; Sovereign AI Brain 7.0.4</div>
 <h1>Connect your Centurion to Kim's</h1>
 <div class="sub">Update first. Then two Centurions on the same WiFi learn to talk.</div>
 <div class="rule"></div>
@@ -77,10 +77,11 @@ sheet. One side connected alone is a half-link, and it behaves exactly like a br
   running. If it does not, or it will not start, press <b>Start</b> next to it &mdash; the Brain
   sets that service up itself if it is missing, so Start now works even on a machine that has never
   had it. Making a Brain reachable restarts that service, which is why it has to be running.</p>
-  <p style="margin:0"><b>2. Both machines must be on 7.0.3 or later.</b> The version is printed on
-  the Brain's opening screen. If a machine is older, do step 1 before step 2 &mdash; the Start button
-  and the screen this sheet describes were both repaired in 7.0.3, and an older Brain can leave you
-  pressing a button that never changes, or asking you to open a terminal.</p>
+  <p style="margin:0"><b>2. Both machines must be on 7.0.4 or later.</b> The version is printed on
+  the Brain's opening screen. If a machine is older, do step 1 first. The <b>Start</b> button was
+  repaired in 7.0.3; the part that lets two connected Centurions send each other anything was
+  repaired in 7.0.4. On an older Brain you can end up pressing a button that never changes, or
+  finishing the connection and finding no message box to use at all.</p>
 </div>
 
 <h2>1 &middot; Update the Brain</h2>
@@ -156,7 +157,7 @@ what the link is actually for.</p>
 
 # ── Sheet 2 ────────────────────────────────────────────────────────────────
 USE_IT = """
-<div class="mast">Centurion &middot; Sovereign AI Brain 7.0.3</div>
+<div class="mast">Centurion &middot; Sovereign AI Brain 7.0.4</div>
 <h1>Using the collaboration</h1>
 <div class="sub">What your Centurion does once it is connected to another owner's.</div>
 <div class="rule"></div>
@@ -210,8 +211,10 @@ and both of you can see the same list. There is no separate app and no separate 
 
 <h2>If it does not work</h2>
 <table>
-  <tr><td class="n">&mdash;</td><td><b>No Send box, and no messages section.</b> You are not
-  connected yet. Go back to the connecting steps &mdash; both machines have to do them.</td></tr>
+  <tr><td class="n">&mdash;</td><td><b>No Send box, and no messages section.</b> Either you are not
+  connected yet, or this machine is older than 7.0.4. Check the pairing first &mdash; both machines
+  have to do those steps. If you are connected and the box is still missing, the machine you are
+  looking at needs the update: the part that draws it was repaired in 7.0.4.</td></tr>
   <tr><td class="n">&mdash;</td><td><b>&ldquo;Could not send.&rdquo;</b> The other machine is asleep,
   closed, or off the network. Nothing is lost: it stays in the outbox and goes when the Brain is
   reachable again. Check the other person's machine is on and on the same WiFi.</td></tr>
