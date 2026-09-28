@@ -290,17 +290,31 @@ class TestSystemdServiceRefresh:
 
 
 class TestRequireServiceInstalled:
-    def test_exits_with_install_hint_when_unit_missing(self, tmp_path, monkeypatch, capsys):
+    def test_raises_a_catchable_error_when_unit_missing(self, tmp_path, monkeypatch):
+        """It used to `sys.exit(1)` — which is a BaseException, so the desktop
+        bridge's `except Exception` could not catch it and the owner got
+        "Gateway Start Failed" with no reason. It must raise something catchable.
+        """
         unit_path = tmp_path / "centurion-gateway.service"
         monkeypatch.setattr(gateway_cli, "get_systemd_unit_path", lambda system=False: unit_path)
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(gateway_cli.GatewayServiceNotInstalledError):
             gateway_cli._require_service_installed("start")
 
-        assert exc_info.value.code == 1
-        out = capsys.readouterr().out
-        assert "not installed" in out
-        assert "centurion gateway install" in out
+    def test_never_names_a_terminal_command(self, tmp_path, monkeypatch, capsys):
+        """This string reaches customers through the app. A customer must never
+        be handed a shell command — that was the old behaviour.
+        """
+        unit_path = tmp_path / "centurion-gateway.service"
+        monkeypatch.setattr(gateway_cli, "get_systemd_unit_path", lambda system=False: unit_path)
+
+        with pytest.raises(gateway_cli.GatewayServiceNotInstalledError) as exc_info:
+            gateway_cli._require_service_installed("start")
+
+        message = str(exc_info.value)
+        assert "centurion gateway install" not in message
+        assert "centurion " not in message
+        assert "centurion gateway install" not in capsys.readouterr().out
 
     def test_passes_when_unit_exists(self, tmp_path, monkeypatch):
         unit_path = tmp_path / "centurion-gateway.service"
@@ -308,6 +322,95 @@ class TestRequireServiceInstalled:
         monkeypatch.setattr(gateway_cli, "get_systemd_unit_path", lambda system=False: unit_path)
 
         gateway_cli._require_service_installed("start")
+
+
+class TestServiceSelfHealsBeforeStart:
+    """The gateway unit is created by the setup wizard and by nothing else, and
+    the package ships none — so every machine installed from the installer has no
+    gateway service. Start must create it rather than refuse.
+    """
+
+    def _prepare(self, tmp_path, monkeypatch):
+        unit_path = tmp_path / "systemd" / "centurion-gateway.service"
+        monkeypatch.setattr(gateway_cli, "get_systemd_unit_path", lambda system=False: unit_path)
+        monkeypatch.setattr(
+            gateway_cli, "generate_systemd_unit",
+            lambda system=False, run_as_user=None: "[Unit]\nDescription=test\n",
+        )
+        monkeypatch.setattr(gateway_cli, "_ensure_linger_enabled", lambda: None)
+        monkeypatch.setattr(gateway_cli, "_preflight_user_systemd", lambda **kw: None)
+        calls = []
+
+        def fake_run(cmd, check=True, **kwargs):
+            calls.append(cmd)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(gateway_cli.subprocess, "run", fake_run)
+        return unit_path, calls
+
+    def test_start_creates_the_missing_unit_then_starts_it(self, tmp_path, monkeypatch):
+        unit_path, calls = self._prepare(tmp_path, monkeypatch)
+
+        gateway_cli.systemd_start()
+
+        assert unit_path.exists(), "Start must create the missing unit"
+        assert unit_path.read_text(encoding="utf-8") == "[Unit]\nDescription=test\n"
+        assert ["systemctl", "--user", "daemon-reload"] in calls
+        assert ["systemctl", "--user", "enable", gateway_cli.get_service_name()] in calls
+        assert ["systemctl", "--user", "start", gateway_cli.get_service_name()] in calls
+
+    def test_start_still_works_when_the_unit_already_exists(self, tmp_path, monkeypatch):
+        unit_path, calls = self._prepare(tmp_path, monkeypatch)
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        unit_path.write_text("[Unit]\nDescription=test\n", encoding="utf-8")
+
+        gateway_cli.systemd_start()
+
+        assert ["systemctl", "--user", "start", gateway_cli.get_service_name()] in calls
+
+    def test_start_survives_a_failed_enable(self, tmp_path, monkeypatch):
+        """A refused `enable` costs start-at-login, not the start itself.
+
+        The owner pressed Start and wants the service running now; refusing to
+        start because it cannot also be scheduled is the wrong trade.
+        """
+        unit_path, calls = self._prepare(tmp_path, monkeypatch)
+
+        def fake_run(cmd, check=True, **kwargs):
+            calls.append(cmd)
+            if "enable" in cmd:
+                if check:
+                    raise gateway_cli.subprocess.CalledProcessError(1, cmd)
+                return SimpleNamespace(returncode=1, stdout="", stderr="denied")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(gateway_cli.subprocess, "run", fake_run)
+
+        gateway_cli.systemd_start()
+
+        assert unit_path.exists()
+        assert ["systemctl", "--user", "start", gateway_cli.get_service_name()] in calls
+
+    def test_restart_heals_a_missing_unit_too(self, tmp_path, monkeypatch):
+        """The connect screen's restart path is the other place a customer hits
+        this, so restart has to heal as well as start.
+        """
+        unit_path, calls = self._prepare(tmp_path, monkeypatch)
+        monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
+        monkeypatch.setattr(
+            gateway_cli, "_recover_pending_systemd_restart",
+            lambda system=False, previous_pid=None: False,
+        )
+        monkeypatch.setattr(
+            gateway_cli, "_wait_for_systemd_service_restart",
+            lambda system=False, previous_pid=None: True,
+        )
+
+        gateway_cli.systemd_restart()
+
+        assert unit_path.exists(), "Restart must create the missing unit"
+        assert ["systemctl", "--user", "daemon-reload"] in calls
+        assert ["systemctl", "--user", "enable", gateway_cli.get_service_name()] in calls
 
 
 class TestGeneratedSystemdUnits:

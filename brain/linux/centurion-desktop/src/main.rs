@@ -7195,18 +7195,45 @@ the whole thing. Both Centurions must use the same secret.",
     /// Restart the Brain's gateway so settings saved from this screen take
     /// effect. The listener only binds when the gateway starts, so without this
     /// the values sit on disk and nothing changes until the customer restarts.
+    ///
+    /// Goes through the bridge action rather than raw `systemctl`, for two
+    /// reasons. The action installs the gateway service when it is missing —
+    /// which is the NORMAL state on a machine installed from the package, where
+    /// the service is created by the setup wizard and by nothing else, and where
+    /// Start used to fail with "Gateway Start Failed". And the previous version
+    /// sent systemctl's stderr to /dev/null, so when a restart did fail the
+    /// reason was unknowable to us and to the owner.
     fn restart_gateway_best_effort() -> bool {
-        for unit in ["centurion-gateway.service", "centurion-gateway"] {
-            let ok = std::process::Command::new("systemctl")
-                .args(["--user", "restart", unit])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if ok {
+        if let Ok(value) = run_bridge_action_result("gateway_restart", serde_json::json!({})) {
+            if value
+                .get("ok")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+            {
                 return true;
             }
+        }
+
+        // Fall back to systemctl, keeping the reason this time.
+        let mut last_error = String::new();
+        for unit in ["centurion-gateway.service", "centurion-gateway"] {
+            match std::process::Command::new("systemctl")
+                .args(["--user", "restart", unit])
+                .output()
+            {
+                Ok(out) if out.status.success() => return true,
+                Ok(out) => {
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    let stderr = stderr.trim();
+                    if !stderr.is_empty() {
+                        last_error = stderr.to_owned();
+                    }
+                }
+                Err(err) => last_error = err.to_string(),
+            }
+        }
+        if !last_error.is_empty() {
+            eprintln!("gateway restart failed: {last_error}");
         }
         false
     }

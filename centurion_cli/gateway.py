@@ -2542,13 +2542,64 @@ def systemd_uninstall(system: bool = False):
     print(f"✓ {_service_scope_label(system).capitalize()} service uninstalled")
 
 
-def _require_service_installed(action: str, system: bool = False) -> None:
+class GatewayServiceNotInstalledError(RuntimeError):
+    """A service action was requested and no gateway unit exists on this machine.
+
+    Raised rather than calling ``sys.exit`` because this same code runs inside the
+    desktop bridge, where ``SystemExit`` is a ``BaseException`` — ``except
+    Exception`` cannot catch it, so it escaped the handler whose whole job is to
+    turn a failure into a sentence the owner can read. The owner saw "Gateway
+    Start Failed" and nothing else.
+    """
+
+
+def _install_service_non_interactive(system: bool = False) -> None:
+    """Create and enable the gateway unit without touching stdin.
+
+    ``systemd_install`` offers to remove legacy units first. A button press has
+    nobody to answer that prompt, and deleting units unasked is not something a
+    Start button should do — so this writes the unit, reloads, enables and
+    returns. Any legacy unit is left for a human.
+
+    Safe against a duplicate gateway by construction: the generated ExecStart is
+    ``gateway run --replace``, which retires an already-running instance instead
+    of racing it.
+    """
     unit_path = get_systemd_unit_path(system=system)
-    if not unit_path.exists():
-        scope_flag = " --system" if system else ""
-        print(f"✗ Gateway service is not installed")
-        print(f"  Run: {'sudo ' if system else ''}centurion gateway install{scope_flag}")
-        sys.exit(1)
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text(generate_systemd_unit(system=system), encoding="utf-8")
+    _run_systemctl(["daemon-reload"], system=system, check=True, timeout=30)
+    try:
+        _run_systemctl(["enable", get_service_name()], system=system, check=True, timeout=30)
+    except subprocess.CalledProcessError:
+        # A failed `enable` costs start-at-login and nothing else. The unit is
+        # written and loaded, so never let it stop the service starting now —
+        # the owner pressed Start and wants it running.
+        print("⚠ Could not set the service to start at login; starting it now anyway.")
+    if not system:
+        _ensure_linger_enabled()
+
+
+def _require_service_installed(action: str, system: bool = False) -> None:
+    if not get_systemd_unit_path(system=system).exists():
+        # Deliberately no terminal command here: this string reaches customers
+        # through the app, and a customer must never be handed a shell command.
+        raise GatewayServiceNotInstalledError(
+            "The Centurion background service is not set up on this computer."
+        )
+
+
+def _self_heal_service_before_action(system: bool = False) -> None:
+    """Install the gateway unit if it is missing, so the action can proceed.
+
+    The unit is created by the setup wizard and by nothing else, and the package
+    ships no gateway unit at all — so EVERY machine installed from the installer
+    has none. Requiring one here is what made Start fail on a machine where
+    nothing was actually wrong.
+    """
+    if get_systemd_unit_path(system=system).exists():
+        return
+    _install_service_non_interactive(system=system)
 
 
 def systemd_start(system: bool = False):
@@ -2560,6 +2611,7 @@ def systemd_start(system: bool = False):
         # reachable (common on fresh RHEL/Debian SSH sessions without linger).
         # Raises UserSystemdUnavailableError with a remediation message.
         _preflight_user_systemd()
+    _self_heal_service_before_action(system=system)
     _require_service_installed("start", system=system)
     refresh_systemd_unit_if_needed(system=system)
     _run_systemctl(["start", get_service_name()], system=system, check=True, timeout=30)
@@ -2599,6 +2651,7 @@ def systemd_restart(system: bool = False):
         _require_root_for_system_service("restart")
     else:
         _preflight_user_systemd()
+    _self_heal_service_before_action(system=system)
     _require_service_installed("restart", system=system)
     refresh_systemd_unit_if_needed(system=system)
     _sync_centurion_home_from_systemd_unit(system=system)
