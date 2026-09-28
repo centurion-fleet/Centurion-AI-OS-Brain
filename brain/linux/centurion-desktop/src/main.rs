@@ -7174,8 +7174,7 @@ If it still fails, open Get Help in Settings and create a Support Code."
         }
         if address.is_empty() {
             container.append(&hint(
-                "This Centurion is not reachable yet — press the button below, and \
-leave the Brain open.",
+                "Press the button below to let the other person connect to this Centurion.",
             ));
         } else {
             container.append(&secret_row("Address", address, false));
@@ -7535,7 +7534,7 @@ above with the other person — one set each way — then press Connect.",
             let values_box = values_box.clone();
             move |_| {
                 enable_button.set_sensitive(false);
-                status_line.set_label("Turning this on — the Brain will restart in a moment…");
+                status_line.set_label("Saved. Starting the connection…");
 
                 // Write the settings, and show what came back immediately. The
                 // two values only exist after this call, so without the redraw
@@ -7558,13 +7557,34 @@ above with the other person — one set each way — then press Connect.",
                     }
                 }
 
-                std::thread::spawn(|| {
-                    restart_gateway_best_effort();
-                });
+                // `systemctl restart` blocks for as long as the stop takes, and this
+                // unit's TimeoutStopSec is 210 s because it drains in-flight work —
+                // which includes an agent turn. So the restart runs on a worker and is
+                // tracked as IN FLIGHT, and the wait is set beyond it.
+                //
+                // The previous version gave up after 90 s *and* fired a second restart
+                // at 15 s. That (a) declared failure while the fix it had asked for was
+                // still running, and (b) raced two concurrent restarts on one unit —
+                // which is the "it just keeps coming back to that same button" loop.
+                let restarting = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let restart_once = {
+                    let flag = restarting.clone();
+                    move || {
+                        let flag = flag.clone();
+                        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                        std::thread::spawn(move || {
+                            restart_gateway_best_effort();
+                            flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                        });
+                    }
+                };
+                restart_once();
+
                 // The poll runs repeatedly, so it needs its own handles.
                 let status_line_inner = status_line.clone();
                 let enable_button_inner = enable_button.clone();
                 let values_box_inner = values_box.clone();
+                let restarting_inner = restarting.clone();
                 let ticks = std::cell::Cell::new(0u32);
                 let retried = std::cell::Cell::new(false);
                 glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
@@ -7584,18 +7604,28 @@ the other person.",
                             return glib::ControlFlow::Break;
                         }
                     }
-                    // The first restart can land while the old gateway is still
-                    // shutting down, so give it one more try before giving up.
-                    if ticks.get() == 15 && !retried.get() {
+                    // One restart at a time, and only once the previous one has
+                    // actually returned. A concurrent second restart does not help.
+                    let busy = restarting_inner.load(std::sync::atomic::Ordering::SeqCst);
+                    if !busy && !retried.get() {
                         retried.set(true);
-                        std::thread::spawn(|| {
-                            restart_gateway_best_effort();
-                        });
+                        restart_once();
                     }
-                    if ticks.get() >= 90 {
+                    // While the restart is genuinely in progress, say so — do not
+                    // report an outcome we do not have yet.
+                    if ticks.get() % 20 == 0 && restarting_inner.load(std::sync::atomic::Ordering::SeqCst) {
                         status_line_inner.set_label(
-                            "Still not reachable. The two values above are saved. Open Settings \
-→ This Brain, press Restart next to Gateway, then reopen this screen.",
+                            "Saved. The Brain is restarting — this can take a minute or two.",
+                        );
+                    }
+                    // Past the unit's own stop timeout plus the start, with the restart
+                    // finished and still nothing listening. That is a real state, not a
+                    // warning to be ignored — and the two values ARE saved, so say the
+                    // useful thing and name the single control that finishes it.
+                    if ticks.get() >= 300 && !restarting_inner.load(std::sync::atomic::Ordering::SeqCst) {
+                        status_line_inner.set_label(
+                            "The two values above are saved and ready to give out. To finish, \
+open Settings → This Brain and press Restart next to Gateway.",
                         );
                         enable_button_inner.set_sensitive(true);
                         return glib::ControlFlow::Break;
