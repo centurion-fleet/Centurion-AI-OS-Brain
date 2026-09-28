@@ -3,6 +3,7 @@ import { useDeckVisible } from "../hooks/useDeckVisible";
 import { useCollab } from "../hooks/useCollab";
 import { bridgeCall } from "../hooks/useBridge";
 import { CollabBrains } from "../components/CollabBrains";
+import { ConjunctionBackBar } from "../components/ConjunctionBackBar";
 import {
   COLUMNS,
   type CollabCard,
@@ -161,6 +162,7 @@ export function Collab() {
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 pb-20 pt-8 sm:px-6 sm:pt-10">
+      <ConjunctionBackBar />
       <header className="mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
           Collaborate
