@@ -5029,44 +5029,166 @@ def _ensure_fleet_toolset_enabled() -> None:
 
 
 def _handle_fleet_status(request_id: str) -> dict[str, Any]:
-    try:
-        from tools.fleet_tools import fleet_status_tool
+    """Who this Brain is connected to, and what each of them is doing.
 
-        raw = fleet_status_tool({})
-        payload = json.loads(raw) if isinstance(raw, str) else raw
-        if not isinstance(payload, dict):
-            raise ValueError("Unexpected fleet status payload")
-        ok = bool(payload.get("success", True)) and not payload.get("error")
+    This used to `from tools.fleet_tools import fleet_status_tool`, a module that
+    exists nowhere in the tree, so the import always raised and the call always
+    failed. That mattered more than it looks: the app builds its "Already
+    connected" list AND the recipient picker for the Send box out of this
+    answer, and it only appends the Send section when that list is non-empty.
+    So a dead handler meant two properly paired Brains were shown no way to
+    speak to each other at all — the link worked and the screen said otherwise.
+
+    It now answers from the peer registry itself, which is the same source the
+    transport reads when it delivers a message, so the list on screen and the
+    list it will actually post to cannot drift apart.
+    """
+    try:
+        from centurion.fleet.peers import FleetPeers
+
+        try:
+            from centurion.fleet.identity import local_identity
+
+            self_id = str(local_identity().get("centurion_id") or "")
+        except Exception:
+            # An answer with no self_id is still a useful answer; an exception
+            # here would throw away the peer list the caller actually wants.
+            self_id = ""
+
+        rows = [
+            {
+                "id": p.centurion_id,
+                "name": p.name,
+                "status": p.status or "unknown",
+                "address": p.address,
+                "last_seen": p.last_seen,
+                "version": p.version,
+                "activity": p.activity or {},
+            }
+            for p in FleetPeers().list_all()
+        ]
         return {
             "id": request_id,
-            "ok": ok,
+            "ok": True,
             "action": "fleet_status",
-            "self_id": payload.get("self_id"),
-            "health": payload.get("health"),
-            "peers": payload.get("peers") or [],
-            "peer_count": payload.get("peer_count") or 0,
-            "message": payload.get("error") or payload.get("message"),
+            "self_id": self_id,
+            "health": "ok",
+            "peers": rows,
+            "peer_count": len(rows),
         }
     except Exception as exc:
         return _error_response(request_id, action="fleet_status", exc=exc)
 
 
 def _handle_fleet_ping(request: dict[str, Any], request_id: str) -> dict[str, Any]:
-    try:
-        from tools.fleet_tools import fleet_ping_tool
+    """Ask a peer Brain whether it is answering, right now.
 
-        peer_id = str(request.get("peer_id") or request.get("name") or "").strip()
-        raw = fleet_ping_tool({"peer_id": peer_id})
-        payload = json.loads(raw) if isinstance(raw, str) else raw
-        if not isinstance(payload, dict):
-            raise ValueError("Unexpected fleet ping payload")
-        ok = bool(payload.get("success", False))
+    This used to `from tools.fleet_tools import fleet_ping_tool`, a module that
+    does not exist anywhere in the tree — so every call raised and the owner was
+    shown an error where an answer belonged. It now asks the peer the one
+    question that actually proves the link: GET /fleet/status, authenticated
+    with the same secret we send messages with. A 200 means the other Brain is
+    up, reachable and holding our secret; anything else is reported as-is.
+
+    It also refreshes the peer's stored status, so the row the owner is looking
+    at tells the truth after they press the button rather than waiting for the
+    next message to happen along.
+    """
+    import time
+    import urllib.error
+    import urllib.request
+
+    try:
+        peer_ref = str(request.get("peer_id") or request.get("name") or "").strip()
+        if not peer_ref:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_ping",
+                "code": "NO_PEER",
+                "message": "Which Centurion? Give the name or id from your list.",
+            }
+
+        peer = _resolve_peer(peer_ref)
+        if peer is None:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_ping",
+                "code": "UNKNOWN_PEER",
+                "message": f'No Centurion called "{peer_ref}" is connected yet.',
+            }
+
+        if not peer.address:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "fleet_ping",
+                "code": "NO_ADDRESS",
+                "message": f"No address is saved for {peer.name or peer.centurion_id}.",
+            }
+
+        from centurion.fleet.identity import fleet_token
+        from centurion.fleet.peers import FleetPeers
+
+        token = peer.auth_token or fleet_token()
+        url = f"{peer.address.rstrip('/')}/fleet/status"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "X-Centurion-ID": peer.centurion_id,
+                "X-Centurion-Auth": token or "",
+            },
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                answered = resp.status == 200
+        except urllib.error.HTTPError as e:
+            answered = False
+            status = e.code
+            # A 401 is not a dead machine — it is a live one that does not
+            # recognise our secret, which is a completely different fix.
+            if status == 401:
+                FleetPeers().update_status(peer.centurion_id, status="offline")
+                return {
+                    "id": request_id,
+                    "ok": False,
+                    "action": "fleet_ping",
+                    "code": "REFUSED",
+                    "message": (
+                        f"{peer.name or peer.centurion_id} is switched on but refused "
+                        "the secret. Re-pair the two Brains."
+                    ),
+                }
+        except (urllib.error.URLError, ConnectionRefusedError, TimeoutError, OSError):
+            answered = False
+
+        if answered:
+            FleetPeers().update_status(
+                peer.centurion_id, status="online", last_seen=time.time()
+            )
+            return {
+                "id": request_id,
+                "ok": True,
+                "action": "fleet_ping",
+                "message": (
+                    f"{peer.name or peer.centurion_id} answered. The link works — "
+                    "a message sent now will arrive."
+                ),
+            }
+
+        FleetPeers().update_status(peer.centurion_id, status="offline")
         return {
             "id": request_id,
-            "ok": ok,
+            "ok": False,
             "action": "fleet_ping",
-            "peer": payload,
-            "message": payload.get("error") or payload.get("note") or payload.get("status"),
+            "code": "NO_ANSWER",
+            "message": (
+                f"No answer from {peer.name or peer.centurion_id}. Check that machine "
+                "is switched on, on the same WiFi, and its Gateway row shows as running."
+            ),
         }
     except Exception as exc:
         return _error_response(request_id, action="fleet_ping", exc=exc)

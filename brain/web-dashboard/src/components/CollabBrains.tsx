@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { CollabMessages } from "./CollabMessages";
 import { bridgeCall } from "../hooks/useBridge";
 import type { BridgeOk } from "../types/life";
 
@@ -44,6 +45,9 @@ export function CollabBrains() {
   const [justEnabled, setJustEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  // Result of pressing Test beside a peer, keyed by peer id. The owner asked a
+  // question; the answer stays on screen next to the row they asked about.
+  const [tested, setTested] = useState<Record<string, string>>({});
 
   const [address, setAddress] = useState("");
   const [token, setToken] = useState("");
@@ -164,6 +168,34 @@ export function CollabBrains() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function test(peerId: string) {
+    setBusy(true);
+    setError(null);
+    // The bridge rejects the call when the ping fails, and the rejection carries
+    // the handler's own sentence — so the failure branch below is the honest one,
+    // not a guess made here.
+    try {
+      const res = await bridgeCall<BridgeOk & { message?: string }>("fleet_ping", {
+        peer_id: peerId,
+      });
+      setTested((prev) => ({
+        ...prev,
+        [peerId]:
+          res.message || "The other Brain answered. The link works — a message will arrive.",
+      }));
+    } catch (e) {
+      setTested((prev) => ({
+        ...prev,
+        [peerId]:
+          e instanceof Error
+            ? e.message
+            : "No answer. Check the other machine is on and on the same WiFi.",
+      }));
     } finally {
       setBusy(false);
     }
@@ -332,19 +364,40 @@ export function CollabBrains() {
                         {p.address} · {p.status}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className="rounded-full px-2 py-1 text-[11px] font-semibold text-muted hover:bg-accent/15 hover:text-ink"
-                      disabled={busy}
-                      onClick={() => void forget(p.id)}
-                    >
-                      Forget
-                    </button>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="rounded-full px-2 py-1 text-[11px] font-semibold text-muted hover:bg-accent/15 hover:text-ink"
+                          disabled={busy}
+                          onClick={() => void test(p.id)}
+                        >
+                          Test
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full px-2 py-1 text-[11px] font-semibold text-muted hover:bg-accent/15 hover:text-ink"
+                          disabled={busy}
+                          onClick={() => void forget(p.id)}
+                        >
+                          Forget
+                        </button>
+                      </div>
+                      {tested[p.id] && (
+                        <p className="max-w-[22rem] text-right text-[11px] text-muted">
+                          {tested[p.id]}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Only once a link exists — the sheets say the same, and an empty
+              compose box with nobody to send to is a control that cannot act. */}
+          {peers.length > 0 && <CollabMessages peers={peers} />}
         </div>
       )}
     </section>
