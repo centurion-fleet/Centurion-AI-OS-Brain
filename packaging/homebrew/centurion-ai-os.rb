@@ -7,7 +7,12 @@ class CenturionAgent < Formula
   # scripts/release.py, not the CalVer tag tarball.
   url "https://github.com/centurion-fleet/Centurion-AI-OS/releases/download/v2026.3.30/centurionai_os-0.6.0.tar.gz"
   sha256 "<replace-with-release-asset-sha256>"
-  license "MIT"
+  # Proprietary. Centurion AI OS is not an open-source grant; the LICENSE
+  # file is "All rights reserved / PROPRIETARY AND CONFIDENTIAL". Homebrew's
+  # audit only admits OSI-approved licences, so this formula is not a
+  # distribution channel Homebrew will accept — that is the correct signal,
+  # not something to paper over with an OSI identifier.
+  license "LicenseRef-Proprietary"
 
   depends_on "certifi" => :no_linkage
   depends_on "cryptography" => :no_linkage

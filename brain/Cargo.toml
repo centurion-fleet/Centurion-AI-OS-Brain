@@ -10,7 +10,10 @@ resolver = "2"
 [workspace.package]
 version = "7.0.7"
 edition = "2024"
-license = "MIT"
+# PROPRIETARY — see the LICENSE file at the repo root. SPDX has no stock
+# identifier for proprietary software; LicenseRef-Proprietary is the
+# correct form. Do not revert to an OSI identifier.
+license = "LicenseRef-Proprietary"
 rust-version = "1.85"
 
 [workspace.lints.rust]

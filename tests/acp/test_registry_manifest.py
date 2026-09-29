@@ -35,7 +35,10 @@ def test_agent_json_matches_official_registry_required_fields():
     assert data["repository"] == "https://github.com/centurion-fleet/Centurion-AI-OS"
     assert data["website"].startswith("https://github.com/centurion-fleet/Centurion-AI-OS")
     assert data["authors"] == ["Centurion Fleet"]
-    assert data["license"] == "MIT"
+    # Proprietary — see LICENSE. The manifest is what a downstream consumer
+    # relies on, so it must never claim an OSI licence.
+    assert data["license"] == "Proprietary"
+    assert data["license"] != "MIT"
     assert set(data["distribution"]) <= ALLOWED_DISTRIBUTIONS
 
 

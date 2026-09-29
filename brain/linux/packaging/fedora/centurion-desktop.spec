@@ -2,7 +2,7 @@ Name:           centurion-desktop
 Version:        %{version}
 Release:        1%{?dist}
 Summary:        Native Sovereign AI Brain desktop and iPhone service
-License:        MIT
+License:        LicenseRef-Proprietary
 URL:            https://github.com/centurion-fleet/Centurion-AI-OS
 Source0:        %{name}-%{version}.tar.gz
 

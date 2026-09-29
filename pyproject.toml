@@ -9,7 +9,11 @@ description = "Centurion AI OS — The self-improving sovereign AI agent that ru
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Centurion Fleet" }]
-license = { text = "MIT" }
+# PROPRIETARY — see the LICENSE file ("All rights reserved / PROPRIETARY AND
+# CONFIDENTIAL"). Centurion AI OS is NOT an open-source grant. Do not
+# reintroduce an OSI identifier here: the package metadata is what a
+# downstream consumer is entitled to rely on.
+license = { text = "Proprietary" }
 dependencies = [
   # Core — every direct dep is exact-pinned to ==X.Y.Z (no ranges).
   # Rationale: ranges allow PyPI to ship a fresh version of a transitive
