@@ -107,6 +107,11 @@ install -m 0755 "${SCRIPTS}/brain-launcher.sh" "${STAGE}/usr/bin/sovereign-ai-br
 mkdir -p "${STAGE}/usr/libexec/centurion"
 install -m 0755 "${SCRIPTS}/cleanup-user-brain-launcher.sh" \
   "${STAGE}/usr/libexec/centurion/cleanup-user-brain-launcher.sh"
+# ExecStartPre for centurion-remote.service: release port 9119 before the service
+# binds it, whoever holds it. Without this ship, the unit's ExecStartPre points at
+# a path that does not exist and the service fails to start at all.
+install -m 0755 "${SCRIPTS}/centurion-free-port.sh" \
+  "${STAGE}/usr/libexec/centurion/centurion-free-port.sh"
 printf '%s\n' "${VERSION}" > "${STAGE}/usr/share/centurion/brain/VERSION"
 chmod 0644 "${STAGE}/usr/share/centurion/brain/VERSION"
 
@@ -310,6 +315,7 @@ fi
 %{_bindir}/sovereign-ai-brain
 %{_bindir}/centurion
 %{_libexecdir}/centurion/cleanup-user-brain-launcher.sh
+%{_libexecdir}/centurion/centurion-free-port.sh
 /usr/lib/centurion
 /usr/share/centurion/mission-deck
 /usr/share/centurion/whatsapp-bridge

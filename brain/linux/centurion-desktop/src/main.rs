@@ -7743,10 +7743,30 @@ same screen on their machine, under “1 · Give these two values to the other p
                 .and_then(|p| p.get("message").and_then(|v| v.as_str()))
                 .unwrap_or("")
                 .to_owned();
+            // A failure message is a claim about WHERE the fault is. Telling
+            // someone to check their network when their own machine is missing a
+            // file sends them to fix the one thing that cannot help — which is
+            // what happened when a dead fleet handler reported a missing module
+            // and the dialog blamed the network. The bridge already knows the
+            // difference (it returns a `code`), so use it instead of guessing.
+            let code = ping
+                .as_ref()
+                .and_then(|p| p.get("code").and_then(|v| v.as_str()))
+                .unwrap_or("");
             let body = if reached {
                 format!(
                     "{} is connected and answered. Both Centurions can reach each other now.",
                     if name.is_empty() { "The other Centurion" } else { &name }
+                )
+            } else if code == "MODULE_MISSING" {
+                // The Brain on THIS machine is missing part of its own software.
+                // Nothing about the other machine or the network can be at fault,
+                // and saying so wastes the owner's time on a dead end.
+                format!(
+                    "Saved, but this Brain could not answer{}, and it is not a network \
+problem — nothing to check on the other machine. Update Centurion AI OS on THIS \
+machine, then quit and reopen Sovereign AI Brain so the bridge reloads.",
+                    if detail.is_empty() { String::new() } else { format!(" — {detail}") }
                 )
             } else {
                 format!(

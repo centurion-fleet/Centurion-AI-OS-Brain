@@ -3,6 +3,13 @@ Description=Centurion encrypted iPhone service (away-from-home TCP 9119)
 Documentation=https://github.com/centurion-fleet/Centurion-AI-OS
 After=network-online.target
 Wants=network-online.target
+# Bound the crash loop. Restart=on-failure + RestartSec=3 below means a start
+# that cannot bind the port retries every three seconds forever — measured in
+# the field at 672 failed starts. After five attempts in a minute systemd gives
+# up and leaves the unit failed, which is a state somebody can see and fix,
+# instead of a loop that burns CPU on a machine a customer paid for.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -11,6 +18,11 @@ Environment=CENTURION_HOME=%h/.centurion
 Environment=PATH=%h/.centurion/Centurion-AI-OS/venv/bin:%h/.centurion/venv/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Override with the Centurion interpreter if install scripts detect one.
 # Environment=CENTURION_REMOTE_PYTHON=%h/.centurion/Centurion-AI-OS/venv/bin/python
+# A restart is not a stop: `systemctl --user restart` stops only what THIS unit
+# owns, so a leftover process from an older install keeps port 9119 and every
+# new start dies with EADDRINUSE. This releases the port, whoever holds it,
+# BEFORE the service starts — and fails loudly rather than looping if it cannot.
+ExecStartPre=/usr/libexec/centurion/centurion-free-port.sh 9119
 ExecStart=/usr/bin/centurion-remote serve --name "Sovereign AI Brain"
 Restart=on-failure
 RestartSec=3

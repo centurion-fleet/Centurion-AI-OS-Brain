@@ -249,8 +249,33 @@ fn restart_repairing_absence(unit: Unit) -> UnitOutcome {
     }
 }
 
+/// Ask systemd to re-read unit files. Bounded, silent, never fatal.
+///
+/// The RPM replaces the unit FILE on disk, but systemd keeps the definition it
+/// loaded until it is told otherwise. So a unit that gained an `ExecStartPre`
+/// guard in this release would still be run the old way and the guard would
+/// never fire — the fix installed and inert, which is the failure mode this
+/// whole module exists to prevent. Reload before restarting.
+fn daemon_reload() {
+    let _ = Command::new("systemctl")
+        .args(["--user", "daemon-reload"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
 pub fn refresh_if_stale(home: &Path, installed: &str) -> Refresh {
-    refresh_at(home, installed, &|name| {
+    // Reload only when a restart is actually going to happen — a normal launch
+    // must not pay for it, and must not signal anything to systemd at all.
+    let installed_trimmed = installed.trim();
+    let stale = !installed_trimmed.is_empty()
+        && installed_trimmed != "unknown"
+        && recorded_services_version(home).as_deref() != Some(installed_trimmed);
+    if stale {
+        daemon_reload();
+    }
+    refresh_at(home, installed_trimmed, &|name| {
         for unit in SERVICE_UNITS {
             if unit.name == name {
                 return restart_repairing_absence(unit);
