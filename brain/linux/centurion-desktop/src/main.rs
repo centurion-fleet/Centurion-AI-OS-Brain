@@ -119,6 +119,25 @@ mod linux {
         &STATE
     }
 
+    /// The attention banner an owner reads when an update is published.
+    ///
+    /// It must never promise a control this install does not have. On a smooth-transfer
+    /// (Get Brain) install both Check and Rebuild are hidden, so "tap Update below" is a
+    /// dead end by construction — the owner is told to press something that is not on the
+    /// screen (NR-001 fault 4). Name the route that does exist instead.
+    ///
+    /// Pure, and separate from `remember_update_check`, so the wording can be tested
+    /// without a GTK main loop.
+    pub(crate) fn update_banner_detail(version: &str, update_control_visible: bool) -> String {
+        if update_control_visible {
+            format!("Sovereign AI Brain update available ({version}) — tap Update below")
+        } else {
+            format!(
+                "Sovereign AI Brain update available ({version}) — get it from Account → Get Brain on your portal"
+            )
+        }
+    }
+
     fn remember_update_check(payload: &UpdateCheckPayload) {
         let mut state = update_attention_state()
             .lock()
@@ -132,9 +151,7 @@ mod linux {
                     .or_else(|| payload.os_version.as_deref())
                     .unwrap_or("newer");
                 state.available = true;
-                state.detail = format!(
-                    "Sovereign AI Brain update available ({ver}) — tap Update below"
-                );
+                state.detail = update_banner_detail(ver, !is_smooth_transfer_install());
             }
             "up_to_date" => {
                 state.available = false;
@@ -9126,4 +9143,36 @@ fn main() {
 #[cfg(not(target_os = "linux"))]
 fn main() {
     eprintln!("Sovereign AI Brain is a native Linux application.");
+}
+
+
+/// NR-001 fault 4 — the banner must not promise a control this install lacks.
+#[cfg(all(test, target_os = "linux"))]
+mod banner_tests {
+    use crate::linux::update_banner_detail;
+
+    /// Where the Update control is present, tell the owner to press it.
+    #[test]
+    fn with_the_control_present_the_banner_points_at_it() {
+        let detail = update_banner_detail("7.0.6", true);
+        assert!(detail.contains("7.0.6"), "{detail}");
+        assert!(detail.contains("tap Update below"), "{detail}");
+    }
+
+    /// Where the control is absent (smooth-transfer installs hide Check and Rebuild),
+    /// pointing at it is a dead end. Name the route that exists instead.
+    #[test]
+    fn without_the_control_the_banner_names_a_route_that_exists() {
+        let detail = update_banner_detail("7.0.6", false);
+        assert!(
+            !detail.contains("tap Update below"),
+            "must not promise a hidden control: {detail}"
+        );
+        assert!(
+            !detail.to_ascii_lowercase().contains("below"),
+            "must not say 'below' at all when nothing is below: {detail}"
+        );
+        assert!(detail.contains("Get Brain"), "{detail}");
+        assert!(detail.contains("7.0.6"), "{detail}");
+    }
 }
