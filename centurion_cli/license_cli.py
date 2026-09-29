@@ -1,7 +1,7 @@
 """``centurion license`` — product license status, activate, redeem, reissue.
 
 Subcommands:
-  status            Show entitlement + enforcement mode + RTO balance
+  status            Show entitlement + enforcement mode
   activate          Start trial or activate subscription / rent-to-own
   redeem            Redeem an outright proof-of-purchase token
   fingerprint       Print this machine's license fingerprint
@@ -25,7 +25,6 @@ def _cfg():
 
 
 def _cmd_status(_args) -> int:
-    from centurion.license.balance import summarize_balance
     from centurion.license.enforcement import evaluate, locked_user_message
     from centurion.license.fingerprint import fingerprint_short
     from centurion.license.phone_home import is_phone_home_due
@@ -34,7 +33,6 @@ def _cmd_status(_args) -> int:
     config = _cfg()
     ent = load_entitlement()
     decision = evaluate(ent, config=config)
-    paid, target, remaining = summarize_balance(ent)
 
     print()
     print(color("  Centurion License", Colors.MAGENTA))
@@ -48,11 +46,6 @@ def _cmd_status(_args) -> int:
     if ent.shipment_id:
         print(f"  Shipment:     {ent.shipment_id}")
     print(f"  Enforcement:  {decision.mode.value}")
-    if ent.tier == "rent_to_own" or ent.state in {
-        "rent_to_own_active",
-        "rent_to_own_paid_off",
-    }:
-        print(f"  RTO balance:  £{paid:.0f} / £{target:.0f} (£{remaining:.0f} remaining)")
     if ent.last_verified_at:
         from datetime import datetime, timezone
 
@@ -230,7 +223,7 @@ def add_parser(subparsers) -> None:
         "tier",
         nargs="?",
         default="trial",
-        help="trial | subscription | rent_to_own",
+        help="trial | subscription",
     )
     activate.add_argument("--code", help="Activation / checkout code from the portal")
     activate.add_argument("--api-key", help="API key associated with the subscription")

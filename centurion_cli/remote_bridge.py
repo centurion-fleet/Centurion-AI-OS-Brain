@@ -3487,7 +3487,6 @@ def _handle_oversight_put(request: dict[str, Any], request_id: str) -> dict[str,
 
 def _handle_license_status(request_id: str) -> dict[str, Any]:
     try:
-        from centurion.license.balance import summarize_balance
         from centurion.license.enforcement import (
             EnforcementMode,
             evaluate,
@@ -3498,7 +3497,6 @@ def _handle_license_status(request_id: str) -> dict[str, Any]:
 
         ent = load_entitlement()
         decision = evaluate(ent)
-        paid, target, remaining = summarize_balance(ent)
         agent_allowed = decision.mode in {
             EnforcementMode.ALLOW,
             EnforcementMode.WARN,
@@ -3549,9 +3547,6 @@ def _handle_license_status(request_id: str) -> dict[str, Any]:
                 "mode": decision.mode.value,
                 "agent_allowed": agent_allowed,
                 "message": message,
-                "balance_paid_gbp": paid,
-                "balance_target_gbp": target,
-                "balance_remaining_gbp": remaining,
                 "customer_name": ent.customer_name,
                 "shipment_id": ent.shipment_id,
             },
@@ -3580,9 +3575,6 @@ def _handle_license_status(request_id: str) -> dict[str, Any]:
                     "mode": "allow",
                     "agent_allowed": True,
                     "message": "",
-                    "balance_paid_gbp": 0,
-                    "balance_target_gbp": 0,
-                    "balance_remaining_gbp": 0,
                     "customer_name": "",
                     "shipment_id": "",
                 },

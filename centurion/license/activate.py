@@ -12,7 +12,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from centurion.license.audit import append_audit
-from centurion.license.balance import apply_paid_off_attestation
 from centurion.license.fingerprint import compute_fingerprint
 from centurion.license.phone_home import get_license_server_url
 from centurion.license.states import LicenseState, LicenseTier
@@ -340,20 +339,6 @@ def request_reissue(
         license_id=ent.license_id,
         status=data.get("status"),
     )
-    if data.get("signed_attestation"):
-        try:
-            apply_paid_off_attestation(
-                ent,
-                str(data["signed_attestation"]),
-                config=config,
-            )
-            return ActivateResult(
-                ok=True,
-                entitlement=load_entitlement(),
-                message=data.get("message") or "Reissue applied",
-            )
-        except ValueError as exc:
-            return ActivateResult(ok=False, error=str(exc))
 
     return ActivateResult(
         ok=bool(data.get("ok", True)),

@@ -15,7 +15,6 @@ from typing import Any, Dict, Optional
 from centurion.license.phone_home import check_interval_seconds
 from centurion.license.states import (
     LicenseState,
-    is_permanently_owned,
     requires_phone_home,
 )
 from centurion.license.store import Entitlement, load_entitlement, save_entitlement
@@ -117,14 +116,6 @@ def evaluate(
     ent = entitlement if entitlement is not None else load_entitlement()
     state = ent.license_state()
     ts = now if now is not None else time.time()
-
-    if is_permanently_owned(state):
-        return EnforcementDecision(
-            mode=EnforcementMode.ALLOW,
-            state=state,
-            message="Permanently licensed",
-            renew_url=renew,
-        )
 
     if state == LicenseState.LOCKED:
         reason = ent.revoke_reason or "License locked"

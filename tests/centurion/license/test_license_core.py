@@ -9,13 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from centurion.license.activate import activate_trial, redeem_outright_token
-from centurion.license.balance import (
-    apply_paid_off_attestation,
-    apply_server_balance,
-    is_paid_off,
-    remaining_gbp,
-)
+from centurion.license.activate import activate_trial
 from centurion.license.enforcement import (
     EnforcementMode,
     enforcement_enabled,
@@ -24,24 +18,19 @@ from centurion.license.enforcement import (
 from centurion.license.fingerprint import compute_fingerprint
 from centurion.license.phone_home import apply_checkin_result, is_phone_home_due
 from centurion.license.states import (
-    InvalidTransition,
+    PERMANENT_OWNED,
     LicenseState,
+    LicenseTier,
     can_transition,
     is_permanently_owned,
     parse_state,
     requires_phone_home,
-    transition,
 )
 from centurion.license.store import (
     Entitlement,
     load_entitlement,
     save_entitlement,
     seed_entitlement,
-)
-from tests.fixtures.license_server import (
-    generate_test_ca,
-    make_outright_attestation,
-    make_paid_off_attestation,
 )
 from centurion.license.phone_home import CheckinResult
 
@@ -59,24 +48,50 @@ class TestStateMachine:
     def test_allowed_activate_paths(self):
         assert can_transition(LicenseState.UNACTIVATED, LicenseState.TRIAL)
         assert can_transition(LicenseState.UNACTIVATED, LicenseState.SUBSCRIPTION_ACTIVE)
-        assert can_transition(LicenseState.UNACTIVATED, LicenseState.OUTRIGHT_OWNED)
 
-    def test_paid_off_is_terminal(self):
-        assert is_permanently_owned(LicenseState.RENT_TO_OWN_PAID_OFF)
-        assert is_permanently_owned(LicenseState.OUTRIGHT_OWNED)
-        assert not requires_phone_home(LicenseState.OUTRIGHT_OWNED)
-        with pytest.raises(InvalidTransition):
-            transition(LicenseState.OUTRIGHT_OWNED, LicenseState.LOCKED)
+    def test_no_state_is_permanent(self):
+        """Retired 29 Sep 2026: every Centurion pays a monthly subscription.
 
-    def test_locked_can_reactivate(self):
+        There is no paid-off or owned state, so nothing is ever exempt from the
+        subscription check — and, per the fleet rule, no state erases a being either.
+        """
+        for state in LicenseState:
+            assert not is_permanently_owned(state), state
+        assert not PERMANENT_OWNED
+
+    def test_every_state_phones_home(self):
+        for state in LicenseState:
+            if state in {LicenseState.UNACTIVATED, LicenseState.LOCKED}:
+                assert not requires_phone_home(state)
+            else:
+                assert requires_phone_home(state), state
+
+    def test_locked_is_never_terminal(self):
+        """A lapsed subscription locks SERVICE. There must always be a way back.
+
+        This is the code-level expression of *the fee governs the service, never the
+        being*: LOCKED can never be a dead end, so no billing event can strand a Brain.
+        """
         assert can_transition(LicenseState.LOCKED, LicenseState.SUBSCRIPTION_ACTIVE)
+        assert can_transition(LicenseState.LOCKED, LicenseState.TRIAL)
+        assert can_transition(LicenseState.SUBSCRIPTION_EXPIRED, LicenseState.SUBSCRIPTION_ACTIVE)
 
     def test_website_state_aliases(self):
-        assert parse_state("owned") == LicenseState.OUTRIGHT_OWNED
         assert parse_state("grace") == LicenseState.GRACE
         assert parse_state("expired") == LicenseState.SUBSCRIPTION_EXPIRED
-        assert parse_state("rent_to_own_active") == LicenseState.RENT_TO_OWN_ACTIVE
         assert requires_phone_home(LicenseState.GRACE)
+
+    def test_retired_ownership_states_are_rejected(self):
+        """A stale saved entitlement must not resolve to a live state."""
+        for retired in ("owned", "outright_owned", "rent_to_own_active", "rent_to_own_paid_off"):
+            with pytest.raises(ValueError):
+                parse_state(retired)
+
+    def test_retired_vocabulary_is_gone_from_the_enum(self):
+        values = {s.value for s in LicenseState}
+        for retired in ("outright_owned", "rent_to_own_active", "rent_to_own_paid_off"):
+            assert retired not in values, f"{retired} came back"
+        assert {t.value for t in LicenseTier} == {"trial", "subscription"}
 
 
 class TestStore:
@@ -98,8 +113,8 @@ class TestStore:
     def test_seed_entitlement(self, license_home):
         ent = seed_entitlement(
             {
-                "state": "outright_owned",
-                "tier": "outright",
+                "state": "subscription_active",
+                "tier": "subscription",
                 "license_id": "lic_own",
                 "customer_name": "Ada",
                 "shipment_id": "ship_1",
@@ -160,53 +175,6 @@ class TestEnforcement:
         assert d2.mode in {EnforcementMode.WARN, EnforcementMode.RESTRICTED, EnforcementMode.LOCKED}
 
 
-class TestBalanceAndAttestation:
-    def test_paid_off_requires_attestation(self, license_home):
-        priv, pub, _b64 = generate_test_ca()
-        fp = "f" * 64
-        ent = Entitlement(
-            state=LicenseState.RENT_TO_OWN_ACTIVE.value,
-            tier="rent_to_own",
-            license_id="lic_rto",
-            machine_fingerprint=fp,
-            balance_paid_gbp=4750,
-            balance_target_gbp=5000,
-        )
-        save_entitlement(ent)
-        apply_server_balance(ent, balance_paid_gbp=5000)
-        assert remaining_gbp(load_entitlement()) == 0
-        # Still not paid_off state until attestation
-        assert load_entitlement().state == "rent_to_own_active"
-
-        token = make_paid_off_attestation(priv, license_id="lic_rto", fingerprint=fp)
-        apply_paid_off_attestation(ent, token, public_key=pub)
-        loaded = load_entitlement()
-        assert loaded.state == "rent_to_own_paid_off"
-        assert is_paid_off(loaded)
-        assert not is_phone_home_due(loaded)
-
-    def test_outright_redeem_offline(self, license_home):
-        priv, pub, b64 = generate_test_ca()
-        with patch(
-            "centurion.license.activate.compute_fingerprint",
-            return_value="a" * 64,
-        ), patch(
-            "centurion.license.fingerprint.compute_fingerprint",
-            return_value="a" * 64,
-        ):
-            token = make_outright_attestation(
-                priv, license_id="lic_out", fingerprint="a" * 64
-            )
-            config = {"license": {"ca_public_key_b64": b64}}
-            result = redeem_outright_token(
-                "pop_test",
-                config=config,
-                offline_attestation=token,
-            )
-            assert result.ok
-            assert load_entitlement().state == "outright_owned"
-
-
 class TestPhoneHomeApply:
     def test_revoke_locks_immediately(self, license_home):
         ent = Entitlement(
@@ -242,7 +210,7 @@ class TestImageBuilder:
             result = build_image_seed(
                 ImageBuildSpec(
                     customer_name="Helen",
-                    tier="outright",
+                    tier="subscription",
                     license_id="lic_dify",
                     shipment_id="ship_9",
                 )
@@ -250,7 +218,7 @@ class TestImageBuilder:
         assert result["ok"]
         assert Path(result["manifest"]).exists()
         ent = load_entitlement()
-        assert ent.state == "outright_owned"
+        assert ent.state == "subscription_active"
         assert ent.shipment_id == "ship_9"
 
 

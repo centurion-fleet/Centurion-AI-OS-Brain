@@ -12,11 +12,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from centurion.license.audit import append_audit
-from centurion.license.balance import apply_paid_off_attestation, apply_server_balance
 from centurion.license.fingerprint import compute_fingerprint
 from centurion.license.states import (
     LicenseState,
-    is_permanently_owned,
     parse_state,
     requires_phone_home,
 )
@@ -87,7 +85,7 @@ def is_phone_home_due(
 ) -> bool:
     ent = entitlement if entitlement is not None else load_entitlement()
     state = ent.license_state()
-    if is_permanently_owned(state) or not requires_phone_home(state):
+    if not requires_phone_home(state):
         return False
     ts = now if now is not None else time.time()
     if ent.next_check_by is not None:
@@ -123,9 +121,6 @@ def phone_home(
     """POST /license/checkin and apply the response to local entitlement."""
     ent = entitlement if entitlement is not None else load_entitlement()
     state = ent.license_state()
-
-    if is_permanently_owned(state):
-        return CheckinResult(ok=True, state=state.value, error="permanently_owned_skip")
 
     if not force and not is_phone_home_due(ent, config=config):
         return CheckinResult(ok=True, state=state.value, error="not_due")
@@ -215,28 +210,6 @@ def apply_checkin_result(
 
     if result.tier:
         entitlement.tier = str(result.tier)
-    if result.balance_paid_gbp is not None:
-        apply_server_balance(
-            entitlement,
-            balance_paid_gbp=result.balance_paid_gbp,
-            balance_target_gbp=result.balance_target_gbp,
-        )
-
-    if result.signed_attestation and result.state in {
-        LicenseState.RENT_TO_OWN_PAID_OFF.value,
-        LicenseState.OUTRIGHT_OWNED.value,
-        "owned",
-    }:
-        try:
-            return apply_paid_off_attestation(
-                entitlement,
-                result.signed_attestation,
-                config=config,
-            )
-        except ValueError as exc:
-            logger.warning("Paid-off attestation rejected: %s", exc)
-            append_audit("attestation_rejected", error=str(exc))
-
     if result.state:
         try:
             new_state = parse_state(result.state)
