@@ -1,7 +1,8 @@
 """License entitlement state machine.
 
-States and legal transitions for Centurion product licensing. Server attestations drive
-most transitions; local code only applies transitions that appear in ALLOWED_TRANSITIONS.
+States and legal transitions for Centurion product licensing. The licence server's
+check-in drives most transitions; local code only applies transitions that appear in
+ALLOWED_TRANSITIONS.
 
 The owned / rent-to-own vocabulary was **retired on 29 Sep 2026**, by decision: every
 Centurion pays a monthly subscription, so there is no permanent state and no machine is

@@ -88,7 +88,6 @@ Periodic phone-home from subscription installs.
   "expires_at": "2027-01-01T00:00:00Z",
   "next_check_by": 1780000000,
   "grace_until": null,
-  "signed_attestation": "base64url(payload).base64url(sig)",
   "revoke_reason": null,
   "balance_paid_eur": 0,
   "balance_target_eur": 0,
@@ -151,7 +150,6 @@ Start a trial or bind a paid monthly-subscription checkout.
   "tier": "subscription",
   "expires_at": "2027-01-01T00:00:00Z",
   "next_check_by": 1780000000,
-  "signed_attestation": "…",
   "customer_name": "Ada Lovelace",
   "trial_expires_at": null
 }
@@ -159,34 +157,19 @@ Start a trial or bind a paid monthly-subscription checkout.
 
 ---
 
-## Signed attestations
+## Signed attestations — REMOVED 29 Sep 2026
 
-Format: `base64url(canonical_json_payload) + "." + base64url(ed25519_signature)`
+There are none. The server no longer signs an attestation and the Brain no longer
+stores one. Nothing ever verified it, so it protected nothing.
 
-Canonical JSON: UTF-8, `sort_keys=True`, separators `(",", ":")`.
+Why it went: the signature was HMAC-SHA256 — symmetric, so any party able to verify
+could also forge — and the OS side had no verifier at all (`tokens.py`'s
+`verify_attestation` had zero callers). Removing it beats carrying a control that
+only looks like one. If attestation is wanted later it should be designed fresh,
+verified client-side, over an asymmetric key.
 
-### Payload fields
-
-```json
-{
-  "kind": "subscription",
-  "license_id": "lic_…",
-  "machine_fingerprint": "sha256hex",
-  "state": "subscription_active",
-  "tier": "subscription",
-  "issued_at": 1770000000,
-  "expires_at": 1780000000,
-  "token_id": null
-}
-```
-
-`kind` is `subscription` — the only grant kind. The retired `paid_off`,
-`outright` and `rto_active` kinds are no longer produced.
-
-The OS embeds / configures the ed25519 CA public key via
-`license.ca_public_key_b64`. Local encrypted entitlement mirrors can be
-tampered with; **a valid attestation is required whenever the server reports the
-licence entitled**.
+Consequently `LICENSE_ATTESTATION_SECRET` is no longer read by the application, and
+the `signed_attestation` key is gone from every response payload.
 
 ---
 
@@ -271,7 +254,8 @@ The old wire vocabulary that went with it:
 
 All of it is gone: there is no cumulative balance and no paid-off state to
 reach. The client-side constants (`DEFAULT_RTO_TARGET_GBP`, `LicenseTier.RENT_TO_OWN`
-handling) survive only as tolerant no-ops.
+handling) survive only as tolerant no-ops. Signed attestations were removed
+entirely on 29 Sep 2026 — see the section above.
 
 ### Outright / `owned` (retired 29 Sep 2026)
 

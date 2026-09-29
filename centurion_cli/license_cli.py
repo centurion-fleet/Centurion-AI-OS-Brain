@@ -95,7 +95,6 @@ def _cmd_redeem(args) -> int:
     result = redeem_purchase_token(
         token,
         config=_cfg(),
-        offline_attestation=getattr(args, "attestation", None),
     )
     if not result.ok:
         print(f"Redeem failed: {result.error}", file=sys.stderr)
@@ -172,7 +171,6 @@ def _cmd_unbox(_args) -> int:
     if decision.mode.value == "locked" and ent.state == "unactivated":
         print("  This machine is not licensed yet.")
         print("  Run: centurion license activate trial")
-        print("   or: centurion license redeem <token>")
     else:
         print("  Your license is ready. Optional next steps:")
         print("    centurion setup          # providers / SOUL")
@@ -237,10 +235,6 @@ def add_parser(subparsers) -> None:
         help="(retired) proof-of-purchase token — outright licences no longer exist",
     )
     redeem.add_argument("token", nargs="?", help="Proof-of-purchase token")
-    redeem.add_argument(
-        "--attestation",
-        help="Offline signed attestation (DIF Y / air-gap)",
-    )
 
     fp = sub.add_parser("fingerprint", help="Print this machine's license fingerprint")
     fp.add_argument("-v", "--verbose", action="store_true", help="Show identity components")

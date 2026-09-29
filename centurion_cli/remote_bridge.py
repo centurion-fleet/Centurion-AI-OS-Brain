@@ -3642,10 +3642,7 @@ def _handle_license_redeem(request: dict[str, Any], request_id: str) -> dict[str
                 "message": "A proof-of-purchase token is required.",
                 "retryable": False,
             }
-        result = redeem_purchase_token(
-            token,
-            offline_attestation=request.get("attestation"),
-        )
+        result = redeem_purchase_token(token)
         if not result.ok:
             return {
                 "id": request_id,

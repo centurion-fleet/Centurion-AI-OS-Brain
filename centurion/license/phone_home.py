@@ -35,7 +35,6 @@ class CheckinResult:
     balance_target_gbp: Optional[float] = None
     next_check_by: Optional[float] = None
     grace_until: Optional[float] = None
-    signed_attestation: Optional[str] = None
     revoke_reason: Optional[str] = None
     error: Optional[str] = None
     network_error: bool = False
@@ -173,7 +172,6 @@ def phone_home(
         grace_until=_as_float(data.get("grace_until"))
         if not isinstance(data.get("grace_until"), str)
         else _parse_iso_ts(data.get("grace_until")),
-        signed_attestation=data.get("signed_attestation"),
         revoke_reason=data.get("revoke_reason"),
         raw=data if isinstance(data, dict) else None,
     )
@@ -203,8 +201,6 @@ def apply_checkin_result(
         entitlement.state = LicenseState.LOCKED.value
         entitlement.revoke_reason = result.revoke_reason or "revoked"
         entitlement.grace_started_at = None
-        if result.signed_attestation:
-            entitlement.signed_attestation = result.signed_attestation
         save_entitlement(entitlement)
         return entitlement
 
@@ -225,8 +221,6 @@ def apply_checkin_result(
             entitlement.next_check_by = float(result.next_check_by)
         else:
             entitlement.next_check_by = now + check_interval_seconds(config)
-        if result.signed_attestation:
-            entitlement.signed_attestation = result.signed_attestation
 
     save_entitlement(entitlement)
     return entitlement

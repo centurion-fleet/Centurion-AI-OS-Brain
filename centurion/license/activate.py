@@ -1,4 +1,9 @@
-"""License activation flows — trial, subscription, RTO, outright redeem."""
+"""License activation flows — trial and monthly subscription.
+
+The rent-to-own / outright paths are retired. ``redeem_purchase_token`` is kept
+as a stub that refuses cleanly, so an old caller gets a clear message instead of
+an AttributeError.
+"""
 
 from __future__ import annotations
 
@@ -115,8 +120,6 @@ def activate_trial(
             )
             if data.get("license_id"):
                 ent.license_id = str(data["license_id"])
-            if data.get("signed_attestation"):
-                ent.signed_attestation = str(data["signed_attestation"])
             if data.get("trial_expires_at") is not None:
                 ent.trial_expires_at = float(data["trial_expires_at"])
         except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
@@ -221,8 +224,6 @@ def activate_from_server(
         # Deprecated: the website still emits this as 0 for older Brains.
         # Recorded, never acted on — entitlement is the credited period.
         ent.balance_target_gbp = float(data["balance_target_gbp"])
-    if data.get("signed_attestation"):
-        ent.signed_attestation = str(data["signed_attestation"])
     # Prefer unix seconds from website contract; ISO next_check_by is not a float.
     if data.get("next_check_by_unix") is not None:
         try:
@@ -252,7 +253,6 @@ def redeem_purchase_token(
     token: str,
     *,
     config: Optional[Dict[str, Any]] = None,
-    offline_attestation: Optional[str] = None,
 ) -> ActivateResult:
     """Retired: redeeming a proof-of-purchase token for an outright licence.
 

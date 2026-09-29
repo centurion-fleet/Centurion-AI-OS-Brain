@@ -31,7 +31,7 @@ KEY_BYTES = 32
 
 @dataclass
 class Entitlement:
-    """Local mirror of license entitlement. Server attestations are authoritative."""
+    """Local mirror of license entitlement. The licence server's check-in is authoritative."""
 
     state: str = LicenseState.UNACTIVATED.value
     tier: Optional[str] = None
@@ -41,7 +41,6 @@ class Entitlement:
     grace_started_at: Optional[float] = None
     balance_paid_gbp: float = 0.0
     balance_target_gbp: float = DEFAULT_RTO_TARGET_GBP
-    signed_attestation: Optional[str] = None
     token_id: Optional[str] = None
     next_check_by: Optional[float] = None
     customer_name: Optional[str] = None

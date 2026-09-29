@@ -1,4 +1,4 @@
-"""Tests for centurion.license state machine, store, enforcement, and attestations."""
+"""Tests for centurion.license state machine, store, and enforcement."""
 
 from __future__ import annotations
 
