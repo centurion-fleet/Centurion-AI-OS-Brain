@@ -3554,8 +3554,114 @@ Is Centurion installed? Re-run Install Brain from your Get Brain download, then 
         });
     }
 
+    /// The licence code the release channel's download route demands. NR-001 fault 2
+    /// closes this properly — either by persisting the code at activation (2a) or by
+    /// having the route trust the identity this Brain already presents (2b). Until one
+    /// of those lands this returns None on a real Brain, and the update reports exactly
+    /// that rather than failing obscurely or pretending to try.
+    fn run_packaged_update_licence_code() -> Option<String> {
+        if let Ok(value) = std::env::var("CENTURION_LICENCE_CODE") {
+            let trimmed = value.trim().to_owned();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+        // Seam for NR-001 fault 2a: the code persisted at activation, read back from
+        // this Brain's own encrypted entitlement store.
+        None
+    }
+
+    /// The packaged (RPM) update — the seven steps in `brain_update`, in order.
+    ///
+    /// This is the engine that already existed and was never connected to the button.
+    /// Every step returns a state rather than a boolean, so "we could not tell" can
+    /// never be reported as success.
+    fn run_packaged_update_pipeline() -> Result<String, String> {
+        use crate::brain_update;
+
+        let dest = std::env::temp_dir().join("centurion-brain-update");
+        let current = brain_update::installed_version().unwrap_or_default();
+
+        // Step 1 — what is published. Public endpoint, no credential.
+        let release = brain_update::latest_release()?;
+        if !current.is_empty() && !brain_update::is_newer(&release.version, &current) {
+            return Ok(format!(
+                "Sovereign AI Brain {current} is already the newest published build."
+            ));
+        }
+        let artifact = release
+            .installer()
+            .ok_or_else(|| format!("Release {} carries no installer package.", release.version))?
+            .clone();
+
+        // Step 2 — download. The route authenticates with a licence code, and a Brain
+        // that has never stored one cannot pass this step. Say so in the owner's words,
+        // and change nothing on their machine.
+        let Some(code) = run_packaged_update_licence_code() else {
+            return Err(format!(
+                "Sovereign AI Brain {} is available, but this Brain has no licence code \
+                 stored and the download route requires one. Nothing was downloaded and \
+                 nothing on this machine was changed.",
+                release.version
+            ));
+        };
+        let path = brain_update::download_artifact(&artifact, &dest, &code)?;
+
+        // Step 3 — the artifact is what the channel said it was.
+        brain_update::verify_sha256(&path, &artifact.sha256)?;
+
+        // Step 4 — the signature, importing the release key on NOKEY.
+        brain_update::verify_or_import_signature(&path)?;
+
+        // Step 5 — free the port BEFORE starting anything. A restart is not a stop:
+        // the leftover process is what produced the 672-failure loop.
+        brain_update::stop_port_holders(brain_update::REMOTE_PORT)?;
+
+        // Step 6 — install, privileged.
+        brain_update::install_rpm(&path)?;
+
+        // Step 7 — prove the running process is newer than the package. Never report
+        // success from the install step alone.
+        let restarted = brain_update::restart_services();
+        let verdict = match brain_update::verify_running_version("centurion-remote") {
+            brain_update::RunningState::NewBuildRunning => format!(
+                "Sovereign AI Brain {} is installed and the newer build is running.",
+                release.version
+            ),
+            brain_update::RunningState::StillRunningOld { .. } => format!(
+                "Sovereign AI Brain {} is installed, but the previous build is still \
+                 running. Quit and reopen to load it.",
+                release.version
+            ),
+            brain_update::RunningState::NotRunning => format!(
+                "Sovereign AI Brain {} is installed. The away-from-home service is not \
+                 running; it will start with the app.",
+                release.version
+            ),
+            brain_update::RunningState::Unknown(why) => format!(
+                "Sovereign AI Brain {} is installed. Could not confirm which build is \
+                 running: {why}",
+                release.version
+            ),
+        };
+        let touched = if restarted.is_empty() {
+            "no services reported a restart".to_owned()
+        } else {
+            restarted.join(", ")
+        };
+        Ok(format!("{verdict}\n(services: {touched})"))
+    }
+
     /// Full Brain update: OS package, then desktop + remote binaries.
     fn run_full_brain_update_pipeline() -> Result<String, String> {
+        // A packaged Brain has no checkout. Until 29 Sep 2026 this called
+        // resolve_centurion_repo_root() unconditionally, so EVERY RPM install hit a
+        // dead end: the banner promised "tap Update below" and the update could never
+        // run. `brain_update` implements the real seven-step packaged update and was
+        // never connected to this button. Route by what is actually present.
+        if resolve_centurion_repo_root().is_err() {
+            return run_packaged_update_pipeline();
+        }
         let os_result = run_os_update();
         let repo_root = resolve_centurion_repo_root()?;
         let install_result = run_native_brain_install(&repo_root);
