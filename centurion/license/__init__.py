@@ -12,7 +12,7 @@ from centurion.license.activate import (
     ActivateResult,
     activate_from_server,
     activate_trial,
-    redeem_outright_token,
+    redeem_purchase_token,
     request_reissue,
 )
 from centurion.license.enforcement import (
@@ -72,7 +72,7 @@ __all__ = [
     "locked_user_message",
     "maybe_phone_home_on_startup",
     "phone_home",
-    "redeem_outright_token",
+    "redeem_purchase_token",
     "request_reissue",
     "requires_phone_home",
     "save_entitlement",

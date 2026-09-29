@@ -16,12 +16,10 @@ from centurion.license.fingerprint import compute_fingerprint
 from centurion.license.phone_home import get_license_server_url
 from centurion.license.states import LicenseState, LicenseTier
 from centurion.license.store import (
-    DEFAULT_RTO_TARGET_GBP,
     Entitlement,
     load_entitlement,
     save_entitlement,
 )
-from centurion.license.tokens import verify_attestation
 
 logger = logging.getLogger(__name__)
 
@@ -138,20 +136,29 @@ def activate_from_server(
 ) -> ActivateResult:
     """Activate via the license server (website `/api/v1/license/activate`).
 
-    Tier may be ``subscription``, ``rent_to_own``, ``owned``/``outright``, or
-    ``paid``/``code`` (code-driven — server returns the real level/state).
+    Tier may be ``subscription``, or ``paid``/``code`` (code-driven — the server
+    returns the real level and state).
+
+    The retired names ``owned``/``outright``/``rent_to_own`` are still ACCEPTED
+    so an old command, script or Brain does not fail on an unknown tier, but
+    they no longer select a different licence: there is one licence, a monthly
+    subscription. Reading them as "let the server decide" is also what those
+    callers meant, since the server is authoritative for level and state.
     """
     tier_norm = tier.strip().lower()
-    code_driven = tier_norm in {"paid", "code", "auto"}
-    if tier_norm in {"owned", "outright"}:
-        tier_norm = LicenseTier.OUTRIGHT.value
-        state = LicenseState.OUTRIGHT_OWNED
-    elif tier_norm in {"sub", "subscription"} or code_driven:
+    code_driven = tier_norm in {
+        "paid",
+        "code",
+        "auto",
+        # retired tier names — accepted, no longer a distinct licence
+        "owned",
+        "outright",
+        "rto",
+        "rent_to_own",
+    }
+    if tier_norm in {"sub", "subscription"} or code_driven:
         tier_norm = LicenseTier.SUBSCRIPTION.value
         state = LicenseState.SUBSCRIPTION_ACTIVE
-    elif tier_norm in {"rto", "rent_to_own"}:
-        tier_norm = LicenseTier.RENT_TO_OWN.value
-        state = LicenseState.RENT_TO_OWN_ACTIVE
     else:
         return ActivateResult(ok=False, error=f"Unsupported tier: {tier}")
 
@@ -193,7 +200,12 @@ def activate_from_server(
     ent.machine_fingerprint = fp
     server_tier = str(data.get("tier") or data.get("level") or tier_norm).lower()
     if server_tier in {"owned", "outright"}:
-        server_tier = LicenseTier.OUTRIGHT.value
+        # Retired names. The website can still echo one back for a licence
+        # issued before the retirement, so map it rather than storing a tier
+        # the local enum no longer has.
+        server_tier = LicenseTier.SUBSCRIPTION.value
+    elif server_tier in {"rto", "rent_to_own"}:
+        server_tier = LicenseTier.SUBSCRIPTION.value
     ent.tier = server_tier
     try:
         ent.state = parse_state(str(data.get("state") or state.value)).value
@@ -206,9 +218,9 @@ def activate_from_server(
     if data.get("balance_paid_gbp") is not None:
         ent.balance_paid_gbp = float(data["balance_paid_gbp"])
     if data.get("balance_target_gbp") is not None:
+        # Deprecated: the website still emits this as 0 for older Brains.
+        # Recorded, never acted on — entitlement is the credited period.
         ent.balance_target_gbp = float(data["balance_target_gbp"])
-    elif server_tier == LicenseTier.RENT_TO_OWN.value:
-        ent.balance_target_gbp = DEFAULT_RTO_TARGET_GBP
     if data.get("signed_attestation"):
         ent.signed_attestation = str(data["signed_attestation"])
     # Prefer unix seconds from website contract; ISO next_check_by is not a float.
@@ -236,77 +248,40 @@ def activate_from_server(
     return ActivateResult(ok=True, entitlement=ent, message=f"Activated as {ent.tier}")
 
 
-def redeem_outright_token(
+def redeem_purchase_token(
     token: str,
     *,
     config: Optional[Dict[str, Any]] = None,
     offline_attestation: Optional[str] = None,
 ) -> ActivateResult:
-    """Redeem a proof-of-purchase token and bind to this machine."""
-    fp = compute_fingerprint()
-    try:
-        from centurion_cli.cloud_client import get_install_id
-    except Exception:
-        get_install_id = lambda: "unknown"  # noqa: E731
+    """Retired: redeeming a proof-of-purchase token for an outright licence.
 
-    # Prefer server redeem; allow offline attestation for air-gapped DIF Y images.
-    data: Dict[str, Any] = {}
-    if offline_attestation:
-        data = {
-            "ok": True,
-            "state": LicenseState.OUTRIGHT_OWNED.value,
-            "tier": LicenseTier.OUTRIGHT.value,
-            "signed_attestation": offline_attestation,
-            "token_id": token,
-        }
-    else:
-        base = get_license_server_url(config)
-        try:
-            data = _post_json(
-                f"{base.rstrip('/')}/license/redeem",
-                {
-                    "token": token,
-                    "machine_fingerprint": fp,
-                    "install_id": get_install_id(),
-                },
-            )
-        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            append_audit("redeem_failed", error=str(exc))
-            return ActivateResult(ok=False, error=f"Redeem failed: {exc}")
+    There are no outright licences. A Centurion licence is a monthly
+    subscription, and the implementation fee is a separate commercial matter
+    handled by a partner — so a proof-of-purchase token has no licence to
+    convert into.
 
-    if not data.get("ok", True):
-        return ActivateResult(ok=False, error=data.get("error") or "Redeem rejected")
+    This previously raised AttributeError on every call: the function bound
+    `LicenseTier.OUTRIGHT` and `LicenseState.OUTRIGHT_OWNED` unconditionally,
+    and both were removed when the tier was retired. It also gated on
+    `attested.kind == "outright"`, while the website's attestation payload
+    carries no `kind` at all — so it could never have granted anything.
 
-    attestation = data.get("signed_attestation")
-    if attestation:
-        try:
-            attested = verify_attestation(
-                str(attestation),
-                expected_fingerprint=fp,
-                config=config,
-            )
-            if attested.state and attested.state != LicenseState.OUTRIGHT_OWNED.value:
-                if attested.kind != "outright":
-                    return ActivateResult(ok=False, error="Attestation is not an outright grant")
-        except ValueError as exc:
-            return ActivateResult(ok=False, error=str(exc))
-
-    ent = load_entitlement()
-    ent.machine_fingerprint = fp
-    ent.tier = LicenseTier.OUTRIGHT.value
-    ent.state = LicenseState.OUTRIGHT_OWNED.value
-    ent.license_id = str(data.get("license_id") or ent.license_id or f"outright-{secrets.token_hex(6)}")
-    ent.token_id = str(data.get("token_id") or token)
-    ent.signed_attestation = str(attestation) if attestation else ent.signed_attestation
-    ent.last_verified_at = time.time()
-    ent.grace_started_at = None
-    ent.revoke_reason = None
-    ent.next_check_by = None
-    if data.get("customer_name"):
-        ent.customer_name = str(data["customer_name"])
-    save_entitlement(ent)
-    append_audit("redeem_outright", license_id=ent.license_id, token_id=ent.token_id)
-    return ActivateResult(ok=True, entitlement=ent, message="Outright license bound to this machine")
+    It now refuses cleanly rather than crashing, and the refusal is the
+    CONSERVATIVE reading: this is a licence gate, and a broken gate must fail
+    closed, never open. Relaxing it to accept an attestation is a decision for
+    the owner, not a bug fix — air-gapped installs may still need a redeem path
+    and it would need to be designed against the website's actual payload.
+    """
+    append_audit("redeem_retired", token_present=bool(token))
+    return ActivateResult(
+        ok=False,
+        error=(
+            "Redeeming a proof-of-purchase token is no longer available: "
+            "outright licences are retired and a Centurion licence is a monthly "
+            "subscription. Run: centurion license activate subscription"
+        ),
+    )
 
 
 def request_reissue(

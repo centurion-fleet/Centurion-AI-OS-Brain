@@ -2,8 +2,8 @@
 
 Subcommands:
   status            Show entitlement + enforcement mode
-  activate          Start trial or activate subscription / rent-to-own
-  redeem            Redeem an outright proof-of-purchase token
+  activate          Start trial or activate subscription
+  redeem            (retired) proof-of-purchase token — no outright licences
   fingerprint       Print this machine's license fingerprint
   reissue-request   Request hardware re-bind after machine failure
   checkin           Force a phone-home check-in now
@@ -86,13 +86,13 @@ def _cmd_activate(args) -> int:
 
 
 def _cmd_redeem(args) -> int:
-    from centurion.license.activate import redeem_outright_token
+    from centurion.license.activate import redeem_purchase_token
 
     token = (getattr(args, "token", None) or "").strip()
     if not token:
         print("Usage: centurion license redeem <token>", file=sys.stderr)
         return 1
-    result = redeem_outright_token(
+    result = redeem_purchase_token(
         token,
         config=_cfg(),
         offline_attestation=getattr(args, "attestation", None),
@@ -147,8 +147,6 @@ def _cmd_checkin(_args) -> int:
         print(f"Check-in failed: {result.error}", file=sys.stderr)
         return 1
     print(f"Check-in ok — state={result.state or 'unchanged'}")
-    if result.balance_paid_gbp is not None:
-        print(f"  Balance: £{result.balance_paid_gbp:.0f}")
     return 0
 
 
@@ -207,10 +205,10 @@ def add_parser(subparsers) -> None:
     """Register `centurion license` on the given argparse subparsers object."""
     parser = subparsers.add_parser(
         "license",
-        help="Product license status, activation, redeem, and phone-home",
+        help="Product license status, activation, and phone-home",
         description=(
-            "Manage Centurion product licensing (subscription, rent-to-own, "
-            "outright). Subcommands: status, activate, redeem, fingerprint, "
+            "Manage Centurion product licensing (monthly subscription). "
+            "Subcommands: status, activate, redeem, fingerprint, "
             "reissue-request, checkin, unbox."
         ),
     )
@@ -218,7 +216,7 @@ def add_parser(subparsers) -> None:
 
     sub.add_parser("status", help="Show entitlement and enforcement status (default)")
 
-    activate = sub.add_parser("activate", help="Activate trial / subscription / rent-to-own")
+    activate = sub.add_parser("activate", help="Activate trial / subscription")
     activate.add_argument(
         "tier",
         nargs="?",
@@ -234,7 +232,10 @@ def add_parser(subparsers) -> None:
         help="Start a local trial without contacting the license server",
     )
 
-    redeem = sub.add_parser("redeem", help="Redeem an outright proof-of-purchase token")
+    redeem = sub.add_parser(
+        "redeem",
+        help="(retired) proof-of-purchase token — outright licences no longer exist",
+    )
     redeem.add_argument("token", nargs="?", help="Proof-of-purchase token")
     redeem.add_argument(
         "--attestation",

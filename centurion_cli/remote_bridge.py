@@ -3630,7 +3630,7 @@ def _handle_license_activate(request: dict[str, Any], request_id: str) -> dict[s
 
 def _handle_license_redeem(request: dict[str, Any], request_id: str) -> dict[str, Any]:
     try:
-        from centurion.license.activate import redeem_outright_token
+        from centurion.license.activate import redeem_purchase_token
 
         token = str(request.get("token") or request.get("code") or "").strip()
         if not token:
@@ -3642,7 +3642,7 @@ def _handle_license_redeem(request: dict[str, Any], request_id: str) -> dict[str
                 "message": "A proof-of-purchase token is required.",
                 "retryable": False,
             }
-        result = redeem_outright_token(
+        result = redeem_purchase_token(
             token,
             offline_attestation=request.get("attestation"),
         )
