@@ -368,6 +368,11 @@ function daysSince(iso){const t=Date.parse(iso||"");return isNaN(t)?null:Math.ma
 function shortDate(iso){const t=Date.parse(iso||"");if(isNaN(t))return"";
   return new Date(t).toLocaleDateString(undefined,{day:"2-digit",month:"short"}).toUpperCase();}
 function cut(s,n){s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1).trimEnd()+"…":s;}
+/* A count we could not read is NOT zero. It is unknown, and the page must say so.
+   An empty list and an unreachable record look identical once both are summed —
+   and the owner reads the difference as "I have done nothing". Mike, 29 Sep 2026:
+   a night's work shown as a screen of zeros. Never again. */
+function num(v){return v==null?"—":v;}
 function setState(msg){$("caption").textContent=msg;}
 
 /* ============================================================
@@ -462,6 +467,14 @@ async function load(){
   try{const so=await ask({action:"soul_get"});localName=(so.soul&&so.soul.name)||localName;}catch(e){}
   try{peers=(await ask({action:"fleet_peer_status"})).peers||[];}catch(e){errors.push("fleet");}
 
+  /* A source that FAILED is not a source that is EMPTY. Every count below is
+     therefore qualified by the sources it is built from, and comes back null —
+     "unknown" — the moment any of them failed. The page prints "—" for null.
+     This is the whole point: a partial sum presented as a total is a lie the
+     owner cannot see through. */
+  const bad=s=>errors.includes(s);
+  const cnt=(v,...srcs)=>srcs.some(bad)?null:v;
+
   const cards=[]; swarms.forEach(b=>(b.cards||[]).forEach(c=>cards.push(Object.assign({board:b.display_name||b.id},c))));
   const by=s=>cards.filter(c=>c.status===s);
   const done=by("done"), running=by("running"), blocked=by("blocked"), todo=by("todo");
@@ -511,7 +524,7 @@ async function load(){
 
   const struck=done.length+pDone.length+tDone.length;
   return{
-    struck,
+    struck:cnt(struck,"boards","plans","missions"),
     /* NAMED SEALS. A wall of anonymous dots communicates nothing. Seal i is item
        i of this list — read from the same record the counter counts, so the wall
        and the number always agree. */
@@ -519,8 +532,9 @@ async function load(){
       pDone.slice().map(p=>cut(p.title,80)),
       done.slice().map(c=>cut(c.title,80)),
       tDone.slice().map(t=>cut(t.title,80))),
-    inHand:running.length+pGo.length+tDoing.length,
-    waiting:pWait.length, openDecisions:decisions.filter(d=>!(d.human_said||d.chosen)).length,
+    inHand:cnt(running.length+pGo.length+tDoing.length,"boards","plans","missions"),
+    waiting:cnt(pWait.length,"plans"),
+    openDecisions:cnt(decisions.filter(d=>!(d.human_said||d.chosen)).length,"decisions"),
     next:tNext.slice(0,7).map(t=>({t:cut(t.title,74),seq:t.sequence_number})),
     /* Approved plans ARE in hand — the human's hand and the Centurion's. They have
        to be named here, otherwise the counter says 22 while the list shows board
@@ -554,14 +568,18 @@ async function load(){
         +(cs.length?"":(adj?"changes requested · ":"waiting "))
         +(dn!=null?dn+" day"+(dn===1?"":"s"):"—")
         +(p.risk?(" · "+p.risk+" risk"):"")+(p.open_questions&&p.open_questions.length?(" · "+p.open_questions.length+" open questions"):"")};}),
-    more:Math.max(0,pWait.length-4),
+    more:cnt(Math.max(0,pWait.length-4),"plans"),
     decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
       .map(d=>({id:d.id,t:cut(d.title,88),taken:shortDate(d.created_at),
         answered:!!(d.human_said||d.chosen),said:cut(d.human_said||d.chosen||"",60)})),
-    aligned:{purpose, onPurpose, unlinked, pendingAll, canJudgeLinkage, idleMust, written:!!purpose,
-             mustDo:pTargets.filter(t=>t.target_type==="essential").length,
+    aligned:{purpose, canJudgeLinkage, written:!!purpose,
+             onPurpose:cnt(onPurpose,"missions"),
+             unlinked:cnt(unlinked,"plans","decisions"),
+             pendingAll:cnt(pendingAll,"plans","decisions"),
+             idleMust:cnt(idleMust,"missions"),
+             mustDo:cnt(pTargets.filter(t=>t.target_type==="essential").length,"missions"),
              primaryTitle:String((primary&&primary.title)||"").trim()},
-    errors, localName, held, boards:swarms.length
+    errors, localName, held, boards:cnt(swarms.length,"boards")
   };
 }
 
@@ -657,7 +675,7 @@ function build(S){
   });
   /* sealed work: one bead per delivery, newer larger, capped so the ring stays a
      ring — and now each bead names the delivery it stands for. */
-  const beads=Math.min(20,S.struck), sItems=S.struckItems||[];
+  const beads=S.struck==null?0:Math.min(20,S.struck), sItems=S.struckItems||[];
   for(let i=0;i<beads;i++){const p=place(-19,.545+i*(.40/Math.max(1,beads))), gm=el("g");
     gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+(i/Math.max(1,beads))*3.6,fill:"url(#ringB)"}));
     nameMark(gm,"str:"+i,"Seal "+(i+1)+" of "+beads,sItems[i]||"sealed work","STRUCK · DELIVERED AND VERIFIED");
@@ -684,14 +702,14 @@ function build(S){
   const lab=(x,y,txt,col)=>{
     const t=el("text",{x:x,y:y,"text-anchor":"middle","font-size":"12.5","letter-spacing":"4.6",
       fill:col,"font-family":"var(--sans)"});t.textContent=txt;return t;};
-  g.appendChild(lab(190,296,"IN HAND · "+S.inHand,"rgba(232,203,150,.95)"));
-  g.appendChild(lab(852,296,"ON PURPOSE · "+A.onPurpose,"rgba(232,203,150,.72)"));
+  g.appendChild(lab(190,296,"IN HAND · "+num(S.inHand),"rgba(232,203,150,.95)"));
+  g.appendChild(lab(852,296,"ON PURPOSE · "+num(A.onPurpose),"rgba(232,203,150,.72)"));
 }
 
 /* ---------- the registers ---------- */
 function seals(S){
   const b=$("seals"); b.innerHTML="";
-  const items=S.struckItems||[], N=Math.min(26,S.struck);
+  const items=S.struckItems||[], N=S.struck==null?0:Math.min(26,S.struck);
   for(let i=0;i<N;i++){
     const d=document.createElement("div");
     d.className="seal"+(i===N-1?" last":"");
@@ -704,7 +722,9 @@ function seals(S){
   const list=$("strucklist"); if(list){
     list.innerHTML="";
     if(!N){const r=document.createElement("div");r.className="regrow";r.style.cursor="default";
-      r.innerHTML='<span class="mtx">Nothing struck yet.</span>';list.appendChild(r);}
+      const unread=(S.errors||[]).some(s=>s==="plans"||s==="boards"||s==="missions");
+      r.innerHTML='<span class="mtx">'+(unread?"Could not read what has been struck — it is not necessarily none."
+        :"Nothing struck yet.")+'</span>';list.appendChild(r);}
     for(let i=0;i<N;i++){
       const r=document.createElement("div"), nm=items[i]||"sealed work";
       r.className="regrow";
@@ -727,7 +747,10 @@ function items(S){
     b.appendChild(d);});
   if(!S.handItems.length&&!S.stopItems.length){
     const d=document.createElement("div");d.className="item";
-    d.innerHTML='<span class="ring">'+RING.hand+'</span><span><span class="tx">Nothing in hand — every lane is clear.</span></span>';
+    const unread=(S.errors||[]).some(s=>s==="plans"||s==="boards"||s==="missions");
+    d.innerHTML='<span class="ring">'+RING.hand+'</span><span><span class="tx">'
+      +(unread?"Could not read what is in hand — this is not an empty lane."
+              :"Nothing in hand — every lane is clear.")+'</span></span>';
     b.appendChild(d);}
 }
 
@@ -750,9 +773,16 @@ function aligned(S){
     return;
   }
 
+  /* A null here means we could not READ the record — which is not the same as
+     reading it and finding nothing. Say which one it is; never imply the second. */
+  const unknown=A.onPurpose==null;
   line(ICON,
-    A.onPurpose===1?"1 piece of work on your purpose":A.onPurpose+" pieces of work on your purpose",
-    A.onPurpose?"moving, and traceable to it":"nothing is moving on it");
+    unknown?"Could not read your purpose record just now"
+           :(A.onPurpose===1?"1 piece of work on your purpose":A.onPurpose+" pieces of work on your purpose"),
+    unknown?"counts are withheld rather than shown as zero"
+           :(A.onPurpose?"moving, and traceable to it":"nothing is moving on it"));
+
+  if(unknown) return;
 
   if(A.canJudgeLinkage){
     if(A.unlinked>0) line(ICON,
@@ -771,7 +801,10 @@ function aligned(S){
       "all on your stated purpose");}
 
   if(A.onPurpose===0 && !A.pendingAll && !(A.idleMust||[]).length){
-    line(ICON,"Nothing open on this Brain at all.","the instrument has nothing to judge yet");}
+    /* Only a genuinely EMPTY record can say this. If a source failed, the honest
+       answer is that we do not know — including when the other sources agree. */
+    const unread=(S.errors||[]).some(s=>s==="plans"||s==="decisions"||s==="missions");
+    if(!unread) line(ICON,"Nothing open on this Brain at all.","the instrument has nothing to judge yet");}
 }
 function next(S){
   const b=$("next"); b.innerHTML="";
@@ -779,7 +812,10 @@ function next(S){
     d.innerHTML='<span class="sq"></span><span class="tx">'+t.t+'</span><span class="seq">'+
       String(t.seq!=null?t.seq:i+1).padStart(2,"0")+'</span>';b.appendChild(d);});
   if(!(S.next||[]).length){const d=document.createElement("div");d.className="ghost";
-    d.innerHTML='<span class="sq"></span><span class="tx">Nothing queued in the sequence.</span>';b.appendChild(d);}
+    const unread=(S.errors||[]).includes("missions");
+    d.innerHTML='<span class="sq"></span><span class="tx">'
+      +(unread?"Could not read the sequence — it is not necessarily empty."
+              :"Nothing queued in the sequence.")+'</span>';b.appendChild(d);}
 }
 function asks(S){
   const b=$("asks"); b.innerHTML="";
@@ -798,7 +834,10 @@ function asks(S){
       btn.addEventListener("click",()=>decide(a,btn.dataset.v,d));});
     b.appendChild(d);});
   if(!(S.asks||[]).length){const d=document.createElement("div");d.className="ask";
-    d.innerHTML='<div class="q">Nothing is waiting on you.</div><div class="ctx">every open question is answered</div>';b.appendChild(d);}
+    const unread=(S.errors||[]).includes("plans");
+    d.innerHTML='<div class="q">'+(unread?"Could not read what is waiting on you"
+      :"Nothing is waiting on you.")+'</div><div class="ctx">'
+      +(unread?"—":"every open question is answered")+'</div>';b.appendChild(d);}
   $("more").textContent = S.more ? (S.more+" further "+(S.more===1?"item waits":"items wait")+" behind these") : "";
 }
 function register(S){
@@ -918,31 +957,40 @@ async function send(a,choice,note,el){
 /* ---------- fill the page ---------- */
 function paint(S){
   const A=S.aligned||{};
-  $("r-struck").textContent=S.struck; $("c-struck").textContent=S.struck;
-  $("r-hand").textContent=S.inHand;   $("c-hand").textContent=S.inHand;
-  $("r-wait").textContent=S.waiting;  $("c-wait").textContent=S.waiting;
-  $("c-next").textContent=(S.next||[]).length;
-  $("c-reg").textContent=(S.decisions||[]).length;
-  $("c-align").textContent=A.written?A.onPurpose:"·";
+  const bad=s=>(S.errors||[]).includes(s);
+  $("r-struck").textContent=num(S.struck); $("c-struck").textContent=num(S.struck);
+  $("r-hand").textContent=num(S.inHand);   $("c-hand").textContent=num(S.inHand);
+  $("r-wait").textContent=num(S.waiting);  $("c-wait").textContent=num(S.waiting);
+  $("c-next").textContent=bad("missions")?"—":(S.next||[]).length;
+  $("c-reg").textContent=bad("decisions")?"—":(S.decisions||[]).length;
+  $("c-align").textContent=A.written?num(A.onPurpose):"·";
   $("hand-a-name").textContent=S.localName;
-  $("hand-a-state").textContent=S.struck+" struck";
+  $("hand-a-state").textContent=num(S.struck)+" struck";
 
   const st=$("stamp-align");
   st.innerHTML = A.written
-    ? "ALIGNED <b>"+A.onPurpose+" ON YOUR PURPOSE</b>"
+    ? "ALIGNED <b>"+num(A.onPurpose)+" ON YOUR PURPOSE</b>"
     : "ONE RING <b>· PURPOSE NOT WRITTEN</b>";
   $("stamp-state").innerHTML="READ <b>"+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+"</b>";
   $("caption").textContent = A.written
     ? "One ring, centred on what you said you are for"
     : "One ring — and no purpose written yet. Activity is not a purpose; write yours and the centre fills";
   /* Say what is held back, rather than silently dropping it. */
-  const nb=S.boards||0;
-  const scope = S.held
+  const nb=S.boards;
+  const scope = (S.held!=null&&nb!=null)
     ? " · "+nb+" BOARD"+(nb===1?"":"S")+" · "+S.held+" HELD INTERNAL"
     : "";
-  $("provenance").textContent = S.errors&&S.errors.length
-    ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
+  const failed=S.errors||[];
+  $("provenance").textContent = failed.length
+    ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+failed.join(", ").toUpperCase())
     : "READ FROM THIS BRAIN'S OWN RECORD"+scope;
+  /* A footnote loses to a wall of numbers. If anything could not be read, the
+     caption — the loudest line on the page — says so, in words, before the eye
+     reaches a single withheld count. The numbers say "—", never 0. */
+  if(failed.length){
+    setState("This page could not read part of this Brain's record — "
+      +failed.join(", ")+". Counts are withheld, not zero. Retrying every minute.");
+  }
   build(S); seals(S); aligned(S); items(S); next(S); asks(S); register(S);
 }
 
