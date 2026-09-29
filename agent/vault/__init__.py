@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -230,6 +231,109 @@ def auto_unlock(*, env_var: str = VAULT_PASSPHRASE_ENV) -> bool:
         return False
 
 
+def generate_passphrase() -> str:
+    """A fresh high-entropy passphrase for an unattended first run."""
+    return secrets.token_urlsafe(32)
+
+
+def write_passphrase_file(passphrase: str, *, path: Optional[Path] = None) -> Path:
+    """Write the auto-unlock keyfile at mode 0600, atomically.
+
+    Created with 0600 from the open() call rather than chmod'd afterwards, so
+    there is never a window in which the passphrase is readable by anyone else.
+    Written to a temporary name and renamed, so a crash mid-write cannot leave a
+    truncated passphrase that would lock the owner out of their own Vault.
+
+    The file deliberately lives OUTSIDE ``vault/`` (see passphrase_file_path) so
+    that backing up or copying the vault directory does not carry the passphrase
+    with it — the ciphertext stays encrypted in transit.
+    """
+    target = path or passphrase_file_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(passphrase)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, target)
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        logger.debug("Vault: could not chmod passphrase file", exc_info=True)
+    return target
+
+
+def bootstrap(
+    *,
+    env_var: str = VAULT_PASSPHRASE_ENV,
+    create: bool = True,
+) -> bool:
+    """Bring the Vault up unattended: create it on first run, then unlock it.
+
+    Why this exists
+    ---------------
+    ``auto_unlock()`` closed the *process-local* gap, but it still needs two
+    things it was never given: a Vault that exists, and a passphrase it can read.
+    Neither was true on a delivered Brain. No installer ran ``vault init``, and
+    nothing ever provisioned a passphrase — so every customer machine reported
+    ``key_present: False``, ``Entries: 0``, and a memory layer that silently did
+    nothing. The owner could not fix it either: ``centurion vault unlock``
+    unlocks only its own short-lived process, and the app offered a help dialog
+    rather than a control.
+
+    A Centurion's memory should not depend on a human opening a terminal. So on
+    a machine that has never had a Vault, this creates one: a fresh passphrase,
+    written 0600 beside (not inside) the vault, then initialised and unlocked.
+
+    **It will never touch an existing Vault.** If a wrapped key is present but no
+    passphrase is readable, the passphrase has been deliberately withheld or
+    lost, and re-initialising would destroy the owner's memory. It logs and
+    returns False instead. There is no recovery path for a lost passphrase, so
+    the only safe move is to leave it alone.
+
+    Returns True if the Vault is unlocked when this returns. Never raises.
+    """
+    try:
+        vault = open_vault()
+        if vault.is_unlocked:
+            return True
+
+        if is_initialized():
+            # An existing Vault we cannot open. Do NOT re-initialise: the key is
+            # wrapped, and overwriting it would erase everything inside.
+            if not read_passphrase(env_var=env_var):
+                logger.warning(
+                    "Vault: exists but is locked, and no passphrase is available "
+                    "(set %s, or restore %s with mode 0600). Leaving it untouched.",
+                    env_var,
+                    passphrase_file_path(),
+                )
+                return False
+            return auto_unlock(env_var=env_var)
+
+        if not create:
+            return False
+
+        passphrase = read_passphrase(env_var=env_var) or generate_passphrase()
+        if not read_passphrase(env_var=env_var):
+            write_passphrase_file(passphrase)
+        initialize(passphrase)
+        logger.info(
+            "Vault: created and unlocked at %s (first run — memory is now on). "
+            "Passphrase stored 0600 at %s; the Vault protects the disk while "
+            "locked, not a hostile OS while unlocked.",
+            get_vault_dir(),
+            passphrase_file_path(),
+        )
+        return open_vault().is_unlocked
+    except Exception:
+        logger.warning("Vault: bootstrap failed", exc_info=True)
+        return False
+
+
 def initialize(passphrase: str) -> Vault:
     """Create key + empty DB and return an unlocked Vault."""
     ensure_vault_dir()
@@ -336,6 +440,9 @@ __all__ = [
     "MemoryType",
     "VAULT_PASSPHRASE_ENV",
     "auto_unlock",
+    "bootstrap",
+    "generate_passphrase",
+    "write_passphrase_file",
     "initialize",
     "is_initialized",
     "open_vault",

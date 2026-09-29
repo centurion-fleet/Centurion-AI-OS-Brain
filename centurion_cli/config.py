@@ -1363,11 +1363,19 @@ DEFAULT_CONFIG = {
     # Vault — offline sealed long-term memory (AES-GCM at rest, local embeddings).
     # Complements MEMORY.md/USER.md; never auto-ingests turns.
     "vault": {
-        "enabled": False,              # opt-in until unlocked + initialized
+        # Memory is ON by default. A Centurion should arrive able to remember.
+        # These three used to be False/False-with-an-opt-in, which meant a
+        # delivered Brain carried a locked, empty, uninitialised Vault and a
+        # memory layer that silently did nothing — the owner could not fix it
+        # without a terminal either. See agent/vault.bootstrap().
+        "enabled": True,
+        "auto_init": True,             # create the Vault on first run, when this
+                                       # machine has never had one
         "auto_unlock": True,           # unlock in-process at agent startup from
                                        # $CENTURION_VAULT_PASSPHRASE or the 0600
                                        # keyfile (vault is process-local otherwise)
-        "prefetch_on_turn": False,
+        "prefetch_on_turn": True,      # read memory back on a turn: a Vault
+                                       # nothing reads from is storage, not memory
         "require_user_confirm": False,
         "max_entry_chars": 4000,
         "max_search_results": 8,

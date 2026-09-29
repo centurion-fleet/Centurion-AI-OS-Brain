@@ -1,9 +1,13 @@
 # README — Vault cannot be unlocked from the CLI (and how to fix it)
 
-**Audience:** every Centurion Brain on the next update, and whoever cuts the release.
-**Status:** fixed in this release. Behaviour described here was observed on **v5.3.10**.
-**Action required:** none for new Brains. Existing Brains with Vault enabled should
-verify the unlock after upgrading (see the checklist at the end).
+**Audience:** every Centurion Brain, and whoever cuts the release.
+**Status:** fixed. Two gaps, closed in sequence:
+`auto_unlock()` (7.0.0+) closed the *process-local* gap; **`bootstrap()` (7.0.6)** closes
+the *first-run* gap — it creates the Vault and provisions its passphrase on first startup,
+so a delivered Brain has working memory with no terminal and no passphrase to type.
+**Action required:** none — memory turns itself on. If `centurion vault status` still
+reports `Key present: False` on a current build, that is a fault to report, not a chore
+to perform.
 
 ---
 

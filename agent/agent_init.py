@@ -1090,17 +1090,39 @@ def init_agent(
 
         try:
             vault_cfg = _agent_cfg.get("vault", {}) or {}
-            agent._vault_prefetch_on_turn = bool(
-                vault_cfg.get("enabled") and vault_cfg.get("prefetch_on_turn")
-            )
+            vault_enabled = bool(vault_cfg.get("enabled"))
             # Vault unlock state is process-local, so the `centurion vault unlock`
             # CLI (a separate, short-lived process) can never unlock a running
             # gateway/agent. Unlock in-process from the env var or keyfile.
             # Idempotent: only the first agent in a process does the work.
-            if vault_cfg.get("enabled") and vault_cfg.get("auto_unlock", True):
-                from agent.vault import auto_unlock
+            #
+            # `bootstrap()` rather than `auto_unlock()`: a Brain that has never
+            # had a Vault has also never made a decision about memory. The shipped
+            # default is `enabled: false`, which meant every delivered machine
+            # carried a locked, empty, uninitialised Vault and a memory layer that
+            # silently no-opped. On a machine with no Vault we create one, then
+            # turn it on — so a Centurion arrives able to remember without a human
+            # in a terminal. An *existing* Vault is never touched.
+            if vault_cfg.get("auto_unlock", True):
+                from agent.vault import bootstrap, is_initialized
 
-                auto_unlock()
+                never_set_up = not is_initialized()
+                if vault_enabled or (vault_cfg.get("auto_init", True) and never_set_up):
+                    if bootstrap() and not vault_enabled:
+                        # Best effort: this process will use the Vault either way,
+                        # but persisting means the next one does too.
+                        try:
+                            from centurion_cli.config import load_config, save_config
+
+                            cfg_out = load_config()
+                            cfg_out.setdefault("vault", {})["enabled"] = True
+                            save_config(cfg_out)
+                        except Exception:
+                            pass
+                        vault_enabled = True
+            agent._vault_prefetch_on_turn = bool(
+                vault_enabled and vault_cfg.get("prefetch_on_turn")
+            )
         except Exception:
             agent._vault_prefetch_on_turn = False
 

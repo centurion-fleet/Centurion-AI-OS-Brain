@@ -4654,14 +4654,14 @@ Being · Continuity\n\
                 "vault_setup" => on_ask(
                     "Set up Vault".to_owned(),
                     format!(
-                        "Snapshot: {}\n\nHelp me set up and initialize Vault on this computer for durable memory.",
+                        "Snapshot: {}\n\nMemory is meant to switch on by itself on first run — the Brain creates its own Vault and unlocks it at startup, with no terminal and no passphrase to type. This machine still reports it as unset up, so something is wrong with that automatic step. Diagnose why, fix it, and confirm memory is on. Do not ask me to run commands in a terminal unless there is genuinely no other way.",
                         vault_status.as_str()
                     ),
                 ),
                 "vault_unlock" => on_ask(
                     "Unlock Vault".to_owned(),
                     format!(
-                        "Snapshot: {}\n\nVault is locked on this computer. Walk me through unlocking it safely with my passphrase.",
+                        "Snapshot: {}\n\nThe Vault on this computer exists but cannot be opened, which means the passphrase is missing or was never saved. The Brain cannot recover it — the key is sealed and there is no back door. Do not send me to a terminal to try. Explain plainly what happened, whether the memory inside is recoverable, and what my options are.",
                         vault_status.as_str()
                     ),
                 ),
