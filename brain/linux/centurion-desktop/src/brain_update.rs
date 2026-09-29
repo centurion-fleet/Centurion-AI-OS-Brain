@@ -56,23 +56,22 @@
 //!     attestation at all.
 //!
 //! So `dry_run()` reports the download as **skipped**, with that reason, rather
-//! than failing opaquely or pretending to try. Three ways to close it, smallest
-//! first:
+//! than failing opaquely or pretending to try.
 //!
-//!   1. **Persist the code at activation.** Client-only. The store is already
-//!      encrypted with a device-derived key, and the route re-checks live
-//!      entitlement, so revocation still works. Existing owners re-enter it once.
-//!   2. **Accept the identity the Brain already presents.** `/api/v1/license/checkin`
-//!      already trusts `license_id` + `install_id` + `machine_fingerprint`; let the
-//!      download route trust the same and return a short-lived signed URL. No
-//!      secret at rest, no customer action — needs a v5-prod change.
-//!   3. **Attestation-based auth.** A real ed25519 CA keypair plus genuine
-//!      server-side signature verification. The right long-term answer, and the
-//!      largest piece of work.
+//! ── ✅ CLOSED 29 Sep 2026 (NR-001 fault 2b) ─────────────────────────────────────
+//! Route 2 — **the identity the Brain already presents** — is now live. The
+//! download route accepts `x-centurion-license-id` + `x-centurion-hardware-id`
+//! (the `license_id` + `machine_fingerprint` pair `/api/v1/license/checkin`
+//! already trusts to bind a device), resolved by the same predicate the platform
+//! already uses. No secret at rest, no customer action. Route 1 composes: a Brain
+//! that holds a code presents the code, a Brain that does not presents identity.
 //!
-//! Until one is chosen the Update button must not be wired: a button whose download
-//! always fails is the same defect class as a button wired to no engine — merely
-//! with a nicer label.
+//! Route 3 — real ed25519 attestation — is still the right long-term answer and
+//! still outstanding. It replaces a *trust-the-server's-word* identity with a
+//! signature the Brain can verify for itself. See NR-001 fault 3.
+//!
+//! `DownloadAuth` below carries whichever credential this Brain has. A Brain with
+//! neither cannot take an update and says exactly that.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -164,15 +163,74 @@ pub fn latest_release() -> Result<Release, String> {
         .map_err(|e| format!("The release channel returned something unexpected: {e}"))
 }
 
+/// How this Brain authenticates step 2 — the download.
+///
+/// Two credentials compose rather than compete (NR-001 §5): a licence code when the
+/// Brain holds one (route 2a), and the identity the Brain is already bound with —
+/// `license_id` + `machine_fingerprint`, exactly the pair `/api/v1/license/checkin`
+/// trusts — when it does not (route 2b).
+///
+/// A Brain with neither cannot take an update. That is a real state and it is reported
+/// as one, not disguised as a network fault.
+#[derive(Debug, Clone)]
+pub enum DownloadAuth {
+    /// A real issued licence code, sent as `x-centurion-license-code`.
+    Code(String),
+    /// The identity this Brain already presents to the licence server.
+    Identity {
+        license_id: String,
+        hardware_id: String,
+        install_id: Option<String>,
+    },
+}
+
+impl DownloadAuth {
+    /// True when this credential carries something worth sending.
+    pub fn is_present(&self) -> bool {
+        match self {
+            DownloadAuth::Code(code) => !code.trim().is_empty(),
+            DownloadAuth::Identity {
+                license_id,
+                hardware_id,
+                ..
+            } => !license_id.trim().is_empty() && !hardware_id.trim().is_empty(),
+        }
+    }
+
+    /// The owner-facing name of this credential, for the failure message.
+    pub fn describe(&self) -> &'static str {
+        match self {
+            DownloadAuth::Code(_) => "licence code",
+            DownloadAuth::Identity { .. } => "licence identity",
+        }
+    }
+}
+
 /// Step 2 — download the artifact.
 ///
-/// Auth is the **licence code**, not a browser session: the download route accepts
-/// `x-centurion-license-code` and falls back to a staff session. Returns the path
-/// written. Never trusts the filename from the channel for the *directory*.
+/// Auth is `DownloadAuth`: a licence code (`x-centurion-license-code`) or the identity
+/// the Brain is already bound with (`x-centurion-license-id` + `x-centurion-hardware-id`),
+/// with a staff browser session as the route's own fallback. Returns the path written.
+/// Never trusts the filename from the channel for the *directory*.
 pub fn download_artifact(
     artifact: &Artifact,
     dest_dir: &Path,
-    licence_code: &str,
+    auth: &DownloadAuth,
+) -> Result<PathBuf, String> {
+    download_artifact_from(artifact, dest_dir, auth, &download_api())
+}
+
+/// The body of step 2, with the route injected.
+///
+/// Split out so a test can drive the real code against a local socket. Mutating
+/// `CENTURION_RELEASE_DOWNLOAD_API` instead would work only under `unsafe` (edition 2024)
+/// and would race every other test in the binary — and a test that has to do that is
+/// usually a test that is about to assert less than it claims.
+pub fn download_artifact_from(
+    artifact: &Artifact,
+    dest_dir: &Path,
+    auth: &DownloadAuth,
+    download_api: &str,
 ) -> Result<PathBuf, String> {
     fs::create_dir_all(dest_dir)
         .map_err(|e| format!("Could not create {}: {e}", dest_dir.display()))?;
@@ -187,16 +245,35 @@ pub fn download_artifact(
 
     // `installer_id` is the canonical parameter; the route still accepts
     // `artifact_id` "for older clients (same UUID now)". Send the current name.
-    let url = format!("{}?installer_id={}", download_api(), artifact.id);
+    let url = format!("{}?installer_id={}", download_api, artifact.id);
     // `Accept: application/json` makes the route answer `{ok:true,url}` instead of a
     // 302, and makes its refusals readable JSON rather than an HTML page. The route
     // only returns JSON when the request asks for it (its `wantsJson` check).
-    let resp = match agent()
+    let request = agent()
         .get(&url)
-        .set("x-centurion-license-code", licence_code)
-        .set("Accept", "application/json")
-        .call()
-    {
+        .set("Accept", "application/json");
+
+    // Present whichever credential this Brain holds. Never send an identity header
+    // carrying an empty value: the route treats a present-but-empty header as a
+    // credential and would burn a rate-limit slot to reach the same refusal.
+    let request = match auth {
+        DownloadAuth::Code(code) => request.set("x-centurion-license-code", code.trim()),
+        DownloadAuth::Identity {
+            license_id,
+            hardware_id,
+            install_id,
+        } => {
+            let request = request
+                .set("x-centurion-license-id", license_id.trim())
+                .set("x-centurion-hardware-id", hardware_id.trim());
+            match install_id.as_deref().map(str::trim) {
+                Some(id) if !id.is_empty() => request.set("x-centurion-install-id", id),
+                _ => request,
+            }
+        }
+    };
+
+    let resp = match request.call() {
         Ok(r) => r,
         // ureq treats any non-2xx as an Error::Status. The body carries the real
         // reason — never discard it in favour of the status code.
@@ -673,9 +750,13 @@ impl DryRunReport {
 /// update something — which is how an installer ships having been exercised once,
 /// by a customer.
 ///
-/// `licence_code` is `None` on a Brain that has never stored one; the download step
-/// then reports *why* it cannot proceed rather than failing opaquely.
-pub fn dry_run(dest_dir: &Path, licence_code: Option<&str>) -> DryRunReport {
+/// `auth` is `None` on a Brain that holds neither a licence code nor a bound identity;
+/// the download step then reports *why* it cannot proceed rather than failing opaquely.
+///
+/// Pass whatever credential this Brain has (`DownloadAuth`) — the same one the live
+/// pipeline uses. A dry run that authenticated differently from the real path would test
+/// the wrong thing.
+pub fn dry_run(dest_dir: &Path, auth: Option<&DownloadAuth>) -> DryRunReport {
     let mut steps: Vec<(String, StepOutcome)> = Vec::new();
 
     // --- 1. resolve -------------------------------------------------------
@@ -742,24 +823,29 @@ pub fn dry_run(dest_dir: &Path, licence_code: Option<&str>) -> DryRunReport {
     }
 
     // --- 2. download ------------------------------------------------------
-    let downloaded = match licence_code.map(str::trim).filter(|c| !c.is_empty()) {
+    let downloaded = match auth.filter(|a| a.is_present()) {
         None => {
             steps.push((
                 "Download the artifact".to_owned(),
                 StepOutcome::Skipped(
-                    "no licence code is stored on this Brain. The download route accepts a \
-                     real issued licence code (`x-centurion-license-code`) or a staff \
-                     session — nothing else. See the note in the module header."
+                    "this Brain holds neither a licence code nor a bound licence identity, \
+                     so there is nothing to authenticate the download with. Both credentials \
+                     are checked: the code at activation, then the license_id + \
+                     machine_fingerprint this Brain already checks in with."
                         .to_owned(),
                 ),
             ));
             None
         }
-        Some(code) => match download_artifact(artifact, dest_dir, code) {
+        Some(auth) => match download_artifact(artifact, dest_dir, auth) {
             Ok(path) => {
                 steps.push((
                     "Download the artifact".to_owned(),
-                    StepOutcome::Done(path.display().to_string()),
+                    StepOutcome::Done(format!(
+                        "{} — authenticated by {}",
+                        path.display(),
+                        auth.describe()
+                    )),
                 ));
                 Some(path)
             }
@@ -936,5 +1022,140 @@ mod tests {
         };
         assert!(!broken.all_clear());
         assert!(broken.render().contains("[FAIL]"));
+    }
+
+    /// NR-001 fault 2b — the download must present the identity this Brain is bound with.
+    ///
+    /// Proves the header wiring against a real socket, not against a string constant. A
+    /// test that only asserted the header *names* would pass while the values never left
+    /// the process — which is exactly the class of defect this report is about.
+    ///
+    /// Also proves the negative: a Brain with no credential still refuses to invent one,
+    /// and a code, when held, is still sent as a code (route 2a composes with 2b).
+    #[test]
+    fn the_download_presents_the_credential_this_brain_holds() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+        use std::sync::mpsc;
+
+        fn serve_once(body: &'static [u8]) -> (mpsc::Receiver<Vec<String>>, String) {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind a port");
+            let port = listener.local_addr().unwrap().port();
+            let (tx, rx) = mpsc::channel::<Vec<String>>();
+            std::thread::spawn(move || {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut lines: Vec<String> = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    if line.trim().is_empty() {
+                        break;
+                    }
+                    lines.push(line.trim().to_owned());
+                }
+                let _ = tx.send(lines);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n\
+                     Content-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(head.as_bytes());
+                let _ = stream.write_all(body);
+                let _ = stream.flush();
+            });
+            (rx, format!("http://127.0.0.1:{port}/api/v1/releases/download"))
+        }
+
+        fn header_value(lines: &[String], name: &str) -> Option<String> {
+            lines
+                .iter()
+                .find(|l| l.to_ascii_lowercase().starts_with(&format!("{name}:")))
+                .map(|l| l.split_once(':').unwrap().1.trim().to_owned())
+        }
+
+        let payload: &[u8] = b"CENTURION-ARTIFACT-PAYLOAD";
+        let artifact = Artifact {
+            id: "a1".to_owned(),
+            filename: "centurion-brain-9.9.9-1.fc44.x86_64.rpm".to_owned(),
+            size_bytes: payload.len() as u64,
+            sha256: "unused".to_owned(),
+        };
+
+        // --- route 2b: the identity the Brain is already bound with ------------------
+        let (rx, base) = serve_once(payload);
+        let dir = std::env::temp_dir().join("centurion-update-test-identity");
+        let written = download_artifact_from(
+            &artifact,
+            &dir,
+            &DownloadAuth::Identity {
+                license_id: "lic_live_42".to_owned(),
+                hardware_id: "ab99deadbeef".to_owned(),
+                install_id: Some("install-xyz".to_owned()),
+            },
+            &base,
+        )
+        .expect("the identity must authenticate the download");
+        let lines = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("a request arrived");
+
+        assert_eq!(
+            header_value(&lines, "x-centurion-license-id").as_deref(),
+            Some("lic_live_42"),
+            "the bound licence id must reach the route: {lines:?}"
+        );
+        assert_eq!(
+            header_value(&lines, "x-centurion-hardware-id").as_deref(),
+            Some("ab99deadbeef"),
+            "the bound machine fingerprint must reach the route: {lines:?}"
+        );
+        assert_eq!(
+            header_value(&lines, "x-centurion-install-id").as_deref(),
+            Some("install-xyz"),
+        );
+        assert!(
+            header_value(&lines, "x-centurion-license-code").is_none(),
+            "an identity must not masquerade as a code"
+        );
+        assert!(written.exists(), "the artifact must be written to disk");
+
+        // --- route 2a still composes: a code is sent as a code -----------------------
+        let (rx, base) = serve_once(payload);
+        let _ = download_artifact_from(
+            &artifact,
+            &dir,
+            &DownloadAuth::Code("CENT-CODE-1".to_owned()),
+            &base,
+        )
+        .expect("a held code must still authenticate");
+        let lines = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("a request arrived");
+        assert_eq!(
+            header_value(&lines, "x-centurion-license-code").as_deref(),
+            Some("CENT-CODE-1"),
+        );
+        assert!(
+            header_value(&lines, "x-centurion-license-id").is_none(),
+            "a code must not also present an identity"
+        );
+
+        // --- a credential with nothing in it is not a credential ---------------------
+        assert!(!DownloadAuth::Code("   ".to_owned()).is_present());
+        assert!(!DownloadAuth::Identity {
+            license_id: "".to_owned(),
+            hardware_id: "ab99".to_owned(),
+            install_id: None
+        }
+        .is_present());
+        assert!(!DownloadAuth::Identity {
+            license_id: "lic_1".to_owned(),
+            hardware_id: "  ".to_owned(),
+            install_id: None
+        }
+        .is_present());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

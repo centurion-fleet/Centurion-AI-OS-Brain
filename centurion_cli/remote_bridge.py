@@ -283,6 +283,8 @@ def handle_request(
         return _handle_license_redeem(request, request_id)
     if action == "license_fingerprint":
         return _handle_license_fingerprint(request_id)
+    if action == "license_update_identity":
+        return _handle_license_update_identity(request_id)
     if action == "fleet_status":
         return _handle_fleet_status(request_id)
     if action == "fleet_ping":
@@ -3686,6 +3688,61 @@ def _handle_license_fingerprint(request_id: str) -> dict[str, Any]:
         }
     except Exception as exc:
         return _error_response(request_id, action="license_fingerprint", exc=exc)
+
+
+def _handle_license_update_identity(request_id: str) -> dict[str, Any]:
+    """The identity this Brain presents to take an update (NR-001 fault 2b).
+
+    A packaged Brain holds no licence code — activation posts the code and discards it.
+    It DOES hold ``license_id`` and the ``machine_fingerprint`` it bound with, which is
+    exactly what ``/api/v1/license/checkin`` already trusts. Return those so the update
+    download can authenticate as the machine the licence is already bound to.
+
+    ``machine_fingerprint`` is preferred over a fresh computation: the server holds the
+    value this Brain activated with, and a recomputation could differ (network interface,
+    board serial readability) and produce a mismatch that looks like a licence fault.
+    """
+    try:
+        from centurion.license.store import load_entitlement
+
+        ent = load_entitlement()
+        license_id = str(ent.license_id or "").strip()
+        if not license_id:
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "license_update_identity",
+                "error": "no_license",
+                "message": "This Brain has no licence yet, so there is nothing to present.",
+                "license_id": "",
+                "hardware_id": "",
+                "install_id": "",
+            }
+
+        hardware_id = str(ent.machine_fingerprint or "").strip()
+        if not hardware_id:
+            from centurion.license.fingerprint import compute_fingerprint
+
+            hardware_id = compute_fingerprint()
+
+        install_id = ""
+        try:
+            from centurion_cli.cloud_client import get_install_id
+
+            install_id = str(get_install_id() or "").strip()
+        except Exception:
+            install_id = ""
+
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "license_update_identity",
+            "license_id": license_id,
+            "hardware_id": hardware_id,
+            "install_id": install_id,
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="license_update_identity", exc=exc)
 
 
 def _handle_soul_get(request_id: str) -> dict[str, Any]:

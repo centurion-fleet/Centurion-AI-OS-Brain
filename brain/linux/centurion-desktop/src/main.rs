@@ -3554,21 +3554,12 @@ Is Centurion installed? Re-run Install Brain from your Get Brain download, then 
         });
     }
 
-    /// The licence code the release channel's download route demands. NR-001 fault 2
-    /// closes this properly — either by persisting the code at activation (2a) or by
-    /// having the route trust the identity this Brain already presents (2b). Until one
-    /// of those lands this returns None on a real Brain, and the update reports exactly
-    /// that rather than failing obscurely or pretending to try.
-    fn run_packaged_update_licence_code() -> Option<String> {
-        if let Ok(value) = std::env::var("CENTURION_LICENCE_CODE") {
-            let trimmed = value.trim().to_owned();
-            if !trimmed.is_empty() {
-                return Some(trimmed);
-            }
-        }
-        // Seam for NR-001 fault 2a: the code persisted at activation, read back from
-        // this Brain's own encrypted entitlement store.
-        None
+    /// The credential this Brain authenticates an update download with (NR-001 fault 2).
+    ///
+    /// Thin wrapper over `bridge_actions::packaged_update_credential` so the GUI path
+    /// and the headless dry run resolve the credential the same way.
+    fn run_packaged_update_credential() -> Option<crate::brain_update::DownloadAuth> {
+        crate::bridge_actions::packaged_update_credential(None)
     }
 
     /// The packaged (RPM) update — the seven steps in `brain_update`, in order.
@@ -3594,18 +3585,20 @@ Is Centurion installed? Re-run Install Brain from your Get Brain download, then 
             .ok_or_else(|| format!("Release {} carries no installer package.", release.version))?
             .clone();
 
-        // Step 2 — download. The route authenticates with a licence code, and a Brain
-        // that has never stored one cannot pass this step. Say so in the owner's words,
-        // and change nothing on their machine.
-        let Some(code) = run_packaged_update_licence_code() else {
+        // Step 2 — download. The route authenticates with a licence code or with the
+        // identity this Brain is already bound with (NR-001 fault 2). A Brain holding
+        // neither cannot pass this step; say so in the owner's words, and change nothing
+        // on their machine.
+        let Some(auth) = run_packaged_update_credential() else {
             return Err(format!(
-                "Sovereign AI Brain {} is available, but this Brain has no licence code \
-                 stored and the download route requires one. Nothing was downloaded and \
+                "Sovereign AI Brain {} is available, but this Brain is not activated, so \
+                 there is no licence to authenticate the download with. Activate Centurion \
+                 in Settings → License, then try again. Nothing was downloaded and \
                  nothing on this machine was changed.",
                 release.version
             ));
         };
-        let path = brain_update::download_artifact(&artifact, &dest, &code)?;
+        let path = brain_update::download_artifact(&artifact, &dest, &auth)?;
 
         // Step 3 — the artifact is what the channel said it was.
         brain_update::verify_sha256(&path, &artifact.sha256)?;
@@ -9108,16 +9101,21 @@ fn main() {
     // predecessor steps against the real channel, installs nothing and stops
     // nothing. A privileged installer that has only ever been compiled is not a
     // tested installer; this is the entry point that makes steps 1–5 testable
-    // without touching the machine. `--licence-code` is needed for the download
-    // because the channel authenticates that route with a licence, not a session.
+    // without touching the machine.
+    //
+    // The download authenticates exactly as the live path does (NR-001 fault 2): an
+    // explicit `--licence-code` or `CENTURION_LICENCE_CODE` if present, otherwise the
+    // identity this Brain is already bound with. Omit the flag on a real Brain and it
+    // still reaches the channel — which is the point, and the thing to watch.
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--update-dry-run") {
         let code = args
             .iter()
             .find_map(|a| a.strip_prefix("--licence-code="))
             .map(str::to_owned);
+        let auth = bridge_actions::packaged_update_credential(code.as_deref());
         let dir = std::env::temp_dir().join("centurion-update-dryrun");
-        let report = brain_update::dry_run(&dir, code.as_deref());
+        let report = brain_update::dry_run(&dir, auth.as_ref());
         println!("{}", report.render());
         // A non-zero exit on failure so a script can gate on it. Skips do not fail.
         std::process::exit(if report.all_clear() { 0 } else { 1 });

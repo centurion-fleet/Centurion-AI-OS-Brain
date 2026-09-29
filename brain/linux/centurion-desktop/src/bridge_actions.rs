@@ -8,6 +8,58 @@
 //! Chat itself is gone; conversation now lives in the Sovereign AI Remote.
 
 use serde_json::Value;
+
+/// The credential this Brain authenticates an update download with (NR-001 fault 2).
+///
+/// Two compose, explicit/env code first so a Brain that holds one keeps using it
+/// (route 2a):
+///
+///   1. `explicit_code` (the `--licence-code` CLI flag, dry runs) or
+///      `CENTURION_LICENCE_CODE` in the environment.
+///   2. The identity this Brain is *already bound with* — `license_id` +
+///      `machine_fingerprint`, the pair `/api/v1/license/checkin` trusts. This is
+///      route 2b and it asks nothing of the owner: the machine is already reconciled
+///      with the licence server, so the download door can consult the same records
+///      the checkin door already does.
+///
+/// `None` means the Brain holds neither — an unactivated machine. That is a real state,
+/// and the update reports exactly that rather than failing obscurely.
+///
+/// Lives here rather than in the GTK module because the headless `--update-dry-run`
+/// entry point needs the same resolution, and a dry run that authenticated differently
+/// from the real path would test the wrong thing.
+pub fn packaged_update_credential(explicit_code: Option<&str>) -> Option<crate::brain_update::DownloadAuth> {
+    use crate::brain_update::DownloadAuth;
+
+    // Route 2a — an explicit code, or one in the environment.
+    let from_env = std::env::var("CENTURION_LICENCE_CODE").ok();
+    for candidate in [explicit_code, from_env.as_deref()] {
+        if let Some(code) = candidate.map(str::trim).filter(|c| !c.is_empty()) {
+            return Some(DownloadAuth::Code(code.to_owned()));
+        }
+    }
+    // Seam for persisting a code at activation — not yet stored anywhere. Read back
+    // from this Brain's own encrypted entitlement store when it is.
+
+    // Route 2b — the identity the Brain already presents.
+    let payload = run_bridge_action("license_update_identity", serde_json::json!({}))?;
+    if payload.get("ok").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let field = |name: &str| -> Option<String> {
+        payload
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    Some(DownloadAuth::Identity {
+        license_id: field("license_id")?,
+        hardware_id: field("hardware_id")?,
+        install_id: field("install_id"),
+    })
+}
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::process::Command;
