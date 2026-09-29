@@ -100,5 +100,5 @@ brain/web-dashboard/dist/
 # blocked the push to GitHub on the 100MB blob limit. Ignored wholesale so it
 # cannot recur. Nothing tracked lives under either path; both are safe to
 # delete from disk.
-desktop/
-desktop-native/
+/desktop/
+/desktop-native/
