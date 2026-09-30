@@ -24,6 +24,7 @@ from agent.prompt_builder import (
     TOOL_USE_ENFORCEMENT_GUIDANCE,
     TOOL_USE_ENFORCEMENT_MODELS,
     OPENAI_MODEL_EXECUTION_GUIDANCE,
+    VERIFICATION_FIRST_GUIDANCE,
     MEMORY_GUIDANCE,
     SESSION_SEARCH_GUIDANCE,
     PLATFORM_HINTS,
@@ -1235,6 +1236,34 @@ class TestOpenAIModelExecutionGuidance:
     def test_guidance_is_string(self):
         assert isinstance(OPENAI_MODEL_EXECUTION_GUIDANCE, str)
         assert len(OPENAI_MODEL_EXECUTION_GUIDANCE) > 100
+
+
+class TestVerificationFirstGuidance:
+    """The verification-first rule ships unconditionally, so its content is
+    asserted directly here — a future edit cannot silently drop a clause.
+
+    The future-promise clause was added after a customer's Centurion set out an
+    overnight plan, closed with \"the report will be waiting for you in the
+    morning\", and never created the job. Nothing was built, and the plan was
+    reported as though stating it were the same act as scheduling it.
+    """
+
+    def test_guidance_covers_future_promises(self):
+        text = VERIFICATION_FIRST_GUIDANCE.lower()
+        assert "promise" in text, "the future-promise clause is missing"
+        assert "schedul" in text, "the clause must name scheduling as the action"
+
+    def test_guidance_still_covers_claims_of_completed_actions(self):
+        text = VERIFICATION_FIRST_GUIDANCE.lower()
+        assert "never report an action as done" in text
+
+    def test_guidance_still_covers_silent_internal_notes(self):
+        text = VERIFICATION_FIRST_GUIDANCE.lower()
+        assert "silent internal notes" in text
+
+    def test_guidance_is_a_substantial_string(self):
+        assert isinstance(VERIFICATION_FIRST_GUIDANCE, str)
+        assert len(VERIFICATION_FIRST_GUIDANCE) > 500
 
 
 # =========================================================================
