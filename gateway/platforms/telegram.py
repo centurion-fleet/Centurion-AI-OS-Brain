@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 import html as _html
 import re
 from datetime import datetime, timezone
@@ -440,6 +441,18 @@ class TelegramAdapter(BasePlatformAdapter):
         self._polling_error_task: Optional[asyncio.Task] = None
         self._polling_conflict_count: int = 0
         self._polling_network_error_count: int = 0
+        # Recurrent-conflict detection.  _polling_conflict_count RESETS on every
+        # successful poll, so an alternating rival — two agents sharing one bot
+        # token, each winning some rounds — never accumulates and is never
+        # surfaced.  Messages just split between them, which reads to the owner
+        # as amnesia or a personality change.  This record is deliberately NOT
+        # reset on success: a recurrent conflict is the only signal available
+        # when the rival is a legacy install that does not participate in our
+        # machine-local token lock (gateway/status.acquire_scoped_lock).
+        self._conflict_timestamps: List[float] = []
+        self._last_conflict_at: float = 0.0
+        self._recurrent_conflict_warned: bool = False
+        self.recurrent_polling_conflicts: int = 0
         self._polling_error_callback_ref = None
         # After sustained reconnect storms the PTB httpx pool can return
         # SendResult(success=True) for sends that never actually transmit.
@@ -1029,9 +1042,63 @@ class TelegramAdapter(BasePlatformAdapter):
             )
             await self._handle_polling_network_error(probe_err)
 
+    # A recurring conflict is a different fault from a transient one, and the
+    # retry counter cannot see it (it resets on every success).  Threshold: this
+    # many conflicts inside this window means a second agent is polling the same
+    # bot token, not that Telegram is still holding a dead session open.
+    RECURRENT_CONFLICT_WINDOW_S = 900.0   # 15 minutes
+    RECURRENT_CONFLICT_THRESHOLD = 3
+
+    def _note_polling_conflict(self) -> None:
+        """Record every polling conflict and surface a RECURRENT one.
+
+        A transient 409 (our own previous session still expiring server-side)
+        happens once and clears.  A rival agent sharing this bot token produces
+        conflict -> recover -> conflict -> recover, forever: each individual
+        conflict looks transient, so the retry logic never escalates and the
+        gateway keeps reporting healthy while messages alternate between two
+        agents.  Detecting the pattern is the only way to see it.
+        """
+        now = time.monotonic()
+        # A full quiet window re-arms the warning, so a rival that goes away and
+        # returns is reported again rather than being silenced forever.
+        if (
+            self._recurrent_conflict_warned
+            and self._last_conflict_at
+            and (now - self._last_conflict_at) > self.RECURRENT_CONFLICT_WINDOW_S
+        ):
+            self._recurrent_conflict_warned = False
+            self._conflict_timestamps = []
+
+        self._last_conflict_at = now
+        cutoff = now - self.RECURRENT_CONFLICT_WINDOW_S
+        self._conflict_timestamps = [t for t in self._conflict_timestamps if t >= cutoff]
+        self._conflict_timestamps.append(now)
+        self.recurrent_polling_conflicts = len(self._conflict_timestamps)
+
+        if (
+            self.recurrent_polling_conflicts >= self.RECURRENT_CONFLICT_THRESHOLD
+            and not self._recurrent_conflict_warned
+        ):
+            self._recurrent_conflict_warned = True
+            logger.error(
+                "[%s] Telegram is being polled by ANOTHER process — %d conflicts in "
+                "the last %d minutes, each one recovering. Two agents are sharing "
+                "this bot token, so messages will alternate between them and each "
+                "will appear to have amnesia. This is NOT a network fault and will "
+                "not clear on its own: find the second Centurion, or legacy install, "
+                "running with this token and take it off Telegram.",
+                self.name,
+                self.recurrent_polling_conflicts,
+                int(self.RECURRENT_CONFLICT_WINDOW_S // 60),
+            )
+
     async def _handle_polling_conflict(self, error: Exception) -> None:
         if self.has_fatal_error and self.fatal_error_code == "telegram_polling_conflict":
             return
+        # Record against RECURRENCE first — the retry counter below dissipates
+        # on the first success, which is precisely how a rival stays invisible.
+        self._note_polling_conflict()
         # Transient 409 Conflict errors arise when the previous gateway process
         # has been killed (e.g. during `centurion update` or `--replace` handoffs)
         # but its long-poll connection hasn't yet expired on Telegram's servers.

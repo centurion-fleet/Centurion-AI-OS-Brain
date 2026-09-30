@@ -309,3 +309,137 @@ async def test_disconnect_skips_inactive_updater_and_app(monkeypatch):
     app.stop.assert_not_awaited()
     app.shutdown.assert_awaited_once()
     warning.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Recurrent polling conflicts — a rival sharing the bot token
+#
+# The retry counter resets on every successful poll, so two agents alternating
+# on one bot token never accumulate and never surface: messages just split
+# between them. These guards assert the PATTERN is caught even when every
+# individual conflict recovers.
+#
+# Regression origin (29-30 Sep 2026): a customer's Centurion was reported as
+# having "complete instantaneous amnesia" and reading as argumentative, while a
+# legacy install polled the same bot token. The same-host token lock could not
+# see it, because a legacy install never takes that lock.
+# ---------------------------------------------------------------------------
+
+
+def _conflict_adapter():
+    return TelegramAdapter(PlatformConfig(enabled=True, token="***"))
+
+
+def test_single_transient_conflict_does_not_surface(monkeypatch):
+    """One 409 is the known transient case (our own session still expiring
+    server-side) and must stay quiet."""
+    adapter = _conflict_adapter()
+    error = MagicMock()
+    monkeypatch.setattr("gateway.platforms.telegram.logger.error", error)
+
+    adapter._note_polling_conflict()
+
+    assert adapter.recurrent_polling_conflicts == 1
+    error.assert_not_called()
+
+
+def test_recurrent_conflicts_surface_even_when_each_one_recovers(monkeypatch):
+    """conflict -> recover -> conflict -> recover is a rival's signature.
+
+    The retry counter is zeroed between conflicts, exactly as a successful poll
+    does. The recurrence record must survive that reset — if it does not, the
+    rival is invisible and the gateway keeps reporting healthy.
+    """
+    adapter = _conflict_adapter()
+    error = MagicMock()
+    monkeypatch.setattr("gateway.platforms.telegram.logger.error", error)
+
+    for _ in range(3):
+        adapter._note_polling_conflict()
+        adapter._polling_conflict_count = 0   # what a successful poll does
+
+    assert adapter.recurrent_polling_conflicts == 3
+    error.assert_called_once()
+    message = " ".join(str(a) for a in error.call_args.args)
+    assert "ANOTHER process" in message
+    assert "amnesia" in message
+
+
+def test_recurrent_warning_is_not_repeated_per_conflict(monkeypatch):
+    """Six conflicts in the window must warn once, not six times."""
+    adapter = _conflict_adapter()
+    error = MagicMock()
+    monkeypatch.setattr("gateway.platforms.telegram.logger.error", error)
+
+    for _ in range(6):
+        adapter._note_polling_conflict()
+
+    assert adapter.recurrent_polling_conflicts == 6
+    error.assert_called_once()
+
+
+def test_quiet_window_rearms_the_warning(monkeypatch):
+    """A rival that leaves and returns is reported again, not silenced forever."""
+    adapter = _conflict_adapter()
+    error = MagicMock()
+    monkeypatch.setattr("gateway.platforms.telegram.logger.error", error)
+
+    clock = [1000.0]
+    monkeypatch.setattr("gateway.platforms.telegram.time.monotonic", lambda: clock[0])
+
+    for _ in range(3):
+        adapter._note_polling_conflict()
+    assert error.call_count == 1
+
+    clock[0] += adapter.RECURRENT_CONFLICT_WINDOW_S + 1
+    adapter._note_polling_conflict()
+    assert adapter.recurrent_polling_conflicts == 1
+
+    for _ in range(2):
+        adapter._note_polling_conflict()
+    assert adapter.recurrent_polling_conflicts == 3
+    assert error.call_count == 2
+
+
+def test_conflicts_outside_the_window_do_not_accumulate(monkeypatch):
+    """Three conflicts spread over an hour are three transients, not a rival."""
+    adapter = _conflict_adapter()
+    error = MagicMock()
+    monkeypatch.setattr("gateway.platforms.telegram.logger.error", error)
+
+    clock = [5000.0]
+    monkeypatch.setattr("gateway.platforms.telegram.time.monotonic", lambda: clock[0])
+
+    for _ in range(3):
+        adapter._note_polling_conflict()
+        clock[0] += adapter.RECURRENT_CONFLICT_WINDOW_S + 1
+
+    assert adapter.recurrent_polling_conflicts == 1
+    error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handler_records_the_conflict_against_recurrence(monkeypatch):
+    """SEAM guard — the handler must actually record the conflict.
+
+    The tests above exercise the counting logic directly. This one exists so the
+    feature cannot be wired to nothing: if _handle_polling_conflict stops calling
+    _note_polling_conflict, the detection is inert while every other test still
+    passes. A retry that succeeds must not erase the record.
+    """
+    adapter = _conflict_adapter()
+    note = MagicMock()
+    adapter._note_polling_conflict = note
+
+    monkeypatch.setattr(
+        "gateway.platforms.telegram.asyncio",
+        SimpleNamespace(sleep=AsyncMock()),
+    )
+    updater = SimpleNamespace(running=True, stop=AsyncMock(), start_polling=AsyncMock())
+    adapter._app = SimpleNamespace(updater=updater)
+    adapter._drain_polling_connections = AsyncMock()
+
+    await adapter._handle_polling_conflict(Exception("Conflict: terminated by other getUpdates request"))
+
+    note.assert_called_once()
+    assert adapter._polling_conflict_count == 0, "the retry counter still resets on success"
