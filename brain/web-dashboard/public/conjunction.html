@@ -213,6 +213,40 @@ svg .mark:focus,svg .mark.hot{filter:drop-shadow(0 0 7px rgba(255,204,132,.95))}
 .ring-in{animation:drift 2.2s cubic-bezier(.16,.9,.2,1) both;transform-origin:520px 340px}
 .flare{animation:flare 2s ease-out both}
 .halo{animation:breathe 3.6s ease-in-out infinite}
+/* ---------- the orbits ----------
+   The two rings are not a picture of a state, they ARE the instrument running.
+   Each ring carries its own cargo — what that Centurion holds, what it has
+   sealed — and the ring and its cargo turn together, slowly, against each other.
+   The sky (register of decisions), the crossing, the still centre and the
+   labels do NOT turn: they are the fixed frame the orbits are read against.
+   Slow enough that any single frame still reads; motion at all is the proof
+   that this is a live reading and not a still. */
+.orbit{transform-origin:520px 340px}
+.orbit-a{animation:spin-cw 190s linear infinite}
+.orbit-b{animation:spin-ccw 230s linear infinite}
+@keyframes spin-cw{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes spin-ccw{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
+
+/* ---------- the live stream ----------
+   Newest first. Every move either Centurion makes, in its own words, with the
+   ring it belongs to named. A row that arrives while the page is open lights
+   once, then settles — so a glance tells you whether anything has happened. */
+.stream{display:flex;flex-direction:column;max-height:460px;overflow:auto;
+  border-top:1px solid var(--hair);scrollbar-width:thin}
+.srow{display:flex;gap:14px;align-items:baseline;padding:11px 4px;border-bottom:1px solid var(--hair);
+  font-size:13.5px;line-height:1.5}
+.srow:last-child{border-bottom:0}
+.srow .sglyph{flex:none;width:15px;text-align:center;color:var(--faint);font-size:14px}
+.srow.a .sglyph{color:var(--bronze-lt)} .srow.b .sglyph{color:var(--steel-lt)}
+.srow .swrap{flex:1;min-width:0}
+.srow .swho{font-size:10px;letter-spacing:.2em;text-transform:uppercase;margin-right:9px}
+.srow.a .swho{color:var(--bronze-lt)} .srow.b .swho{color:var(--steel-lt)}
+.srow .stx{color:var(--dim)}
+.srow .sdet{display:block;margin-top:5px;font-size:11.5px;line-height:1.55;color:var(--faint)}
+.srow .swhen{flex:none;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--faint);
+  white-space:nowrap;padding-top:2px}
+.srow.fresh{animation:rise .55s cubic-bezier(.22,.8,.24,1) both;
+  background:linear-gradient(90deg,rgba(255,180,84,.10),transparent 70%)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 @media (max-width:720px){
   footer{flex-direction:column;gap:12px;align-items:flex-start}
@@ -313,6 +347,14 @@ svg .mark:focus,svg .mark.hot{filter:drop-shadow(0 0 7px rgba(255,204,132,.95))}
     </section>
   </div>
 
+  <section class="plate streamplate" aria-label="Live activity — what the Centurions are doing">
+    <h2><span class="count" id="c-stream">·</span> Live · what they are doing</h2>
+    <p class="note">Every move both Centurions make, newest first, read from their own record the
+    moment it happens. Bronze is this Brain; steel is the second Centurion. This is the plain answer
+    to “what are they actually doing” — not a log of plumbing, but the work itself, as it is done.</p>
+    <div class="stream" id="stream" role="log" aria-live="polite" aria-label="Live activity, newest first"></div>
+  </section>
+
   <section class="plate ledger">
     <h2><span class="count" id="c-reg">·</span> Register of decisions</h2>
     <p class="note">Every decision taken, earliest at the left. A bronze pillar is decided and
@@ -363,6 +405,12 @@ function daysSince(iso){const t=Date.parse(iso||"");return isNaN(t)?null:Math.ma
 function shortDate(iso){const t=Date.parse(iso||"");if(isNaN(t))return"";
   return new Date(t).toLocaleDateString(undefined,{day:"2-digit",month:"short"}).toUpperCase();}
 function cut(s,n){s=String(s||"").replace(/\s+/g," ").trim();return s.length>n?s.slice(0,n-1).trimEnd()+"…":s;}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function shortClock(iso){const t=Date.parse(iso||"");if(isNaN(t))return"";return new Date(t).toLocaleString(undefined,
+  {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).toUpperCase();}
+/* Keys already shown in the stream, so a row that arrives while the page is open
+   can light once. null until the first paint, so the first paint is not all "new". */
+let STREAM_SEEN=null;
 function setState(msg){$("caption").textContent=msg;}
 
 /* ============================================================
@@ -456,6 +504,9 @@ async function load(){
   let localName="This Brain";
   try{const so=await ask({action:"soul_get"});localName=(so.soul&&so.soul.name)||localName;}catch(e){}
   try{peers=(await ask({action:"fleet_peer_status"})).peers||[];}catch(e){errors.push("fleet");}
+  /* This Brain's own recorded moves — the same record the Remote reads. */
+  let thoughts=[];
+  try{thoughts=(await ask({action:"life_thoughts_list",limit:40})).thoughts||[];}catch(e){errors.push("activity");}
 
   const cards=[]; swarms.forEach(b=>(b.cards||[]).forEach(c=>cards.push(Object.assign({board:b.display_name||b.id},c))));
   const by=s=>cards.filter(c=>c.status===s);
@@ -477,6 +528,19 @@ async function load(){
 
   const peer=peers[0]||null;
   const peerActs=peer&&peer.activity&&Array.isArray(peer.activity.items)?peer.activity.items:[];
+
+  /* THE STREAM — one list, both rings, newest first. This Brain's own recorded
+     moves plus the peer's reported activity, in the work's own words. A move
+     appears here the moment it is recorded, which is the whole answer to
+     "what are they actually doing". Glyph is the move's kind, not decoration. */
+  const SGLYPH={thought:"·",tool_start:"›",tool_result:"›",target_update:"◆",
+    artifact:"◇",decision:"○",handoff:"→"};
+  const stream=[].concat(
+    (thoughts||[]).map(t=>({who:"a",glyph:SGLYPH[t.activity_type]||"·",
+      t:String(t.summary||""),d:String(t.detail||""),at:t.created_at||""})),
+    (peerActs||[]).map(a=>({who:"b",glyph:"→",t:String((a&&a.title)||a||""),d:"",
+      at:String((a&&(a.at||a.created_at))||(peer&&peer.last_seen)||"")}))
+  ).filter(x=>x.t).sort((x,y)=>Date.parse(y.at||0)-Date.parse(x.at||0)).slice(0,40);
 
   const struck=done.length+pDone.length+tDone.length;
   return{
@@ -529,7 +593,7 @@ async function load(){
     decisions:decisions.slice().sort((a,b)=>Date.parse(a.created_at||0)-Date.parse(b.created_at||0))
       .map(d=>({id:d.id,t:cut(d.title,88),taken:shortDate(d.created_at),
         answered:!!(d.human_said||d.chosen),said:cut(d.human_said||d.chosen||"",60)})),
-    peer, peerActs:peerActs, peers:peers.length, errors, localName, held, boards:swarms.length
+    peer, peerActs:peerActs, stream:stream, peers:peers.length, errors, localName, held, boards:swarms.length
   };
 }
 
@@ -562,6 +626,12 @@ function build(S){
   svg.appendChild(el("ellipse",{cx:CX,cy:CY+126,rx:452,ry:74,fill:"url(#floor)"}));
   svg.appendChild(el("ellipse",{cx:CX,cy:CY+6,rx:434,ry:300,fill:"url(#core)"}));
   const g=el("g",{class:"instrument-in"}); svg.appendChild(g);
+  /* The two orbits. Each is a group that turns about the still centre; a ring and
+     everything it carries are appended to its own orbit, so cargo travels with the
+     ring it rides. The sky (register of decisions), the crossing and the centre are
+     appended to g instead, and never turn. The global reduced-motion rule stops it. */
+  const orbitA=el("g",{class:"orbit orbit-a"}); g.appendChild(orbitA);
+  const orbitB=el("g",{class:"orbit orbit-b"}); g.appendChild(orbitB);
   const place=(rot,f)=>{const a=f*Math.PI*2,x0=Math.cos(a)*RX,y0=Math.sin(a)*RY,r=rot*Math.PI/180;
     return [CX+(x0*Math.cos(r)-y0*Math.sin(r)),CY+(x0*Math.sin(r)+y0*Math.cos(r))];};
   const arc=(rot,f0,f1,steps)=>{let d="";for(let i=0;i<=steps;i++){const f=f0+(f1-f0)*(i/steps);
@@ -588,7 +658,7 @@ function build(S){
   }
 
   /* ring A — this Brain. always occupied. */
-  const ring=(rot,grad,glowHi,hi,dim)=>{
+  const ring=(parent,rot,grad,glowHi,hi,dim)=>{
     const grp=el("g",{class:"ring-in"});
     grp.appendChild(el("path",{d:arc(rot,.5,1,64),fill:"none",stroke:grad,"stroke-width":1.3,
       opacity:dim?.18:.40,"stroke-linecap":"round","stroke-dasharray":dim?"4 6":""}));
@@ -599,10 +669,12 @@ function build(S){
     grp.appendChild(el("path",{d:arc(rot,0,.5,64),fill:"none",stroke:grad,"stroke-width":dim?1.6:2.9,
       opacity:dim?.5:1,"stroke-linecap":"round","stroke-dasharray":dim?"5 7":"",
       class:dim?"halo":""}));
-    g.appendChild(grp);
+    if(dim)grp.classList.add("peer-ring");
+    parent.appendChild(grp);
+    return grp;
   };
-  ring(-19,"url(#ringB)","#B08D57","rgba(255,238,205,.85)",false);
-  ring( 19,"url(#ringS)","#8C93A0","rgba(232,238,248,.62)",!S.peer);
+  ring(orbitA,-19,"url(#ringB)","#B08D57","rgba(255,238,205,.85)",false);
+  ring(orbitB, 19,"url(#ringS)","#8C93A0","rgba(232,238,248,.62)",!S.peer);
 
   /* what ring A carries: in hand, then what has stopped — each named, and each
      tied to its own row in the In hand register below. */
@@ -618,7 +690,7 @@ function build(S){
       gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:2.8,fill:"var(--bronze-lt)"}));
     }
     nameMark(gm,"hand:"+i,it.stop?"Stopped":"In hand · moving",it.t,it.meta||"");
-    g.appendChild(gm);
+    orbitA.appendChild(gm);
   });
   /* sealed work: one bead per delivery, newer larger, capped so the ring stays a
      ring — and now each bead names the delivery it stands for. */
@@ -627,12 +699,12 @@ function build(S){
   for(let i=0;i<beads;i++){const p=place(-19,.545+i*(.40/Math.max(1,beads))), gm=el("g");
     gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+ (i/beads)*3.6,fill:"url(#ringB)"}));
     nameMark(gm,"str:"+i,"Seal "+(i+1)+" of "+beads,sItems[i]||"sealed work","STRUCK · DELIVERED AND VERIFIED");
-    g.appendChild(gm);}
+    orbitA.appendChild(gm);}
   for(let i=0;i<beadsPeer;i++){const p=place(19,.60+i*(.34/Math.max(1,beadsPeer))), gm=el("g");
     gm.appendChild(el("circle",{cx:p[0],cy:p[1],r:5.4+(i/Math.max(1,beadsPeer))*3.6,fill:"url(#ringS)"}));
     nameMark(gm,"sstr:"+i,"Peer seal "+(i+1)+" of "+beadsPeer,pItems[i]||"peer delivery",
       "THE SECOND CENTURION · DELIVERED");
-    g.appendChild(gm);}
+    orbitB.appendChild(gm);}
 
   /* the conjunction — lit when two minds are actually on this network */
   const cross=[[-19,.755],[19,.245]].map(f=>place(f[0],f[1]));
@@ -775,6 +847,38 @@ function asks(S){
     d.innerHTML='<div class="q">Nothing is waiting on you.</div><div class="ctx">every open question is answered</div>';b.appendChild(d);}
   $("more").textContent = S.more ? (S.more+" further "+(S.more===1?"item waits":"items wait")+" behind these") : "";
 }
+/* ---------- the live stream ----------
+   The answer to "what are they doing": every recorded move by either Centurion,
+   newest first, in the work's own words. Bronze rows are this Brain's own record;
+   steel rows are the second Centurion's reported activity. A row that arrives
+   while the page is open lights once, then settles. */
+function stream(S){
+  const b=$("stream"); if(!b) return;
+  const items=S.stream||[];
+  if($("c-stream")) $("c-stream").textContent=items.length;
+  const keys=items.map(x=>x.who+"|"+x.at+"|"+x.t);
+  const first=(STREAM_SEEN===null), fresh=new Set();
+  keys.forEach((k,i)=>{ if(!first && !STREAM_SEEN.has(k)) fresh.add(i); });
+  b.innerHTML="";
+  if(!items.length){
+    const d=document.createElement("div"); d.className="srow";
+    d.innerHTML='<span class="sglyph" aria-hidden="true">·</span><span class="swrap">'
+      +'<span class="stx">Nothing recorded yet — the moment either Centurion moves, it lands here.</span></span>';
+    b.appendChild(d);
+  }
+  items.forEach((x,i)=>{
+    const d=document.createElement("div");
+    d.className="srow "+x.who+(fresh.has(i)?" fresh":"");
+    const who=x.who==="a"?(S.localName||"This Brain"):((S.peer&&S.peer.name)||"Second Centurion");
+    d.innerHTML='<span class="sglyph" aria-hidden="true">'+esc(x.glyph)+'</span>'
+      +'<span class="swrap"><span class="swho">'+esc(who)+'</span>'
+      +'<span class="stx">'+esc(x.t)+'</span>'
+      +(x.d?'<span class="sdet">'+esc(cut(x.d,220))+'</span>':'')+'</span>'
+      +'<span class="swhen">'+(x.at?esc(shortClock(x.at)):"")+'</span>';
+    b.appendChild(d);
+  });
+  STREAM_SEEN=new Set(keys);
+}
 function register(S){
   const s=$("register"); s.innerHTML="";
   const D=S.decisions||[]; const pad=54, W=1500, base=112, n=Math.max(1,D.length);
@@ -916,14 +1020,16 @@ function paint(S){
   $("provenance").textContent = S.errors&&S.errors.length
     ? ("READ FROM THIS BRAIN'S OWN RECORD · UNAVAILABLE: "+S.errors.join(", ").toUpperCase())
     : "READ FROM THIS BRAIN'S OWN RECORD"+scope;
-  build(S); seals(S); items(S); next(S); asks(S); register(S);
+  build(S); seals(S); items(S); next(S); asks(S); stream(S); register(S);
 }
 
 load().then(paint).catch(e=>{
   setState("Could not read this Brain's record — "+e.message);
   $("provenance").textContent="READ FROM THIS BRAIN'S OWN RECORD · FAILED";
 });
-setInterval(()=>{ load().then(paint).catch(()=>{}); }, 60000);
+/* Read again every 20 seconds — often enough that a move shows up while the page
+   is still being watched, which is the whole point of a live stream. */
+setInterval(()=>{ load().then(paint).catch(()=>{}); }, 20000);
 
 </script>
 </body>
