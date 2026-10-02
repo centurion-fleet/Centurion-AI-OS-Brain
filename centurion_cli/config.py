@@ -1254,9 +1254,27 @@ DEFAULT_CONFIG = {
     # Gemini 5000, Edge 5000, Mistral 4000, NeuTTS/KittenTTS 2000).
     "tts": {
         "provider": "edge",  # "edge" (free) | "elevenlabs" (premium) | "openai" | "xai" | "minimax" | "mistral" | "gemini" | "neutts" (local) | "kittentts" (local) | "piper" (local)
+
+        # Global playback speed, for every provider that supports one (Edge, OpenAI,
+        # MiniMax, KittenTTS). 1.0 = the voice's natural pace; 1.25 = 25% faster.
+        #
+        # ⚠️ PIPER IGNORES THIS. Its equivalent is `piper.length_scale`, because Piper
+        # exposes a DURATION multiplier rather than a speed: length_scale 2.0 = twice
+        # as slow, so 0.8 = 25% faster. The two keys move INVERSELY and must be kept in
+        # step by hand — otherwise the free house voice and the paid premium voice
+        # speak at visibly different speeds in the same product. Change one, change
+        # the other:  speed 1.25  ⇄  length_scale 0.8.
+        "speed": 1.25,
+
         "edge": {
-            "voice": "en-US-AriaNeural",
-            # Popular: AriaNeural, JennyNeural, AndrewNeural, BrianNeural, SoniaNeural
+            # The house voice for English. Irish, deliberately: a sale built on
+            # European sovereignty should not open with a US accent.
+            # Change to "en-GB-SoniaNeural" for a more neutral pan-European register.
+            "voice": "en-IE-EmilyNeural",
+            # Per-language house voices live in tts.voice_plan (free, one per market):
+            # de-DE-KatjaNeural · fr-FR-DeniseNeural · it-IT-ElsaNeural
+            # es-ES-ElviraNeural · nl-NL-FennaNeural · pl-PL-ZofiaNeural
+            # Full list: https://learn.microsoft.com/azure/ai-services/speech-service/language-support
         },
         "elevenlabs": {
             "voice_id": "pNInz6obpgDQGcFmaJgB",  # Adam
@@ -1290,11 +1308,140 @@ DEFAULT_CONFIG = {
             "voice": "en_US-lessac-medium",
             # "voices_dir": "",        # Override voice cache dir; default = ~/.centurion/cache/piper-voices/
             # "use_cuda": False,       # Requires onnxruntime-gpu
-            # "length_scale": 1.0,     # 2.0 = twice as slow
+            # Duration multiplier, NOT a speed: 2.0 = twice as slow, 0.8 = 25% faster.
+            # Kept in step with the global tts.speed of 1.25 — see the note there.
+            "length_scale": 0.8,
             # "noise_scale": 0.667,
             # "noise_w_scale": 0.8,
             # "volume": 1.0,
             # "normalize_audio": True,
+        },
+
+        # ---- THE VOICE CATALOGUE -------------------------------------------
+        # Hybrid model, European-first. ONE FREE HOUSE VOICE PER LANGUAGE, and a
+        # premium male + female above it per language.
+        #
+        # Why the free tier is per-language and not one voice: intelligibility is
+        # the floor, not a product. A Centurion sold into Italy that cannot speak
+        # Italian is broken, not upsold. So no language is ever gated behind a
+        # subscription, and the free house voices below are the real, verified
+        # Edge neural voices — free at any volume.
+        #
+        # The premium tier is what carries the price: high-quality character
+        # voices, one male and one female per language.
+        #
+        # `voice_pack_tiers` names the licence tiers that carry the pack. It ships
+        # EMPTY: nothing premium unlocks until the tier is named here, so a stock
+        # install cannot leak a paid voice.
+        #
+        # ⚠️ `premium_voice_ids` are REAL ids, verified 2 Oct 2026 against Piper's
+        # canonical voices.json (rhasspy/piper-voices, 177 voices). Never invent one.
+        #
+        # ⚠️ GENDER IS INFERRED FROM THE VOICE NAME. The source data carries NO gender
+        # field, so every gender below is a reading of the name (thorsten, kerstin,
+        # riccardo, serena…) and is marked gender_verified: false. Do not present it
+        # to a customer as fact until a native speaker has heard it.
+        #
+        # ⚠️ QUALITY IS UNEVEN — read `premium_quality` before selling this tier.
+        # Piper gives no high-quality female German and no usable male Italian:
+        #   de-DE female = low   · it-IT male = x_low   · es-ES female = unverified
+        #   nl-NL female = unverified (a speaker inside a 52-speaker corpus)
+        # The other slots are medium/high. Drop the weak ones to ElevenLabs or
+        # Mistral Voxtral if "premium" is to mean better audio rather than
+        # on-device. See the report: premium here means SOVEREIGN, not louder.
+        #
+        # English has no en_IE in Piper, so the premium pair is en_GB.
+        #
+        # `voice_pack_tiers` ships EMPTY: nothing premium unlocks until the tier is
+        # named here, so a stock install cannot leak a paid voice.
+        "voice_pack_tiers": [],
+        "voice_plan": {
+            "languages": [
+                {
+                    "code": "en-IE",
+                    "label": "English (Ireland)",
+                    "house_voice": "en-IE-EmilyNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "high", "male": "medium"},
+                    "premium_voice_ids": {
+                        "female": "en_GB-cori-high",
+                        "male": "en_GB-alan-medium",
+                    },
+                },
+                {
+                    "code": "de-DE",
+                    "label": "Deutsch",
+                    "house_voice": "de-DE-KatjaNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "low", "male": "high"},
+                    "premium_voice_ids": {
+                        "female": "de_DE-kerstin-low",
+                        "male": "de_DE-thorsten-high",
+                    },
+                },
+                {
+                    "code": "fr-FR",
+                    "label": "Français",
+                    "house_voice": "fr-FR-DeniseNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "medium", "male": "medium"},
+                    "premium_voice_ids": {
+                        "female": "fr_FR-siwis-medium",
+                        "male": "fr_FR-tom-medium",
+                    },
+                },
+                {
+                    "code": "it-IT",
+                    "label": "Italiano",
+                    "house_voice": "it-IT-ElsaNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "high", "male": "x_low"},
+                    "premium_voice_ids": {
+                        "female": "it_IT-serena-high",
+                        "male": "it_IT-riccardo-x_low",
+                    },
+                },
+                {
+                    "code": "es-ES",
+                    "label": "Español",
+                    "house_voice": "es-ES-ElviraNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "medium", "male": "medium"},
+                    "premium_voice_ids": {
+                        "female": "es_ES-sharvard-medium",
+                        "male": "es_ES-davefx-medium",
+                    },
+                },
+                {
+                    "code": "nl-NL",
+                    "label": "Nederlands",
+                    "house_voice": "nl-NL-FennaNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "medium", "male": "medium"},
+                    "premium_voice_ids": {
+                        "female": "nl_NL-mls-medium",
+                        "male": "nl_NL-ronnie-medium",
+                    },
+                },
+                {
+                    "code": "pl-PL",
+                    "label": "Polski",
+                    "house_voice": "pl-PL-ZofiaNeural",
+                    "house_gender": "female",
+                    "premium_provider": "piper",
+                    "premium_quality": {"female": "medium", "male": "high"},
+                    "premium_voice_ids": {
+                        "female": "pl_PL-gosia-medium",
+                        "male": "pl_PL-bass-high",
+                    },
+                },
+            ],
         },
     },
     
