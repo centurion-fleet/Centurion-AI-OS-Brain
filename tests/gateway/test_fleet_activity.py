@@ -124,10 +124,82 @@ def test_local_activity_has_the_shape_the_board_renders():
         "name",
         "version",
         "working_on",
+        "capabilities",
         "captured_at",
     }
     assert payload["name"], "a Centurion with no name cannot be directed"
     assert payload["working_on"] == []
+
+
+def test_capabilities_are_read_from_the_skill_library(tmp_path):
+    # "What I can do" must come from the skills on disk, not a hand-written
+    # profile — a profile drifts from reality and the library cannot.
+    skill = tmp_path / "life" / "remote-viewing"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: remote-viewing\ndescription: Run an SRV session.\n---\n\n# body\n",
+        encoding="utf-8",
+    )
+
+    got = activity.capabilities(root=str(tmp_path))
+    assert [c["name"] for c in got] == ["remote-viewing"]
+    assert got[0]["category"] == "life"
+    assert got[0]["description"] == "Run an SRV session."
+
+
+def test_an_empty_skill_library_reports_empty_not_missing(tmp_path):
+    # No skills yet is a real answer, and it must not read as an error.
+    assert activity.capabilities(root=str(tmp_path)) == []
+
+
+def test_capability_list_is_a_claim_of_ability_not_of_work(tmp_path):
+    # The two answers live in different fields on purpose: a peer must never be
+    # able to mistake "I can do this" for "I have done this".
+    skill = tmp_path / "devops" / "sql-migrations"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: sql-migrations\ndescription: Run and verify migrations.\n---\n",
+        encoding="utf-8",
+    )
+    caps = activity.capabilities(root=str(tmp_path))
+    assert "status" not in caps[0]
+    assert set(caps[0]) == {"name", "category", "description"}
+
+
+def test_a_peer_cannot_write_unbounded_capabilities():
+    parsed = activity.parse_activity(
+        {"capabilities": [{"name": f"skill-{i}"} for i in range(200)]}
+    )
+    assert len(parsed["capabilities"]) == activity.MAX_CAPABILITIES
+
+
+def test_junk_capabilities_are_dropped_not_stored():
+    parsed = activity.parse_activity(
+        {"capabilities": [None, "junk", {}, {"name": ""}, {"name": "real"}]}
+    )
+    assert [c["name"] for c in parsed["capabilities"]] == ["real"]
+
+
+def test_a_big_category_cannot_crowd_the_manifest(tmp_path):
+    # The defect this exists to prevent: sort by category, cut at the cap, and
+    # every skill after the first few categories reports as absent when it is
+    # only late. One huge category must not erase the rest.
+    big = tmp_path / "aaa-huge"
+    small = tmp_path / "zzz-small"
+    for i in range(50):
+        d = big / f"skill-{i:02d}"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"---\nname: skill-{i:02d}\ndescription: d\n---\n")
+    for name in ("only-one", "only-two"):
+        d = small / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"---\nname: {name}\ndescription: d\n---\n")
+
+    got = activity.capabilities(limit=10, root=str(tmp_path))
+    assert len(got) == 10
+    categories = {c["category"] for c in got}
+    assert categories == {"aaa-huge", "zzz-small"}, categories
+    assert any(c["name"] == "only-one" for c in got), "the small category was erased"
 
 
 # --- what we accept from a peer --------------------------------------------
