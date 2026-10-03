@@ -114,6 +114,7 @@ Named explicitly, because these are Conjunction features whose absence is the de
   is no second party to scope against.
 - **No second accent colour.** The two-ring bronze/steel language collapses to one ring: the
   Centurion's. The owner is the centre, and the centre has no colour.
+  *(Amended 3 Oct 2026: one ring still — but that ring now **turns**. See §7.)*
 - **No peers, no swarms, no pairing.** Brain-to-brain belongs to Conjunction's world; pairing
   and boards remain reachable from the masthead, not from here.
 
@@ -136,6 +137,47 @@ read as "you are busy, therefore you are aligned".
 So ALIGNED may only count work that traces to the stated purpose by name. Busy is not evidence.
 If the purpose is empty or never written, ALIGNED says so plainly instead of inferring one from
 activity.
+
+## 7. Added 3 Oct 2026 — shared motion, and the thought stream
+
+**The owner's direction, recorded as a decision. It supersedes two earlier rules on this page.**
+
+Until today Stillpoint was the page that *did not move* and *did not have a feed*. Both were
+deliberate: §4 kept a single, un-turning ring, and the policy review (§6, *"The Live pulse feed is
+entheta by policy's own standard"*) called an activity stream a defect. **Both are overruled.**
+Recorded here so the change reads as a decision rather than as drift.
+
+### 7.1 The ring turns
+
+The ring now carries the same slow counter-orbit as Conjunction: the ring and the work it carries
+turn one way (`spin-cw`, 190s), the sealed work accumulating along the lower arc turns the other
+(`spin-ccw`, 230s). Everything that is a **fixed frame** — the register marks, the still centre, the
+purpose, the labels — still does not turn.
+
+**Why this is not simply Conjunction's mistake repeated.** Conjunction's own note said *"No ambient
+animation: a page that is always moving cannot be photographed."* That rule is now retired on both
+pages, because the two readings conflicted and **liveness won.** What the rule protected — a frame
+that survives being photographed and forwarded — is met by the **rate**, not by stillness. Motion at
+all is the proof this is a live reading and not a still. `prefers-reduced-motion` stops both.
+
+### 7.2 The thought stream
+
+A **Live · what it is doing** plate now sits above the Register, reading the same
+`life_thoughts_list` source Conjunction reads — so the two pages can never disagree about what has
+been done. Rows are bronze: this page has one Centurion, so the steel voice does not appear.
+
+**What makes it different from the feed the review cut:**
+
+1. **The work in its own words, not a log of plumbing** — the standard Conjunction is held to.
+2. **A settled list, not a ticker.** Rows arrive, light once, then settle. It carries data; it is not
+   ambient motion.
+
+⚠️ **The review's finding was not wrong — it was overruled.** An unsolicited feed at the bottom of a
+page whose whole claim is *"four things, and nothing else"* **is** a defect. What changed is the
+owner's decision that the visibility a customer asked for — and one language across both tabs — is
+worth more than Stillpoint's purity. If the plate later reads as noise, §6's original fix remains
+the fallback and is the version that satisfies both: **demote it behind a control the owner
+deliberately opens.**
 
 ---
 

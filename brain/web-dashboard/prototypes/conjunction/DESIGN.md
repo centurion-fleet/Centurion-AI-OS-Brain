@@ -51,9 +51,17 @@ too subtle to read. Field 02 fixed the read; field 03 gave it physical depth.
 - **Light comes from above** (Kennedy 1). Each ring is drawn as two arcs: the far half is a thin,
   dim hairline that takes the highlight where it faces the sky; the near half is heavier and
   brighter, with its own bloom. The instrument stands in its own pool of shadow.
-- **One motion, and it means something.** The rings settle into place on load, then the crossings
-  flare once — *coming into conjunction*. Then stillness. No ambient animation: a page that is
-  always moving cannot be photographed.
+- **One motion, and it means something — REVISED 3 Oct 2026.** The rings settle into place on load,
+  then the crossings flare once — *coming into conjunction*. After that they **keep turning, slowly
+  and against each other**: `spin-cw` 190s / `spin-ccw` 230s, `linear infinite`.
+  ⚠️ **This supersedes the original rule on this page — *"No ambient animation: a page that is
+  always moving cannot be photographed."*** That rule is retired, and the reason matters: the two
+  readings were in conflict and **liveness won.** What the old rule protected — a frame that
+  survives being photographed and forwarded — is now met by the **rate** rather than by stillness:
+  190s and 230s per revolution is slow enough that any single frame is legible, while the motion
+  itself is the page's proof that this is a live reading and not a still. The owner confirmed the
+  change on 3 Oct 2026 and directed the same treatment onto Stillpoint, so the two instrument pages
+  read as one language. `prefers-reduced-motion` stops both, as it always did.
 - **Whitespace is the default.** Plates are generous; the registers breathe.
 - **Words are demoted.** Every register is legible as shape first, label second. The labels name
   what the shape already said.

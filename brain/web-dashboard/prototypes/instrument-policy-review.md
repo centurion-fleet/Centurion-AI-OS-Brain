@@ -190,6 +190,17 @@ else". It contradicts our own design thesis on the same page.
 **The fix.** Cut it, or demote it to something you deliberately open. The page's own standard —
 *the only failure is silence, and everything else is your next move* — does not admit a feed.
 
+> **⚠️ SUPERSEDED — 3 Oct 2026, by the owner's decision.** The feed was cut, and then reinstated in
+> a different form: Stillpoint now carries a **Live · what it is doing** thought stream above the
+> Register, and its ring turns (see `focus/DESIGN.md` §7). The reasoning above was not wrong and is
+> not withdrawn — an unsolicited ticker *is* entheta by this standard. What changed is that the owner
+> judged the visibility a customer explicitly asked for, plus one visual language across both tabs,
+> to be worth more than Stillpoint's purity.
+>
+> **The finding still stands as the test to apply.** If the stream is later found to be noise rather
+> than information, the fix below is the one that satisfies both sides: **demote it behind a control
+> the owner deliberately opens.** That option remains open and is the recommended fallback.
+
 ---
 
 ### 7. Every Centurion post needs its own product and statistic (the AI-customer half)
