@@ -1283,6 +1283,17 @@ class WhatsAppAdapter(BasePlatformAdapter):
                         except Exception as e:
                             print(f"[{self.name}] Failed to read document text: {e}", flush=True)
 
+            # Include the quoted/replied-to message content (WhatsApp's reply
+            # feature) so the agent can see what the reply refers to. Skip
+            # slash commands — the raw command must stay at the start of the
+            # text for command dispatch.
+            quoted_body = str(data.get("quotedBody") or "").strip()
+            if quoted_body and not body.lstrip().startswith("/"):
+                if len(quoted_body) > 800:
+                    quoted_body = quoted_body[:800] + "…"
+                prefix = f"[Replying to: {quoted_body}]"
+                body = f"{prefix}\n\n{body}" if body else prefix
+
             return MessageEvent(
                 text=body,
                 message_type=msg_type,

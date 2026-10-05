@@ -1445,15 +1445,29 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
     email_pwd = os.getenv("EMAIL_PASSWORD")
     email_imap = os.getenv("EMAIL_IMAP_HOST")
     email_smtp = os.getenv("EMAIL_SMTP_HOST")
-    if all([email_addr, email_pwd, email_imap, email_smtp]):
-        if Platform.EMAIL not in config.platforms:
-            config.platforms[Platform.EMAIL] = PlatformConfig()
-        config.platforms[Platform.EMAIL].enabled = True
-        config.platforms[Platform.EMAIL].extra.update({
-            "address": email_addr,
-            "imap_host": email_imap,
-            "smtp_host": email_smtp,
-        })
+    email_auth_type = os.getenv("EMAIL_AUTH_TYPE", "password").lower()
+    email_client_id = os.getenv("EMAIL_CLIENT_ID", "")
+    # Honor an explicit EMAIL_ENABLED=false override. The email platform is
+    # auto-enabled whenever credentials are present (legacy behaviour), but
+    # that forced-enable ignores config.yaml and must be suppressible — the
+    # Commander's gateway flooded his inbox with auto-replies (6 Aug 2026).
+    email_enabled_override = os.getenv("EMAIL_ENABLED", "true").lower() != "false"
+    # Two valid states: password auth (needs EMAIL_PASSWORD) or OAuth2 (needs EMAIL_CLIENT_ID)
+    if email_addr and email_imap and email_smtp and email_enabled_override:
+        if email_auth_type == "oauth2":
+            cred_ok = bool(email_client_id)
+        else:
+            cred_ok = bool(email_pwd)
+        if cred_ok:
+            if Platform.EMAIL not in config.platforms:
+                config.platforms[Platform.EMAIL] = PlatformConfig()
+            config.platforms[Platform.EMAIL].enabled = True
+            config.platforms[Platform.EMAIL].extra.update({
+                "address": email_addr,
+                "imap_host": email_imap,
+                "smtp_host": email_smtp,
+                "auth_type": email_auth_type,
+            })
     email_home = os.getenv("EMAIL_HOME_ADDRESS")
     if email_home and Platform.EMAIL in config.platforms:
         config.platforms[Platform.EMAIL].home_channel = HomeChannel(

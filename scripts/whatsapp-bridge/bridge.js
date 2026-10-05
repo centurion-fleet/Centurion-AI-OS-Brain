@@ -124,6 +124,19 @@ function normalizeWhatsAppId(value) {
   return String(value).replace(':', '@');
 }
 
+// Baileys requires a full JID ("447970729736@s.whatsapp.net" or "<lid>@lid").
+// Bare phone numbers (as stored in WHATSAPP_HOME_CHANNEL) fail jidDecode with
+// "Cannot destructure property 'user' of 'jidDecode(...)' as it is undefined."
+// Normalise any chatId lacking a server suffix to the classic @s.whatsapp.net form.
+function toJid(chatId) {
+  if (!chatId) return chatId;
+  const s = String(chatId).trim().replace(/^\+/, '');
+  if (!s) return chatId;
+  if (s.includes('@')) return s;
+  if (/^\d+$/.test(s)) return `${s}@s.whatsapp.net`;
+  return chatId;
+}
+
 function getMessageContent(msg) {
   const content = msg?.message || {};
   if (content.ephemeralMessage?.message) return content.ephemeralMessage.message;
@@ -145,6 +158,30 @@ function getContextInfo(messageContent) {
   }
   return {};
 }
+
+// Extract a readable text representation from a WhatsApp message content
+// object (used for quoted/replied-to messages). Mirrors the main body
+// extraction branches; media without a caption degrades to a placeholder.
+function extractQuotedText(messageContent) {
+  if (!messageContent || typeof messageContent !== 'object') return '';
+  if (messageContent.conversation) return messageContent.conversation;
+  if (messageContent.extendedTextMessage?.text) return messageContent.extendedTextMessage.text;
+  if (messageContent.imageMessage) return messageContent.imageMessage.caption || '[image]';
+  if (messageContent.videoMessage) return messageContent.videoMessage.caption || '[video]';
+  if (messageContent.audioMessage || messageContent.pttMessage) return '[voice message]';
+  if (messageContent.stickerMessage) return '[sticker]';
+  if (messageContent.documentMessage) {
+    return messageContent.documentMessage.caption || `[document: ${messageContent.documentMessage.fileName || 'file'}]`;
+  }
+  if (messageContent.contactMessage) return `[contact: ${messageContent.contactMessage.displayName || ''}]`;
+  if (messageContent.locationMessage) return '[location]';
+  if (messageContent.buttonsMessage?.contentText) return messageContent.buttonsMessage.contentText;
+  if (messageContent.listMessage?.description) return messageContent.listMessage.description;
+  return '[message]';
+}
+
+// Cap quoted text so a huge quoted message can't bloat the agent prompt.
+const MAX_QUOTED_BODY_CHARS = 600;
 
 mkdirSync(SESSION_DIR, { recursive: true });
 
@@ -520,6 +557,17 @@ async function startSocket() {
       const quotedRemoteJid = normalizeWhatsAppId(contextInfo?.remoteJid || '') || null;
       const hasQuotedMessage = !!contextInfo?.quotedMessage;
 
+      // Extract the quoted/replied-to message's text so the agent can see
+      // what the reply refers to (WhatsApp's reply feature). Media-only
+      // quoted messages degrade to a placeholder.
+      let quotedBody = '';
+      if (hasQuotedMessage && contextInfo.quotedMessage) {
+        quotedBody = extractQuotedText(contextInfo.quotedMessage);
+        if (quotedBody.length > MAX_QUOTED_BODY_CHARS) {
+          quotedBody = quotedBody.slice(0, MAX_QUOTED_BODY_CHARS) + '…';
+        }
+      }
+
       // Extract message body
       let body = '';
       let hasMedia = false;
@@ -634,6 +682,7 @@ async function startSocket() {
         quotedParticipant,
         quotedRemoteJid,
         hasQuotedMessage,
+        quotedBody,
         botIds,
         timestamp: msg.messageTimestamp,
       };
@@ -705,12 +754,13 @@ app.post('/send', async (req, res) => {
   if (!chatId || !message) {
     return res.status(400).json({ error: 'chatId and message are required' });
   }
+  const target = toJid(chatId);
 
   try {
     const chunks = splitLongMessage(formatOutgoingMessage(message));
     const messageIds = [];
     for (let i = 0; i < chunks.length; i += 1) {
-      const sent = await sendWithTimeout(chatId, { text: chunks[i] });
+      const sent = await sendWithTimeout(target, { text: chunks[i] });
       trackSentMessageId(sent);
       if (sent?.key?.id) messageIds.push(sent.key.id);
       if (chunks.length > 1 && i < chunks.length - 1) {
@@ -738,16 +788,16 @@ app.post('/edit', async (req, res) => {
   if (!chatId || !messageId || !message) {
     return res.status(400).json({ error: 'chatId, messageId, and message are required' });
   }
+  const target = toJid(chatId);
 
   try {
-    const key = { id: messageId, fromMe: true, remoteJid: chatId };
+    const key = { id: messageId, fromMe: true, remoteJid: target };
     const chunks = splitLongMessage(formatOutgoingMessage(message));
     const messageIds = [];
-
-    await sendWithTimeout(chatId, { text: chunks[0], edit: key });
+    await sendWithTimeout(target, { text: chunks[0], edit: key });
     if (chunks.length > 1) {
       for (let i = 1; i < chunks.length; i += 1) {
-        const sent = await sendWithTimeout(chatId, { text: chunks[i] });
+        const sent = await sendWithTimeout(target, { text: chunks[i] });
         trackSentMessageId(sent);
         if (sent?.key?.id) messageIds.push(sent.key.id);
         if (i < chunks.length - 1) {
@@ -791,6 +841,7 @@ app.post('/send-media', async (req, res) => {
   if (!chatId || !filePath) {
     return res.status(400).json({ error: 'chatId and filePath are required' });
   }
+  const target = toJid(chatId);
 
   try {
     if (!existsSync(filePath)) {
@@ -866,9 +917,10 @@ app.post('/typing', async (req, res) => {
 
   const { chatId } = req.body;
   if (!chatId) return res.status(400).json({ error: 'chatId required' });
+  const target = toJid(chatId);
 
   try {
-    await sock.sendPresenceUpdate('composing', chatId);
+    await sock.sendPresenceUpdate('composing', target);
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false });

@@ -17295,6 +17295,12 @@ class GatewayRunner:
             _notify_adapter = self.adapters.get(source.platform)
             if not _notify_adapter:
                 return
+            # Never send "still working" heartbeats by email — each one is a
+            # separate email and floods the recipient's inbox on long tasks
+            # (6 Aug 2026 incident: 20+ heartbeat emails). Emails carry final
+            # responses only; chat platforms get the live progress updates.
+            if source.platform == Platform.EMAIL:
+                return
             while True:
                 await asyncio.sleep(_NOTIFY_INTERVAL)
                 _elapsed_mins = int((time.time() - _notify_start) // 60)

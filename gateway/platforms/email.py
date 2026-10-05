@@ -4,20 +4,28 @@ Email platform adapter for the Centurion gateway.
 Allows users to interact with Centurion by sending emails.
 Uses IMAP to receive and SMTP to send messages.
 
+Supports two authentication modes:
+  1. Password (basic auth) — EMAIL_PASSWORD
+  2. OAuth2 (XOAUTH2 SASL via MSAL device code flow) — EMAIL_CLIENT_ID
+
 Environment variables:
     EMAIL_IMAP_HOST     — IMAP server host (e.g., imap.gmail.com)
     EMAIL_IMAP_PORT     — IMAP server port (default: 993)
     EMAIL_SMTP_HOST     — SMTP server host (e.g., smtp.gmail.com)
     EMAIL_SMTP_PORT     — SMTP server port (default: 587)
     EMAIL_ADDRESS       — Email address for the agent
-    EMAIL_PASSWORD      — Email password or app-specific password
+    EMAIL_PASSWORD      — Email password or app-specific password (password mode)
     EMAIL_POLL_INTERVAL — Seconds between mailbox checks (default: 15)
     EMAIL_ALLOWED_USERS — Comma-separated list of allowed sender addresses
+    EMAIL_AUTH_TYPE     — "password" (default) or "oauth2"
+    EMAIL_CLIENT_ID     — Azure app client ID (required for oauth2 mode)
+    EMAIL_TENANT_ID     — "consumers" (default) for personal accounts, or tenant GUID
 """
 
 import asyncio
 import email as email_lib
 import imaplib
+import json
 import logging
 import os
 import re
@@ -65,6 +73,23 @@ MAX_MESSAGE_LENGTH = 50_000
 # Supported image extensions for inline detection
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
+# Default OAuth2 scopes for Exchange Online IMAP/SMTP
+_OAUTH_SCOPES = [
+    "https://outlook.office.com/IMAP.AccessAsUser.All",
+    "https://outlook.office.com/SMTP.Send",
+    "offline_access",
+    "openid",
+    "profile",
+]
+
+# MSAL token cache location (persisted so re-auth isn't needed every restart)
+_CENTURION_HOME = os.environ.get(
+    "CENTURION_HOME",
+    os.path.join(os.path.expanduser("~"), ".centurion"),
+)
+_OAUTH_TOKEN_CACHE = os.path.join(_CENTURION_HOME, "email_token_cache.bin")
+
+
 def _send_imap_id(imap: "imaplib.IMAP4") -> None:
     """Send RFC 2971 IMAP ID command identifying this client.
 
@@ -98,15 +123,26 @@ def _is_automated_sender(address: str, headers: dict) -> bool:
         if value and check(value):
             return True
     return False
-    
+
 def check_email_requirements() -> bool:
     """Check if email platform dependencies are available."""
     addr = os.getenv("EMAIL_ADDRESS")
-    pwd = os.getenv("EMAIL_PASSWORD")
+    auth_type = os.getenv("EMAIL_AUTH_TYPE", "password")
     imap = os.getenv("EMAIL_IMAP_HOST")
     smtp = os.getenv("EMAIL_SMTP_HOST")
-    if not all([addr, pwd, imap, smtp]):
+
+    if not all([addr, imap, smtp]):
         return False
+
+    if auth_type == "oauth2":
+        client_id = os.getenv("EMAIL_CLIENT_ID")
+        if not client_id:
+            return False
+    else:
+        pwd = os.getenv("EMAIL_PASSWORD")
+        if not pwd:
+            return False
+
     return True
 
 
@@ -242,6 +278,29 @@ def _extract_attachments(
     return attachments
 
 
+# ── OAuth2 helpers ──────────────────────────────────────────────────────────
+
+def _build_xoauth2_string(email: str, access_token: str) -> str:
+    """Build the XOAUTH2 SASL initial response string."""
+    return f"user={email}\x01auth=Bearer {access_token}\x01\x01"
+
+
+def _imap_xoauth2_login(imap: imaplib.IMAP4_SSL, email: str, access_token: str) -> None:
+    """Authenticate IMAP using XOAUTH2 SASL mechanism."""
+    auth_str = _build_xoauth2_string(email, access_token)
+    imap.authenticate("XOAUTH2", lambda _: auth_str.encode("utf-8"))
+
+
+def _smtp_xoauth2_login(smtp: smtplib.SMTP, email: str, access_token: str) -> None:
+    """Authenticate SMTP using XOAUTH2 SASL mechanism."""
+    auth_str = _build_xoauth2_string(email, access_token)
+    # The authobject receives the challenge (None for initial response in XOAUTH2)
+    # and must return the auth string, or None to abort.
+    smtp.auth("XOAUTH2", lambda challenge=None: auth_str if challenge is None else None)
+
+
+# ── EmailAdapter ────────────────────────────────────────────────────────────
+
 class EmailAdapter(BasePlatformAdapter):
     """Email gateway adapter using IMAP (receive) and SMTP (send)."""
 
@@ -255,6 +314,13 @@ class EmailAdapter(BasePlatformAdapter):
         self._smtp_host = os.getenv("EMAIL_SMTP_HOST", "")
         self._smtp_port = int(os.getenv("EMAIL_SMTP_PORT", "587"))
         self._poll_interval = int(os.getenv("EMAIL_POLL_INTERVAL", "15"))
+
+        # OAuth2 settings
+        self._auth_type = os.getenv("EMAIL_AUTH_TYPE", "password").lower()
+        self._client_id = os.getenv("EMAIL_CLIENT_ID", "")
+        self._tenant_id = os.getenv("EMAIL_TENANT_ID", "consumers")
+        self._msal_app = None
+        self._token_cache = None
 
         # Skip attachments — configured via config.yaml:
         #   platforms:
@@ -271,7 +337,131 @@ class EmailAdapter(BasePlatformAdapter):
         # Map chat_id (sender email) -> last subject + message-id for threading
         self._thread_context: Dict[str, Dict[str, str]] = {}
 
-        logger.info("[Email] Adapter initialized for %s", self._address)
+        logger.info("[Email] Adapter initialized for %s (auth=%s)", self._address, self._auth_type)
+
+    # ── OAuth2 token management ──────────────────────────────────────────
+
+    def _acquire_token(self) -> Optional[str]:
+        """Acquire an OAuth2 access token via MSAL device code flow.
+
+        On first call, initiates device code flow — user must visit a URL
+        and enter the code in their browser.  Subsequent calls reuse the
+        cached token (with automatic refresh).
+
+        Returns the access token string, or None if acquisition failed.
+        """
+        if self._auth_type != "oauth2" or not self._client_id:
+            logger.debug("[Email] OAuth2 not configured, skipping token acquisition")
+            return None
+
+        try:
+            import msal
+        except ImportError:
+            logger.error("[Email] msal library not installed — run: pip install msal")
+            return None
+
+        authority = f"https://login.microsoftonline.com/{self._tenant_id}"
+        cache = msal.SerializableTokenCache()
+
+        # Load cached tokens from disk
+        if os.path.exists(_OAUTH_TOKEN_CACHE):
+            try:
+                with open(_OAUTH_TOKEN_CACHE, "r") as f:
+                    cache.deserialize(f.read())
+                logger.debug("[Email] Loaded token cache from %s", _OAUTH_TOKEN_CACHE)
+            except Exception as e:
+                logger.warning("[Email] Failed to load token cache: %s", e)
+
+        app = msal.PublicClientApplication(
+            self._client_id,
+            authority=authority,
+            token_cache=cache,
+        )
+        self._msal_app = app
+
+        accounts = app.get_accounts()
+        if accounts:
+            # Try silent token acquisition first
+            logger.debug("[Email] Found cached account, attempting silent token refresh")
+            result = app.acquire_token_silent(
+                scopes=_OAUTH_SCOPES,
+                account=accounts[0],
+            )
+            if result and "access_token" in result:
+                self._persist_token_cache(cache)
+                logger.info("[Email] Token refreshed silently from cache")
+                return result["access_token"]
+            logger.info("[Email] Silent token refresh failed, re-authenticating")
+
+        # Initiate device code flow
+        flow = app.initiate_device_flow(scopes=_OAUTH_SCOPES)
+        if "user_code" not in flow:
+            logger.error("[Email] Device code flow failed: %s", flow.get("error", "unknown"))
+            return None
+
+        print("\n" + "=" * 60)
+        print("  Email Gateway — Microsoft OAuth2 Authentication Required")
+        print("=" * 60)
+        print(f"\n  1. Open: {flow['verification_uri']}")
+        print(f"\n  2. Enter code: {flow['user_code']}")
+        print("\n  Sign in with the Microsoft account for:")
+        print(f"     {self._address}")
+        print("\n  This grants Centurion access to read and send emails.")
+        print("\n" + "=" * 60 + "\n")
+
+        result = app.acquire_token_by_device_flow(flow)
+        if "access_token" in result:
+            self._persist_token_cache(cache)
+            logger.info("[Email] OAuth2 token acquired successfully")
+            return result["access_token"]
+        else:
+            error_desc = result.get("error_description", result.get("error", "unknown"))
+            logger.error("[Email] Token acquisition failed: %s", error_desc)
+            return None
+
+    def _persist_token_cache(self, cache) -> None:
+        """Persist the MSAL token cache to disk."""
+        try:
+            Path(_OAUTH_TOKEN_CACHE).parent.mkdir(parents=True, exist_ok=True)
+            with open(_OAUTH_TOKEN_CACHE, "w") as f:
+                f.write(cache.serialize())
+            logger.debug("[Email] Token cache saved to %s", _OAUTH_TOKEN_CACHE)
+        except Exception as e:
+            logger.warning("[Email] Failed to persist token cache: %s", e)
+
+    # ── IMAP/SMTP connection helpers ─────────────────────────────────────
+
+    def _get_imap_connection(self) -> imaplib.IMAP4_SSL:
+        """Create an authenticated IMAP connection."""
+        imap = imaplib.IMAP4_SSL(self._imap_host, self._imap_port, timeout=30)
+
+        if self._auth_type == "oauth2":
+            token = self._acquire_token()
+            if not token:
+                raise RuntimeError("Failed to acquire OAuth2 token for IMAP")
+            _imap_xoauth2_login(imap, self._address, token)
+        else:
+            imap.login(self._address, self._password)
+
+        _send_imap_id(imap)
+        return imap
+
+    def _get_smtp_connection(self) -> smtplib.SMTP:
+        """Create an authenticated SMTP connection."""
+        smtp = smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=30)
+        smtp.starttls(context=ssl.create_default_context())
+
+        if self._auth_type == "oauth2":
+            token = self._acquire_token()
+            if not token:
+                raise RuntimeError("Failed to acquire OAuth2 token for SMTP")
+            _smtp_xoauth2_login(smtp, self._address, token)
+        else:
+            smtp.login(self._address, self._password)
+
+        return smtp
+
+    # ── Lifecycle ────────────────────────────────────────────────────────
 
     def _trim_seen_uids(self) -> None:
         """Keep only the most recent UIDs to prevent unbounded memory growth.
@@ -297,9 +487,7 @@ class EmailAdapter(BasePlatformAdapter):
         """Connect to the IMAP server and start polling for new messages."""
         try:
             # Test IMAP connection
-            imap = imaplib.IMAP4_SSL(self._imap_host, self._imap_port, timeout=30)
-            imap.login(self._address, self._password)
-            _send_imap_id(imap)
+            imap = self._get_imap_connection()
             # Mark all existing messages as seen so we only process new ones
             imap.select("INBOX")
             status, data = imap.uid("search", None, "ALL")
@@ -316,9 +504,7 @@ class EmailAdapter(BasePlatformAdapter):
 
         try:
             # Test SMTP connection
-            smtp = smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=30)
-            smtp.starttls(context=ssl.create_default_context())
-            smtp.login(self._address, self._password)
+            smtp = self._get_smtp_connection()
             smtp.quit()
             logger.info("[Email] SMTP connection test passed.")
         except Exception as e:
@@ -365,10 +551,8 @@ class EmailAdapter(BasePlatformAdapter):
         """Fetch new (unseen) messages from IMAP. Runs in executor thread."""
         results = []
         try:
-            imap = imaplib.IMAP4_SSL(self._imap_host, self._imap_port, timeout=30)
+            imap = self._get_imap_connection()
             try:
-                imap.login(self._address, self._password)
-                _send_imap_id(imap)
                 imap.select("INBOX")
 
                 status, data = imap.uid("search", None, "UNSEEN")
@@ -553,10 +737,8 @@ class EmailAdapter(BasePlatformAdapter):
 
         msg.attach(MIMEText(body, "plain", "utf-8"))
 
-        smtp = smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=30)
+        smtp = self._get_smtp_connection()
         try:
-            smtp.starttls(context=ssl.create_default_context())
-            smtp.login(self._address, self._password)
             smtp.send_message(msg)
         finally:
             try:
@@ -675,10 +857,8 @@ class EmailAdapter(BasePlatformAdapter):
             except Exception as e:
                 logger.warning("[Email] Failed to attach %s: %s", file_path, e)
 
-        smtp = smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=30)
+        smtp = self._get_smtp_connection()
         try:
-            smtp.starttls(context=ssl.create_default_context())
-            smtp.login(self._address, self._password)
             smtp.send_message(msg)
         finally:
             try:
@@ -754,10 +934,8 @@ class EmailAdapter(BasePlatformAdapter):
             part.add_header("Content-Disposition", f"attachment; filename={fname}")
             msg.attach(part)
 
-        smtp = smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=30)
+        smtp = self._get_smtp_connection()
         try:
-            smtp.starttls(context=ssl.create_default_context())
-            smtp.login(self._address, self._password)
             smtp.send_message(msg)
         finally:
             try:
