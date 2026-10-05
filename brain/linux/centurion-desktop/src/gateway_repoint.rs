@@ -150,55 +150,167 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Does the tree the unit points at carry its own work?
+/// A capability that used to be carried by hand on an owner's checkout and is now
+/// part of the release.
 ///
-/// `Some(plain description)` means it does; `None` means it is safe to leave.
+/// This register is the record of absorption. It is maintained by hand, on
+/// purpose: nothing can infer that some local work has been taken upstream, and a
+/// machine that guesses gets it wrong in the one direction that costs a feature.
 ///
-/// ⚠️ The two mistakes here are not equal. Deciding "no local work" when there is
-/// some switches a working feature off with no warning. Deciding "local work" when
-/// there is none only means an owner stays one version behind for a while, with a
-/// log line saying why. So every uncertain answer is a *yes* — a tree that is a
-/// repository we could not interrogate is treated as carrying work.
+/// `marker` must appear in the **packaged** copy of `file`. That is the evidence —
+/// not the version number, not a date, not an assumption that "we ported it".
+struct Absorbed {
+    /// Repo-relative path, matching `git diff --name-only`.
+    file: &'static str,
+    /// A string present in the packaged copy once the capability is really there.
+    marker: &'static str,
+    /// The release that landed it, for the log.
+    release: &'static str,
+    /// What it does, in plain words.
+    what: &'static str,
+}
+
+/// Work that has been absorbed into the release.
 ///
-/// A tree that is not a repository at all is a plain install; it carries nothing
-/// of the owner's, and there is nothing to preserve.
-pub(crate) fn local_work_reason(dir: &Path) -> Option<String> {
+/// Every marker below was read out of the ported files, not assumed. If a copy of
+/// the packaged tree does not contain the marker, the release does not have the
+/// capability yet and the hold stands.
+const ABSORBED: &[Absorbed] = &[
+    Absorbed {
+        file: "gateway/platforms/email.py",
+        marker: "_smtp_xoauth2_login",
+        release: "7.0.10",
+        what: "XOAUTH2 sign-in for IMAP and SMTP",
+    },
+    Absorbed {
+        file: "gateway/platforms/whatsapp.py",
+        marker: "quotedBody",
+        release: "7.0.10",
+        what: "WhatsApp quoted replies (adapter side)",
+    },
+    Absorbed {
+        file: "scripts/whatsapp-bridge/bridge.js",
+        marker: "extractQuotedText",
+        release: "7.0.10",
+        what: "WhatsApp quoted replies (bridge side)",
+    },
+    Absorbed {
+        file: "gateway/config.py",
+        marker: "EMAIL_AUTH_TYPE",
+        release: "7.0.10",
+        what: "email OAuth settings",
+    },
+    Absorbed {
+        file: "gateway/run.py",
+        marker: "20+ heartbeat emails",
+        release: "7.0.10",
+        what: "no \"still working\" heartbeats by email",
+    },
+    Absorbed {
+        file: "gateway/platforms/base.py",
+        marker: ".markdown",
+        release: "7.0.9",
+        what: "document extensions delivered as attachments",
+    },
+    Absorbed {
+        file: "tests/gateway/test_whatsapp_quoted_reply.py",
+        marker: "test_quoted_body_prefixed_to_text",
+        release: "7.0.10",
+        what: "the quoted-reply test",
+    },
+];
+
+/// Every file this tree has changed relative to where it forked from `main`,
+/// including anything uncommitted.
+///
+/// `None` means the question could not be answered — which the caller must treat
+/// as "assume there is work", never as "there is none".
+fn local_work_files(dir: &Path) -> Option<Vec<String>> {
+    let base = git(dir, &["merge-base", "HEAD", "main"])?;
+    let base = base.trim().to_owned();
+    if base.is_empty() {
+        return None;
+    }
+
+    let mut files: Vec<String> = Vec::new();
+    if let Some(diff) = git(dir, &["diff", "--name-only", &format!("{base}..HEAD")]) {
+        files.extend(
+            diff.lines()
+                .map(|line| line.trim().to_owned())
+                .filter(|line| !line.is_empty()),
+        );
+    } else {
+        return None;
+    }
+    if let Some(status) = git(dir, &["status", "--porcelain"]) {
+        for line in status.lines() {
+            if let Some(path) = line.get(3..) {
+                let path = path.trim();
+                if !path.is_empty() {
+                    files.push(path.to_owned());
+                }
+            }
+        }
+    }
+
+    files.sort();
+    files.dedup();
+    Some(files)
+}
+
+/// Does the packaged copy of `file` really carry the capability?
+fn packaged_has(packaged_root: &Path, file: &str, marker: &str) -> bool {
+    std::fs::read_to_string(packaged_root.join(file))
+        .map(|text| text.contains(marker))
+        .unwrap_or(false)
+}
+
+/// Why this tree's work must not be lost — or `None` when it is safe to leave.
+///
+/// ⚠️ The two mistakes are not equal. Saying "safe" when it is not switches a
+/// working feature off with no warning. Saying "unsafe" when it is fine only
+/// leaves an owner one version behind, with a log line explaining why. So:
+///
+/// - a tree whose changes we cannot enumerate → **work**;
+/// - a changed file we have no register entry for → **work**;
+/// - a registered file whose marker is absent from the packaged copy → **work**;
+/// - only a tree whose every change is provably present in the release → safe.
+///
+/// This is the discharge. It is what lets a machine that was patched by hand move
+/// itself once the release has caught up with it, without anyone visiting.
+pub(crate) fn unabsorbed_local_work(dir: &Path, packaged_root: &Path) -> Option<String> {
+    // Not a repository: a plain install carries nothing of the owner's.
     if !dir.join(".git").exists() {
         return None;
     }
 
-    let Some(head) = git(dir, &["rev-parse", "--short", "HEAD"]) else {
-        return Some("it is a git repository whose state could not be read".to_owned());
+    let Some(files) = local_work_files(dir) else {
+        return Some("it is a git repository whose changes could not be read".to_owned());
     };
-    let at = if head.is_empty() {
-        String::new()
-    } else {
-        format!(" at {head}")
-    };
-
-    let Some(branch) = git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]) else {
-        return Some(format!(
-            "it is a git repository whose branch could not be read{at}"
-        ));
-    };
-    if !branch.is_empty() && !matches!(branch.as_str(), "main" | "master" | "release") {
-        return Some(format!("it is on the branch {branch}{at}"));
+    if files.is_empty() {
+        return None;
     }
 
-    match git(dir, &["status", "--porcelain"]) {
-        Some(status) => {
-            let changed = status
-                .lines()
-                .filter(|line| !line.trim().is_empty())
-                .count();
-            if changed > 0 {
-                Some(format!("it has {changed} uncommitted change(s){at}"))
-            } else {
-                None
-            }
+    let mut unabsorbed: Vec<String> = Vec::new();
+    for file in &files {
+        match ABSORBED.iter().find(|entry| entry.file == file) {
+            Some(entry) if packaged_has(packaged_root, entry.file, entry.marker) => {}
+            Some(entry) => unabsorbed.push(format!(
+                "{} ({}) — the installed release does not carry it yet",
+                entry.file, entry.what
+            )),
+            None => unabsorbed.push(format!("{file} — not something this release absorbed")),
         }
-        // A release branch we could not interrogate is still uncertain.
-        None => Some(format!("its working state could not be read{at}")),
+    }
+
+    if unabsorbed.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "it carries {} change(s) the release does not cover: {}",
+            unabsorbed.len(),
+            unabsorbed.join("; ")
+        ))
     }
 }
 
@@ -394,9 +506,12 @@ pub fn repoint_on_launch(home: &Path, user_home: &Path, installed: &str) -> Repo
         return Repoint::NotApplicable;
     };
 
+    // The discharge lives here: a tree whose work the installed release has
+    // provably absorbed is safe to leave, so a hand-patched machine moves itself
+    // once the release catches up. Anything not covered still holds.
     let plan = hold_if_carrying_local_work(
         plan_repoint(&unit, &root, user_home, installed, &checkout_version),
-        &local_work_reason,
+        &|dir| unabsorbed_local_work(dir, &root),
     );
 
     match plan {
@@ -679,6 +794,60 @@ mod tests {
                 Some("it is on a branch".to_owned())
             });
             assert_eq!(out, original);
+        }
+    }
+
+    #[test]
+    fn a_tree_that_is_not_a_repository_carries_nothing_of_the_owners() {
+        let dir = temp_home("plain-install");
+        assert_eq!(
+            unabsorbed_local_work(&dir, Path::new(PACKAGED)),
+            None,
+            "a plain install has nothing to preserve"
+        );
+    }
+
+    #[test]
+    fn the_package_must_actually_contain_the_capability() {
+        // The evidence rule: a register entry on its own proves nothing. The
+        // marker has to be in the installed copy, or the hold stands.
+        let root = temp_home("packaged-copy");
+        std::fs::create_dir_all(root.join("gateway")).expect("dir");
+        std::fs::write(
+            root.join("gateway/email.py"),
+            "def _smtp_xoauth2_login(): ...\n",
+        )
+        .expect("file");
+
+        assert!(packaged_has(
+            &root,
+            "gateway/platforms/email.py",
+            "_smtp_xoauth2_login"
+        ) == false, "a path that does not exist cannot carry it");
+        assert!(packaged_has(&root, "gateway/email.py", "_smtp_xoauth2_login"));
+        assert!(
+            !packaged_has(&root, "gateway/email.py", "something_else"),
+            "an absent marker must read as absent"
+        );
+    }
+
+    #[test]
+    fn every_register_entry_names_a_real_file_and_a_release() {
+        // A register that drifts is worse than none: it would discharge a hold for
+        // work the release does not have. Pin the shape.
+        for entry in ABSORBED {
+            assert!(!entry.file.is_empty(), "a register entry needs a file");
+            assert!(!entry.marker.is_empty(), "a register entry needs a marker");
+            assert!(
+                !entry.release.is_empty(),
+                "a register entry must name the release that absorbed it"
+            );
+            assert!(!entry.what.is_empty(), "a register entry must say what it does");
+            assert!(
+                !entry.file.starts_with('/'),
+                "{} must be repo-relative",
+                entry.file
+            );
         }
     }
 }
