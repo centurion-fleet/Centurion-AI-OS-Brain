@@ -290,6 +290,55 @@ pub fn refresh_if_stale(home: &Path, installed: &str) -> Refresh {
 pub fn refresh_services_in_background(installed: String) {
     std::thread::spawn(move || {
         let home = PathBuf::from(crate::bridge_actions::resolve_centurion_home());
+
+        // Before anything else: a Brain installed the old way can have its gateway
+        // unit pointing at a working checkout rather than at the tree the package
+        // owns. Restarting the services in that state restarts the OLD code — the
+        // owner reopens the Brain, everything reads current, and the agent they
+        // actually talk to is unchanged. Move the unit first, then refresh.
+        //
+        // Bounded and non-destructive: see `gateway_repoint` for why it declines
+        // more often than it acts.
+        if let Some(user_home) = std::env::var_os("HOME").map(PathBuf::from) {
+            match crate::gateway_repoint::repoint_on_launch(&home, &user_home, &installed) {
+                crate::gateway_repoint::Repoint::NotApplicable => {}
+                crate::gateway_repoint::Repoint::Repointed {
+                    from,
+                    to,
+                    superseded,
+                } => log_line(
+                    &home,
+                    &format!(
+                        "repointed the gateway unit: {} ({}) -> {} — the old tree is untouched",
+                        from.display(),
+                        superseded.as_deref().unwrap_or("version unreadable"),
+                        to.display()
+                    ),
+                ),
+                crate::gateway_repoint::Repoint::Blocked { reason } => {
+                    log_line(&home, &format!("gateway unit NOT repointed: {reason}"))
+                }
+                // The unit points at an older tree that carries the owner's own
+                // work. We left it alone on purpose: repointing would switch off
+                // whatever that work does, and a version that lags is recoverable
+                // where a feature that quietly disappears is not. Named here so it
+                // can be ported rather than discovered by its absence.
+                crate::gateway_repoint::Repoint::Held {
+                    from,
+                    superseded,
+                    detail,
+                } => log_line(
+                    &home,
+                    &format!(
+                        "gateway unit HELD at {} ({}) — not repointed because {detail}. \
+                         The running Brain stays on that tree until its changes are ported.",
+                        from.display(),
+                        superseded.as_deref().unwrap_or("version unreadable")
+                    ),
+                ),
+            }
+        }
+
         match refresh_if_stale(&home, &installed) {
             Refresh::UpToDate => {}
             Refresh::Refreshed { from, to } => log_line(

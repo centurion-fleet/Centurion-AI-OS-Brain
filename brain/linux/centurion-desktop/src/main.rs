@@ -73,6 +73,10 @@ mod interviews;
 mod service_freshness;
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code, unused_imports, clippy::too_many_lines)]
+mod gateway_repoint;
+
+#[cfg(target_os = "linux")]
 #[allow(
     dead_code,
     unused_imports,
