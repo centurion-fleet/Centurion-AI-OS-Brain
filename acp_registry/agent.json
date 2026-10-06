@@ -1,7 +1,7 @@
 {
   "id": "centurion-ai-os",
   "name": "Centurion AI OS",
-  "version": "7.0.9",
+  "version": "7.0.10",
   "description": "Self-improving sovereign AI agent by Centurion Fleet with ACP editor integration, persistent memory, skills, and rich tool support.",
   "repository": "https://github.com/centurion-fleet/Centurion-AI-OS",
   "website": "https://github.com/centurion-fleet/Centurion-AI-OS/docs/user-guide/features/acp",
@@ -11,7 +11,7 @@
   "license": "Proprietary",
   "distribution": {
     "uvx": {
-      "package": "centurionai-os[acp]==7.0.9",
+      "package": "centurionai-os[acp]==7.0.10",
       "args": [
         "centurion-acp"
       ]
