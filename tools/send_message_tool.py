@@ -251,7 +251,35 @@ def _handle_send(args):
     force_document_attachments = "[[as_document]]" in message
 
     media_files, cleaned_message = BasePlatformAdapter.extract_media(message)
-    media_files = BasePlatformAdapter.filter_media_delivery_paths(media_files)
+
+    # A MEDIA path outside the safe delivery roots is DROPPED by the filter. If we
+    # then send the text and report success, the agent believes it delivered an
+    # attachment the owner never received — a silent failure, observed twice in the
+    # field. Refuse the send and name the rejected paths so the agent can fix and
+    # retry, rather than reporting a delivery that did not happen.
+    requested_media = len(media_files)
+    rejected_media: list = []
+    media_files = BasePlatformAdapter.filter_media_delivery_paths(
+        media_files, rejected=rejected_media
+    )
+    if rejected_media:
+        from gateway.platforms.base import _media_delivery_allowed_roots
+        return json.dumps({
+            "success": False,
+            "error": (
+                f"NOT SENT — {len(rejected_media)} of {requested_media} attachment(s) sit "
+                "outside the safe media delivery roots and would have been dropped "
+                "silently. Nothing was sent."
+            ),
+            "rejected_paths": rejected_media,
+            "allowed_roots": [str(r) for r in _media_delivery_allowed_roots()],
+            "hint": (
+                "Move each file under an allowed root (or CENTURION_MEDIA_ALLOW_DIRS) and "
+                "retry. A file the agent itself produced within the last 10 minutes is "
+                "also trusted."
+            ),
+        })
+
     mirror_text = cleaned_message.strip() or _describe_media_for_mirror(media_files)
 
     used_home_channel = False

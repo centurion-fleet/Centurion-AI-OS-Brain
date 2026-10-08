@@ -401,16 +401,15 @@ class TestSendMessageTool:
                 )
             )
 
-        assert result["success"] is True
-        send_mock.assert_awaited_once_with(
-            Platform.TELEGRAM,
-            telegram_cfg,
-            "12345",
-            "hello",
-            thread_id=None,
-            media_files=[],
-            force_document=False,
-        )
+        # A rejected attachment must NOT be reported as a successful send. The
+        # old contract asserted success=True here while the file was silently
+        # dropped — the agent then told the owner it had delivered a file that
+        # never arrived. Nothing goes out; the agent is told why and can retry.
+        assert result["success"] is False
+        assert result["rejected_paths"] == [str(secret)]
+        assert "allowed_roots" in result and result["allowed_roots"]
+        assert "secret" not in json.dumps(result).replace(str(secret), "")
+        send_mock.assert_not_awaited()
 
     def test_top_level_send_failure_redacts_query_token(self):
         config, _telegram_cfg = _make_config()

@@ -2388,27 +2388,47 @@ class BasePlatformAdapter(ABC):
         return validate_media_delivery_path(path)
 
     @staticmethod
-    def filter_media_delivery_paths(media_files) -> List[Tuple[str, bool]]:
-        """Drop unsafe MEDIA paths and normalize accepted paths."""
+    def filter_media_delivery_paths(media_files, rejected=None) -> List[Tuple[str, bool]]:
+        """Drop unsafe MEDIA paths and normalize accepted paths.
+
+        ``rejected`` is an optional list which, when supplied, collects the
+        original paths that failed the delivery-root check. Callers that report
+        an outcome to the agent MUST pass it: a dropped attachment that is not
+        surfaced becomes a silent failure and the agent reports a delivery that
+        never happened (see ``tools/send_message_tool.py``).
+        """
         safe_media: List[Tuple[str, bool]] = []
         for media_path, is_voice in media_files or []:
             safe_path = validate_media_delivery_path(str(media_path))
             if safe_path:
                 safe_media.append((safe_path, bool(is_voice)))
             else:
-                logger.warning("Skipping unsafe MEDIA directive path outside allowed roots")
+                logger.warning(
+                    "Skipping unsafe MEDIA directive path outside allowed roots: %s",
+                    media_path,
+                )
+                if rejected is not None:
+                    rejected.append(str(media_path))
         return safe_media
 
     @staticmethod
-    def filter_local_delivery_paths(file_paths) -> List[str]:
-        """Drop unsafe bare local file paths and normalize accepted paths."""
+    def filter_local_delivery_paths(file_paths, rejected=None) -> List[str]:
+        """Drop unsafe bare local file paths and normalize accepted paths.
+
+        See ``filter_media_delivery_paths`` for the meaning of ``rejected``.
+        """
         safe_paths: List[str] = []
         for file_path in file_paths or []:
             safe_path = validate_media_delivery_path(str(file_path))
             if safe_path:
                 safe_paths.append(safe_path)
             else:
-                logger.warning("Skipping unsafe local file path outside allowed roots")
+                logger.warning(
+                    "Skipping unsafe local file path outside allowed roots: %s",
+                    file_path,
+                )
+                if rejected is not None:
+                    rejected.append(str(file_path))
         return safe_paths
 
     @staticmethod

@@ -461,6 +461,52 @@ class TestMediaDeliveryPathValidation:
 
         assert filtered == [(str(safe.resolve()), True)]
 
+    def test_filter_reports_rejected_paths_when_asked(self, tmp_path, monkeypatch):
+        """A dropped path must be reportable, not just logged.
+
+        The silent-drop defect: the filter removed the attachment and returned
+        success, so the agent claimed a delivery that never happened. Callers now
+        pass ``rejected=`` and refuse the send when it is non-empty.
+        """
+        root = tmp_path / "media-cache"
+        safe = root / "speech.ogg"
+        unsafe = tmp_path / "outside.ogg"
+        safe.parent.mkdir(parents=True)
+        safe.write_bytes(b"OggS")
+        unsafe.write_bytes(b"OggS")
+        self._patch_roots(monkeypatch, root)
+
+        rejected: list = []
+        filtered = BasePlatformAdapter.filter_media_delivery_paths(
+            [(str(unsafe), False), (str(safe), True)], rejected=rejected
+        )
+
+        assert filtered == [(str(safe.resolve()), True)]
+        assert rejected == [str(unsafe)]
+
+    def test_filter_rejected_default_keeps_backwards_compatible_call(self, tmp_path, monkeypatch):
+        """Omitting ``rejected`` must behave exactly as before."""
+        root = tmp_path / "media-cache"
+        unsafe = tmp_path / "outside.ogg"
+        root.mkdir(parents=True)
+        unsafe.write_bytes(b"OggS")
+        self._patch_roots(monkeypatch, root)
+
+        assert BasePlatformAdapter.filter_media_delivery_paths([(str(unsafe), False)]) == []
+
+    def test_filter_local_reports_rejected_paths(self, tmp_path, monkeypatch):
+        root = tmp_path / "media-cache"
+        root.mkdir(parents=True)
+        unsafe = tmp_path / "loose.pdf"
+        unsafe.write_bytes(b"%PDF-1.4")
+        self._patch_roots(monkeypatch, root)
+
+        rejected: list = []
+        assert BasePlatformAdapter.filter_local_delivery_paths(
+            [str(unsafe)], rejected=rejected
+        ) == []
+        assert rejected == [str(unsafe)]
+
     def test_allows_operator_configured_extra_root(self, tmp_path, monkeypatch):
         extra_root = tmp_path / "operator-media"
         media_file = extra_root / "report.pdf"
