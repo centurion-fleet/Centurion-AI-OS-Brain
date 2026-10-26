@@ -75,6 +75,21 @@ struct SignumChatView: View {
                     .environmentObject(connectionManager)
                     .environmentObject(adrianService)
                     .environmentObject(missionStore)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                showConnect = false
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(SignumTheme.ink.opacity(0.7))
+                                    .frame(width: 30, height: 30)
+                                    .background(Circle().fill(SignumTheme.surface))
+                                    .overlay(Circle().stroke(SignumTheme.hair, lineWidth: 1))
+                            }
+                            .accessibilityLabel("Close")
+                        }
+                    }
             }
         }
         .task {
