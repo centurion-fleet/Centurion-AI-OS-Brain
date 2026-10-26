@@ -90,6 +90,11 @@ struct SignumChatView: View {
                 .padding(.trailing, 16)
                 .accessibilityLabel("Close")
             }
+            .onChange(of: connectionManager.isCryptoChatReady) { wasReady, isReady in
+                if !wasReady && isReady {
+                    showConnect = false
+                }
+            }
         }
         .task {
             resolveConversation()
