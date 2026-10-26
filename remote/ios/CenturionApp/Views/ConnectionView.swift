@@ -505,7 +505,7 @@ struct ConnectionPairingSheet: View {
     @EnvironmentObject private var connectionManager: ConnectionManager
     @Environment(\.dismiss) private var dismiss
     @State private var connectionString = ""
-    @State private var showManualEntry = false
+    @State private var showManualEntry = true
     @State private var showNetworkFind = false
     @State private var showQRScanner = false
     @State private var showPasteFallback = false

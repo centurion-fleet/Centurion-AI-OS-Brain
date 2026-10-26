@@ -69,7 +69,7 @@ struct SignumChatView: View {
             .environmentObject(messageService)
             .environmentObject(connectionManager)
         }
-        .sheet(isPresented: $showConnect) {
+        .fullScreenCover(isPresented: $showConnect) {
             ZStack(alignment: .topTrailing) {
                 ConnectionView()
                     .environmentObject(connectionManager)
