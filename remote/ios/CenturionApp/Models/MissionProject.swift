@@ -86,18 +86,6 @@ struct MissionTask: Identifiable, Codable, Equatable {
 
 extension MissionProgram {
     static func preview() -> [MissionProgram] {
-        let tasks = [
-            MissionTask(id: UUID(), targetId: UUID(), title: "Research market positioning", description: "Analyse competitive landscape", status: .done, order: 0, isBlocked: false, createdAt: Date()),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Draft messaging framework", description: "Core narrative and key messages", status: .inProgress, order: 1, isBlocked: true, blockedReason: "Awaiting feedback", createdAt: Date()),
-            MissionTask(id: UUID(), targetId: UUID(), title: "Design visual assets", description: "Brand deck and one-pager", status: .todo, order: 2, isBlocked: true, blockedReason: "Dependent on messaging", createdAt: Date()),
-        ]
-
-        let targets = [
-            MissionTarget(id: UUID(), programId: UUID(), title: "Q3 Go-to-Market", description: "Launch campaign", status: .active, order: 0, tasks: tasks, createdAt: Date()),
-            MissionTarget(id: UUID(), programId: UUID(), title: "Partner Onboarding", description: "Onboard partners", status: .backlog, order: 1, tasks: [], createdAt: Date()),
-            MissionTarget(id: UUID(), programId: UUID(), title: "Content Strategy", description: "Blog and whitepapers", status: .review, order: 2, tasks: [], createdAt: Date()),
-        ]
-
         return [
             MissionProgram(id: UUID(), name: "Q3 Go-to-Market", description: "Launch campaign across all channels", status: .active, order: 0, targetCount: 3, taskCount: 12, completedTaskCount: 5, createdAt: Date(), updatedAt: Date(), isEncrypted: true),
             MissionProgram(id: UUID(), name: "Sales Enablement", description: "Sales materials and training", status: .active, order: 1, targetCount: 4, taskCount: 12, completedTaskCount: 5, createdAt: Date(), updatedAt: Date(), isEncrypted: true),

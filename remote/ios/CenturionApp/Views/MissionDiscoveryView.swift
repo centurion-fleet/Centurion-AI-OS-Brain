@@ -331,7 +331,7 @@ struct MissionDiscoveryView: View {
 
         Task {
             do {
-                try await connectionManager.sendMessage(message)
+                _ = try await connectionManager.sendMessage(message)
                 await MainActor.run {
                     isSharing = false
                     shareStatus = .sent
