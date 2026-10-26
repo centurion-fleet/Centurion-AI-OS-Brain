@@ -2332,8 +2332,15 @@ final class ConnectionManager: ObservableObject {
         var publicKey = identityKey.publicKey
         publicKey.insert(0x01, at: 0)
 
+        #if DEBUG
+        print("[CryptoChat] sending handshake: \(publicKey.count) bytes, first byte \(publicKey[0])")
+        #endif
+
         try await RemoteFrameIO.sendData(publicKey, over: connection)
         let data = try await RemoteFrameIO.receiveExactly(33, over: connection)
+        #if DEBUG
+        print("[CryptoChat] received handshake response: \(data.count) bytes, first byte \(data.first ?? 0)")
+        #endif
         guard data.count == 33, data[0] == 0x01 else {
             throw ConnectionError.invalidResponse
         }
@@ -2676,7 +2683,7 @@ private actor RemoteIOPipeline {
 private enum RemoteFrameIO {
     static func sendData(_ data: Data, over connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: data, completion: .contentProcessed({ error in
+            connection.send(content: data, completion: .idempotent({ error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {

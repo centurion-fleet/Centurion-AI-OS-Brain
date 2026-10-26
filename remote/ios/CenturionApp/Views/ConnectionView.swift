@@ -10,6 +10,8 @@ struct ConnectionView: View {
     @State private var showRecoverySheet = false
     @State private var showGetHelp = false
     @State private var showAdrian = false
+    @State private var manualHost = ""
+    @State private var manualPort = "9119"
 
     var body: some View {
         MainTabChrome(title: "Connect") {
@@ -22,6 +24,10 @@ struct ConnectionView: View {
                         thinkingServiceCard
                     }
 
+                    if !connectionManager.isCryptoChatReady {
+                        manualConnectSection
+                    }
+
                     primaryActionButton
                     supportLinks
                     reassuranceSection
@@ -31,7 +37,7 @@ struct ConnectionView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .sheet(isPresented: $showPairingSheet) {
+        .fullScreenCover(isPresented: $showPairingSheet) {
             ConnectionPairingSheet()
                 .environmentObject(connectionManager)
         }
@@ -88,6 +94,45 @@ struct ConnectionView: View {
                 EncryptionStatusBadge(isEncrypted: connectionManager.isChannelEncrypted)
             }
         }
+    }
+
+    private var manualConnectSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Connect directly")
+                .font(.system(.headline, design: .serif))
+                .foregroundColor(ColorTheme.primaryText())
+            Text("Enter your Brain’s IP address and port. Use this when the QR scanner is not needed.")
+                .font(.subheadline)
+                .foregroundColor(ColorTheme.mutedText())
+
+            HStack(spacing: Spacing.md) {
+                TextField("Hostname or IP", text: $manualHost)
+                    .textContentType(.URL)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Port", text: $manualPort)
+                    .keyboardType(.numberPad)
+                    .frame(width: 80)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Button {
+                Haptics.lightTap()
+                let port = Int(manualPort) ?? 9119
+                connectionManager.connect(host: manualHost, port: port)
+            } label: {
+                Text("Connect")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(CenturionSecondaryButtonStyle())
+            .disabled(manualHost.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding()
+        .background(ColorTheme.cardBackground())
+        .cornerRadius(12)
     }
 
     private var thinkingServiceCard: some View {
