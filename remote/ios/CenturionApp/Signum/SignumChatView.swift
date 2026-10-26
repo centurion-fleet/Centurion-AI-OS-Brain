@@ -70,26 +70,25 @@ struct SignumChatView: View {
             .environmentObject(connectionManager)
         }
         .sheet(isPresented: $showConnect) {
-            NavigationStack {
+            ZStack(alignment: .topTrailing) {
                 ConnectionView()
                     .environmentObject(connectionManager)
                     .environmentObject(adrianService)
                     .environmentObject(missionStore)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button {
-                                showConnect = false
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(SignumTheme.ink.opacity(0.7))
-                                    .frame(width: 30, height: 30)
-                                    .background(Circle().fill(SignumTheme.surface))
-                                    .overlay(Circle().stroke(SignumTheme.hair, lineWidth: 1))
-                            }
-                            .accessibilityLabel("Close")
-                        }
-                    }
+
+                Button {
+                    showConnect = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SignumTheme.ink.opacity(0.7))
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(SignumTheme.surface))
+                        .overlay(Circle().stroke(SignumTheme.hair, lineWidth: 1))
+                }
+                .padding(.top, 52)
+                .padding(.trailing, 16)
+                .accessibilityLabel("Close")
             }
         }
         .task {
