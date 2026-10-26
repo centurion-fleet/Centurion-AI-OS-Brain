@@ -4,6 +4,8 @@ import SwiftUI
 struct CenturionApp: App {
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @AppStorage("centurion.hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// Signum chat surface (default) vs the original five-tab dashboard.
+    @AppStorage("signum.chatSurface") private var signumSurfaceEnabled = true
     @Environment(\.scenePhase) private var scenePhase
     @State private var showOnboarding: Bool
     @State private var services = AppServices()
@@ -21,7 +23,24 @@ struct CenturionApp: App {
                 ColorTheme.background()
                     .ignoresSafeArea()
 
-                ContentView()
+                // ⚠️ THE ROOT SWITCH. Signum is the app; the five-tab dashboard is
+                // still in the binary behind a flag so it can be reached without a
+                // code change if the new surface has a defect in the field. Default
+                // is Signum — Adrian, 26 Oct 2026: "I went too complicated with
+                // earlier versions."
+                //
+                // The flag is the UserDefaults key `signum.chatSurface` (Bool).
+                // There is no Settings row for it yet — the dashboard's Settings tab
+                // is inside the surface being replaced, so a row there would be
+                // unreachable from Signum. If it needs a visible switch, it belongs
+                // behind a long press on the header mark, not in Settings.
+                Group {
+                    if signumSurfaceEnabled {
+                        SignumChatView()
+                    } else {
+                        ContentView()
+                    }
+                }
                     .environmentObject(services.connectionManager)
                     .environmentObject(services.messageService)
                     .environmentObject(services.missionStore)
