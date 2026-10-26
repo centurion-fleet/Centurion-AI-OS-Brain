@@ -131,7 +131,7 @@ struct ConnectionView: View {
             .disabled(manualHost.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding()
-        .background(ColorTheme.cardBackground())
+        .background(ColorTheme.surface())
         .cornerRadius(12)
     }
 
