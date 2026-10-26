@@ -125,6 +125,9 @@ final class ConnectionManager: ObservableObject {
     private var approvalRetryTask: Task<Void, Never>?
     private var pathMonitor: NWPathMonitor?
     private var pathDebounceTask: Task<Void, Never>?
+    /// Throttle auto-reconnect so a stale / unreachable endpoint cannot spin the UI.
+    private var lastAutoReconnectAttempt: Date?
+    private let autoReconnectCooldown: TimeInterval = 30
     /// When a primary attempt fails, allow one LAN fallback for this reconnect cycle.
     private var allowLanFallback = true
     /// After a primary→LAN cascade, surface primary-path recovery if LAN also fails.
@@ -264,6 +267,11 @@ final class ConnectionManager: ObservableObject {
     func attemptAutoReconnect() {
         guard connectionState == .disconnected || isErrorState else { return }
         guard hasPersistedLink else { return }
+        if let last = lastAutoReconnectAttempt,
+           Date().timeIntervalSince(last) < autoReconnectCooldown {
+            return
+        }
+        lastAutoReconnectAttempt = Date()
         allowLanFallback = true
         reconnectWithPriority(stopApprovalLoop: true)
     }
@@ -419,6 +427,7 @@ final class ConnectionManager: ObservableObject {
         pendingPairingToken = nil
         allowLanFallback = true
         recoveryPrefersPrimary = false
+        lastAutoReconnectAttempt = nil
         connectionState = .disconnected
         markDiscoveredDevicesDisconnected()
     }
@@ -536,6 +545,11 @@ final class ConnectionManager: ObservableObject {
             // Away candidate: try Realtime when LAN/remote TCP is down and Brain is online.
             Task { await self.considerRelayAway() }
             guard self.hasPersistedLink else { return }
+            if let last = self.lastAutoReconnectAttempt,
+               Date().timeIntervalSince(last) < self.autoReconnectCooldown {
+                return
+            }
+            self.lastAutoReconnectAttempt = Date()
             self.allowLanFallback = true
             self.recoveryPrefersPrimary = false
             self.reconnectWithPriority(stopApprovalLoop: true)

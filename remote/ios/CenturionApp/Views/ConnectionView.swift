@@ -168,6 +168,16 @@ struct ConnectionView: View {
                     }
                     .buttonStyle(CenturionGhostButtonStyle())
                     .accessibilityLabel("Start pairing")
+
+                    Button(role: .destructive) {
+                        Haptics.lightTap()
+                        connectionManager.disconnect()
+                    } label: {
+                        Text("Clear saved link")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(CenturionGhostButtonStyle())
+                    .accessibilityLabel("Clear saved link")
                 }
             } else {
                 Button {
