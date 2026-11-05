@@ -33,6 +33,11 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var clientFingerprint: String?
     /// Dangerous-tool approval waiting for the owner during an in-flight Crypto Chat turn.
     @Published var pendingToolApproval: PendingToolApproval?
+    /// True when the Centurion on the other end no longer matches the key this
+    /// iPhone stored for it (a rebuilt or restored Brain). Surfaced so the owner
+    /// can decide to trust it again — a changed identity is a decision, not a
+    /// transient failure to be retried silently.
+    @Published var serverIdentityChanged = false
     /// Honest waiting — short activity hint while a turn is in flight (no PII).
     @Published var turnActivityHint: String?
     /// Live assistant draft while a turn streams (cleared on final/error).
@@ -2426,13 +2431,16 @@ final class ConnectionManager: ObservableObject {
         guard status.type == "ready" else {
             throw ConnectionError.invalidResponse
         }
-        let trustIdentifier = pendingDevice?.serviceName
-            ?? pendingDevice?.hostname
-            ?? "default-centurion"
-        try ServerTrustStore.verifyOrStore(
-            identifier: trustIdentifier,
-            publicKey: serverPublicKey
-        )
+        let trustIdentifier = serverTrustIdentifier
+        do {
+            try ServerTrustStore.verifyOrStore(
+                identifier: trustIdentifier,
+                publicKey: serverPublicKey
+            )
+        } catch CryptoError.serverIdentityChanged {
+            serverIdentityChanged = true
+            throw ConnectionError.serverIdentityChanged(trustIdentifier)
+        }
 
         stopApprovalRetryLoop()
         currentSessionKey = sessionKey
@@ -2534,6 +2542,38 @@ final class ConnectionManager: ObservableObject {
         guard response.type == "pong" else {
             throw ConnectionError.invalidResponse
         }
+    }
+
+    /// The identifier the trust store files a Centurion under. Must be computed
+    /// the same way on read and on forget, or the stored key can never be cleared.
+    private var serverTrustIdentifier: String {
+        pendingDevice?.serviceName
+            ?? pendingDevice?.hostname
+            ?? "default-centurion"
+    }
+
+    /// Forget what this iPhone stored about the Centurion's key, then retry.
+    ///
+    /// Only ever called from the owner pressing **Trust this Centurion again** —
+    /// never automatically. A changed identity is either their rebuilt Brain or
+    /// something that should stop the connection, and only they can tell which.
+    func forgetTrustedServerIdentityAndReconnect() {
+        var identifiers: Set<String> = ["default-centurion"]
+        var candidates: [CenturionDevice] = []
+        if let device = pendingDevice { candidates.append(device) }
+        if let device = connectedDevice { candidates.append(device) }
+        if let lan = loadLastLanDevice() { candidates.append(lan) }
+        if let remote = loadLastRemoteDevice() { candidates.append(remote) }
+
+        for device in candidates {
+            identifiers.insert(device.hostname)
+            if let service = device.serviceName { identifiers.insert(service) }
+        }
+        for identifier in identifiers where !identifier.isEmpty {
+            ServerTrustStore.remove(identifier: identifier)
+        }
+        serverIdentityChanged = false
+        reconnect()
     }
 
     private func failConnection(_ message: String) {
@@ -2933,6 +2973,8 @@ enum ConnectionError: Error, LocalizedError {
     case messageTooLarge
     case hydrating
     case serverRejected(String)
+    /// The Brain answered with a different key than the one this iPhone stored.
+    case serverIdentityChanged(String)
 
     var errorDescription: String? {
         switch self {
@@ -2945,6 +2987,12 @@ enum ConnectionError: Error, LocalizedError {
         case .hydrating:
             return "Loading mission data. Please wait — Chat opens when that’s done."
         case .serverRejected(let message): return message
+        case .serverIdentityChanged(let identifier):
+            return """
+            This Centurion is not the one this iPhone linked to before — its key has changed \
+            (\(identifier)). If you rebuilt or restored the Brain, trust it again below. If you \
+            did not, stop: something else is answering on that address.
+            """
         }
     }
 }

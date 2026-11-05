@@ -1,6 +1,15 @@
-# Sovereign AI Remote — TestFlight What to Test (build 68)
+# Sovereign AI Remote — TestFlight What to Test (build 69)
 
-**iOS App Version 5.4.0**. Build **68**. Pair against this Brain.
+**iOS App Version 5.4.0**. Build **69**. Pair against this Brain.
+
+## 5.4.0 — build 69
+
+- **Connection failures now say why.** A failed link shows the Brain's own reason
+  under **NOT LINKED** — pairing code rejected, host unreachable, or the
+  Centurion's key has changed — with **Try again** and **Pair**.
+- **Changed Centurion identity is recoverable.** If the Brain was rebuilt or
+  restored, the card offers **Trust this Centurion again** instead of a dead end.
+- Fixes the handshake send that made builds 64–67 uncompilable.
 
 ## 5.4.0 — Signum chat surface
 

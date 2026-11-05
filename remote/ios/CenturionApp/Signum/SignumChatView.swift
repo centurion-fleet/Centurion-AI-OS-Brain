@@ -211,6 +211,11 @@ struct SignumChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: SignumTheme.Metrics.messageSpacing) {
+                    if let issue = connectionIssue {
+                        connectionIssueCard(issue)
+                            .id("signum-connection-issue")
+                    }
+
                     if messages.isEmpty && !isSending {
                         emptyState
                     }
@@ -248,6 +253,78 @@ struct SignumChatView: View {
             }
             .onChange(of: isSending) { _, _ in scroll(proxy, animated: true) }
         }
+    }
+
+    /// The reason the link is down, in the Brain's own words.
+    ///
+    /// The header can only carry a status; the actual message ("your pairing code
+    /// could not be verified", "this Centurion's key has changed") used to be
+    /// thrown away, which left the owner staring at "Offline" with no cause.
+    private var connectionIssue: String? {
+        switch connectionManager.connectionState {
+        case .error(let message): return message
+        case .awaitingApproval(let message): return message
+        default: return nil
+        }
+    }
+
+    private func connectionIssueCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("NOT LINKED")
+                .font(SignumTheme.mono(9.5, .semibold))
+                .tracking(1.3)
+                .foregroundStyle(SignumTheme.goldDeep)
+
+            Text(message)
+                .font(SignumTheme.ui(14))
+                .foregroundStyle(SignumTheme.ink)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                if connectionManager.serverIdentityChanged {
+                    Button("Trust this Centurion again") {
+                        Haptics.mediumTap()
+                        connectionManager.forgetTrustedServerIdentityAndReconnect()
+                    }
+                    .font(SignumTheme.ui(13, .medium))
+                    .foregroundStyle(SignumTheme.cream)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(SignumTheme.ink))
+                } else {
+                    Button("Try again") {
+                        Haptics.lightTap()
+                        connectionManager.reconnect()
+                    }
+                    .font(SignumTheme.ui(13, .medium))
+                    .foregroundStyle(SignumTheme.cream)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(SignumTheme.ink))
+
+                    Button("Pair") {
+                        Haptics.lightTap()
+                        showConnect = true
+                    }
+                    .font(SignumTheme.ui(13, .medium))
+                    .foregroundStyle(SignumTheme.ink)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .overlay(
+                        Capsule().stroke(SignumTheme.hairStrong, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SignumTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(SignumTheme.hair, lineWidth: 1)
+        )
     }
 
     private var emptyState: some View {

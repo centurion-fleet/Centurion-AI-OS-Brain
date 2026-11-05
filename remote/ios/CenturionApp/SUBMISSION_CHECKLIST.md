@@ -1,6 +1,6 @@
 # Sovereign AI Remote — App Store submission checklist
 
-Centurion v5 lockstep (`MARKETING_VERSION` **5.4.0** / build **68**). Complete before App Store submit.
+Centurion v5 lockstep (`MARKETING_VERSION` **5.4.0** / build **69**). Complete before App Store submit.
 
 ## Listing name & price
 
