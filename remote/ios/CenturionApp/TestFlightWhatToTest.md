@@ -1,6 +1,13 @@
-# Sovereign AI Remote — TestFlight What to Test (build 69)
+# Sovereign AI Remote — TestFlight What to Test (build 70)
 
-**iOS App Version 5.4.0**. Build **69**. Pair against this Brain.
+**iOS App Version 5.4.0**. Build **70**. Pair against this Brain.
+
+## 5.4.0 — build 70
+
+- **The real reason is no longer overwritten.** A failed LAN attempt used to be
+  reported as "couldn't reach your Centurion remotely" whenever a remote address
+  was saved, hiding the actual cause. Specific diagnostics (identity changed,
+  pairing rejected, bad response) now survive.
 
 ## 5.4.0 — build 69
 

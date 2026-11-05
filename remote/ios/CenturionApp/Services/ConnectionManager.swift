@@ -2331,11 +2331,25 @@ final class ConnectionManager: ObservableObject {
                 )
             } catch CryptoError.serverIdentityChanged {
                 self.failConnection(
-                    "This Sovereign was reset. Remove its saved trust in Settings, then connect again."
+                    "This Centurion was reset. Trust it again, then connect.",
+                    specific: true
                 )
             } catch ConnectionError.serverRejected(let message) {
-                self.failConnection(message)
+                self.failConnection(message, specific: true)
+            } catch let error as ConnectionError {
+                self.failConnection(
+                    error.errorDescription
+                        ?? "The secure connection could not be established.",
+                    specific: true
+                )
+            } catch let error as CryptoError {
+                self.failConnection(
+                    error.errorDescription
+                        ?? "The secure connection could not be established.",
+                    specific: true
+                )
             } catch {
+                // Transport-level failure: the remote/LAN advice is genuinely useful here.
                 self.failConnection(
                     (error as? LocalizedError)?.errorDescription
                         ?? "The secure connection could not be established."
@@ -2576,7 +2590,11 @@ final class ConnectionManager: ObservableObject {
         reconnect()
     }
 
-    private func failConnection(_ message: String) {
+    /// `specific` marks a message that is already the real reason (identity
+    /// changed, pairing rejected, bad response). Those must never be replaced by
+    /// the generic "couldn't reach it remotely" advice — doing that is what hid
+    /// the actual failure behind a misleading network message.
+    private func failConnection(_ message: String, specific: Bool = false) {
         clearConnectionTimeout()
         resetPostLinkHydration()
         keepaliveTask?.cancel()
@@ -2595,7 +2613,7 @@ final class ConnectionManager: ObservableObject {
         """
 
         // If remote/Tailscale failed, try LAN once before surfacing an error.
-        if allowLanFallback,
+        if allowLanFallback, !specific,
            pendingDevice?.isRemotePath == true || pendingDevice?.isTailscalePath == true {
             allowLanFallback = false
             if let lan = loadLastLanDevice()
@@ -2617,7 +2635,7 @@ final class ConnectionManager: ObservableObject {
             return
         }
 
-        if recoveryPrefersPrimary {
+        if recoveryPrefersPrimary, !specific {
             recoveryPrefersPrimary = false
             connectionState = .error(
                 loadLastRemoteDevice() != nil ? remoteRecovery : """
