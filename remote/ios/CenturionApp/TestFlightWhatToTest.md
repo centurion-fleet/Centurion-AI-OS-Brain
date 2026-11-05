@@ -1,6 +1,12 @@
-# Sovereign AI Remote — TestFlight What to Test (build 73)
+# Sovereign AI Remote — TestFlight What to Test (build 74)
 
-**iOS App Version 5.4.0**. Build **73**. Pair against this Brain.
+**iOS App Version 5.5.0**. Build **74**. Pair against this Brain.
+
+## 5.5.0 — build 74
+
+- Version train moves to 5.5.0 / 74 so App Store Connect sees a new release.
+- `CFBundleVersion` and `CFBundleShortVersionString` now come from
+  `CURRENT_PROJECT_VERSION` / `MARKETING_VERSION` instead of being hardcoded.
 
 ## 5.4.0 — build 73
 
