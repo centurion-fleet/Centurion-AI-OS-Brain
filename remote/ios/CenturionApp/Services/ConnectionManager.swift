@@ -2330,8 +2330,6 @@ final class ConnectionManager: ObservableObject {
             // in flight, this attempt's failure is noise — the newer attempt owns
             // the UI. Without this guard, a superseded socket reports "couldn't
             // link" while the live one is still succeeding.
-            func abandoned() -> Bool { self.connection !== connection }
-
             do {
                 try await withTimeout(seconds: handshakeTimeoutSeconds) {
                     try await self.completeKeyExchange(
@@ -2340,35 +2338,35 @@ final class ConnectionManager: ObservableObject {
                     )
                 }
             } catch is TimeoutError {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 self.failConnection(
                     "The connection timed out. Check that both devices are on the same network."
                 )
             } catch CryptoError.serverIdentityChanged {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 self.failConnection(
                     "This Centurion was reset. Trust it again, then connect.",
                     specific: true
                 )
             } catch ConnectionError.serverRejected(let message) {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 self.failConnection(message, specific: true)
             } catch let error as ConnectionError {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 self.failConnection(
                     error.errorDescription
                         ?? "The secure connection could not be established.",
                     specific: true
                 )
             } catch let error as CryptoError {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 self.failConnection(
                     error.errorDescription
                         ?? "The secure connection could not be established.",
                     specific: true
                 )
             } catch {
-                guard !abandoned() else { return }
+                guard self.connection === connection else { return }
                 // Never throw the diagnostic away: if the error has no readable
                 // description, show its type/value. A fixed "could not be
                 // established" sentence is what made this failure invisible.

@@ -1,6 +1,11 @@
-# Sovereign AI Remote — TestFlight What to Test (build 72)
+# Sovereign AI Remote — TestFlight What to Test (build 73)
 
-**iOS App Version 5.4.0**. Build **72**. Pair against this Brain.
+**iOS App Version 5.4.0**. Build **73**. Pair against this Brain.
+
+## 5.4.0 — build 73
+
+- Fixes the build error in 71/72: the superseded-attempt check is now written
+  inline instead of in a helper that could not touch the main-actor connection.
 
 ## 5.4.0 — build 72
 
