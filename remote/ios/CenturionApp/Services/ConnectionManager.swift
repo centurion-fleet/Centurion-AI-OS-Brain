@@ -135,6 +135,12 @@ final class ConnectionManager: ObservableObject {
     /// keeps showing the real reason instead of being overwritten a second later
     /// by a fresh (and equally hopeless) attempt at the saved endpoint.
     private var suppressAutoReconnect = false
+    /// Same-endpoint connect de-dupe: several call sites can fire in the same
+    /// runloop (recovery sheet, auto-reconnect, approval poll). Each connect()
+    /// cancels the previous socket, which shows up on the Brain as a handshake
+    /// that completes and is instantly dropped.
+    private var lastConnectTarget: String?
+    private var lastConnectStartedAt: Date?
     /// Throttle auto-reconnect so a stale / unreachable endpoint cannot spin the UI.
     private var lastAutoReconnectAttempt: Date?
     private let autoReconnectCooldown: TimeInterval = 30
@@ -412,6 +418,18 @@ final class ConnectionManager: ObservableObject {
     }
 
     func connect(to device: CenturionDevice, stopApprovalLoop: Bool = true) {
+        let target = "\(device.ipAddress)|\(device.hostname)|\(device.port)"
+        if connectionState == .connecting,
+           lastConnectTarget == target,
+           let started = lastConnectStartedAt,
+           Date().timeIntervalSince(started) < 2 {
+            #if DEBUG
+            print("[Link] ignoring duplicate connect to \(target)")
+            #endif
+            return
+        }
+        lastConnectTarget = target
+        lastConnectStartedAt = Date()
         suppressAutoReconnect = false
         if stopApprovalLoop {
             stopApprovalRetryLoop()
@@ -2339,6 +2357,9 @@ final class ConnectionManager: ObservableObject {
                 }
             } catch is TimeoutError {
                 guard self.connection === connection else { return }
+                #if DEBUG
+                print("[Link] handshake timed out after \(handshakeTimeoutSeconds)s")
+                #endif
                 self.failConnection(
                     "The connection timed out. Check that both devices are on the same network."
                 )
@@ -2367,6 +2388,9 @@ final class ConnectionManager: ObservableObject {
                 )
             } catch {
                 guard self.connection === connection else { return }
+                #if DEBUG
+                print("[Link] handshake failed: \(String(reflecting: error))")
+                #endif
                 // Never throw the diagnostic away: if the error has no readable
                 // description, show its type/value. A fixed "could not be
                 // established" sentence is what made this failure invisible.
@@ -2497,6 +2521,9 @@ final class ConnectionManager: ObservableObject {
         connectionState = .connected
         activeConnectionTarget = nil
         beginPostLinkHydration()
+        #if DEBUG
+        print("[Link] handshake complete — connected to \(connectedDevice?.name ?? "unknown")")
+        #endif
         // Keep Bonjour browsing alive while linked — cancelling the browser can drop
         // NWConnections that were opened via a Bonjour service endpoint.
         startKeepalive()

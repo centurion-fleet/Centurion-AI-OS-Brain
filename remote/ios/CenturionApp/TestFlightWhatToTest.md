@@ -1,6 +1,13 @@
-# Sovereign AI Remote — TestFlight What to Test (build 74)
+# Sovereign AI Remote — TestFlight What to Test (build 75)
 
-**iOS App Version 5.5.0**. Build **74**. Pair against this Brain.
+**iOS App Version 5.5.0**. Build **75**. Pair against this Brain.
+
+## 5.5.0 — build 75
+
+- Diagnostics: the console now prints `[Link] handshake failed: …` with the real
+  error, `[Link] handshake timed out after 15s`, or `[Link] handshake complete`.
+- Duplicate connects to the same endpoint inside 2 seconds are ignored, so one
+  tap cannot spawn a storm of sockets that cancel each other.
 
 ## 5.5.0 — build 74
 
