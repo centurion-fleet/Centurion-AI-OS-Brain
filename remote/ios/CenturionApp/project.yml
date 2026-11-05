@@ -12,7 +12,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # Project-wide so Xcode General / TestFlight never fall back to a stale ASC train.
     MARKETING_VERSION: "5.4.0"
-    CURRENT_PROJECT_VERSION: "71"
+    CURRENT_PROJECT_VERSION: "72"
 
 packages:
   Sodium:
@@ -46,7 +46,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.centurion.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "5.4.0"
-        CURRENT_PROJECT_VERSION: "71"
+        CURRENT_PROJECT_VERSION: "72"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_IPHONE: YES
         SUPPORTS_IPAD: YES

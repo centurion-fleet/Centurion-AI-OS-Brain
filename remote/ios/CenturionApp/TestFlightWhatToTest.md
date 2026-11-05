@@ -1,6 +1,13 @@
-# Sovereign AI Remote — TestFlight What to Test (build 71)
+# Sovereign AI Remote — TestFlight What to Test (build 72)
 
-**iOS App Version 5.4.0**. Build **71**. Pair against this Brain.
+**iOS App Version 5.4.0**. Build **72**. Pair against this Brain.
+
+## 5.4.0 — build 72
+
+- **The reason stays on screen.** The background reconnect no longer overwrites a
+  named failure a second later with "couldn't reach your Centurion remotely".
+  Real errors also keep their own text, with the recovery advice appended rather
+  than replacing it.
 
 ## 5.4.0 — build 71
 

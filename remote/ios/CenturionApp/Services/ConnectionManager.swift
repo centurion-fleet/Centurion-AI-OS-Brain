@@ -130,6 +130,11 @@ final class ConnectionManager: ObservableObject {
     private var approvalRetryTask: Task<Void, Never>?
     private var pathMonitor: NWPathMonitor?
     private var pathDebounceTask: Task<Void, Never>?
+    /// A failure we can name is not improved by retrying it. While this is set,
+    /// the background reconnect loop stays out of the way so the owner's card
+    /// keeps showing the real reason instead of being overwritten a second later
+    /// by a fresh (and equally hopeless) attempt at the saved endpoint.
+    private var suppressAutoReconnect = false
     /// Throttle auto-reconnect so a stale / unreachable endpoint cannot spin the UI.
     private var lastAutoReconnectAttempt: Date?
     private let autoReconnectCooldown: TimeInterval = 30
@@ -206,6 +211,7 @@ final class ConnectionManager: ObservableObject {
 
     /// One-tap reconnect: remote first, then LAN, then legacy Tailscale.
     func reconnect() {
+        suppressAutoReconnect = false
         allowLanFallback = true
         recoveryPrefersPrimary = false
         reconnectWithPriority(stopApprovalLoop: true)
@@ -270,6 +276,7 @@ final class ConnectionManager: ObservableObject {
 
     /// After splash / on enter foreground: remote first, then LAN / Tailscale.
     func attemptAutoReconnect() {
+        guard !suppressAutoReconnect else { return }
         guard connectionState == .disconnected || isErrorState else { return }
         guard hasPersistedLink else { return }
         if let last = lastAutoReconnectAttempt,
@@ -405,6 +412,7 @@ final class ConnectionManager: ObservableObject {
     }
 
     func connect(to device: CenturionDevice, stopApprovalLoop: Bool = true) {
+        suppressAutoReconnect = false
         if stopApprovalLoop {
             stopApprovalRetryLoop()
         }
@@ -2600,6 +2608,7 @@ final class ConnectionManager: ObservableObject {
             ServerTrustStore.remove(identifier: identifier)
         }
         serverIdentityChanged = false
+        suppressAutoReconnect = false
         reconnect()
     }
 
@@ -2638,12 +2647,14 @@ final class ConnectionManager: ObservableObject {
                 return
             }
             recoveryPrefersPrimary = false
+            // Append the advice — never replace the reason. Replacing it is how a
+            // LAN failure ended up reported as "couldn't reach it remotely".
             connectionState = .error(
-                pendingDevice?.isRemotePath == true ? remoteRecovery : """
+                message + "\n\n" + (pendingDevice?.isRemotePath == true ? remoteRecovery : """
                 Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
                 and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
                 use Find my Sovereign on Wi‑Fi.
-                """
+                """)
             )
             return
         }
@@ -2651,15 +2662,16 @@ final class ConnectionManager: ObservableObject {
         if recoveryPrefersPrimary, !specific {
             recoveryPrefersPrimary = false
             connectionState = .error(
-                loadLastRemoteDevice() != nil ? remoteRecovery : """
+                message + "\n\n" + (loadLastRemoteDevice() != nil ? remoteRecovery : """
                 Tailscale could not reach your Sovereign. Turn on Tailscale on this iPhone \
                 and on your Sovereign, then tap Reconnect. If you are at home without Tailscale, \
                 use Find my Sovereign on Wi‑Fi.
-                """
+                """)
             )
             return
         }
 
+        if specific { suppressAutoReconnect = true }
         connectionState = .error(message)
     }
 
