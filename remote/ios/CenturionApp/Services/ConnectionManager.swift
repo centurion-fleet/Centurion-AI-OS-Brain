@@ -2697,7 +2697,12 @@ private actor RemoteIOPipeline {
 private enum RemoteFrameIO {
     static func sendData(_ data: Data, over connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: data, completion: .idempotent({ error in
+            // `SendCompletion` has two cases: `.idempotent` (no associated value —
+            // tells the stack the content is safe to re-send) and `.contentProcessed`,
+            // which is the one that takes the handler. Using `.idempotent(...)`
+            // with a closure does not compile: "Enum case 'idempotent' has no
+            // associated values".
+            connection.send(content: data, completion: .contentProcessed({ error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {
