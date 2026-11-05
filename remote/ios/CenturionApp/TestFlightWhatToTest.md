@@ -1,6 +1,15 @@
-# Sovereign AI Remote — TestFlight What to Test (build 70)
+# Sovereign AI Remote — TestFlight What to Test (build 71)
 
-**iOS App Version 5.4.0**. Build **70**. Pair against this Brain.
+**iOS App Version 5.4.0**. Build **71**. Pair against this Brain.
+
+## 5.4.0 — build 71
+
+- **The failure names itself.** If linking fails with something the app has no
+  wording for, the card now shows the underlying error instead of the fixed
+  sentence "The secure connection could not be established."
+- **A superseded attempt no longer reports a false failure.** If a second
+  connect replaces the first mid-handshake, the abandoned socket stays quiet
+  instead of throwing "Couldn't link" over a link that is still coming up.
 
 ## 5.4.0 — build 70
 
