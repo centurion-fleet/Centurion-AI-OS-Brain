@@ -13,8 +13,9 @@ struct SignumConversationList: View {
     @Environment(\.dismiss) private var dismiss
 
     let selectedId: UUID?
-    let onSelect: (UUID) -> Void
+    let onSelect: (Conversation) -> Void
     let onNew: () -> Void
+    let onDelete: (Conversation) -> Void
 
     private var ordered: [Conversation] {
         messageService.conversations
@@ -43,11 +44,18 @@ struct SignumConversationList: View {
                         LazyVStack(spacing: 0) {
                             ForEach(ordered) { conversation in
                                 Button {
-                                    onSelect(conversation.id)
+                                    onSelect(conversation)
                                 } label: {
                                     row(conversation)
                                 }
                                 .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        onDelete(conversation)
+                                    } label: {
+                                        Label("Delete conversation", systemImage: "trash")
+                                    }
+                                }
 
                                 Divider().overlay(SignumTheme.hair)
                             }

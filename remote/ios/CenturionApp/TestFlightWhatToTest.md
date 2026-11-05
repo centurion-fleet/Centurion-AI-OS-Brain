@@ -1,6 +1,31 @@
-# Sovereign AI Remote — TestFlight What to Test (build 59)
+# Sovereign AI Remote — TestFlight What to Test (build 68)
 
-**iOS App Version 5.3.8** (not 5.0.1 / 5.2.x / 5.3.7). Build **59**. Pair against Brain **5.3.8**.
+**iOS App Version 5.4.0**. Build **68**. Pair against this Brain.
+
+## 5.4.0 — Signum chat surface
+
+The app is now one screen: the conversation, the composer, and the name of your
+Centurion. The five-tab dashboard is still in the binary behind the
+`signum.chatSurface` flag but is no longer the default.
+
+- **Link** — header is tappable while unlinked: tap the name/status to open
+  pairing. The pairing cover dismisses itself the moment Crypto Chat links, and
+  the header shows **CONNECTED · THIS MACHINE**.
+- **Chat** — send a message, watch the working line ("Reading…", "Running a
+  tool…") and the answer stream in. Long-press any message to copy; long-press
+  an answer for **Ask again**.
+- **Stop** — while a turn is running the send arrow becomes a stop square. Stop
+  drops the wait without showing an error card.
+- **Try again** — a failed send shows one error card with a retry. Retry
+  re-sends the same question without leaving a duplicate in the thread.
+- **Conversations** — the menu button opens the drawer. It now pulls the Brain's
+  real topic list on open, resumes the Brain session when you pick a topic, and
+  long-press → **Delete conversation** removes it on the phone and on the Brain.
+- **Name** — the header name comes from the Soul (`name`), cached so the screen
+  opens with the right name before the network answers.
+
+Pair on home Wi‑Fi. If pairing times out, check Local Network permission and
+delete/reinstall to clear a stale saved endpoint.
 
 ## 5.3.8
 

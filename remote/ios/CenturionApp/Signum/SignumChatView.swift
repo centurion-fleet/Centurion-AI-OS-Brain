@@ -29,7 +29,12 @@ struct SignumChatView: View {
     @State private var conversationId: UUID?
     @State private var showConversations = false
     @State private var showConnect = false
-    @State private var copied = false
+    /// Set when the owner stops a turn themselves — suppress the error card that
+    /// the aborted request would otherwise raise.
+    @State private var didCancelTurn = false
+    /// Guards `isSending` against a cancelled turn's task finishing after a new
+    /// one has already started.
+    @State private var turnToken = 0
     @FocusState private var composerFocused: Bool
 
     private var conversation: Conversation? {
@@ -56,18 +61,36 @@ struct SignumChatView: View {
         .sheet(isPresented: $showConversations) {
             SignumConversationList(
                 selectedId: conversationId,
-                onSelect: { id in
-                    conversationId = id
+                onSelect: { picked in
                     showConversations = false
                     Haptics.lightTap()
+                    Task { @MainActor in
+                        let opened = await messageService.openHostTopic(picked)
+                        conversationId = opened.id
+                    }
                 },
                 onNew: {
                     startNewConversation()
                     showConversations = false
+                },
+                onDelete: { doomed in
+                    Task { @MainActor in
+                        await messageService.deleteHostTopic(doomed)
+                        if conversationId == doomed.id {
+                            conversationId = nil
+                            resolveConversation()
+                        }
+                    }
                 }
             )
             .environmentObject(messageService)
             .environmentObject(connectionManager)
+            .onAppear {
+                guard connectionManager.isChatComposerReady else { return }
+                Task { @MainActor in
+                    _ = await messageService.syncHostTopicsFromBrain()
+                }
+            }
         }
         .fullScreenCover(isPresented: $showConnect) {
             ZStack(alignment: .topTrailing) {
@@ -109,6 +132,41 @@ struct SignumChatView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
+            // The status line says "tap to reconnect", so it has to be tappable:
+            // the header is the only permanent affordance when the link is down.
+            if isLinked {
+                identityBlock
+            } else {
+                Button {
+                    Haptics.lightTap()
+                    showConnect = true
+                } label: {
+                    identityBlock
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens pairing")
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                Haptics.lightTap()
+                showConversations = true
+            } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(SignumTheme.ink.opacity(0.55))
+                    .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Conversations")
+        }
+        .padding(.horizontal, SignumTheme.Metrics.screenPadding)
+        .padding(.bottom, 10)
+    }
+
+    private var identityBlock: some View {
+        HStack(spacing: 12) {
             SignumMark(size: 30)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -128,23 +186,8 @@ struct SignumChatView: View {
                         .lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 8)
-
-            Button {
-                Haptics.lightTap()
-                showConversations = true
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(SignumTheme.ink.opacity(0.55))
-                    .frame(width: 40, height: 40)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Conversations")
         }
-        .padding(.horizontal, SignumTheme.Metrics.screenPadding)
-        .padding(.bottom, 10)
+        .contentShape(Rectangle())
     }
 
     private var statusLine: String {
@@ -369,17 +412,30 @@ struct SignumChatView: View {
                         .padding(.bottom, 8)
                 }
 
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(canSend ? SignumTheme.cream : SignumTheme.muted)
-                        .frame(width: 34, height: 34)
-                        .background(canSend ? SignumTheme.ink : SignumTheme.hair)
-                        .clipShape(Circle())
+                if isSending {
+                    Button(action: stop) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(SignumTheme.ink)
+                            .frame(width: 34, height: 34)
+                            .background(SignumTheme.hair)
+                            .clipShape(Circle())
+                    }
+                    .padding(.bottom, 4)
+                    .accessibilityLabel("Stop")
+                } else {
+                    Button(action: send) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(canSend ? SignumTheme.cream : SignumTheme.muted)
+                            .frame(width: 34, height: 34)
+                            .background(canSend ? SignumTheme.ink : SignumTheme.hair)
+                            .clipShape(Circle())
+                    }
+                    .disabled(!canSend)
+                    .padding(.bottom, 4)
+                    .accessibilityLabel("Send")
                 }
-                .disabled(!canSend)
-                .padding(.bottom, 4)
-                .accessibilityLabel("Send")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -434,9 +490,12 @@ struct SignumChatView: View {
         Haptics.messageSent()
         draft = ""
         sendError = nil
+        didCancelTurn = false
         lastFailed = text
         isSending = true
         composerFocused = false
+        turnToken += 1
+        let token = turnToken
 
         resolveConversation()
         guard let conversation else {
@@ -448,15 +507,34 @@ struct SignumChatView: View {
             do {
                 _ = try await messageService.sendMessage(text, in: conversation.context)
             } catch {
-                Haptics.error()
-                sendError = connectionManager.friendlyRemoteError(error)
+                guard token == turnToken else { return }
+                if didCancelTurn {
+                    didCancelTurn = false
+                } else {
+                    Haptics.error()
+                    sendError = connectionManager.friendlyRemoteError(error)
+                }
             }
-            isSending = false
+            if token == turnToken { isSending = false }
         }
     }
 
+    /// Abandon the turn. The request cannot be recalled from the Brain, but the
+    /// app stops waiting on it and the thread stops claiming work is happening.
+    private func stop() {
+        Haptics.mediumTap()
+        didCancelTurn = true
+        turnToken += 1
+        connectionManager.cancelInFlightChat()
+        isSending = false
+        sendError = nil
+    }
+
     private func retry() {
-        guard let text = lastFailed else { return }
+        guard let text = lastFailed, let conversation else { return }
+        // The failed send already left the question in the thread — drop it so a
+        // retry does not post the same question twice.
+        messageService.discardUnansweredUserMessage(text, in: conversation.id)
         draft = text
         sendError = nil
         send()

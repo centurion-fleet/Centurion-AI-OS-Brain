@@ -373,6 +373,21 @@ final class MessageService: ObservableObject {
         persistIfLive()
     }
 
+    /// Drop a user message that never received an answer, so tapping **Try again**
+    /// re-sends it instead of leaving two identical questions in the thread.
+    ///
+    /// No-op unless the message is still the newest one in that conversation —
+    /// anything that did get an answer is left alone.
+    func discardUnansweredUserMessage(_ text: String, in conversationId: UUID) {
+        let mine = allMessages.filter { $0.conversationId == conversationId }
+        guard let last = mine.last,
+              last.role == .user,
+              last.content == text
+        else { return }
+        allMessages.removeAll { $0.id == last.id }
+        persistIfLive()
+    }
+
     private func renamedContext(_ context: ConversationContext, title: String) -> ConversationContext {
         switch context {
         case .plan(let id, _): return .plan(id: id, title: title)
