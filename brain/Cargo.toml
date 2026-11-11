@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "7.0.10"
+version = "7.0.11"
 edition = "2024"
 # PROPRIETARY — see the LICENSE file at the repo root. SPDX has no stock
 # identifier for proprietary software; LicenseRef-Proprietary is the

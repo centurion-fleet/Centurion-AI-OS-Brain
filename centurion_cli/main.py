@@ -13377,6 +13377,19 @@ Examples:
     )
     memory_sub.add_parser("status", help="Show current memory provider config")
     memory_sub.add_parser("off", help="Disable external provider (built-in only)")
+    _collect_parser = memory_sub.add_parser(
+        "collect",
+        help="Print a digest of recent sessions, for distillation into durable memory",
+    )
+    _collect_parser.add_argument("--hours", type=int, default=24,
+                                 help="Window to read back (default 24)")
+    _collect_parser.add_argument("--max-chars", type=int, default=14000)
+    _pressure_parser = memory_sub.add_parser(
+        "pressure",
+        help="Show hot-cache headroom; exits silent below --silent-under (for watchdogs)",
+    )
+    _pressure_parser.add_argument("--silent-under", type=int, default=None)
+    _pressure_parser.add_argument("--json", action="store_true")
     _reset_parser = memory_sub.add_parser(
         "reset",
         help="Erase all built-in memory (MEMORY.md and USER.md)",
@@ -13396,6 +13409,19 @@ Examples:
 
     def cmd_memory(args):
         sub = getattr(args, "memory_command", None)
+        if sub in {"collect", "pressure"}:
+            from centurion_cli import memory_loop as _memory_loop
+
+            argv = [sub]
+            if sub == "collect":
+                argv += ["--hours", str(getattr(args, "hours", 24)),
+                         "--max-chars", str(getattr(args, "max_chars", 14000))]
+            else:
+                if getattr(args, "silent_under", None) is not None:
+                    argv += ["--silent-under", str(args.silent_under)]
+                if getattr(args, "json", False):
+                    argv += ["--json"]
+            return _memory_loop.main(argv)
         if sub == "off":
             from centurion_cli.config import load_config, save_config
 
