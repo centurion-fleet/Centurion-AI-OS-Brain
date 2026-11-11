@@ -80,3 +80,22 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
+
+# xcodegen does not emit a scheme unless asked. Without a *shared* scheme Xcode
+# invents a user one on first open and drops it on every regeneration — which
+# greys out Product → Archive and takes the Distribute/TestFlight path with it.
+schemes:
+  CenturionApp:
+    build:
+      targets:
+        CenturionApp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
