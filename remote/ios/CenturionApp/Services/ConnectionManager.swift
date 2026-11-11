@@ -75,18 +75,15 @@ final class ConnectionManager: ObservableObject {
         case relayAway
     }
 
-    /// True when the LAN Crypto Chat socket is the link carrying the session.
+    /// True when a LAN socket physically exists and carries the session key.
     ///
-    /// Away-first correction: a relay link also sets `connectionState = .connected`,
-    /// so the old test (`connected && key != nil`) reported *LAN* while the owner was
-    /// on 4G — which made every LAN branch fire on a cellular build, including the one
-    /// that tore the working away socket down. The transport that holds the session is
-    /// the only thing that may answer this question.
+    /// Away-first correction: the old test was `connected && key != nil`, but a relay link
+    /// also sets `.connected`, so this reported *LAN* while the owner was on 4G and routed
+    /// traffic at a socket that did not exist. Ask whether the away pipe is live first —
+    /// that is not circular, because `isRelayAwayConnected` never consults this property.
     var prefersLanCryptoChat: Bool {
-        guard transportPreference == .lanPreferred,
-              connectionState == .connected,
-              currentSessionKey != nil else { return false }
-        return connection != nil
+        if isRelayAwayConnected { return false }
+        return connection != nil && connectionState == .connected && currentSessionKey != nil
     }
 
     /// Away pipe is live (Realtime joined). Still not a substitute for LAN DoD.
@@ -959,6 +956,14 @@ final class ConnectionManager: ObservableObject {
             transportPreference = .lanPreferred
             return
         }
+        // Never stamp an "away is offline" error over a LAN attempt that is still in
+        // flight. `startAwayFirst()` fires this at launch, in parallel with discovery, and
+        // without this guard the first-run path flips connectionState to .error while the
+        // local handshake is still opening — which reads to the owner as "it connected and
+        // then dropped", and to the service as a client that hung up mid-handshake.
+        // The ladder already calls us again when LAN genuinely fails.
+        guard connection == nil,
+              connectionState == .disconnected || isErrorState else { return }
         let enabled = (remoteRelayStatus["enabled"] as? Bool)
             ?? UserDefaults.standard.bool(forKey: "centurion.remoteRelay.enabledHint")
         let installId = (remoteRelayStatus["install_id"] as? String)
