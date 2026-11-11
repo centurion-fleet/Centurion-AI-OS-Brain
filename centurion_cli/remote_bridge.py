@@ -273,6 +273,8 @@ def handle_request(
         return _handle_session_rename(request, request_id)
     if action == "session_delete":
         return _handle_session_delete(request, request_id)
+    if action == "command_run":
+        return _handle_command_run(request, request_id)
     if action == "approval_respond":
         return _handle_approval_respond(request, request_id)
     if action == "license_status":
@@ -6501,6 +6503,315 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     sys.stdout.write("\n")
     return 0 if response.get("ok") else 1
+
+
+# ---------------------------------------------------------------------------
+# Slash commands over the remote bridge
+# ---------------------------------------------------------------------------
+
+#: Commands the phone may run. Deliberately short.
+#:
+#: The Brain has 59 slash commands; the remote surface gets the ones an owner would
+#: reach for while away from the machine, and nothing that can reconfigure or restart
+#: it blind. Every name here is implemented below — this is not a passthrough to the
+#: interactive CLI, because those handlers expect a terminal, a session and a prompt.
+REMOTE_COMMAND_ALLOWLIST: tuple[str, ...] = (
+    "status",
+    "whoami",
+    "tools",
+    "skills",
+    "cron",
+    "relay",
+    "version",
+    "help",
+)
+
+#: Refused by name so the refusal reads as a decision, not a bug.
+REMOTE_COMMAND_REFUSED: dict[str, str] = {
+    "restart": "Restarting the Brain from a phone would leave you with a dead machine and no way back in. Do it at the desk.",
+    "update": "Updates run at the desk, where the machine can be recovered if one fails.",
+    "quit": "There is nothing to quit — this is the Brain, not a terminal.",
+    "sethome": "Home channel is set at the desk.",
+    "handoff": "Handoff needs a target platform chosen at the desk.",
+    "rollback": "Filesystem rollback is a desk operation.",
+    "snapshot": "State snapshots are a desk operation.",
+}
+
+
+def _handle_command_run(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Run one allowlisted slash command and return its text.
+
+    The phone's palette offers these; the Brain is what enforces the list. A command the
+    app does not know about still resolves here if it is allowlisted, which is what keeps
+    the two surfaces from drifting: add a command to the Brain, and both can run it.
+    """
+    raw = str(request.get("command") or "").strip()
+    command = raw.lstrip("/").strip().lower()
+    argument = str(request.get("argument") or "").strip()
+
+    if not command:
+        return _command_refusal(
+            request_id,
+            command,
+            "NO_COMMAND",
+            "No command given.",
+        )
+
+    if command in REMOTE_COMMAND_REFUSED:
+        return _command_refusal(
+            request_id,
+            command,
+            "REFUSED",
+            REMOTE_COMMAND_REFUSED[command],
+        )
+
+    if command not in REMOTE_COMMAND_ALLOWLIST:
+        return _command_refusal(
+            request_id,
+            command,
+            "UNSUPPORTED_COMMAND",
+            f"/{command} is not available from the phone. Available: "
+            + ", ".join("/" + name for name in REMOTE_COMMAND_ALLOWLIST),
+        )
+
+    try:
+        if command == "help":
+            return _command_ok(request_id, command, _command_catalogue())
+        if command == "version":
+            from centurion_cli import __version__ as version
+
+            return _command_ok(request_id, command, [f"Centurion AI OS {version}"])
+        if command == "status":
+            return _command_ok(request_id, command, _command_status_lines())
+        if command == "whoami":
+            return _command_ok(request_id, command, _command_whoami_lines())
+        if command == "relay":
+            return _command_ok(request_id, command, _command_relay_lines())
+        if command == "cron":
+            return _command_ok(request_id, command, _command_cron_lines())
+        if command in {"tools", "skills"}:
+            snapshot = _handle_tools_skills_snapshot(request_id)
+            if not snapshot.get("ok"):
+                return _command_refusal(
+                    request_id,
+                    command,
+                    "SNAPSHOT_FAILED",
+                    str(snapshot.get("message") or "Could not read the tool list."),
+                )
+            if command == "tools":
+                tools = snapshot.get("toolsets") or []
+                return _command_ok(
+                    request_id,
+                    command,
+                    [f"{len(tools)} toolsets enabled"] + [f"  {name}" for name in tools],
+                )
+            skills = snapshot.get("skills") or []
+            lines = [f"{len(skills)} skills loaded"]
+            for bucket in ("self_built", "bundled", "hub_reference"):
+                entries = snapshot.get(bucket)
+                if isinstance(entries, list) and entries:
+                    lines.append(f"  {bucket.replace('_', ' ')}: {len(entries)}")
+            return _command_ok(request_id, command, lines)
+        # Unreachable while the allowlist and this dispatch agree.
+        return _command_refusal(
+            request_id, command, "UNSUPPORTED_COMMAND", f"/{command} has no handler."
+        )
+    except Exception as exc:  # noqa: BLE001 — surface the failure, never a fake success
+        logger.exception("command_run failed for %s", command)
+        return _error_response(request_id, action="command_run", exc=exc)
+
+
+def _command_ok(request_id: str, command: str, lines: list[str], title: str = "") -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "ok": True,
+        "action": "command_run",
+        "type": "command_run_response",
+        "command": command,
+        "title": title or command,
+        "lines": lines,
+        "text": "\n".join(lines),
+    }
+
+
+def _command_refusal(request_id: str, command: str, code: str, message: str) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "ok": False,
+        "action": "command_run",
+        "type": "command_run_response",
+        "command": command,
+        "code": code,
+        "error": message,
+        "message": message,
+        "retryable": False,
+        "lines": [message],
+        "text": message,
+    }
+
+
+def _command_catalogue() -> list[str]:
+    """The palette, described by the side that enforces it."""
+    return [
+        "/status — model, session, relay, uptime",
+        "/whoami — identity, profile, licence",
+        "/relay — Chat-from-anywhere state",
+        "/tools — toolsets this Centurion has",
+        "/skills — skill counts by origin",
+        "/cron — scheduled jobs and next run",
+        "/version — build",
+        "/help — this list",
+    ]
+
+
+def _command_status_lines() -> list[str]:
+    lines: list[str] = []
+    try:
+        from centurion_cli import __version__ as version
+
+        lines.append(f"Centurion AI OS {version}")
+    except Exception:
+        pass
+
+    # Relay / away state — the thing an owner checks when a message will not go.
+    try:
+        from centurion_cli import remote_relay_service as relay
+
+        state = relay.status()
+        presence = state.get("presence") or {}
+        if not state.get("enabled"):
+            lines.append("Away: off — this Brain cannot be reached from outside your network")
+        elif presence.get("online"):
+            lines.append("Away: connected")
+        else:
+            lines.append("Away: enabled, not connected")
+        if not state.get("websockets_installed"):
+            lines.append("  relay dependencies missing — pip install 'centurionai-os[remote-relay]'")
+    except Exception as exc:  # noqa: BLE001
+        lines.append(f"Away: unknown ({exc})")
+
+    # Model actually in use. `model` is a mapping ({default, provider, base_url}) on a
+    # configured Brain and a bare string on a fresh one — both shapes are real.
+    try:
+        from centurion_cli.config import load_config
+
+        cfg = load_config() or {}
+        raw_model = cfg.get("model") if isinstance(cfg, dict) else ""
+        if isinstance(raw_model, dict):
+            model = str(raw_model.get("default") or raw_model.get("name") or "").strip()
+            provider = str(raw_model.get("provider") or "").strip()
+        else:
+            model = str(raw_model or "").strip()
+            provider = str((cfg.get("provider") if isinstance(cfg, dict) else "") or "").strip()
+        if model:
+            lines.append(f"Model: {model}" + (f" via {provider}" if provider else ""))
+    except Exception:
+        pass
+
+    # Sessions + uptime, from the local database.
+    try:
+        from centurion_state import SessionDB
+
+        db = SessionDB()
+        try:
+            sessions = len(db.list_sessions_rich(limit=10000) or [])
+        finally:
+            closer = getattr(db, "close", None)
+            if callable(closer):
+                closer()
+        lines.append(f"Sessions stored: {sessions}")
+    except Exception:
+        pass
+
+    try:
+        import time
+
+        with open("/proc/uptime", encoding="utf-8") as fh:
+            up = float(fh.read().split()[0])
+        hours, rem = divmod(int(up), 3600)
+        lines.append(f"Uptime: {hours}h {rem // 60}m")
+    except Exception:
+        pass
+
+    return lines or ["No status available."]
+
+
+def _command_whoami_lines() -> list[str]:
+    lines: list[str] = []
+    try:
+        from centurion_constants import get_centurion_home
+
+        lines.append(f"Home: {get_centurion_home()}")
+    except Exception:
+        pass
+    try:
+        from centurion.license.store import load_entitlement
+
+        ent = load_entitlement()
+        if ent is not None:
+            plan = getattr(ent, "plan", None) or getattr(ent, "tier", None)
+            owner = getattr(ent, "email", None) or getattr(ent, "holder", None)
+            if plan:
+                lines.append(f"Licence: {plan}")
+            if owner:
+                lines.append(f"Registered to: {owner}")
+        else:
+            lines.append("Licence: none found on this machine")
+    except Exception:
+        pass
+    try:
+        from centurion.license.fingerprint import fingerprint_short
+
+        lines.append(f"Machine: {fingerprint_short()}")
+    except Exception:
+        pass
+    return lines or ["No identity available."]
+
+
+def _command_relay_lines() -> list[str]:
+    try:
+        from centurion_cli import remote_relay_service as relay
+
+        state = relay.status()
+    except Exception as exc:  # noqa: BLE001
+        return [f"Could not read relay state: {exc}"]
+
+    presence = state.get("presence") or {}
+    lines = [
+        f"Enabled: {'yes' if state.get('enabled') else 'no'}",
+        f"Brain present: {'yes' if presence.get('online') else 'no'}",
+        f"Install: {state.get('install_id') or '—'}",
+        f"Channel: {state.get('channel') or '—'}",
+        f"Control plane: {state.get('control_base') or '—'}",
+    ]
+    if not state.get("websockets_installed"):
+        lines.append("Dependencies missing: pip install 'centurionai-os[remote-relay]'")
+    hint = state.get("hint")
+    if hint:
+        lines.append(str(hint))
+    return lines
+
+
+def _command_cron_lines() -> list[str]:
+    try:
+        from cron.jobs import list_jobs
+
+        jobs = list_jobs(include_disabled=True) or []
+    except Exception as exc:  # noqa: BLE001
+        return [f"Could not read scheduled jobs: {exc}"]
+    if not jobs:
+        return ["No scheduled jobs."]
+    lines = [f"{len(jobs)} scheduled job{'s' if len(jobs) != 1 else ''}"]
+    for job in jobs:
+        name = job.get("name") or job.get("id") or "unnamed"
+        raw_schedule = job.get("schedule_display") or job.get("schedule") or "?"
+        if isinstance(raw_schedule, dict):
+            raw_schedule = raw_schedule.get("display") or raw_schedule.get("expr") or "?"
+        state = "paused" if job.get("paused_at") or job.get("state") == "paused" else (
+            "enabled" if job.get("enabled", True) else "disabled"
+        )
+        lines.append(f"  {name} — {raw_schedule} ({state})")
+    return lines
 
 
 if __name__ == "__main__":

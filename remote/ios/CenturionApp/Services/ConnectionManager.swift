@@ -75,9 +75,18 @@ final class ConnectionManager: ObservableObject {
         case relayAway
     }
 
-    /// True when LAN Crypto Chat is up — always preferred over the cloud relay.
+    /// True when the LAN Crypto Chat socket is the link carrying the session.
+    ///
+    /// Away-first correction: a relay link also sets `connectionState = .connected`,
+    /// so the old test (`connected && key != nil`) reported *LAN* while the owner was
+    /// on 4G — which made every LAN branch fire on a cellular build, including the one
+    /// that tore the working away socket down. The transport that holds the session is
+    /// the only thing that may answer this question.
     var prefersLanCryptoChat: Bool {
-        connectionState == .connected && currentSessionKey != nil
+        guard transportPreference == .lanPreferred,
+              connectionState == .connected,
+              currentSessionKey != nil else { return false }
+        return connection != nil
     }
 
     /// Away pipe is live (Realtime joined). Still not a substitute for LAN DoD.
@@ -130,6 +139,8 @@ final class ConnectionManager: ObservableObject {
     private var approvalRetryTask: Task<Void, Never>?
     private var pathMonitor: NWPathMonitor?
     private var pathDebounceTask: Task<Void, Never>?
+    /// Guards `startAwayFirst()` so a relaunch of the chat surface does not stack joins.
+    private var isAwayFirstStarted = false
     /// A failure we can name is not improved by retrying it. While this is set,
     /// the background reconnect loop stays out of the way so the owner's card
     /// keeps showing the real reason instead of being overwritten a second later
@@ -846,16 +857,40 @@ final class ConnectionManager: ObservableObject {
         return (payload["sessions"] as? [[String: Any]]) ?? []
     }
 
-    /// Refresh Brain `remote_relay` status. LAN stays preferred when connected.
+    /// Run a Brain slash command over whichever transport is live (LAN or away).
+    ///
+    /// The Brain resolves the name against the same `centurion_cli.commands` registry that
+    /// Telegram resolves against, so a command added to the Brain appears on both surfaces
+    /// without the app shipping a new table. The Brain — not the phone — decides what is
+    /// allowed; the app's catalogue only controls what is *offered*.
+    func runSlashCommand(
+        _ command: String,
+        argument: String? = nil,
+        timeoutSeconds: TimeInterval = 30
+    ) async throws -> [String: Any] {
+        var extra: [String: Any] = ["command": command]
+        if let argument, !argument.isEmpty {
+            extra["argument"] = argument
+        }
+        return try await invokeRemote(
+            action: "command_run",
+            extra: extra,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    /// Refresh Brain `remote_relay` status.
+    ///
+    /// Away-first: this used to tear the relay socket down whenever the LAN was up
+    /// ("product rule: prefer :9119"). That rule assumed the owner is at home. In the
+    /// field it means Wi‑Fi appearing mid-session kills the only socket that survives
+    /// the owner walking out of the building. The relay stays joined; it simply does not
+    /// carry the session while the LAN does.
     @discardableResult
     func refreshRemoteRelayStatus() async -> [String: Any] {
         guard connectionState == .connected else {
             await considerRelayAway()
             return remoteRelayStatus
-        }
-        // LAN up — tear down any away socket (product rule: prefer :9119).
-        if relayAway.isConnected {
-            relayAway.disconnect(resetEpoch: true)
         }
         do {
             let payload = try await invokeRemote(action: "remote_relay_status")
@@ -865,18 +900,29 @@ final class ConnectionManager: ObservableObject {
                let key = payload["supabase_anon_key"] as? String, !key.isEmpty {
                 let control = payload["control_base"] as? String
                 relayAway.configure(supabaseURL: url, anonKey: key, controlBase: control)
+                UserDefaults.standard.set(url, forKey: "centurion.remoteRelay.supabaseURL")
+                UserDefaults.standard.set(key, forKey: "centurion.remoteRelay.supabaseAnonKey")
+                if let control, !control.isEmpty {
+                    UserDefaults.standard.set(control, forKey: "centurion.remoteRelay.controlBase")
+                }
             }
             if let installId = payload["install_id"] as? String, !installId.isEmpty {
                 UserDefaults.standard.set(installId, forKey: "centurion.remoteRelay.installId")
             }
+            if let enabledFlag = payload["enabled"] as? Bool {
+                UserDefaults.standard.set(enabledFlag, forKey: "centurion.remoteRelay.enabledHint")
+            }
             let enabled = payload["enabled"] as? Bool ?? false
             let online = ((payload["presence"] as? [String: Any])?["online"] as? Bool) ?? false
-            // Product rule: if LAN is up, stay on LAN even when relay is enabled.
+            // The transport already carrying the session keeps it. Everything else is a
+            // candidate for later, not a reason to migrate mid-turn.
             if prefersLanCryptoChat {
                 transportPreference = .lanPreferred
+            } else if isRelayAwayConnected {
+                transportPreference = .relayAway
             } else if enabled && online {
                 transportPreference = .relayAway
-            } else {
+            } else if connection == nil {
                 transportPreference = .lanPreferred
             }
             return payload
@@ -885,12 +931,31 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    /// When LAN Crypto Chat is down, join Realtime if Brain presence is online.
+    /// Away-first launch: join the relay immediately, before and independently of the LAN.
+    ///
+    /// The old flow only armed the away pipe after LAN discovery and a remote TCP dial had
+    /// both failed — a 20-second walk through an address that is not on this network, in
+    /// front of the only transport guaranteed to work. That dead twenty seconds is the
+    /// product's worst moment and it happened every cold start away from home.
+    ///
+    /// Safe to call on every launch: it is a no-op when there is no cached pairing, and it
+    /// returns instantly because the join runs on its own task.
+    func startAwayFirst() {
+        guard !isAwayFirstStarted else { return }
+        isAwayFirstStarted = true
+        let hasInstall = !(UserDefaults.standard.string(forKey: "centurion.remoteRelay.installId") ?? "").isEmpty
+        let enabledHint = UserDefaults.standard.bool(forKey: "centurion.remoteRelay.enabledHint")
+        guard hasInstall || enabledHint else { return }
+        Task { await considerRelayAway() }
+    }
+
+    /// When the LAN is down, join Realtime if Brain presence is online.
+    ///
+    /// Away-first: the LAN being present is no longer a reason to *disconnect* the relay.
+    /// It is only a reason not to promote it to the session-carrying transport, because a
+    /// second key exchange would overwrite `currentSessionKey` out from under the live turn.
     func considerRelayAway() async {
         if prefersLanCryptoChat {
-            if relayAway.isConnected {
-                relayAway.disconnect(resetEpoch: true)
-            }
             transportPreference = .lanPreferred
             return
         }
@@ -2218,6 +2283,7 @@ final class ConnectionManager: ObservableObject {
             "session_history_response": "session_history",
             "approval_respond_response": "approval_respond",
             "remote_relay_status_response": "remote_relay_status",
+            "command_run_response": "command_run",
             "remote_relay_enable_response": "remote_relay_enable",
             "remote_relay_disable_response": "remote_relay_disable",
             "settings_snapshot_response": "settings_snapshot",
@@ -2259,11 +2325,15 @@ final class ConnectionManager: ObservableObject {
     private func startConnectionTimeout() {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            // Away-first: this used to be twenty seconds, which an owner on a train spent
+            // watching a spinner for a machine on another network entirely. The relay is now
+            // joined in parallel from launch, so the LAN dial gets a short, honest window
+            // rather than holding the whole surface hostage.
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
             await MainActor.run {
                 guard let self, self.connectionState == .connecting else { return }
                 self.failConnection(
-                    "The connection timed out. Confirm both devices are on the same Wi‑Fi and Local Network access is enabled for this app in Settings."
+                    "Could not reach your Centurion on this network. Chat from anywhere is trying instead."
                 )
             }
         }

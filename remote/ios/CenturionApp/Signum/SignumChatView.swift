@@ -32,6 +32,11 @@ struct SignumChatView: View {
     /// Set when the owner stops a turn themselves — suppress the error card that
     /// the aborted request would otherwise raise.
     @State private var didCancelTurn = false
+    /// Command output in the thread. Not part of the conversation: nobody said it,
+    /// it must never be sent to the model, and it must not reappear as history.
+    @State private var systemEntries: [SignumSystemEntry] = []
+    /// A command round-trip is in flight. Blocks a second send, not the composer.
+    @State private var isRunningCommand = false
     /// Guards `isSending` against a cancelled turn's task finishing after a new
     /// one has already started.
     @State private var turnToken = 0
@@ -121,6 +126,10 @@ struct SignumChatView: View {
         }
         .task {
             resolveConversation()
+            // Away-first: join the relay now, in parallel with whatever the LAN does.
+            // Waiting for discovery to fail is how the old build spent twenty seconds
+            // looking for a machine on another network.
+            connectionManager.startAwayFirst()
             await identity.refresh(using: connectionManager)
         }
         .onChange(of: connectionManager.connectionState) { _, _ in
@@ -191,6 +200,12 @@ struct SignumChatView: View {
     }
 
     private var statusLine: String {
+        // Away-first: the old line said "THIS MACHINE" whenever the socket was up, which
+        // became a lie the moment the relay was the socket. An owner on a train deserves
+        // to know which of the two paths is carrying their conversation.
+        if connectionManager.isRelayAwayConnected {
+            return "CONNECTED · AWAY"
+        }
         switch connectionManager.connectionState {
         case .connected:
             return "CONNECTED · THIS MACHINE"
@@ -228,6 +243,22 @@ struct SignumChatView: View {
                             onRetry: message.role == .centurion ? { retry() } : nil
                         )
                         .id(message.id)
+                    }
+
+                    ForEach(systemEntries) { entry in
+                        SignumSystemRow(entry: entry)
+                            .id(entry.id)
+                    }
+
+                    if isRunningCommand {
+                        SignumSystemRow(
+                            entry: SignumSystemEntry(
+                                command: "running",
+                                lines: ["Asking your Centurion…"],
+                                failed: false
+                            )
+                        )
+                        .id("signum-command-running")
                     }
 
                     if isSending {
@@ -469,6 +500,16 @@ struct SignumChatView: View {
 
     private var composerArea: some View {
         VStack(spacing: 0) {
+            // The palette sits above the field, not over it — the owner can see what they
+            // are choosing and what they were typing at the same time.
+            if showsPalette {
+                SignumCommandPalette(query: draft) { command in
+                    pick(command)
+                }
+                .padding(.bottom, 8)
+                .transition(.opacity)
+            }
+
             Divider().overlay(SignumTheme.hair)
 
             HStack(alignment: .bottom, spacing: 10) {
@@ -533,6 +574,12 @@ struct SignumChatView: View {
         isLinked ? "Ask \(identity.name)" : "Not connected"
     }
 
+    /// A leading `/` with no space yet means the owner is naming a command, not writing one.
+    private var showsPalette: Bool {
+        guard draft.hasPrefix("/") else { return false }
+        return !draft.dropFirst().contains(" ")
+    }
+
     private var canSend: Bool {
         isLinked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
@@ -562,7 +609,18 @@ struct SignumChatView: View {
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, isLinked else { return }
+        guard !text.isEmpty else { return }
+
+        // A command is not a message. It never reaches the model, never becomes history,
+        // and never costs a turn.
+        if text.hasPrefix("/") {
+            draft = ""
+            composerFocused = false
+            runCommandLine(text)
+            return
+        }
+
+        guard isLinked else { return }
 
         Haptics.messageSent()
         draft = ""
@@ -619,6 +677,117 @@ struct SignumChatView: View {
 
     private func copy(_ text: String) {
         UIPasteboard.general.string = text
+        Haptics.lightTap()
+    }
+
+    // MARK: - Commands
+
+    /// Resolve a typed slash line to a catalogue entry and run it.
+    ///
+    /// An unknown command does not go to the Brain as chat: it warns and stays in the
+    /// field, so a mistyped `/staus` cannot accidentally become a question.
+    private func runCommandLine(_ text: String) {
+        let body = String(text.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = body.split(separator: " ").first.map(String.init)?.lowercased() ?? ""
+
+        if let command = SignumCommand.catalogue.first(where: { $0.name == name }) {
+            pick(command)
+            return
+        }
+
+        if let refused = legacyCommandHint(name) {
+            appendSystem(SignumSystemEntry(command: name, lines: [refused], failed: true))
+            return
+        }
+
+        appendSystem(
+            SignumSystemEntry(
+                command: name.isEmpty ? "command" : name,
+                lines: [
+                    "No such command.",
+                    "Available: " + SignumCommand.catalogue.map(\.display).joined(separator: "  "),
+                ],
+                failed: true
+            )
+        )
+    }
+
+    /// Commands Telegram accepted that this surface deliberately does not. Saying why beats
+    /// saying nothing — the owner learns the machine is fine, the door is just closed here.
+    private func legacyCommandHint(_ name: String) -> String? {
+        switch name {
+        case "model":
+            return "/model is set on the desk. Changing the model from a phone can leave a Centurion answering on a credential it cannot test."
+        case "restart", "update":
+            return "/\(name) runs at the desk, where a failure can be recovered."
+        case "quit", "quit.":
+            return "There is nothing to quit here — the Brain is not a terminal."
+        default:
+            return nil
+        }
+    }
+
+    private func pick(_ command: SignumCommand) {
+        Haptics.lightTap()
+        draft = ""
+        switch command.action {
+        case .newConversation:
+            startNewConversation()
+        case .stopTurn:
+            if isSending { stop() }
+        case .retryTurn:
+            retry()
+        case .openConversations:
+            showConversations = true
+        case .showHelp:
+            appendSystem(
+                SignumSystemEntry(
+                    command: "help",
+                    lines: SignumCommand.catalogue.map { "\($0.display) — \($0.summary)" },
+                    failed: false
+                )
+            )
+        case .brain(let name):
+            Task { @MainActor in await runBrainCommand(name) }
+        }
+    }
+
+    private func runBrainCommand(_ name: String) async {
+        isRunningCommand = true
+        defer { isRunningCommand = false }
+        do {
+            let payload = try await connectionManager.runSlashCommand(name)
+            let lines = Self.lines(from: payload)
+            let ok = (payload["ok"] as? Bool) ?? !lines.isEmpty
+            appendSystem(SignumSystemEntry(command: name, lines: lines, failed: !ok))
+        } catch {
+            appendSystem(
+                SignumSystemEntry(
+                    command: name,
+                    lines: [connectionManager.friendlyRemoteError(error)],
+                    failed: true
+                )
+            )
+        }
+    }
+
+    /// Prefer the Brain's structured `lines`; fall back to its `text`, then to the raw
+    /// message. Never invent output for a command that returned nothing.
+    private static func lines(from payload: [String: Any]) -> [String] {
+        if let lines = payload["lines"] as? [String], !lines.isEmpty {
+            return lines
+        }
+        if let text = payload["text"] as? String, !text.isEmpty {
+            return text.components(separatedBy: "\n")
+        }
+        if let message = payload["message"] as? String, !message.isEmpty {
+            return [message]
+        }
+        return ["No output returned."]
+    }
+
+    private func appendSystem(_ entry: SignumSystemEntry) {
+        systemEntries.append(entry)
         Haptics.lightTap()
     }
 
