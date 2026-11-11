@@ -72,16 +72,23 @@ struct SignumCommand: Identifiable {
         let trimmed = needle.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return catalogue }
         let lowered = trimmed.lowercased()
+
+        // Dedupe by name rather than by value: `contains(_:)` on an array of structs would
+        // require Equatable conformance, and command identity is the name anyway.
+        var seen: Set<String> = []
+        var ordered: [SignumCommand] = []
+        func take(_ candidates: [SignumCommand]) {
+            for command in candidates where !seen.contains(command.name) {
+                seen.insert(command.name)
+                ordered.append(command)
+            }
+        }
+
         // Name first, then summary — typing "relay" and typing "anywhere" should both land.
-        let byName = catalogue.filter { $0.name.lowercased().hasPrefix(lowered) }
-        let byContains = catalogue.filter {
-            !byName.contains($0) && $0.name.lowercased().contains(lowered)
-        }
-        let bySummary = catalogue.filter {
-            !byName.contains($0) && !byContains.contains($0)
-                && $0.summary.lowercased().contains(lowered)
-        }
-        return byName + byContains + bySummary
+        take(catalogue.filter { $0.name.lowercased().hasPrefix(lowered) })
+        take(catalogue.filter { $0.name.lowercased().contains(lowered) })
+        take(catalogue.filter { $0.summary.lowercased().contains(lowered) })
+        return ordered
     }
 }
 
