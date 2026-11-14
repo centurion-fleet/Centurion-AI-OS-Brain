@@ -372,7 +372,14 @@ def human_status(now: Optional[float] = None, centurion_home: Optional[Path] = N
         out.append(f"Archive:       {st.entries[0].path}")
     if st.next_due_at:
         nxt = datetime.fromtimestamp(st.next_due_at).strftime("%A %d %B, %H:%M")
-        out.append(f"Next due:      {nxt}")
+        # A slot in the past is not "next due" — it is the day cover ran out, and
+        # saying "next due Wednesday 4 November" on 14 November reads as a bug to
+        # a principal and as a missed deadline to an insurer.
+        now_ts = now if now is not None else time.time()
+        if st.next_due_at < now_ts and st.overdue:
+            out.append(f"Overdue since: {nxt}")
+        else:
+            out.append(f"Next due:      {nxt}")
     out.append(f"Schedule:      {st.schedule.label()}" + (f" → {st.schedule.drive}" if st.schedule.drive else ""))
     if st.overdue:
         why = "no verified backup on record" if (st.never or not st.readable) else f"{st.age_days:.0f} days since the last one"
