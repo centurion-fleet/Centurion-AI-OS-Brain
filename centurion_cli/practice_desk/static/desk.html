@@ -376,7 +376,7 @@
     </div>
     <div class="block">
       <h4>Client</h4>
-      <p class="flag">No client attached. Client threads arrive with the Firm instrument.</p>
+      <p id="firm-client">No client attached — this is your private thread.</p>
     </div>
     <div class="block">
       <h4>Drafts awaiting signature</h4>
@@ -674,6 +674,11 @@
     renderMessages();
     $("firm-scope").textContent = state.scope === "client"
       ? (state.clientName || "Client") : "Private";
+    $("firm-client").innerHTML = state.scope === "client"
+      ? `<b>${esc(state.clientName || "Client")}</b> — shared with everyone on this machine. `
+        + `Nobody is assigned yet: the assignment register is not built, so this thread is `
+        + `visible to every active person.`
+      : "No client attached — this is your private thread.";
   }
 
   async function loadClients() {
