@@ -14,6 +14,7 @@ import logging
 import re
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -95,6 +96,10 @@ def handle_request(
         }
     if action == "settings_snapshot":
         return _handle_settings_snapshot(request, request_id)
+    if action == "backup_status":
+        from centurion_cli.backup_bridge import backup_status_payload
+
+        return backup_status_payload(request_id)
     if action == "tool_env_get":
         return _handle_tool_env_get(request, request_id)
     if action == "tool_env_set":
@@ -227,6 +232,8 @@ def handle_request(
         return _handle_plan_share(request, request_id)
     if action == "plan_comment":
         return _handle_plan_comment(request, request_id)
+    if action == "deliveries_snapshot":
+        return _handle_deliveries_snapshot(request, request_id)
     if action == "handover_list":
         return _handle_handover_list(request, request_id)
     if action == "handover_set":
@@ -6503,6 +6510,77 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     sys.stdout.write("\n")
     return 0 if response.get("ok") else 1
+
+
+def _deliveries_ledger_path() -> Path:
+    """Where the hardware delivery ledger lives on this machine.
+
+    Kept in the owner's own record rather than the product tree: the count of machines that
+    have gone out is commercial fact about his business, not appliance state.
+    """
+    return Path.home() / "centurion" / "deliveries" / "deliveries.json"
+
+
+def _handle_deliveries_snapshot(request: dict[str, Any], request_id: str) -> dict[str, Any]:
+    """Units of hardware that have left the building, newest shipment first.
+
+    A ledger we cannot read is reported as unreadable, never as zero units — a dashboard that
+    shows ``0 delivered`` when the file is missing is the same lie as an empty record.
+    """
+    try:
+        path = _deliveries_ledger_path()
+        if not path.exists():
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "deliveries_snapshot",
+                "code": "LEDGER_MISSING",
+                "error": f"no delivery ledger at {path}",
+                "message": f"no delivery ledger at {path}",
+                "path": str(path),
+            }
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        units = payload.get("units") if isinstance(payload, dict) else payload
+        if not isinstance(units, list):
+            return {
+                "id": request_id,
+                "ok": False,
+                "action": "deliveries_snapshot",
+                "code": "LEDGER_MALFORMED",
+                "error": "ledger has no 'units' list",
+                "message": "ledger has no 'units' list",
+                "path": str(path),
+            }
+        clean: list[dict[str, Any]] = []
+        for row in units:
+            if not isinstance(row, dict):
+                continue
+            shipped = str(row.get("shipped") or "").strip()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", shipped):
+                continue
+            clean.append(
+                {
+                    "id": str(row.get("id") or ""),
+                    "recipient": str(row.get("recipient") or ""),
+                    "country": str(row.get("country") or ""),
+                    "shipped": shipped,
+                    "carrier": row.get("carrier"),
+                    "tracking": row.get("tracking"),
+                    "hardware": str(row.get("hardware") or "Centurion"),
+                    "notes": str(row.get("notes") or ""),
+                }
+            )
+        clean.sort(key=lambda r: r["shipped"], reverse=True)
+        return {
+            "id": request_id,
+            "ok": True,
+            "action": "deliveries_snapshot",
+            "units": clean,
+            "total": len(clean),
+            "path": str(path),
+        }
+    except Exception as exc:
+        return _error_response(request_id, action="deliveries_snapshot", exc=exc)
 
 
 # ---------------------------------------------------------------------------

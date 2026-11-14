@@ -114,6 +114,23 @@ def _post_json(url: str, payload: Dict[str, Any], timeout: float = 15.0) -> Dict
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _backup_checkin_fields() -> Dict[str, Any]:
+    """Backup metadata for the check-in. Fails to nulls, never to optimism.
+
+    A machine that cannot read its own backup ledger must not report healthy
+    backup state to the server — and it must not block the licence check-in
+    either. Nulls mean "unknown", which is exactly what the fleet list needs in
+    order to chase it.
+    """
+    try:
+        from centurion_cli import backup_state as _bs
+
+        return _bs.checkin_fields()
+    except Exception:
+        logger.debug("backup checkin fields unavailable", exc_info=True)
+        return {"last_backup_at": None, "backup_verified": None, "backup_overdue": None}
+
+
 def phone_home(
     *,
     entitlement: Optional[Entitlement] = None,
@@ -146,6 +163,9 @@ def phone_home(
         # the server can answer "no" rather than the machine discovering it late.
         "edition": ent.edition(),
         "seats": ent.seat_limit(),
+        # Backup health — metadata only. The fleet view needs to know who has not
+        # backed up in a fortnight; it never needs to know what is in the archive.
+        **_backup_checkin_fields(),
         "os_version": f"{_platform.system()} {_platform.release()}",
         "centurion_version": centurion_version,
         "last_state": ent.state,
