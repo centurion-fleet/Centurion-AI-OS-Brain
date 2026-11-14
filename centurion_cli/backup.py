@@ -27,6 +27,10 @@ from centurion_constants import get_default_centurion_root, get_centurion_home, 
 # restore paths share one implementation of the format.
 from centurion_cli import backup_crypto as _bc
 
+# Backup state: the ledger, the schedule, and the overdue rule that the panel and
+# the licensing check-in both read.
+from centurion_cli import backup_state as _bs
+
 logger = logging.getLogger(__name__)
 
 
@@ -147,6 +151,23 @@ def _format_size(nbytes: int) -> str:
 
 def run_backup(args) -> None:
     """Create a zip backup of the Centurion home directory."""
+    # Status and reminder are read-only modes: they answer "am I covered?" and
+    # "put it in my diary", and neither writes an archive.
+    if getattr(args, "status", False):
+        for line in _bs.human_status():
+            print(line)
+        return
+
+    if getattr(args, "reminder", None):
+        target = Path(args.reminder).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_bs.reminder_ics(), encoding="utf-8", newline="")
+        sched = _bs.status().schedule
+        print(f"Reminder written: {target}")
+        print(f"  Repeats {sched.label()}. Add it to the practice's calendar.")
+        print("  It carries no passphrase and no paths — a calendar syncs to phones.")
+        return
+
     centurion_root = get_default_centurion_root()
 
     if not centurion_root.is_dir():
@@ -281,6 +302,13 @@ def run_backup(args) -> None:
                 f"  Verified:    yes — decrypted, digest matched, "
                 f"{verified['files']} entries CRC-checked"
             )
+            _bs.record_backup(
+                path=str(container),
+                size_bytes=enc["archive_bytes"],
+                records=enc["records"],
+                verified=True,
+                encrypted=True,
+            )
         except _bc.BackupCryptoError as exc:
             print(f"\nError: {exc}")
             print("The unencrypted zip has been KEPT at the path below; delete it yourself once resolved.")
@@ -291,7 +319,21 @@ def run_backup(args) -> None:
         print(f"\nRestore with: centurion import {container.name}")
         return
 
+    # A plain zip is recorded honestly as unencrypted and unverified: it has not
+    # been through the container's proof, and it must not read as a safe backup.
+    _bs.record_backup(
+        path=str(out_path),
+        size_bytes=zip_size,
+        records=0,
+        verified=False,
+        encrypted=False,
+    )
+
     print(f"\nRestore with: centurion import {out_path.name}")
+    print(
+        "\n⚠ This archive is NOT encrypted. Use --encrypt for any backup that "
+        "leaves this machine."
+    )
 
 
 # ---------------------------------------------------------------------------

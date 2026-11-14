@@ -12824,6 +12824,18 @@ Examples:
         help="Read the backup passphrase from this file instead of prompting "
         "(for a scheduled/unattended backup; the file must be protected by the OS).",
     )
+    backup_parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show the backup record: last verified backup, next due, and whether "
+        "this machine is overdue. Writes nothing.",
+    )
+    backup_parser.add_argument(
+        "--reminder",
+        metavar="PATH",
+        help="Write a weekly .ics calendar reminder for the backup slot to PATH. "
+        "Carries no passphrase and no paths.",
+    )
     backup_parser.set_defaults(func=cmd_backup)
 
     # =========================================================================
