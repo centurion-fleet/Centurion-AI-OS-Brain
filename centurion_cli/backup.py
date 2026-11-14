@@ -140,6 +140,61 @@ def _safe_copy_db(src: Path, dst: Path) -> bool:
 # Backup
 # ---------------------------------------------------------------------------
 
+# Editions whose machine holds other people's records: a practice's clients, an
+# association's members. On these the archive is never written in the clear.
+_CLIENT_RECORD_TIERS = ("accountant", "practice", "association")
+
+# Scheduled archives kept on the drive: the last eight, oldest overwritten.
+CONTAINER_ROTATION_KEEP = 8
+
+
+def _carries_client_records() -> tuple[bool, str]:
+    """Return (does this machine hold client records, what to call it).
+
+    Deliberately fails *open* on an unresolvable edition. The guard exists to
+    stop a licensed Practice or vertical Brain writing a plaintext archive; a
+    machine whose edition cannot be read is not one of those, and treating an
+    unreadable boot record as "practice" would refuse backups on every fresh
+    install — which is how a safety rule gets switched off by the person it was
+    meant to protect. The refusal message names the edition either way, so a
+    wrong classification is visible rather than silent.
+    """
+    try:
+        from centurion.license.edition import current_edition, edition_label
+        tier = current_edition().tier
+    except Exception:
+        return False, "Centurion Brain"
+    if tier not in _CLIENT_RECORD_TIERS:
+        return False, edition_label(tier)
+    return True, edition_label(tier)
+
+
+def _prune_container_rotation(directory: Path, keep: int = CONTAINER_ROTATION_KEEP) -> List[Path]:
+    """Keep the newest `keep` scheduled archives in `directory`; delete older.
+
+    Only files this command names itself — ``centurion-backup-<stamp>.cbk`` —
+    are touched. A container the operator named by hand is left alone: deleting
+    a file we did not create is not housekeeping, it is data loss, and it would
+    happen on somebody's only remaining copy of a month they had not rotated.
+    """
+    try:
+        candidates = sorted(
+            (p for p in directory.glob("centurion-backup-*.cbk") if p.is_file()),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return []
+    removed: List[Path] = []
+    for old in candidates[keep:]:
+        try:
+            old.unlink()
+            removed.append(old)
+        except OSError as exc:
+            logger.warning("Could not rotate out %s: %s", old, exc)
+    return removed
+
+
 def _format_size(nbytes: int) -> str:
     """Human-readable file size."""
     for unit in ("B", "KB", "MB", "GB"):
@@ -173,6 +228,26 @@ def run_backup(args) -> None:
     if not centurion_root.is_dir():
         print(f"Error: Centurion home directory not found at {centurion_root}")
         sys.exit(1)
+
+    # ── The plaintext guard ─────────────────────────────────────────────────
+    # A machine that carries client records does not produce a plaintext
+    # archive, ever. The rule lives here rather than in an operator's memory
+    # (business/EDITIONS.md §6.3): an unencrypted zip of a UK practice's client
+    # files on a USB stick in a drawer is a UK GDPR problem that surfaces after
+    # a burglary. Refused BEFORE anything is written, so a refused run leaves
+    # no half-artefact behind for somebody to mistake for a backup.
+    _is_client_machine, _edition_label = _carries_client_records()
+    if _is_client_machine and not getattr(args, "encrypt", False):
+        print(
+            f"\nRefused: this machine is a {_edition_label}.\n\n"
+            "  It carries client records, so it does not write a plaintext archive —\n"
+            "  not to a drive, not to a folder, not to a network share.\n\n"
+            "  Use --encrypt with a passphrase the practice holds:\n\n"
+            "    centurion backup -e --passphrase-file <file> -o <destination>\n\n"
+            "  The passphrase is theirs, not ours: we cannot read the archive, and\n"
+            "  that is deliberate. Nothing was written."
+        )
+        sys.exit(2)
 
     # Determine output path
     if args.output:
@@ -309,6 +384,14 @@ def run_backup(args) -> None:
                 verified=True,
                 encrypted=True,
             )
+            rotated = _prune_container_rotation(container.parent)
+            if rotated:
+                print(
+                    f"  Rotation:    kept the last {CONTAINER_ROTATION_KEEP}, "
+                    f"removed {len(rotated)} older archive(s)"
+                )
+                for old in rotated:
+                    print(f"    removed {old.name}")
         except _bc.BackupCryptoError as exc:
             print(f"\nError: {exc}")
             print("The unencrypted zip has been KEPT at the path below; delete it yourself once resolved.")
