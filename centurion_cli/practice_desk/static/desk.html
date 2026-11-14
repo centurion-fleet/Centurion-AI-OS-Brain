@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Practice Desk</title>
+<style>
+  :root{
+    --field:#0A0B0D; --field-2:#101215; --field-3:#15181C; --line:#22262C;
+    --bronze:#B08D57; --bronze-hi:#DCBA80; --bronze-dim:rgba(176,141,87,.14);
+    --steel:#8C93A0; --steel-hi:#C2C8D2;
+    --amber:#FFB454; --amber-dim:rgba(255,180,84,.10);
+    --red:#C4593F;
+    --ink:#E8E4DC; --ink-dim:#9A948A; --ink-faint:#6C675F;
+    --serif:'Instrument Serif',Georgia,serif;
+    --sans:'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--field); color:var(--ink); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  button{font-family:inherit}
+
+  /* ── shell ───────────────────────────────────────────────────────────── */
+  .shell{display:grid; grid-template-columns:236px 1fr 260px; height:100dvh}
+  .shell.narrow{grid-template-columns:1fr}
+
+  /* ── left rail ───────────────────────────────────────────────────────── */
+  .rail{
+    border-right:1px solid var(--line); display:flex; flex-direction:column;
+    background:var(--field-2); min-height:0;
+  }
+  .brand{
+    display:flex; align-items:center; gap:9px; padding:18px 18px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .brand svg{width:20px;height:20px;flex:none}
+  .brand b{
+    font-family:var(--mono); font-size:9px; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--ink-faint); font-weight:400;
+  }
+  .nav{padding:12px 10px; border-bottom:1px solid var(--line)}
+  .nav button{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:transparent; border:0; color:var(--ink-dim); cursor:pointer;
+    padding:10px 12px; border-radius:2px; font-size:13.5px; transition:.14s;
+  }
+  .nav button:hover{background:rgba(255,255,255,.04); color:var(--ink)}
+  .nav button[aria-current="true"]{background:var(--bronze-dim); color:var(--bronze-hi)}
+  .nav .dot{
+    width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;flex:none;
+  }
+  .nav button[aria-current="true"] .dot{opacity:1;background:var(--bronze-hi)}
+
+  .rail-scroll{overflow-y:auto; flex:1; min-height:0; padding:14px 10px}
+  .group-label{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--ink-faint); padding:0 12px 8px;
+  }
+  .conv{
+    display:block; width:100%; text-align:left; background:transparent; border:0;
+    color:var(--ink-dim); padding:10px 12px; border-radius:2px; cursor:pointer;
+    font-size:13px; line-height:1.35; transition:.14s;
+  }
+  .conv:hover{background:rgba(255,255,255,.04); color:var(--ink)}
+  .conv[aria-current="true"]{background:rgba(255,255,255,.06); color:var(--ink)}
+  .conv small{
+    display:block; font-family:var(--mono); font-size:8.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink-faint); margin-top:4px;
+  }
+
+  .rail-foot{
+    border-top:1px solid var(--line); padding:13px 16px;
+    font-family:var(--mono); font-size:9px; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--ink-faint); line-height:1.9;
+  }
+  .rail-foot a{color:var(--steel); text-decoration:none; cursor:pointer}
+  .rail-foot a:hover{color:var(--steel-hi)}
+  .who{color:var(--steel-hi); text-transform:none; letter-spacing:0; font-size:11px;
+       font-family:var(--sans)}
+
+  /* ── main ────────────────────────────────────────────────────────────── */
+  main{display:flex; flex-direction:column; min-width:0; min-height:0}
+  .topbar{
+    display:flex; align-items:center; gap:14px; padding:15px 26px;
+    border-bottom:1px solid var(--line); flex:none;
+  }
+  .topbar h1{
+    font-family:var(--serif); font-weight:400; font-size:21px; margin:0;
+    letter-spacing:-.01em; flex:1; min-width:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .stamp{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+    text-transform:uppercase; padding:5px 9px; border:1px solid var(--line);
+    border-radius:2px; color:var(--ink-faint); white-space:nowrap;
+  }
+  .stamp.ok{border-color:rgba(176,141,87,.5); color:var(--bronze-hi)}
+  .stamp.warn{border-color:rgba(255,180,84,.5); color:var(--amber)}
+  .stamp.bad{border-color:rgba(196,89,63,.55); color:#E0917C}
+
+  .scroll{overflow-y:auto; flex:1; min-height:0}
+  .view{padding:26px; max-width:820px}
+  .view[hidden]{display:none}
+
+  /* ── today ───────────────────────────────────────────────────────────── */
+  .date{font-family:var(--mono); font-size:9px; letter-spacing:.2em;
+        text-transform:uppercase; color:var(--ink-faint); margin-bottom:8px}
+  .greet{font-family:var(--serif); font-size:26px; font-weight:400; margin:0 0 4px}
+  .sub{color:var(--ink-dim); font-size:13.5px; margin:0 0 26px; line-height:1.5}
+
+  .panes{display:grid; grid-template-columns:repeat(2,1fr); gap:1px;
+         background:var(--line); border:1px solid var(--line); margin-bottom:26px}
+  .pane{background:var(--field-2); padding:18px 18px 20px}
+  .pane h3{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-faint); font-weight:400;
+    margin:0 0 12px; line-height:1.5;
+  }
+  .pane .big{
+    font-family:var(--serif); font-size:30px; line-height:1; color:var(--ink);
+    margin-bottom:8px;
+  }
+  .pane .big.unmeasured{color:var(--ink-faint)}
+  .pane .why{font-size:11.5px; color:var(--ink-faint); line-height:1.45}
+  .pane .why.flag{color:#B9906A}
+
+  .section-h{
+    font-family:var(--mono); font-size:9px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--ink-faint); margin:0 0 12px;
+  }
+  .rows{border-top:1px solid var(--line)}
+  .row{
+    display:flex; align-items:center; gap:12px; padding:12px 2px;
+    border-bottom:1px solid var(--line); font-size:13.5px;
+  }
+  .row .k{color:var(--ink-faint); font-family:var(--mono); font-size:9px;
+          letter-spacing:.14em; text-transform:uppercase; flex:1}
+  .row .v{color:var(--ink); font-variant-numeric:tabular-nums}
+  .row .v.dim{color:var(--ink-faint)}
+
+  /* ── thread ──────────────────────────────────────────────────────────── */
+  .thread{padding:22px 26px 8px; display:flex; flex-direction:column; gap:18px;
+          max-width:820px}
+  .msg{display:flex; flex-direction:column; gap:6px; max-width:100%}
+  .msg .who{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-faint);
+  }
+  .msg .body{
+    font-size:14.5px; line-height:1.62; color:var(--ink);
+    white-space:pre-wrap; word-wrap:break-word;
+  }
+  .msg.me .body{
+    background:var(--field-3); border-left:2px solid var(--bronze);
+    padding:12px 15px; border-radius:0 2px 2px 0;
+  }
+  .msg.brain .body{padding-left:15px; border-left:2px solid var(--line)}
+  .msg.brain.streaming .body::after{
+    content:""; display:inline-block; width:6px; height:14px;
+    background:var(--bronze); margin-left:3px; vertical-align:-2px;
+    animation:blink 1s steps(2) infinite;
+  }
+  @keyframes blink{50%{opacity:0}}
+  .msg.err .body{border-left-color:var(--red); color:#E0917C}
+
+  .composer{
+    border-top:1px solid var(--line); padding:14px 26px 18px; flex:none;
+    background:var(--field);
+  }
+  .composer .inner{max-width:820px; display:flex; gap:10px; align-items:flex-end}
+  textarea{
+    flex:1; resize:none; background:var(--field-2); border:1px solid var(--line);
+    border-radius:2px; color:var(--ink); font-family:var(--sans); font-size:14px;
+    line-height:1.5; padding:12px 14px; outline:none; min-height:46px; max-height:180px;
+    transition:border-color .15s;
+  }
+  textarea:focus{border-color:var(--bronze)}
+  textarea::placeholder{color:var(--ink-faint)}
+  .send{
+    background:var(--bronze); color:#14100A; border:0; border-radius:2px;
+    padding:0 18px; height:46px; font-size:13.5px; font-weight:600; cursor:pointer;
+    transition:.15s; flex:none;
+  }
+  .send:hover{background:var(--bronze-hi)}
+  .send:disabled{background:#3A3630; color:var(--ink-faint); cursor:not-allowed}
+  .hint{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink-faint); margin-top:9px;
+  }
+
+  /* ── right rail ──────────────────────────────────────────────────────── */
+  .firm{
+    border-left:1px solid var(--line); background:var(--field-2);
+    display:flex; flex-direction:column; min-height:0; overflow-y:auto;
+  }
+  .firm .head{
+    padding:16px 18px 13px; border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--ink-faint);
+  }
+  .firm .block{padding:15px 18px; border-bottom:1px solid var(--line)}
+  .firm .block h4{
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-faint); font-weight:400; margin:0 0 9px;
+  }
+  .firm .block p{margin:0; font-size:12.5px; line-height:1.55; color:var(--ink-dim)}
+  .firm .block p b{color:var(--ink); font-weight:500}
+  .firm .block p.flag{color:#B9906A}
+
+  /* ── lock ────────────────────────────────────────────────────────────── */
+  .lock{
+    position:fixed; inset:0; background:rgba(10,11,13,.96); z-index:50;
+    display:none; place-items:center; text-align:center; padding:24px;
+    backdrop-filter:blur(6px);
+  }
+  .lock.show{display:grid}
+  .lock h2{font-family:var(--serif); font-weight:400; font-size:28px; margin:0 0 8px}
+  .lock p{color:var(--ink-dim); font-size:13.5px; margin:0 0 22px}
+  .lock button{
+    background:var(--bronze); color:#14100A; border:0; border-radius:2px;
+    padding:12px 24px; font-size:13.5px; font-weight:600; cursor:pointer;
+  }
+
+  /* ── narrow ──────────────────────────────────────────────────────────── */
+  .mobile-bar{display:none}
+  @media (max-width:900px){
+    .shell{grid-template-columns:1fr}
+    .rail,.firm{display:none}
+    .shell.drawer .rail{
+      display:flex; position:fixed; inset:0 auto 0 0; width:266px; z-index:40;
+      box-shadow:0 0 0 100vmax rgba(0,0,0,.6);
+    }
+    .mobile-bar{
+      display:flex; align-items:center; gap:12px; padding:12px 16px;
+      border-bottom:1px solid var(--line); flex:none;
+    }
+    .mobile-bar button{
+      background:transparent; border:1px solid var(--line); color:var(--steel-hi);
+      border-radius:2px; padding:7px 11px; font-size:11px; cursor:pointer;
+      font-family:var(--mono); letter-spacing:.12em; text-transform:uppercase;
+    }
+    .mobile-bar h1{font-family:var(--serif); font-size:17px; margin:0; flex:1;
+                   font-weight:400; white-space:nowrap; overflow:hidden;
+                   text-overflow:ellipsis}
+    .view,.thread{padding:18px 16px 8px}
+    .panes{grid-template-columns:1fr}
+    .topbar{padding:13px 16px}
+    .composer{padding:11px 14px 15px}
+  }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <aside class="rail">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.2" stroke="#B08D57" stroke-width="1"/>
+        <circle cx="12" cy="12" r="4.4" stroke="#8C93A0" stroke-width="1"/>
+        <circle cx="12" cy="3.6" r="1.5" fill="#B08D57"/>
+      </svg>
+      <b>Practice Desk</b>
+    </div>
+    <nav class="nav">
+      <button data-view="today" aria-current="true"><span class="dot"></span>Today</button>
+      <button data-view="thread"><span class="dot"></span>Thread</button>
+    </nav>
+    <div class="rail-scroll">
+      <div class="group-label">Private</div>
+      <button class="conv" data-view="thread" aria-current="false">
+        My thread
+        <small id="conv-meta">nobody else sees this</small>
+      </button>
+    </div>
+    <div class="rail-foot">
+      <div class="who" id="who">—</div>
+      <div id="seat">—</div>
+      <a id="signout">Sign out</a>
+    </div>
+  </aside>
+
+  <main>
+    <div class="mobile-bar">
+      <button id="drawer">Menu</button>
+      <h1 id="mtitle">Today</h1>
+    </div>
+    <div class="topbar">
+      <h1 id="title">Today</h1>
+      <span class="stamp" id="stamp">—</span>
+    </div>
+
+    <div class="scroll" id="scroll">
+      <!-- TODAY -->
+      <section class="view" id="view-today">
+        <div class="date" id="today-date">—</div>
+        <h2 class="greet" id="greet">Good morning</h2>
+        <p class="sub" id="today-sub">This is the practice as the machine sees it.</p>
+
+        <div class="panes" id="panes"></div>
+
+        <div class="section-h">The machine</div>
+        <div class="rows" id="machine-rows"></div>
+      </section>
+
+      <!-- THREAD -->
+      <section class="view" id="view-thread" hidden>
+        <div class="thread" id="thread"></div>
+      </section>
+    </div>
+
+    <div class="composer" id="composer" hidden>
+      <div class="inner">
+        <textarea id="input" rows="1" placeholder="Ask about a client, a deadline, or the practice's own rules…"></textarea>
+        <button class="send" id="send">Ask</button>
+      </div>
+      <div class="hint" id="hint">Nothing is sent to a client without a human signature</div>
+    </div>
+  </main>
+
+  <aside class="firm">
+    <div class="head">Firm</div>
+    <div class="block">
+      <h4>This thread</h4>
+      <p><b id="firm-scope">Private</b> — visible only to you.</p>
+    </div>
+    <div class="block">
+      <h4>Client</h4>
+      <p class="flag">No client attached. Client threads arrive with the Firm instrument.</p>
+    </div>
+    <div class="block">
+      <h4>Drafts awaiting signature</h4>
+      <p class="flag">Not measured — no drafts register on this machine yet.</p>
+    </div>
+    <div class="block">
+      <h4>Provenance</h4>
+      <p>Answers will name the file and line they rely on, once the practice library is indexed.</p>
+    </div>
+  </aside>
+</div>
+
+<div class="lock" id="lock">
+  <div>
+    <h2>Locked</h2>
+    <p>Fifteen minutes idle. Sign in again with your passkey.</p>
+    <button onclick="window.location.reload()">Unlock</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const shell = $("shell");
+  const state = { view: "today", person: null, messages: [], busy: false };
+  const IDLE_MS = 15 * 60 * 1000;
+  let lastActive = Date.now();
+
+  // ── plumbing ────────────────────────────────────────────────────────────
+  async function get(url) {
+    const res = await fetch(url, { credentials: "same-origin" });
+    if (res.status === 401) { lock(); throw new Error("locked"); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || "Could not read that.");
+    return data;
+  }
+  async function post(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body || {}),
+    });
+    if (res.status === 401) { lock(); throw new Error("locked"); }
+    return res;
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function lock() {
+    $("lock").classList.add("show");
+  }
+
+  // ── navigation ──────────────────────────────────────────────────────────
+  function show(view) {
+    state.view = view;
+    document.querySelectorAll("[data-view]").forEach((b) => {
+      b.setAttribute("aria-current", String(b.dataset.view === view));
+    });
+    $("view-today").hidden = view !== "today";
+    $("view-thread").hidden = view !== "thread";
+    $("composer").hidden = view !== "thread";
+    $("stamp").hidden = view !== "today";
+    const titles = { today: "Today", thread: "Thread" };
+    $("title").textContent = titles[view];
+    $("mtitle").textContent = titles[view];
+    shell.classList.remove("drawer");
+    if (view === "thread") setTimeout(() => $("input").focus(), 60);
+  }
+  document.querySelectorAll("[data-view]").forEach((b) =>
+    b.addEventListener("click", () => show(b.dataset.view)));
+  $("drawer").addEventListener("click", () => shell.classList.toggle("drawer"));
+  $("signout").addEventListener("click", async () => {
+    await post("/api/signout", {}).catch(() => {});
+    window.location.href = "/";
+  });
+
+  // ── today ───────────────────────────────────────────────────────────────
+  const PANE_LABELS = {
+    drafts_awaiting_signature: "Drafts awaiting signature",
+    deadlines_inside_14_days: "Deadlines inside 14 days",
+    clients_chased_no_reply: "Clients chased, no reply",
+    hours_returned_this_month: "Hours returned this month",
+  };
+
+  async function loadToday() {
+    const data = await get("/api/today");
+    state.person = data.person;
+
+    $("who").textContent = data.person.name;
+    $("who").title = data.person.email;
+    const held = data.seats.held;
+    $("seat").textContent = `${held} seat${held === 1 ? "" : "s"} held · ${data.person.role}`;
+
+    const d = new Date(data.at * 1000);
+    $("today-date").textContent = d.toLocaleDateString("en-GB", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    });
+    const hour = d.getHours();
+    $("greet").textContent = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    $("greet").textContent += `, ${data.person.name.split(" ")[0]}`;
+
+    // Panes: an unmeasured pane says so, in the same size type as a value.
+    $("panes").innerHTML = Object.entries(data.panes).map(([key, pane]) => {
+      const measured = pane.value !== null && pane.value !== undefined;
+      return `<div class="pane">
+        <h3>${esc(PANE_LABELS[key] || key)}</h3>
+        <div class="big${measured ? "" : " unmeasured"}">${measured ? esc(pane.value) : "—"}</div>
+        <div class="why${measured ? "" : " flag"}">${esc(measured ? "measured" : "not measured — " + pane.reason)}</div>
+      </div>`;
+    }).join("");
+
+    const n = data.unmeasured.length;
+    $("today-sub").textContent = n === 0
+      ? "This is the practice as the machine sees it. Every pane is measured."
+      : `This is the practice as the machine sees it. ${n} of ${Object.keys(data.panes).length} panes `
+        + `${n === 1 ? "is" : "are"} not measured yet, and say so rather than showing a zero.`;
+
+    const rows = [
+      ["Named users held", held, false],
+      ["Session", "signed in", false],
+      ["Licence", data.licence.refusal_at ? "at capacity" : "room for one more", false],
+      ["Unmeasured panes", data.unmeasured.length, false],
+    ];
+    $("machine-rows").innerHTML = rows.map(([k, v]) =>
+      `<div class="row"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`
+    ).join("");
+
+    // The stamp is a fact about Today, not about the thread. Hide it elsewhere
+    // rather than leave a stale claim under a different heading.
+    $("stamp").hidden = false;
+    $("stamp").textContent = data.unmeasured.length
+      ? `${data.unmeasured.length} panes unmeasured`
+      : "all measured";
+    $("stamp").className = "stamp" + (data.unmeasured.length ? " warn" : " ok");
+  }
+
+  // ── thread ──────────────────────────────────────────────────────────────
+  function renderMessages() {
+    const t = $("thread");
+    if (!state.messages.length) {
+      t.innerHTML = `<div class="msg brain"><span class="who">The practice's Centurion</span>
+        <div class="body">Ask me anything about the practice. I will name the file I am reading, and I will tell you what I could not settle rather than guessing.</div></div>`;
+      return;
+    }
+    t.innerHTML = state.messages.map((m) => {
+      const mine = m.role === "user";
+      return `<div class="msg ${mine ? "me" : "brain"}">
+        <span class="who">${mine ? "You" : "The practice's Centurion"}</span>
+        <div class="body">${esc(m.content)}</div>
+      </div>`;
+    }).join("");
+    const sc = $("scroll");
+    sc.scrollTop = sc.scrollHeight;
+  }
+
+  async function loadThread() {
+    const data = await get("/api/thread");
+    state.messages = data.messages || [];
+    renderMessages();
+  }
+
+  async function ask() {
+    const input = $("input");
+    const text = input.value.trim();
+    if (!text || state.busy) return;
+
+    state.busy = true;
+    $("send").disabled = true;
+    input.value = "";
+    input.style.height = "auto";
+
+    state.messages.push({ role: "user", content: text });
+    renderMessages();
+
+    const bubble = document.createElement("div");
+    bubble.className = "msg brain streaming";
+    bubble.innerHTML = `<span class="who">The practice's Centurion</span><div class="body"></div>`;
+    $("thread").appendChild(bubble);
+    const body = bubble.querySelector(".body");
+    const sc = $("scroll");
+    sc.scrollTop = sc.scrollHeight;
+
+    let answer = "";
+    try {
+      const res = await post("/api/chat", { message: text });
+      if (!res.body) throw new Error("The desk returned nothing.");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (const part of parts) {
+          const line = part.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          let evt;
+          try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+          if (evt.delta) {
+            answer += evt.delta;
+            body.textContent = answer;
+            sc.scrollTop = sc.scrollHeight;
+          } else if (evt.error) {
+            bubble.classList.remove("streaming");
+            bubble.classList.add("err");
+            body.textContent = answer || evt.error;
+            if (answer) { body.textContent = answer; }
+            bubble.insertAdjacentHTML("beforeend",
+              `<div class="hint" style="color:#C4593F">${esc(evt.error)}</div>`);
+          } else if (evt.done) {
+            bubble.classList.remove("streaming");
+          }
+        }
+      }
+      if (answer) state.messages.push({ role: "assistant", content: answer });
+    } catch (err) {
+      bubble.classList.remove("streaming");
+      bubble.classList.add("err");
+      body.textContent = answer || err.message || "That did not work.";
+    } finally {
+      bubble.classList.remove("streaming");
+      state.busy = false;
+      $("send").disabled = false;
+      input.focus();
+    }
+  }
+
+  $("send").addEventListener("click", ask);
+  $("input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+  });
+  $("input").addEventListener("input", (e) => {
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 180) + "px";
+  });
+
+  // ── idle lock ───────────────────────────────────────────────────────────
+  ["click", "keydown", "pointerdown", "touchstart"].forEach((ev) =>
+    window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
+  setInterval(() => {
+    if (Date.now() - lastActive > IDLE_MS) lock();
+  }, 20000);
+
+  // ── boot ────────────────────────────────────────────────────────────────
+  (async () => {
+    try {
+      await loadToday();
+      await loadThread();
+      show("today");
+    } catch (err) {
+      if (err.message !== "locked") {
+        $("stamp").textContent = "could not read the record";
+        $("stamp").className = "stamp bad";
+      }
+    }
+  })();
+})();
+</script>
+</body>
+</html>

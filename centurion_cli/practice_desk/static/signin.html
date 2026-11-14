@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Practice Desk — sign in</title>
+<style>
+  :root{
+    --field:#0A0B0D; --field-2:#101215; --line:#22262C;
+    --bronze:#B08D57; --bronze-hi:#DCBA80;
+    --steel:#8C93A0; --steel-hi:#C2C8D2;
+    --amber:#FFB454;
+    --ink:#E8E4DC; --ink-dim:#9A948A; --ink-faint:#6C675F;
+    --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+    --sans:'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:ui-monospace,'SF Mono','JetBrains Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--field); color:var(--ink); font-family:var(--sans);
+    display:grid; place-items:center; padding:24px;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(720px 420px at 50% -10%, rgba(176,141,87,.10), transparent 70%);
+  }
+  .card{width:100%; max-width:430px}
+  .mark{display:flex; align-items:center; gap:10px; margin-bottom:34px}
+  .mark svg{width:26px;height:26px;flex:none}
+  .mark span{
+    font-family:var(--mono); font-size:10px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--ink-faint);
+  }
+  h1{
+    font-family:var(--serif); font-weight:400; font-size:34px; line-height:1.1;
+    margin:0 0 10px; letter-spacing:-.01em;
+  }
+  .lede{color:var(--ink-dim); font-size:14.5px; line-height:1.55; margin:0 0 30px}
+  label{
+    display:block; font-family:var(--mono); font-size:9.5px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--ink-faint); margin-bottom:8px;
+  }
+  input{
+    width:100%; background:var(--field-2); border:1px solid var(--line);
+    border-radius:2px; color:var(--ink); font-family:var(--mono); font-size:13px;
+    padding:13px 14px; outline:none; transition:border-color .15s;
+  }
+  input:focus{border-color:var(--bronze)}
+  button{
+    width:100%; margin-top:14px; padding:14px 16px; cursor:pointer;
+    background:var(--bronze); color:#14100A; border:0; border-radius:2px;
+    font-family:var(--sans); font-size:14px; font-weight:600; letter-spacing:.01em;
+    transition:background .15s, transform .1s;
+  }
+  button:hover{background:var(--bronze-hi)}
+  button:active{transform:translateY(1px)}
+  button:disabled{background:#3A3630; color:var(--ink-faint); cursor:not-allowed}
+  button.quiet{
+    background:transparent; border:1px solid var(--line); color:var(--steel-hi);
+    font-weight:500;
+  }
+  button.quiet:hover{border-color:var(--steel); background:rgba(140,147,160,.06)}
+  .rule{height:1px; background:var(--line); margin:30px 0 26px}
+  .msg{
+    margin-top:18px; font-size:13.5px; line-height:1.5; padding:12px 14px;
+    border-left:2px solid var(--amber); background:rgba(255,180,84,.06);
+    color:#F0D6AE; display:none;
+  }
+  .msg.show{display:block}
+  .msg.ok{border-color:var(--bronze); background:rgba(176,141,87,.08); color:var(--bronze-hi)}
+  .foot{
+    margin-top:34px; font-family:var(--mono); font-size:9.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-faint); line-height:2;
+  }
+  .foot b{color:var(--steel); font-weight:400}
+  .hidden{display:none}
+  @media (max-width:420px){
+    h1{font-size:28px}
+    body{padding:18px}
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="mark">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.2" stroke="#B08D57" stroke-width="1"/>
+      <circle cx="12" cy="12" r="4.4" stroke="#8C93A0" stroke-width="1"/>
+      <circle cx="12" cy="3.6" r="1.5" fill="#B08D57"/>
+    </svg>
+    <span>Practice Desk</span>
+  </div>
+
+  <h1 id="title">Sign in</h1>
+  <p class="lede" id="lede">Use the passkey on this device. There is no password to remember or share.</p>
+
+  <!-- invite panel -->
+  <form id="invite-panel" class="hidden" autocomplete="off">
+    <label for="code">Your invitation</label>
+    <input id="code" name="code" placeholder="paste the code a partner gave you" spellcheck="false">
+    <button type="submit" id="invite-btn">Continue</button>
+  </form>
+
+  <!-- sign-in panel -->
+  <div id="signin-panel">
+    <button type="button" id="signin-btn">Use my passkey</button>
+    <div class="rule"></div>
+    <button type="button" class="quiet" id="have-code">I have an invitation code</button>
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="foot">
+    <div><b id="seat-line">One named user per sign-in</b></div>
+    <div>Nothing is sent without a human signature</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const msg = $("msg");
+
+  function say(text, ok) {
+    msg.textContent = text;
+    msg.className = "msg show" + (ok ? " ok" : "");
+  }
+  function clear() { msg.className = "msg"; msg.textContent = ""; }
+
+  // base64url <-> ArrayBuffer, the two conversions WebAuthn always needs
+  const b64uToBuf = (s) => {
+    s = String(s).replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf.buffer;
+  };
+  const bufToB64u = (buf) => {
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+
+  async function post(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body || {}),
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* keep {} */ }
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || "The desk could not complete that.");
+    }
+    return data;
+  }
+
+  // ── sign in ──────────────────────────────────────────────────────────────
+  async function signIn() {
+    clear();
+    if (!window.PublicKeyCredential) {
+      say("This browser cannot use passkeys. Use Chrome, Edge, Firefox or Safari.");
+      return;
+    }
+    const btn = $("signin-btn");
+    btn.disabled = true;
+    btn.textContent = "Waiting for your device…";
+    try {
+      const begun = await post("/api/signin/begin", {});
+      const pk = begun.options;
+      pk.challenge = b64uToBuf(pk.challenge);
+      pk.allowCredentials = (pk.allowCredentials || []).map((c) => ({
+        ...c, id: b64uToBuf(c.id),
+      }));
+      const assertion = await navigator.credentials.get({ publicKey: pk });
+      const payload = {
+        id: assertion.id,
+        clientDataJSON: bufToB64u(assertion.response.clientDataJSON),
+        authenticatorData: bufToB64u(assertion.response.authenticatorData),
+        signature: bufToB64u(assertion.response.signature),
+      };
+      if (assertion.response.userHandle) {
+        payload.userHandle = bufToB64u(assertion.response.userHandle);
+      }
+      await post("/api/signin/finish", payload);
+      window.location.href = "/";
+    } catch (err) {
+      if (err && err.name === "NotAllowedError") {
+        say("No passkey was used. Try again, or ask a partner for an invitation.");
+      } else {
+        say(err.message || "That did not work.");
+      }
+      btn.disabled = false;
+      btn.textContent = "Use my passkey";
+    }
+  }
+
+  // ── enrol ────────────────────────────────────────────────────────────────
+  async function enrol(token) {
+    clear();
+    if (!window.PublicKeyCredential) {
+      say("This browser cannot use passkeys. Use Chrome, Edge, Firefox or Safari.");
+      return;
+    }
+    const btn = $("invite-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Waiting for your device…"; }
+    try {
+      const begun = await post("/api/invite", { token });
+      const pk = begun.options;
+      pk.challenge = b64uToBuf(pk.challenge);
+      pk.user.id = b64uToBuf(pk.user.id);
+      const credential = await navigator.credentials.create({ publicKey: pk });
+      const payload = {
+        clientDataJSON: bufToB64u(credential.response.clientDataJSON),
+        attestationObject: bufToB64u(credential.response.attestationObject),
+      };
+      await post("/api/register", payload);
+      window.location.href = "/";
+    } catch (err) {
+      if (err && err.name === "NotAllowedError") {
+        say("The passkey was not created. The invitation has now been used — ask a partner for a new one.");
+      } else {
+        say(err.message || "That did not work.");
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "Continue"; }
+    }
+  }
+
+  // ── which panel ──────────────────────────────────────────────────────────
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const inviteToken = hash.get("invite");
+
+  if (inviteToken) {
+    $("title").textContent = "Welcome";
+    $("lede").textContent = "Set a passkey on this device. It is how this desk will know who you are — there is no password.";
+    $("signin-panel").classList.add("hidden");
+    $("invite-panel").classList.remove("hidden");
+    $("code").value = inviteToken;
+    $("invite-panel").addEventListener("submit", (e) => {
+      e.preventDefault();
+      enrol($("code").value.trim());
+    });
+    // The link is single use; drop it from the address bar so a shared screen
+    // or a screenshot does not carry a live invitation.
+    history.replaceState(null, "", window.location.pathname);
+    setTimeout(() => enrol(inviteToken), 250);
+  } else {
+    $("signin-btn").addEventListener("click", signIn);
+    $("have-code").addEventListener("click", () => {
+      $("title").textContent = "Join the practice";
+      $("lede").textContent = "Paste the code a partner gave you. It works once and expires in fifteen minutes.";
+      $("signin-panel").classList.add("hidden");
+      $("invite-panel").classList.remove("hidden");
+      $("code").focus();
+    });
+    $("invite-panel").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const token = $("code").value.trim();
+      if (!token) { say("Paste the code first."); return; }
+      enrol(token);
+    });
+  }
+})();
+</script>
+</body>
+</html>
