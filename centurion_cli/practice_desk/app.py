@@ -770,6 +770,34 @@ async def drafts_list(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "drafts": items})
 
 
+async def documents(request: web.Request) -> web.Response:
+    """The files this practice's own drafts have cited.
+
+    Derived from the drafts register rather than a folder scan: the answer to
+    "what has the machine read" is the citations it actually wrote, and a
+    directory listing would claim files nobody used while missing the ones it
+    did. A failed read returns an error, never an empty list.
+    """
+    person = await _require_person(request)
+    desk: Desk = request.app[DESK_KEY]
+    from centurion_cli.practice_desk.documents import library_use
+
+    try:
+        drafts = desk.store.drafts(person)
+    except Exception as exc:  # noqa: BLE001 — report the failure, not a zero
+        return web.json_response(
+            {
+                "ok": False,
+                "error": "could not read the drafts register",
+                "detail": str(exc)[:200],
+            },
+            status=500,
+        )
+    payload = library_use(drafts)
+    payload["ok"] = True
+    return web.json_response(payload)
+
+
 async def draft_create(request: web.Request) -> web.Response:
     person = await _require_person(request)
     if not _same_origin(request):
@@ -1115,6 +1143,7 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_get("/api/clients", clients_list)
     app.router.add_post("/api/clients/assign", client_assign)
     app.router.add_get("/api/drafts", drafts_list)
+    app.router.add_get("/api/documents", documents)
     app.router.add_post("/api/drafts", draft_create)
     app.router.add_post("/api/drafts/action", draft_action)
     app.router.add_get("/api/people", people_list)

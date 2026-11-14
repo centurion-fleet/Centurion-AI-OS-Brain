@@ -247,6 +247,46 @@
   select.mini option{background:var(--field-2); color:var(--ink); font-family:var(--mono)}
   .sub.flag{color:#B9906A}
 
+  /* ── work items ──────────────────────────────────────────────────────── */
+  /* A work item, not a message: the unit of this screen carries what it cites
+     and what it could not settle, and the unsettled line is never quieter than
+     the draft body — it is what a partner is actually signing against. */
+  .wi{display:flex; flex-direction:column; gap:9px; padding:15px 2px;
+      border-bottom:1px solid var(--line)}
+  .wi-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+  .wi-title{font-size:14px; color:var(--ink)}
+  .wi-meta{font-family:var(--mono); font-size:9px; letter-spacing:.14em;
+           text-transform:uppercase; color:var(--ink-faint)}
+  .chip{font-family:var(--mono); font-size:8.5px; letter-spacing:.13em;
+        text-transform:uppercase; padding:3px 7px; border-radius:2px;
+        border:1px solid var(--line); color:var(--steel-hi); white-space:nowrap}
+  .chip.wait{color:var(--amber); border-color:rgba(255,180,84,.35); background:var(--amber-dim)}
+  .chip.signed{color:var(--bronze-hi); border-color:rgba(176,141,87,.4); background:var(--bronze-dim)}
+  .chip.gone{color:var(--ink-faint)}
+  .wi-body{font-size:13px; color:var(--ink-dim); line-height:1.55; white-space:pre-wrap;
+           max-height:5.4em; overflow:hidden}
+  .wi-prov{display:flex; flex-direction:column; gap:5px}
+  .wi-prov .lab{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em;
+                text-transform:uppercase; color:var(--ink-faint)}
+  .wi-prov .cite{font-family:var(--mono); font-size:10.5px; color:var(--steel-hi);
+                 word-break:break-all}
+  .wi-prov .none{font-size:11.5px; color:var(--ink-faint)}
+  .wi-unsettled{color:#D8A25E; font-size:12.5px; line-height:1.5;
+                border-left:2px solid rgba(255,180,84,.4); padding-left:10px}
+  .wi-verbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:2px}
+  .filters{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px}
+  .filters button{background:transparent; border:1px solid var(--line);
+     color:var(--ink-faint); font-family:var(--mono); font-size:9px; letter-spacing:.14em;
+     text-transform:uppercase; padding:6px 10px; border-radius:2px; cursor:pointer}
+  .filters button:hover{border-color:var(--steel); color:var(--ink)}
+  .filters button[aria-pressed="true"]{border-color:var(--bronze); color:var(--bronze-hi);
+     background:var(--bronze-dim)}
+  .doc{display:flex; flex-direction:column; gap:4px; padding:12px 2px;
+       border-bottom:1px solid var(--line)}
+  .doc .path{font-family:var(--mono); font-size:11.5px; color:var(--ink); word-break:break-all}
+  .doc .meta{font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+             text-transform:uppercase; color:var(--ink-faint)}
+
   /* ── narrow ──────────────────────────────────────────────────────────── */
   .mobile-bar{display:none}
   @media (max-width:900px){
@@ -288,7 +328,9 @@
     </div>
     <nav class="nav">
       <button data-view="today" aria-current="true"><span class="dot"></span>Today</button>
-      <button data-view="thread"><span class="dot"></span>Thread</button>
+      <button data-view="work"><span class="dot"></span>Work</button>
+      <button data-view="documents"><span class="dot"></span>Documents</button>
+      <button data-view="thread"><span class="dot"></span>Ask</button>
       <button data-view="people" id="nav-people" hidden><span class="dot"></span>People</button>
     </nav>
     <div class="rail-scroll">
@@ -327,11 +369,6 @@
 
         <div class="panes" id="panes"></div>
 
-        <div id="drafts-block" hidden>
-          <div class="section-h">Review queue — waiting for a partner's signature</div>
-          <div class="rows" id="draft-rows"></div>
-        </div>
-
         <div id="deadline-block" hidden>
           <div class="section-h">Next deadlines, computed from the client records</div>
           <div class="rows" id="deadline-rows"></div>
@@ -339,6 +376,33 @@
 
         <div class="section-h">The machine</div>
         <div class="rows" id="machine-rows"></div>
+      </section>
+
+      <!-- WORK -->
+      <section class="view" id="view-work" hidden>
+        <div class="date">One queue, and the unit is a work item</div>
+        <h2 class="greet">Work</h2>
+        <p class="sub" id="work-sub">Everything this practice has drafted. Each item carries what it reads and what it could not settle — that is what a partner signs against.</p>
+
+        <div class="filters" id="work-filters">
+          <button data-status="all" aria-pressed="true">All</button>
+          <button data-status="awaiting_signature" aria-pressed="false">Awaiting signature</button>
+          <button data-status="draft" aria-pressed="false">Drafts</button>
+          <button data-status="signed" aria-pressed="false">Signed</button>
+          <button data-status="withdrawn" aria-pressed="false">Withdrawn</button>
+        </div>
+
+        <div class="rows" id="work-rows"></div>
+      </section>
+
+      <!-- DOCUMENTS -->
+      <section class="view" id="view-documents" hidden>
+        <div class="date">Provenance, aggregated</div>
+        <h2 class="greet">Documents</h2>
+        <p class="sub" id="docs-sub">The files this practice's own work has cited. Not a folder listing — a listing would claim files nobody used and miss the ones that settled a number.</p>
+
+        <div class="section-h" id="docs-head">What the machine has read</div>
+        <div class="rows" id="doc-rows"></div>
       </section>
 
       <!-- PEOPLE -->
@@ -460,21 +524,30 @@
   }
 
   // ── navigation ──────────────────────────────────────────────────────────
+  // Five views, and the order is the day: what is late, what is drafted, what
+  // the machine read, and only then the place you type.
+  const VIEWS = ["today", "work", "documents", "thread", "people"];
+  const VIEW_TITLES = {
+    today: "Today", work: "Work", documents: "Documents",
+    thread: "Ask", people: "People",
+  };
+
   function show(view) {
     state.view = view;
     document.querySelectorAll("[data-view]").forEach((b) => {
       b.setAttribute("aria-current", String(b.dataset.view === view));
     });
-    ["today", "thread", "people"].forEach((name) => {
+    VIEWS.forEach((name) => {
       const el = $("view-" + name);
       if (el) el.hidden = name !== view;
     });
     $("composer").hidden = view !== "thread";
+    if (view === "work") loadWork();
+    if (view === "documents") loadDocuments();
     if (view === "people") { loadPeople(); loadAudit(); }
     $("stamp").hidden = view !== "today";
-    const titles = { today: "Today", thread: "Thread", people: "People" };
-    $("title").textContent = titles[view];
-    $("mtitle").textContent = titles[view];
+    $("title").textContent = VIEW_TITLES[view];
+    $("mtitle").textContent = VIEW_TITLES[view];
     shell.classList.remove("drawer");
     if (view === "thread") setTimeout(() => $("input").focus(), 60);
   }
@@ -492,6 +565,14 @@
       }
       show(b.dataset.view);
     }));
+  document.querySelectorAll("#work-filters button").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.workStatus = b.dataset.status;
+      document.querySelectorAll("#work-filters button").forEach((other) =>
+        other.setAttribute("aria-pressed", String(other === b)));
+      loadWork();
+    }));
+
   $("drawer").addEventListener("click", () => shell.classList.toggle("drawer"));
   $("signout").addEventListener("click", async () => {
     await post("/api/signout", {}).catch(() => {});
@@ -771,6 +852,44 @@
   }
 
   // ── thread ──────────────────────────────────────────────────────────────
+  // ── citations, lifted from an answer ────────────────────────────────────
+  // An answer names the file it read ("…/VAT-2025.md:112"). Filing the work
+  // item without those citations would produce a draft that rests on nothing
+  // the practice can point at, so lift them out of the text. A path with no
+  // line number is still a citation; a sentence is not.
+  const CITE_RE = /([\w.~/\\-]+\.(?:md|txt|csv|tsv|json|jsonl|ya?ml|pdf|xlsx?|docx?|rtf))(?::(\d+)|[,\s]+line\s+(\d+))?/gi;
+
+  function citesFrom(text) {
+    const out = [];
+    const seen = new Set();
+    let match;
+    CITE_RE.lastIndex = 0;
+    while ((match = CITE_RE.exec(String(text || "")))) {
+      const line = match[2] || match[3];
+      const cite = line ? `${match[1]}:${line}` : match[1];
+      if (seen.has(cite)) continue;
+      seen.add(cite);
+      out.push(cite);
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+
+  // "I could not settle …" / "Could not settle: …" — the machine's own flag is
+  // the only honest source for this list, so it is read from the answer rather
+  // than inferred. Nothing found means an empty list, not a guess.
+  function unsettledFrom(text) {
+    const out = [];
+    String(text || "").split(/\n+/).forEach((line) => {
+      const m = line.match(/(?:could not settle|not settled|unsettled)\s*[:\-—]?\s*(.+)$/i);
+      if (!m || !m[1]) return;
+      // The sentence's full stop belongs to the prose, not to the record.
+      const value = m[1].trim().replace(/[.;,\s]+$/, "");
+      if (value.length > 3) out.push(value.slice(0, 240));
+    });
+    return out.slice(0, 6);
+  }
+
   function renderMessages() {
     const t = $("thread");
     if (!state.messages.length) {
@@ -785,7 +904,7 @@
         ? (shared && m.author ? m.author : "You")
         : "The practice's Centurion";
       const saveBtn = mine ? "" :
-        `<button class="mini keep" data-idx="${state.messages.indexOf(m)}">Save as draft</button>`;
+        `<button class="mini keep" data-idx="${state.messages.indexOf(m)}">File as a work item</button>`;
       return `<div class="msg ${mine ? "me" : "brain"}">
         <span class="who">${esc(label)}</span>
         <div class="body">${esc(m.content)}</div>
@@ -804,8 +923,10 @@
             body: m.content,
             client: state.scope === "client" ? state.client : null,
             kind: "letter",
+            cites: citesFrom(m.content),
+            unsettled: unsettledFrom(m.content),
           });
-          btn.textContent = "Saved — not sent";
+          btn.textContent = "Filed — not sent";
           await loadDrafts();
         } catch (err) {
           btn.disabled = false;
@@ -821,39 +942,124 @@
     return row ? row.name : slug;
   }
 
-  async function loadDrafts() {
+  // ── work: the queue is the product ──────────────────────────────────────
+  const STATE_LABEL = {
+    draft: "draft",
+    awaiting_signature: "awaiting signature",
+    signed: "signed",
+    withdrawn: "withdrawn",
+  };
+  const STATE_CHIP = { awaiting_signature: "wait", signed: "signed", withdrawn: "gone" };
+
+  function workItem(d) {
+    const role = state.person && state.person.role;
+    const mine = state.person && d.prepared_by === state.person.id;
+    const may = mine || role === "partner";
+    const verbs = [];
+    if (d.status === "draft" && may)
+      verbs.push(`<button class="mini" data-submit="${d.id}">Submit for signature</button>`);
+    if (d.status === "awaiting_signature" && role === "partner")
+      verbs.push(`<button class="mini" data-sign="${d.id}">Sign</button>`);
+    if ((d.status === "draft" || d.status === "awaiting_signature") && may)
+      verbs.push(`<button class="mini" data-withdraw="${d.id}">Withdraw</button>`);
+
+    const cites = (d.cites || []).length
+      ? d.cites.map((c) => `<span class="cite">${esc(c)}</span>`).join("")
+      : `<span class="none">no file cited — this draft rests on nothing the machine can name</span>`;
+    const unsettled = (d.unsettled || []).length
+      ? `<div class="wi-unsettled">Could not settle: ${esc((d.unsettled || []).join(" · "))}</div>`
+      : "";
+    const body = (d.body || "").trim();
+
+    return `<div class="wi" data-id="${d.id}">
+      <div class="wi-head">
+        <span class="wi-title">${esc(clientLabel(d.client_slug))} · ${esc(d.kind)}</span>
+        <span class="chip ${STATE_CHIP[d.status] || ""}">${esc(STATE_LABEL[d.status] || d.status)}</span>
+        <span class="wi-meta">prepared by ${esc(d.prepared_by_name || "someone")}</span>
+      </div>
+      ${body ? `<div class="wi-body">${esc(body)}</div>` : ""}
+      <div class="wi-prov"><span class="lab">Reads</span>${cites}</div>
+      ${unsettled}
+      ${verbs.length ? `<div class="wi-verbs">${verbs.join("")}</div>` : ""}
+    </div>`;
+  }
+
+  async function loadWork() {
+    const rows = $("work-rows");
+    if (!rows) return;
+    const wanted = state.workStatus || "all";
     try {
-      const awaiting = await get("/api/drafts?status=awaiting_signature");
-      const mine = await get("/api/drafts?status=draft");
-      const rows = [];
-
-      (awaiting.drafts || []).forEach((d) => {
-        const signable = state.person && state.person.role === "partner";
-        rows.push(`<div class="row">
-          <span class="k">${esc(clientLabel(d.client_slug))} · ${esc(d.kind)}<br>
-            <span class="email">prepared by ${esc(d.prepared_by_name)}</span></span>
-          <span class="v dim">${signable ? "" : "waiting"}</span>
-          ${signable ? `<button class="mini" data-sign="${d.id}">Sign</button>` : ""}
-        </div>`);
-      });
-      (mine.drafts || []).forEach((d) => {
-        rows.push(`<div class="row">
-          <span class="k">${esc(clientLabel(d.client_slug))} · ${esc(d.kind)}<br>
-            <span class="email">your draft — not submitted</span></span>
-          <span class="v dim"></span>
-          <button class="mini" data-submit="${d.id}">Submit for signature</button>
-        </div>`);
-      });
-
-      if (!rows.length) { $("drafts-block").hidden = true; return; }
-      $("drafts-block").hidden = false;
-      $("draft-rows").innerHTML = rows.join("");
-      $("draft-rows").querySelectorAll("[data-sign]").forEach((b) =>
+      const data = await get("/api/drafts");
+      const drafts = data.drafts || [];
+      const shown = drafts.filter((d) => wanted === "all" || d.status === wanted);
+      if (!drafts.length) {
+        rows.innerHTML = `<div class="wi"><div class="wi-body">Nothing has been filed on this machine yet. Ask a question in Ask, then file the answer — it lands here with whatever it cited.</div></div>`;
+        return;
+      }
+      if (!shown.length) {
+        rows.innerHTML = `<div class="wi"><div class="wi-body">Nothing in this state: ${
+          drafts.length
+        } item${drafts.length === 1 ? "" : "s"} on the register, none of them ${esc(
+          STATE_LABEL[wanted] || wanted
+        )}.</div></div>`;
+        return;
+      }
+      rows.innerHTML = shown.map(workItem).join("");
+      rows.querySelectorAll("[data-sign]").forEach((b) =>
         b.addEventListener("click", () => draftAction(b.dataset.sign, "sign")));
-      $("draft-rows").querySelectorAll("[data-submit]").forEach((b) =>
+      rows.querySelectorAll("[data-submit]").forEach((b) =>
         b.addEventListener("click", () => draftAction(b.dataset.submit, "submit")));
+      rows.querySelectorAll("[data-withdraw]").forEach((b) =>
+        b.addEventListener("click", () => draftAction(b.dataset.withdraw, "withdraw")));
     } catch (e) {
-      $("drafts-block").hidden = true;
+      rows.innerHTML = `<div class="wi"><div class="wi-unsettled">Could not read the drafts register. This is a failed read, not an empty queue — nothing here is a zero.</div></div>`;
+    }
+  }
+
+  // The Ask view files an answer, then the work view must be current.
+  function loadDrafts() {
+    return loadWork();
+  }
+
+  // ── documents: provenance, aggregated ───────────────────────────────────
+  async function loadDocuments() {
+    const rows = $("doc-rows");
+    if (!rows) return;
+    const head = $("docs-head");
+    try {
+      const data = await get("/api/documents");
+      if (!data.ok) throw new Error(data.error || "could not read the drafts register");
+      const docs = data.documents || [];
+      if (head) {
+        head.textContent = docs.length
+          ? `${docs.length} file${docs.length === 1 ? "" : "s"} · ${data.citations} citation${
+              data.citations === 1 ? "" : "s"
+            } across ${data.drafts} draft${data.drafts === 1 ? "" : "s"}`
+          : "What the machine has read";
+      }
+      if (data.unmeasured) {
+        rows.innerHTML = `<div class="doc">
+          <span class="path" style="color:var(--ink-faint)">—</span>
+          <span class="meta">${esc(data.unmeasured)}</span></div>`;
+        return;
+      }
+      rows.innerHTML = docs.map((d) => {
+        const shownLines = d.lines_shown || [];
+        const lines = shownLines.length
+          ? ` · line${shownLines.length === 1 ? "" : "s"} ${esc(shownLines.join(", "))}`
+          : "";
+        const clients = d.clients && d.clients.length
+          ? esc(d.clients.join(", "))
+          : "practice";
+        return `<div class="doc">
+          <span class="path">${esc(d.path)}</span>
+          <span class="meta">${d.citations} citation${d.citations === 1 ? "" : "s"}${lines} · ${clients}</span>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      rows.innerHTML = `<div class="doc">
+        <span class="path" style="color:var(--red)">—</span>
+        <span class="meta">could not read the record — a failed read, not an empty library</span></div>`;
     }
   }
 
