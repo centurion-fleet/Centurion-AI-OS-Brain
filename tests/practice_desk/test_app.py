@@ -678,6 +678,47 @@ def test_the_deadline_pane_is_measured_once_a_library_exists(settings, tmp_path)
     run(scenario())
 
 
+# ── capability by role ──────────────────────────────────────────────────────
+
+
+def test_a_non_partner_browser_session_is_narrowed_before_it_reaches_the_brain(settings):
+    """A junior must not be able to ask the Centurion for a shell on the box.
+
+    Exercised directly on the stream helper rather than through two browsers: what
+    is being tested is the body the desk sends, and a two-client scenario spends
+    its difficulty on test plumbing instead of on the rule.
+    """
+    brain = FakeBrain()
+    brain_app = web.Application()
+    brain_app.router.add_post("/v1/chat/completions", brain.chat)
+    brain_server = TestServer(brain_app)
+
+    store = st.PracticeStore(settings.db_path)
+    partner = store.admit_person(name="Adrian", email="a@firm.test", role="partner")
+    associate = store.admit_person(name="Junior", email="j@firm.test", role="associate")
+
+    async def scenario():
+        await brain_server.start_server()
+        try:
+            settings.brain_url = str(brain_server.make_url("")).rstrip("/")
+            desk = desk_app.Desk(settings=settings, store=store)
+
+            async for _ in desk_app._stream_from_brain(desk, partner, [{"role": "user", "content": "hi"}]):
+                pass
+            async for _ in desk_app._stream_from_brain(desk, associate, [{"role": "user", "content": "hi"}]):
+                pass
+        finally:
+            await brain_server.close()
+
+    run(scenario())
+
+    partner_body, junior_body = brain.requests[0], brain.requests[1]
+    assert "toolsets" not in partner_body, "a partner keeps the platform's set"
+    assert sorted(junior_body["toolsets"]) == sorted(desk_app.PRACTICE_TOOLSETS)
+    for forbidden in ("terminal", "code_execution", "cronjob", "delegation"):
+        assert forbidden not in junior_body["toolsets"]
+
+
 # ── the stream ──────────────────────────────────────────────────────────────
 
 

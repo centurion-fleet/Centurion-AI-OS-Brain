@@ -198,6 +198,13 @@ async def _json(request: web.Request) -> Dict[str, Any]:
     return payload
 
 
+# What a browser session is allowed to reach, by role. A partner at the machine
+# gets the platform's default set; everybody else is narrowed to reading and
+# drafting, so a junior cannot ask the Centurion to run a shell command on the
+# practice's own box. The narrowing is an intersection with what the server has
+# enabled — it can never add a capability.
+PRACTICE_TOOLSETS = ("web", "file", "skills", "memory")
+
 # Who may change who exists. A manager can run client work; only a partner or an
 # administrator may add, suspend or revoke a person.
 PEOPLE_ADMINS = ("partner", "administrator")
@@ -884,6 +891,8 @@ async def _stream_from_brain(desk: Desk, person: Person, history: list):
         "stream": True,
         "messages": [{"role": "system", "content": system}, *history],
     }
+    if person.role != "partner":
+        body["toolsets"] = list(PRACTICE_TOOLSETS)
     headers = {"Content-Type": "application/json"}
     if settings.brain_key:
         headers["Authorization"] = f"Bearer {settings.brain_key}"

@@ -941,6 +941,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_start_callback=None,
         tool_complete_callback=None,
         gateway_session_key: Optional[str] = None,
+        toolsets: Optional[List[str]] = None,
     ) -> Any:
         """
         Create an AIAgent instance using the gateway's runtime config.
@@ -967,6 +968,21 @@ class APIServerAdapter(BasePlatformAdapter):
 
         user_config = _load_gateway_config()
         enabled_toolsets = sorted(_get_platform_tools(user_config, "api_server"))
+
+        # A caller may NARROW the platform's toolset list for one request — it can
+        # never widen it. The intersection is deliberate: a client that asks for
+        # "terminal" on a platform where terminal is not enabled gets nothing, and
+        # there is no request body that can add a capability this server does not
+        # already have.
+        if toolsets:
+            requested = {str(name).strip() for name in toolsets if str(name).strip()}
+            narrowed = sorted(set(enabled_toolsets) & requested)
+            if not narrowed:
+                raise ValueError(
+                    "None of the requested toolsets are enabled on this server: "
+                    + ", ".join(sorted(requested))
+                )
+            enabled_toolsets = narrowed
 
         max_iterations = int(os.getenv("CENTURION_MAX_ITERATIONS", "90"))
 
@@ -1495,6 +1511,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
+                toolsets=body.get("toolsets") if isinstance(body.get("toolsets"), list) else None,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -1514,6 +1531,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=system_prompt,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
+                toolsets=body.get("toolsets") if isinstance(body.get("toolsets"), list) else None,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -2527,6 +2545,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_complete_callback=_on_tool_complete,
                 agent_ref=agent_ref,
                 gateway_session_key=gateway_session_key,
+                toolsets=body.get("toolsets") if isinstance(body.get("toolsets"), list) else None,
             ))
             # Ensure SSE drain loops can terminate without relying on polling
             # agent_task.done(), which can race with queue timeout checks.
@@ -2560,6 +2579,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 ephemeral_system_prompt=instructions,
                 session_id=session_id,
                 gateway_session_key=gateway_session_key,
+                toolsets=body.get("toolsets") if isinstance(body.get("toolsets"), list) else None,
             )
 
         idempotency_key = request.headers.get("Idempotency-Key")
@@ -3024,6 +3044,7 @@ class APIServerAdapter(BasePlatformAdapter):
         tool_complete_callback=None,
         agent_ref: Optional[list] = None,
         gateway_session_key: Optional[str] = None,
+        toolsets: Optional[List[str]] = None,
     ) -> tuple:
         """
         Create an agent and run a conversation in a thread executor.
@@ -3047,6 +3068,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 tool_start_callback=tool_start_callback,
                 tool_complete_callback=tool_complete_callback,
                 gateway_session_key=gateway_session_key,
+                toolsets=toolsets,
             )
             if agent_ref is not None:
                 agent_ref[0] = agent
