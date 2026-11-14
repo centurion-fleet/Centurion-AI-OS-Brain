@@ -617,20 +617,75 @@ async def clients_list(request: web.Request) -> web.Response:
         )
     from centurion_cli.practice_desk import deadlines as dl
 
+    person = request.app[DESK_KEY].store.resolve_session(_session_token(request))
+    if person is None:
+        raise web.HTTPUnauthorized(
+            text=json.dumps({"ok": False, "error": "Not signed in."}),
+            content_type="application/json",
+        )
+
     records = dl.load_library(Path(library))
+    store = desk.store
+    visible, hidden = [], 0
+    for r in records:
+        if not store.may_see_client(person, r.slug):
+            hidden += 1
+            continue
+        visible.append(
+            {
+                "slug": r.slug,
+                "name": r.name,
+                "entity": r.entity,
+                "year_end": r.year_end.isoformat() if r.year_end else None,
+                "assigned": [p.name for p in store.assignees(r.slug)],
+            }
+        )
     return web.json_response(
         {
             "ok": True,
-            "assignment": "every active person may see every client thread",
-            "clients": [
-                {
-                    "slug": r.slug,
-                    "name": r.name,
-                    "entity": r.entity,
-                    "year_end": r.year_end.isoformat() if r.year_end else None,
-                }
-                for r in records
-            ],
+            "assignment": "partners see every client; everyone else sees only what they are assigned to",
+            "clients": visible,
+            "hidden_count": hidden,
+        }
+    )
+
+
+async def client_assign(request: web.Request) -> web.Response:
+    """A partner decides who works on which client.
+
+    Partner only, deliberately: a manager can run the work but not hand out the
+    file, and an administrator runs the machine rather than the client list.
+    """
+    person = await _require_person(request)
+    if person.role != "partner":
+        raise DeskError(
+            f"Only a partner can assign a client. You are signed in as {person.role}."
+        )
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+
+    target = desk.store.get_person(str(payload.get("person", "")))
+    if target is None:
+        raise DeskError("That person is not on this machine.")
+    client_id = str(payload.get("client", "")).strip()
+    if not client_id:
+        raise DeskError("Name the client you are assigning.")
+
+    action = str(payload.get("action", "assign"))
+    if action == "assign":
+        desk.store.assign(client_id, target.id, by=person.id)
+    elif action == "unassign":
+        desk.store.unassign(client_id, target.id, by=person.id)
+    else:
+        raise DeskError("Action must be assign or unassign.")
+
+    desk.store.record(person.id, f"client_{action}", scope="client", client_id=client_id,
+                      detail=target.name)
+    return web.json_response(
+        {
+            "ok": True,
+            "client": client_id,
+            "assigned": [p.name for p in desk.store.assignees(client_id)],
         }
     )
 
@@ -675,6 +730,7 @@ async def thread(request: web.Request) -> web.Response:
     person = await _require_person(request)
     desk: Desk = request.app[DESK_KEY]
     scope, client_id = _scope_from(request)
+    _require_client_access(desk, person, scope, client_id)
     conv = desk.store.ensure_conversation(person=person, scope=scope, client_id=client_id)
     return web.json_response(
         {
@@ -687,6 +743,22 @@ async def thread(request: web.Request) -> web.Response:
             },
             "messages": _decorate(desk, desk.store.messages(conv["id"])),
         }
+    )
+
+
+def _require_client_access(desk: "Desk", person: Person, scope: str, client_id: Optional[str]) -> None:
+    """The Firm rule at the door, so the chat route cannot be the way round it."""
+    if scope != "client":
+        return
+    if not client_id:
+        raise DeskError("A client thread must name its client.")
+    if desk.store.may_see_client(person, client_id):
+        return
+    desk.store.record(person.id, "client_access_refused", scope=scope, client_id=client_id,
+                      detail=f"role {person.role}")
+    raise DeskError(
+        f"You are not assigned to {client_id}. A partner can assign you, or answer "
+        "in your own thread."
     )
 
 
@@ -732,6 +804,7 @@ async def chat(request: web.Request) -> web.StreamResponse:
         raise DeskError("That message is too long for one turn.")
 
     scope, client_id = _scope_from(request)
+    _require_client_access(desk, person, scope, client_id)
     conv = desk.store.ensure_conversation(person=person, scope=scope, client_id=client_id)
     desk.store.append_message(conv["id"], role="user", content=message, person_id=person.id)
     desk.store.record(person.id, "asked", scope=conv["scope"], detail=message[:200])
@@ -918,6 +991,7 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_get("/api/thread", thread)
     app.router.add_get("/api/deadlines", deadline_list)
     app.router.add_get("/api/clients", clients_list)
+    app.router.add_post("/api/clients/assign", client_assign)
     app.router.add_get("/api/people", people_list)
     app.router.add_post("/api/people/invite", people_invite)
     app.router.add_post("/api/people/status", people_status)

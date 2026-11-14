@@ -191,7 +191,17 @@ class PracticeStore:
                     ON messages(conversation_id, id);
                 CREATE INDEX IF NOT EXISTS idx_sessions_expiry
                     ON sessions(expires_at);
+                CREATE TABLE IF NOT EXISTS assignments (
+                    client_slug TEXT NOT NULL,
+                    person_id   TEXT NOT NULL REFERENCES people(id),
+                    created_at  REAL NOT NULL,
+                    created_by  TEXT,
+                    PRIMARY KEY (client_slug, person_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at);
+                CREATE INDEX IF NOT EXISTS idx_assign_person
+                    ON assignments(person_id);
                 """
             )
             row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
@@ -510,6 +520,65 @@ class PracticeStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    # ── assignments: who may see which client ───────────────────────────────
+
+    def assign(self, client_slug: str, person_id: str, *, by: Optional[str] = None) -> None:
+        slug = (client_slug or "").strip()
+        if not slug:
+            raise DeskError("An assignment needs a client.")
+        if self.get_person(person_id) is None:
+            raise DeskError("That person is not on this machine.")
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO assignments(client_slug, person_id, created_at, created_by)"
+                " VALUES (?, ?, ?, ?)",
+                (slug, person_id, _now(), by),
+            )
+            self._audit(conn, by, "client_assigned", client_id=slug, detail=person_id)
+
+    def unassign(self, client_slug: str, person_id: str, *, by: Optional[str] = None) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM assignments WHERE client_slug = ? AND person_id = ?",
+                (client_slug, person_id),
+            )
+            self._audit(conn, by, "client_unassigned", client_id=client_slug, detail=person_id)
+
+    def assignees(self, client_slug: str) -> List[Person]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT p.* FROM people p JOIN assignments a ON a.person_id = p.id"
+                " WHERE a.client_slug = ? AND p.status != 'departed' ORDER BY p.name",
+                (client_slug,),
+            ).fetchall()
+        return [_person(r) for r in rows]
+
+    def assignments_for(self, person_id: str) -> List[str]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT client_slug FROM assignments WHERE person_id = ? ORDER BY client_slug",
+                (person_id,),
+            ).fetchall()
+        return [r["client_slug"] for r in rows]
+
+    def may_see_client(self, person: Person, client_slug: str) -> bool:
+        """The Firm rule, in one place.
+
+        A partner sees every client — that is what a partner is. Everybody else
+        sees only what they are assigned to. An administrator sees none of it:
+        the role runs the machine, not the files.
+
+        Deliberately fails closed on an unknown role, and a missing assignment is
+        a refusal rather than a default.
+        """
+        if person.role == "partner":
+            return True
+        if person.role == "administrator":
+            return False
+        if not client_slug:
+            return False
+        return client_slug in self.assignments_for(person.id)
+
     # ── conversations ───────────────────────────────────────────────────────
 
     def conversation(
@@ -525,6 +594,8 @@ class PracticeStore:
             return None
         conv = dict(row)
         if conv["scope"] == "private" and conv["owner_id"] != person.id:
+            return None
+        if conv["scope"] == "client" and not self.may_see_client(person, conv.get("client_id")):
             return None
         return conv
 

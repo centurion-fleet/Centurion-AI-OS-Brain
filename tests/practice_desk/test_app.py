@@ -404,6 +404,18 @@ def test_a_client_thread_is_shared_and_carries_who_said_what(settings, tmp_path)
             assert len(clients["clients"]) == 8
             slug = clients["clients"][0]["slug"]
 
+            # A manager is not assigned yet, so the file is not hers to read.
+            refused = await associate_client.get(f"/api/thread?scope=client&client={slug}")
+            assert refused.status == 400
+            assert "not assigned" in (await refused.json())["error"]
+
+            # The partner assigns her, and only then does the thread open.
+            assigned = await partner_client.post(
+                "/api/clients/assign",
+                json={"client": slug, "person": _person.id, "action": "assign"},
+            )
+            assert assigned.status == 200, await assigned.json()
+
             # The partner writes in the shared thread.
             await partner_client.post(
                 f"/api/chat?scope=client&client={slug}", json={"message": "What is due here?"}
@@ -437,6 +449,180 @@ def test_a_client_thread_without_a_client_is_refused(settings):
             assert "must name its client" in (await response.json())["error"]
         finally:
             await client.close()
+
+    run(scenario())
+
+
+# ── the Firm rule: who may see which client ─────────────────────────────────
+
+
+def test_an_unassigned_associate_is_refused_at_the_door_and_the_attempt_is_recorded(
+    settings, tmp_path
+):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        junior_client = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            junior, token = _add_person_with_session(
+                boss, name="Junior", email="junior@firm.test", role="associate"
+            )
+            junior_client.session.cookie_jar.update_cookies({"pd_session": token})
+            slug = "hargreaves-and-sons"
+
+            # Reading is refused.
+            read = await junior_client.get(f"/api/thread?scope=client&client={slug}")
+            assert read.status == 400
+            assert "not assigned" in (await read.json())["error"]
+
+            # And so is writing — the chat route is not a way round the refusal.
+            write = await junior_client.post(
+                f"/api/chat?scope=client&client={slug}", json={"message": "hello"}
+            )
+            assert write.status == 400
+
+            # The refusal itself is on the record, with the person's role.
+            store = boss.server.app[desk_app.DESK_KEY].store
+            actions = [(r["action"], r["detail"]) for r in store.audit_log(50)]
+            assert ("client_access_refused", "role associate") in actions
+        finally:
+            await boss.close()
+            await junior_client.close()
+
+    run(scenario())
+
+
+def test_assignment_opens_the_thread_and_unassignment_closes_it_again(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        staff = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            worker, token = _add_person_with_session(
+                boss, name="Worker", email="worker@firm.test", role="associate"
+            )
+            staff.session.cookie_jar.update_cookies({"pd_session": token})
+            slug = "millfield-joinery"
+
+            await boss.post(
+                "/api/clients/assign",
+                json={"client": slug, "person": worker.id, "action": "assign"},
+            )
+            opened = await staff.get(f"/api/thread?scope=client&client={slug}")
+            assert opened.status == 200
+            assert (await opened.json())["conversation"]["scope"] == "client"
+
+            await boss.post(
+                "/api/clients/assign",
+                json={"client": slug, "person": worker.id, "action": "unassign"},
+            )
+            closed = await staff.get(f"/api/thread?scope=client&client={slug}")
+            assert closed.status == 400
+        finally:
+            await boss.close()
+            await staff.close()
+
+    run(scenario())
+
+
+def test_an_administrator_sees_no_client_files_even_when_assigned(settings, tmp_path):
+    """The role runs the machine. Giving it client access is how confidentiality
+    failures start, so the assignment does not open a door it should not."""
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        it_client = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            it_person, token = _add_person_with_session(
+                boss, name="IT", email="it@firm.test", role="administrator"
+            )
+            it_client.session.cookie_jar.update_cookies({"pd_session": token})
+            await boss.post(
+                "/api/clients/assign",
+                json={"client": "fenwick-farm", "person": it_person.id, "action": "assign"},
+            )
+            refused = await it_client.get("/api/thread?scope=client&client=fenwick-farm")
+            assert refused.status == 400
+
+            listed = await (await it_client.get("/api/clients")).json()
+            assert listed["clients"] == []
+            assert listed["hidden_count"] == 8
+        finally:
+            await boss.close()
+            await it_client.close()
+
+    run(scenario())
+
+
+def test_only_a_partner_may_assign_a_client(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        manager_client = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            manager, token = _add_person_with_session(
+                boss, name="Manager", email="manager@firm.test", role="manager"
+            )
+            manager_client.session.cookie_jar.update_cookies({"pd_session": token})
+            response = await manager_client.post(
+                "/api/clients/assign",
+                json={"client": "quill-street-studio", "person": manager.id, "action": "assign"},
+            )
+            assert response.status == 400
+            assert "Only a partner" in (await response.json())["error"]
+        finally:
+            await boss.close()
+            await manager_client.close()
+
+    run(scenario())
+
+
+def test_the_client_list_does_not_advertise_files_the_person_cannot_open(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        staff = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            worker, token = _add_person_with_session(
+                boss, name="Worker", email="worker@firm.test", role="associate"
+            )
+            staff.session.cookie_jar.update_cookies({"pd_session": token})
+            await boss.post(
+                "/api/clients/assign",
+                json={"client": "brook-house-dental", "person": worker.id, "action": "assign"},
+            )
+
+            mine = await (await staff.get("/api/clients")).json()
+            assert [c["slug"] for c in mine["clients"]] == ["brook-house-dental"]
+            assert mine["hidden_count"] == 7
+            assert mine["clients"][0]["assigned"] == ["Worker"]
+
+            everything = await (await boss.get("/api/clients")).json()
+            assert len(everything["clients"]) == 8
+            assert everything["hidden_count"] == 0
+        finally:
+            await boss.close()
+            await staff.close()
 
     run(scenario())
 

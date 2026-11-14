@@ -378,6 +378,15 @@
       <h4>Client</h4>
       <p id="firm-client">No client attached — this is your private thread.</p>
     </div>
+    <div class="block" id="firm-assign-block" hidden>
+      <h4>Assigned</h4>
+      <p id="firm-assignees">nobody yet</p>
+      <div id="firm-assign-control" hidden style="margin-top:10px;display:flex;gap:6px">
+        <select id="assign-person"
+                style="flex:1;min-width:0;background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:2px;padding:6px 8px;font-size:11.5px"></select>
+        <button class="mini" id="assign-btn">Assign</button>
+      </div>
+    </div>
     <div class="block">
       <h4>Drafts awaiting signature</h4>
       <p class="flag">Not measured — no drafts register on this machine yet.</p>
@@ -674,6 +683,7 @@
     renderMessages();
     $("firm-scope").textContent = state.scope === "client"
       ? (state.clientName || "Client") : "Private";
+    updateAssignPanel();
     $("firm-client").innerHTML = state.scope === "client"
       ? `<b>${esc(state.clientName || "Client")}</b> — shared with everyone on this machine. `
         + `Nobody is assigned yet: the assignment register is not built, so this thread is `
@@ -681,17 +691,75 @@
       : "No client attached — this is your private thread.";
   }
 
+  let assignRoster = [];
+
+  async function updateAssignPanel() {
+    const block = $("firm-assign-block");
+    if (state.scope !== "client" || !state.client) { block.hidden = true; return; }
+    block.hidden = false;
+    const row = assignRoster.find((c) => c.slug === state.client);
+    const assigned = (row && row.assigned) || [];
+    const isPartner = state.person && state.person.role === "partner";
+    $("firm-assignees").textContent = assigned.length
+      ? assigned.join(", ")
+      : (isPartner
+          ? "nobody yet — you can open it because you are a partner; nobody else can"
+          : "nobody yet");
+    $("firm-assign-control").hidden = !isPartner;
+    if (!isPartner) return;
+
+    try {
+      const people = await get("/api/people");
+      const options = (people.people || [])
+        .filter((p) => p.role !== "partner" && p.status !== "departed")
+        .map((p) => `<option value="${p.id}">${esc(p.name)} — ${esc(p.role)}</option>`)
+        .join("");
+      $("assign-person").innerHTML = options || "<option value=''>nobody to assign</option>";
+    } catch (e) { /* a non-partner never reaches the control */ }
+  }
+
+  $("assign-btn").addEventListener("click", async () => {
+    const personId = $("assign-person").value;
+    if (!personId) return;
+    const row = assignRoster.find((c) => c.slug === state.client);
+    const already = ((row && row.assigned) || []);
+    const who = $("assign-person").selectedOptions[0].textContent.split(" — ")[0];
+    const action = already.includes(who) ? "unassign" : "assign";
+    try {
+      await post("/api/clients/assign",
+        { client: state.client, person: personId, action });
+      await loadClients();
+      await updateAssignPanel();
+    } catch (err) {
+      alert(err.message || "That did not work.");
+    }
+  });
+
   async function loadClients() {
     try {
       const data = await get("/api/clients");
-      const clients = data.clients || [];
-      if (!clients.length) return;
+      assignRoster = data.clients || [];
+      const clients = assignRoster;
+      if (data.hidden_count) {
+        $("clients-label").hidden = false;
+        $("clients-label").textContent =
+          `Clients · ${data.hidden_count} not assigned to you`;
+      }
+      if (!clients.length) {
+        $("client-list").innerHTML = data.hidden_count
+          ? `<div class="hint" style="padding:6px 12px">No client is assigned to you yet. Ask a partner.</div>`
+          : "";
+        return;
+      }
       $("clients-label").hidden = false;
       $("client-list").innerHTML = clients.map((c) => `
         <button class="conv client" data-slug="${esc(c.slug)}" data-name="${esc(c.name)}"
                 aria-current="false">
           ${esc(c.name)}
-          <small>${esc(c.entity || "client")} · shared with the practice</small>
+          <small>${esc(c.entity || "client")} · ${
+            c.assigned && c.assigned.length
+              ? "assigned: " + esc(c.assigned.join(", "))
+              : "not assigned to anyone"}</small>
         </button>`).join("");
       $("client-list").querySelectorAll(".client").forEach((btn) => {
         btn.addEventListener("click", async () => {
