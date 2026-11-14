@@ -6,7 +6,8 @@ command replies, restart-drain notices.  Agent-generated output, log lines,
 error tracebacks, tool outputs, and slash-command descriptions all stay in
 English.
 
-Catalog files live under ``locales/<lang>.yaml`` at the repo root.  Each
+Catalog files live under ``agent/locales/<lang>.yaml`` -- inside the package,
+so a wheel ships them with the code that reads them.  Each
 catalog is a flat dict keyed by dotted paths (e.g. ``approval.choose`` or
 ``gateway.approval_expired``).  Missing keys fall back to English; if English
 is missing too, the key path itself is returned so a broken catalog never
@@ -26,7 +27,7 @@ Language resolution order:
     4. ``"en"`` (baseline)
 
 Supported languages live in :data:`SUPPORTED_LANGUAGES` -- a catalogue file
-``locales/<lang>.yaml`` must exist for every code in that tuple, and
+``agent/locales/<lang>.yaml`` must exist for every code in that tuple, and
 ``tests/agent/test_i18n.py`` asserts full key parity with English.  Unknown
 values fall back to en.
 """
@@ -154,11 +155,14 @@ _catalog_lock = threading.Lock()
 def _locales_dir() -> Path:
     """Return the directory containing locale YAML files.
 
-    Lives next to the repo root so both the bundled install and editable
-    checkouts find it without PYTHONPATH gymnastics.
+    Lives *inside* the ``agent`` package on purpose. It used to sit at the repo
+    root, which works from a checkout and from the RPM (both ship the whole
+    source tree) but not from a wheel: root-level directories are not package
+    data, so ``pip install`` produced an ``agent/i18n.py`` with no catalogs
+    beside it. Nothing crashed -- :func:`t` fell back to English and the
+    installed Brain quietly believed it was translated.
     """
-    # agent/i18n.py -> agent/ -> repo root
-    return Path(__file__).resolve().parent.parent / "locales"
+    return Path(__file__).resolve().parent / "locales"
 
 
 def _normalize_lang(value: Any) -> str:

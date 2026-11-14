@@ -237,6 +237,9 @@ py-modules = ["run_agent", "model_tools", "toolsets", "batch_runner", "trajector
 
 [tool.setuptools.package-data]
 centurion_cli = ["web_dist/**/*", "tui_dist/**/*", "scripts/install.sh", "scripts/install.ps1"]
+# The i18n catalogs live inside the agent package so a wheel ships them; at the
+# repo root they were silently absent from any pip install (7.1.0).
+agent = ["locales/*.yaml"]
 gateway = ["assets/**/*"]
 plugins = [
   "*/dashboard/manifest.json",
