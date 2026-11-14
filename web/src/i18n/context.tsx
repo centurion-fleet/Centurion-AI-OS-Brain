@@ -26,6 +26,7 @@ import { ru } from "./ru";
 import { hu } from "./hu";
 import { nl } from "./nl";
 import { pl } from "./pl";
+import { setCurrentLocale } from "./current";
 import { api } from "@/lib/api";
 
 const TRANSLATIONS: Record<Locale, Translations> = {
@@ -166,6 +167,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  // Non-React code (date formatting, plugins) reads the locale through this
+  // pointer, so every change — mount, server hydration, menu click — has to
+  // write it. It is derived state, so it is set during render rather than in
+  // an effect: a wrong-language "35m ago" for one frame is still a bug.
+  setCurrentLocale(locale, TRANSLATIONS[locale]);
+
+  // Tell assistive tech and the browser which language this page is in --
+  // otherwise a Dutch interface is announced in English phonemes and the
+  // hyphenation and spell-check follow the wrong language too.
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+  }
 
   const value: I18nContextValue = {
     locale,

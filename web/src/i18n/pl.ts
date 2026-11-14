@@ -417,7 +417,7 @@ export const pl: Translations = {
     expiresIn: "wygasa za {time}",
   },
   language: {
-    switchTo: "Przełącz na chiński",
+    switchTo: "Zmień język",
   },
   theme: {
     title: "Motyw",

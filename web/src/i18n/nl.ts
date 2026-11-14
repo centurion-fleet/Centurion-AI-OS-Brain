@@ -420,7 +420,7 @@ export const nl: Translations = {
     expiresIn: "verloopt over {time}",
   },
   language: {
-    switchTo: "Overschakelen naar Chinees",
+    switchTo: "Taal wijzigen",
   },
   theme: {
     title: "Thema",

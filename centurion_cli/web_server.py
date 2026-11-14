@@ -4906,9 +4906,15 @@ def start_server(
 
     global _DASHBOARD_EMBEDDED_CHAT_ENABLED, _DASHBOARD_INSECURE_BINDING
     _DASHBOARD_EMBEDDED_CHAT_ENABLED = embedded_chat
+
+    # Defined BEFORE it is read. This tuple used to be assigned three lines
+    # below the first use, which makes the name local to the function and
+    # raises UnboundLocalError before a socket is ever opened -- so
+    # `centurion web` could not start the dashboard at all. Found 14 Nov 2026
+    # while opening the UI to review the language selector.
+    _LOCALHOST = ("127.0.0.1", "localhost", "::1")
     _DASHBOARD_INSECURE_BINDING = host not in _LOCALHOST
 
-    _LOCALHOST = ("127.0.0.1", "localhost", "::1")
     if host not in _LOCALHOST and not allow_public:
         raise SystemExit(
             f"Refusing to bind to {host} — the dashboard exposes API keys "
