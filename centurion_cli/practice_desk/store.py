@@ -332,6 +332,48 @@ class PracticeStore:
                 conn.execute("DELETE FROM sessions WHERE person_id = ?", (person_id,))
             self._audit(conn, by, f"person_{status}", detail=person_id)
 
+    def set_role(self, person_id: str, role: str, *, by: Optional[str] = None) -> Person:
+        """Change what a person is allowed to be.
+
+        Two refusals, both about the practice staying operable rather than about
+        permissions: the last active partner cannot be demoted (there would be
+        nobody left who may sign), and an unknown role is not stored.
+
+        A role change takes effect on the next request because the role is read
+        from the people row on every session resolve — no cached copy to expire.
+        """
+        if role not in ROLES:
+            raise DeskError(f"Unknown role: {role}")
+        person = self.get_person(person_id)
+        if person is None:
+            raise DeskError("No such person on this machine.")
+
+        # "May sign" is not the same as "is active right now": a person who has
+        # been admitted and invited but not yet enrolled will be able to sign
+        # the moment they do. Only a suspended or departed seat is truly gone
+        # from the signing pool, so those are the states that do not count.
+        signing_states = ("active", "invited")
+        if person.role == "partner" and role != "partner" and person.status in signing_states:
+            with self.connect() as conn:
+                others = conn.execute(
+                    "SELECT COUNT(*) FROM people WHERE role = 'partner'"
+                    " AND status IN ('active', 'invited') AND id != ?",
+                    (person_id,),
+                ).fetchone()[0]
+            if not others:
+                raise DeskError(
+                    f"{person.name} is the last partner who can sign. Demoting them "
+                    "would leave the practice with nobody who may sign — admit or "
+                    "promote another partner first."
+                )
+
+        with self.connect() as conn:
+            conn.execute("UPDATE people SET role = ? WHERE id = ?", (role, person_id))
+            self._audit(
+                conn, by, "person_role_changed", detail=f"{person_id}: {person.role} → {role}"
+            )
+        return self.get_person(person_id)  # type: ignore[return-value]
+
     # ── invitations ─────────────────────────────────────────────────────────
 
     def issue_invitation(self, person_id: str, *, by: Optional[str] = None) -> str:

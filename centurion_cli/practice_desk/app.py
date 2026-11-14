@@ -593,6 +593,31 @@ async def people_status(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "person": _person_payload(desk.store.get_person(target.id))})
 
 
+async def people_role(request: web.Request) -> web.Response:
+    """Change what a person is allowed to be.
+
+    Partner-only, and deliberately not a people-admin action. An administrator
+    runs the machine; if an administrator could set roles they could promote
+    themselves to partner, which hands them client files and the signature.
+    That is privilege escalation with a nice label on it, so it is refused here
+    rather than left to a UI that happens to hide the button.
+    """
+    person = await _require_person(request)
+    if person.role != "partner":
+        raise DeskError(
+            f"Only a partner may change a role. You are signed in as {person.role}."
+        )
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+    target = desk.store.get_person(str(payload.get("id", "")))
+    if target is None:
+        raise DeskError("That person is not on this machine.")
+
+    role = str(payload.get("role", "")).strip().lower()
+    updated = desk.store.set_role(target.id, role, by=person.id)
+    return web.json_response({"ok": True, "person": _person_payload(updated)})
+
+
 async def people_revoke(request: web.Request) -> web.Response:
     person = await _require_person(request)
     _require_people_admin(person)
@@ -603,6 +628,39 @@ async def people_revoke(request: web.Request) -> web.Response:
         raise DeskError("That person is not on this machine.")
     desk.store.revoke_all_credentials(target.id, by=person.id)
     return web.json_response({"ok": True, "person": _person_payload(target)})
+
+
+async def audit_view(request: web.Request) -> web.Response:
+    """The record a partner is entitled to read: who did what, when.
+
+    Names are resolved here rather than left as ids, because a row of opaque
+    tokens is a register nobody reads. A person who has left still has a name
+    on their rows; an id that no longer resolves is shown as `departed seat`
+    rather than silently blanked.
+    """
+    person = await _require_person(request)
+    _require_people_admin(person)
+    desk: Desk = request.app[DESK_KEY]
+    try:
+        limit = max(1, min(200, int(request.query.get("limit", "40"))))
+    except ValueError:
+        limit = 40
+
+    names = {p.id: p.name for p in desk.store.list_people(include_departed=True)}
+    entries = []
+    for row in desk.store.audit_log(limit=limit):
+        who = row.get("person_id")
+        entries.append(
+            {
+                "at": row.get("at"),
+                "who": names.get(who, "departed seat") if who else "the machine",
+                "action": row.get("action") or "",
+                "scope": row.get("scope"),
+                "client": row.get("client_id"),
+                "detail": row.get("detail"),
+            }
+        )
+    return web.json_response({"ok": True, "entries": entries})
 
 
 async def clients_list(request: web.Request) -> web.Response:
@@ -1060,8 +1118,10 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_post("/api/drafts", draft_create)
     app.router.add_post("/api/drafts/action", draft_action)
     app.router.add_get("/api/people", people_list)
+    app.router.add_get("/api/audit", audit_view)
     app.router.add_post("/api/people/invite", people_invite)
     app.router.add_post("/api/people/status", people_status)
+    app.router.add_post("/api/people/role", people_role)
     app.router.add_post("/api/people/revoke", people_revoke)
     app.router.add_post("/api/chat", chat)
 

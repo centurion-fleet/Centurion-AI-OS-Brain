@@ -1,12 +1,11 @@
 # Practice desk
 
 The signed-in browser client for the Practice edition. One named person per
-session, a passkey instead of a password, and a record of who asked what.
+session, a passkey instead of a password, and a register of who asked what.
 
-This is **Build A** of `~/centurion/business/SIGNUM-WEB-DESIGN-v1.0.pdf`: one
-user, one passkey, one private thread, computed deadlines, and the register that
-makes a seat a real thing. Client threads and the Firm panel are Build B and are
-not here.
+Built as Build A and Build B of `~/centurion/business/SIGNUM-WEB-DESIGN-v1.0.pdf`:
+one user and one private thread, then shared client threads, the assignment
+register, the drafts queue a partner signs from, and capability narrowed by role.
 
 ## Run it
 
@@ -29,9 +28,9 @@ on PATH.
 
 Open the link, enrol a passkey, and the desk opens on **Today**.
 
-Other verbs: `people`, `deadlines`, `suspend --email … [--status …]`,
-`revoke --email …`, `audit`. `--db PATH` on any verb points at a different
-register.
+Other verbs: `people`, `role --email … --role …`, `deadlines`,
+`suspend --email … [--status …]`, `revoke --email …`, `audit`.
+`--db PATH` on any verb points at a different register.
 
 ## ⚠️ The one deployment fact that surprises everybody
 
@@ -45,22 +44,53 @@ hostname with a real certificate (or a private CA installed on their machines),
 reached over the practice network or a private link — never published to the
 open internet.
 
+This is the only thing blocking a second person on their own machine. It is a
+naming decision (one hostname), not a code problem.
+
 ## What the licence decides, not this code
 
 Seats. `store.capacity_refusal()` asks `current_edition().refusal(...)`, so the
 sentence a partner reads when they try to add an eleventh person is the same
 sentence that appears in the agreement. There is no second copy of the number.
 
+On a Brain edition (one named user) the second invite is refused in the licence's
+own words: *"the second user is a second machine, not a setting."*
+
+## Two things a role must not be able to do
+
+**An administrator cannot grant a role.** Administrators keep the machine; a
+partner holds the signature and the client files. A role route open to
+administrators would let the machine's keeper promote themselves — privilege
+escalation with a friendly label — so `/api/people/role` refuses anyone who is
+not a partner, in the route, not only in the UI.
+
+**The last partner who can sign cannot be demoted.** The refusal names the
+consequence rather than the rule: *"Demoting them would leave the practice with
+nobody who may sign."* A partner who has been invited but not yet enrolled counts
+as a signer, because they can sign the moment they enrol; a suspended one does
+not.
+
+## The record
+
+Every admission, invitation, role change, suspension, assignment, refusal,
+prepared draft and signature is written to `audit` and readable two ways:
+
+- **In the desk**, under *People → The record*, newest first, with names resolved
+  rather than ids. Someone who has left keeps their name on their rows; an id
+  that no longer resolves prints as `departed seat`, never blank.
+- **From the terminal**, `centurion practice-desk audit --limit 40`.
+
+A refusal is recorded too — including a refusal to open a client's files. The
+attempt is the interesting part, not only the success.
+
 ## What is deliberately missing
 
-- **Client threads and the Firm panel.** Build B, and they follow the drafts
-  register — a Firm panel with no drafts to show is empty furniture.
-- **Drafts awaiting signature / clients chased / hours returned.** The panes
-  return `null` with a stated reason rather than a zero. A confident zero over a
-  register that was never written is a lie a partner will act on.
-- **Per-role toolsets.** A browser session currently carries the Brain's full
-  toolset. Narrowing it by role (no shell, no writes outside the library, for a
-  non-partner) is a design decision awaiting a ruling, not an oversight.
+- **Clients chased / hours returned.** The panes return `null` with a stated
+  reason rather than a zero. There is no correspondence register and no work log
+  behind them yet, and a confident zero over a register that was never written is
+  a lie a partner will act on.
+- **A hostname with TLS.** See above. Loopback works today; a second machine does
+  not until that name exists.
 
 ## Tests
 
@@ -68,7 +98,7 @@ sentence that appears in the agreement. There is no second copy of the number.
 ./venv/bin/python -m pytest tests/practice_desk -q
 ```
 
-63 tests. The two worth knowing about:
+91 tests. The four worth knowing about:
 
 - `test_webauthn.py` builds the ceremony with a software authenticator — real
   P-256 keys, real DER signatures, real COSE layout — and then breaks exactly
@@ -77,3 +107,6 @@ sentence that appears in the agreement. There is no second copy of the number.
   `test_today_reports_unmeasured_panes_as_null_never_zero` guard the two
   invariants that matter commercially: a cookie is not authorisation for a POST,
   and an unreadable register is not an empty one.
+- `test_desk_html.py` runs `node --check` over the desk's own script and asserts
+  every element the script reaches for exists. A renamed id is a control that
+  looks live and does nothing — the one failure this desk is not allowed to have.

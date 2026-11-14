@@ -1,10 +1,15 @@
 """`python -m centurion_cli.practice_desk` — run the desk, admit people, look at the record.
 
-Three verbs, deliberately few. Everything that changes who exists goes through
-`invite`, and everything that changes what they can do goes through `suspend` or
-`revoke` — there is no verb that grants a session directly, because a session is
-earned by a passkey and a CLI flag that bypassed that would be the one hole in
-the whole design.
+A small set of verbs on purpose. Everything that changes who exists goes through
+`invite`; everything that changes what they may do goes through `suspend`,
+`revoke` or `role`; and there is no verb that grants a session directly, because
+a session is earned by a passkey and a CLI flag that bypassed that would be the
+one hole in the whole design.
+
+`role` is the narrow exception to "people changes are administrative": only a
+partner may sign, so only a partner may hand that out or take it away. The
+command asks the register, not the operator, and prints the refusal when the
+change would leave the practice with nobody who can sign.
 """
 
 from __future__ import annotations
@@ -152,18 +157,40 @@ def cmd_revoke(args) -> int:
     return 0
 
 
+def cmd_role(args) -> int:
+    """Change what a person is allowed to be, from the terminal."""
+    store = _store(args)
+    person = store.person_by_email(args.email)
+    if person is None:
+        print(f"No such person: {args.email}", file=sys.stderr)
+        return 2
+    try:
+        updated = store.set_role(person.id, args.role, by=args.by)
+    except DeskError as refusal:
+        # The refusal is the useful output: it says why the practice cannot do
+        # this, which is a sentence an operator can act on.
+        print(str(refusal), file=sys.stderr)
+        return 2
+    print(f"{updated.name} is now {updated.role}. It takes effect on their next request.")
+    return 0
+
+
 def cmd_audit(args) -> int:
     store = _store(args)
     rows = store.audit_log(limit=args.limit)
     if not rows:
         print("Nothing recorded yet.")
         return 0
+    names = {p.id: p.name for p in store.list_people(include_departed=True)}
     print(f"{'WHEN':20} {'WHO':22} {'ACTION':22} DETAIL")
     for row in rows:
         import datetime
 
         when = datetime.datetime.fromtimestamp(row["at"]).strftime("%Y-%m-%d %H:%M:%S")
-        who = row["person_id"] or "—"
+        who_id = row["person_id"]
+        # A name, not a token. An id that no longer resolves is said out loud
+        # rather than printed as if it meant something.
+        who = names.get(who_id, "departed seat") if who_id else "the machine"
         print(f"{when:20} {who[:22]:22} {row['action'][:22]:22} {row['detail'] or ''}")
     return 0
 
@@ -216,6 +243,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_revoke.add_argument("--email", required=True)
     p_revoke.add_argument("--by")
     p_revoke.set_defaults(func=cmd_revoke)
+
+    p_role = sub.add_parser("role", help="change what a person is allowed to be")
+    p_role.add_argument("--email", required=True)
+    p_role.add_argument("--role", required=True,
+                        choices=["associate", "manager", "partner", "administrator"])
+    p_role.add_argument("--by")
+    p_role.set_defaults(func=cmd_role)
 
     p_demo = sub.add_parser("demo", help="write the sample practice (fictional clients)")
     p_demo.add_argument("--to", help="parent directory (default: the Centurion home)")

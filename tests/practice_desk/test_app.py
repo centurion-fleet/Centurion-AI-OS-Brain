@@ -989,3 +989,252 @@ def test_the_desk_refuses_to_serve_a_network_address_without_tls(settings):
     with pytest.raises(SystemExit) as caught:
         desk_app.serve(settings)
     assert "TLS" in str(caught.value)
+
+
+# ── roles: what a person is allowed to be ───────────────────────────────────
+
+
+def _sideline(client, *, name: str, email: str, role: str) -> str:
+    """Admit someone and give the caller a live session token for them.
+
+    No passkey ceremony: the point of these tests is what a role permits once
+    a person is signed in, not how they got there.
+    """
+    store = client.server.app[desk_app.DESK_KEY].store
+    person = store.admit_person(name=name, email=email, role=role)
+    store.set_status(person.id, "active")
+    return store.open_session(person.id)
+
+
+def test_a_promotion_bites_on_the_next_request_without_a_signin(settings):
+    """A role is read per request, so nothing cached can go stale.
+
+    The same session that was refused a moment ago is allowed after the
+    promotion — no sign-out and no new passkey.
+    """
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)  # Adrian, partner
+            token = _sideline(client, name="Junior", email="junior@firm.test",
+                              role="associate")
+            store = client.server.app[desk_app.DESK_KEY].store
+            junior = store.person_by_email("junior@firm.test")
+            adrian = store.person_by_email("adrian@firm.test")
+            adrian_token = store.open_session(adrian.id)
+        finally:
+            await client.close()
+
+        before = await _client(settings)
+        try:
+            before.session.cookie_jar.update_cookies({"pd_session": token})
+            refused = await before.get("/api/people")
+            assert refused.status == 400
+            assert "associate" in (await refused.json())["error"]
+        finally:
+            await before.close()
+
+        promoter = await _client(settings)
+        try:
+            promoter.session.cookie_jar.update_cookies({"pd_session": adrian_token})
+            response = await promoter.post(
+                "/api/people/role", json={"id": junior.id, "role": "partner"}
+            )
+            data = await response.json()
+            assert response.status == 200, data
+            assert data["person"]["role"] == "partner"
+        finally:
+            await promoter.close()
+
+        after = await _client(settings)
+        try:
+            after.session.cookie_jar.update_cookies({"pd_session": token})
+            allowed = await after.get("/api/people")
+            assert allowed.status == 200
+            assert (await allowed.json())["ok"] is True
+        finally:
+            await after.close()
+
+    run(scenario())
+
+
+def test_an_administrator_cannot_promote_themselves_to_partner(settings):
+    """An administrator runs the machine. Partner means the signature and the
+    client files. Letting the machine's keeper grant that to themselves is
+    privilege escalation with a friendly label, so the route refuses it."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)  # Adrian, partner
+            token = _sideline(client, name="Ops", email="ops@firm.test",
+                              role="administrator")
+            store = client.server.app[desk_app.DESK_KEY].store
+            ops = store.person_by_email("ops@firm.test")
+        finally:
+            await client.close()
+
+        keeper = await _client(settings)
+        try:
+            keeper.session.cookie_jar.update_cookies({"pd_session": token})
+            response = await keeper.post(
+                "/api/people/role", json={"id": ops.id, "role": "partner"}
+            )
+            assert response.status == 400
+            assert "Only a partner" in (await response.json())["error"]
+        finally:
+            await keeper.close()
+
+    run(scenario())
+
+
+def test_the_last_partner_cannot_be_demoted(settings):
+    """The refusal names the consequence, not the rule: nobody would be left
+    who may sign. Once a second partner exists, the same demotion is allowed."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)  # Adrian, sole partner
+            store = client.server.app[desk_app.DESK_KEY].store
+            adrian = store.person_by_email("adrian@firm.test")
+
+            first = await client.post(
+                "/api/people/role", json={"id": adrian.id, "role": "manager"}
+            )
+            assert first.status == 400
+            said = (await first.json())["error"]
+            assert "last partner who can sign" in said
+            assert "sign" in said
+
+            _sideline(client, name="Second Partner", email="two@firm.test",
+                      role="partner")
+            second = await client.post(
+                "/api/people/role", json={"id": adrian.id, "role": "manager"}
+            )
+            assert second.status == 200, await second.json()
+            assert (await second.json())["person"]["role"] == "manager"
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_a_role_change_is_recorded_with_both_roles(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            store = client.server.app[desk_app.DESK_KEY].store
+            junior = store.admit_person(name="Junior", email="junior@firm.test",
+                                        role="associate")
+            response = await client.post(
+                "/api/people/role", json={"id": junior.id, "role": "manager"}
+            )
+            assert response.status == 200, await response.json()
+
+            entries = [
+                r for r in store.audit_log()
+                if r["action"] == "person_role_changed"
+            ]
+            assert len(entries) == 1
+            assert "associate" in entries[0]["detail"]
+            assert "manager" in entries[0]["detail"]
+            # The person who made the change is on the record.
+            adrian = store.person_by_email("adrian@firm.test")
+            assert entries[0]["person_id"] == adrian.id
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_an_unknown_role_is_refused_and_nothing_changes(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            store = client.server.app[desk_app.DESK_KEY].store
+            junior = store.admit_person(name="Junior", email="junior@firm.test",
+                                        role="associate")
+            response = await client.post(
+                "/api/people/role", json={"id": junior.id, "role": "owner"}
+            )
+            assert response.status == 400
+            assert store.get_person(junior.id).role == "associate"
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+# ── the record ──────────────────────────────────────────────────────────────
+
+
+def test_the_record_shows_names_not_ids_and_names_the_departed(settings):
+    """A partner reads a list of people, not a list of tokens. Someone who has
+    left keeps their name on their rows instead of the entry going blank."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)  # Adrian, partner
+            store = client.server.app[desk_app.DESK_KEY].store
+            gone = store.admit_person(name="Former Clerk", email="gone@firm.test",
+                                      role="associate")
+            # A row the departed person did themselves, still on the record.
+            store.record(gone.id, "draft_prepared", detail="their last draft")
+            store.set_status(gone.id, "departed")
+            # A row with no person at all — the machine's own work.
+            store.record(None, "machine_started")
+
+            data = await (await client.get("/api/audit?limit=50")).json()
+            assert data["ok"] is True
+            whos = {e["who"] for e in data["entries"]}
+            assert "Adrian Barkus" in whos
+            assert "Former Clerk" in whos          # departed, still named
+            assert "the machine" in whos           # nobody, still honest
+            # An id that does not resolve is named as such, never blanked.
+            store.record("not-a-real-id", "draft_prepared")
+            again = await (await client.get("/api/audit?limit=50")).json()
+            assert any(e["who"] == "departed seat" for e in again["entries"])
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_an_associate_cannot_read_the_record(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            token = _sideline(client, name="Junior", email="junior@firm.test",
+                              role="associate")
+        finally:
+            await client.close()
+
+        junior = await _client(settings)
+        try:
+            junior.session.cookie_jar.update_cookies({"pd_session": token})
+            response = await junior.get("/api/audit")
+            assert response.status == 400
+            assert "associate" in (await response.json())["error"]
+        finally:
+            await junior.close()
+
+    run(scenario())
+
+
+def test_the_record_limit_cannot_be_used_to_dump_the_whole_register(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            response = await client.get("/api/audit?limit=100000")
+            assert response.status == 200
+            data = await response.json()
+            assert len(data["entries"]) <= 200
+            bogus = await client.get("/api/audit?limit=not-a-number")
+            assert bogus.status == 200  # falls back to the default, never a 500
+        finally:
+            await client.close()
+
+    run(scenario())

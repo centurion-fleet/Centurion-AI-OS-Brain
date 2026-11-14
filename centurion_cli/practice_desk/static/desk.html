@@ -235,6 +235,16 @@
   }
   .mini:hover{border-color:var(--steel); color:var(--ink)}
   .mini:disabled{opacity:.4; cursor:not-allowed}
+  /* A role picker is a select that has to sit in a row of buttons without
+     looking like a form field. Appearance reset keeps the native arrow. */
+  select.mini{
+    appearance:none; -webkit-appearance:none; padding-right:18px;
+    background-image:linear-gradient(45deg,transparent 50%,var(--steel-hi) 50%),
+                     linear-gradient(135deg,var(--steel-hi) 50%,transparent 50%);
+    background-position:calc(100% - 11px) 50%, calc(100% - 7px) 50%;
+    background-size:4px 4px, 4px 4px; background-repeat:no-repeat;
+  }
+  select.mini option{background:var(--field-2); color:var(--ink); font-family:var(--mono)}
   .sub.flag{color:#B9906A}
 
   /* ── narrow ──────────────────────────────────────────────────────────── */
@@ -356,6 +366,10 @@
 
         <div class="section-h" style="margin-top:22px">Seats</div>
         <div class="rows" id="people-rows"></div>
+
+        <div class="section-h" style="margin-top:26px">The record</div>
+        <p class="sub" id="audit-sub">Every admission, signature, assignment and refusal, newest first.</p>
+        <div class="rows" id="audit-rows"></div>
       </section>
 
       <!-- THREAD -->
@@ -456,7 +470,7 @@
       if (el) el.hidden = name !== view;
     });
     $("composer").hidden = view !== "thread";
-    if (view === "people") loadPeople();
+    if (view === "people") { loadPeople(); loadAudit(); }
     $("stamp").hidden = view !== "today";
     const titles = { today: "Today", thread: "Thread", people: "People" };
     $("title").textContent = titles[view];
@@ -580,21 +594,51 @@
       : "A seat is a named person with a passkey. There is room for another.";
     $("people-sub").className = "sub" + (data.refusal ? " flag" : "");
 
+    const isPartner = state.person && state.person.role === "partner";
     const rows = data.people.map((p) => {
-      const state = p.status === "active"
+      const state_ = p.status === "active"
         ? (p.passkeys ? "active" : "active, no passkey")
         : p.status;
       const actions = p.status === "active"
         ? `<button class="mini" data-act="suspend" data-id="${p.id}">Suspend</button>
            <button class="mini" data-act="revoke" data-id="${p.id}">Revoke passkeys</button>`
         : `<button class="mini" data-act="active" data-id="${p.id}">Reinstate</button>`;
+      // A role is not a label, it is what the person may do: signing, client
+      // files, the machine. Only a partner may move it, and the server refuses
+      // an administrator who tries — hiding the control is courtesy, not the guard.
+      const roleControl = isPartner
+        ? `<select class="mini role" data-id="${p.id}" aria-label="Role for ${esc(p.name)}" title="${esc(ROLE_HELP[p.role] || "")}">
+             ${["associate", "manager", "partner", "administrator"].map((r) =>
+               `<option value="${r}"${r === p.role ? " selected" : ""}>${r}</option>`
+             ).join("")}
+           </select>`
+        : "";
       return `<div class="row person">
         <span class="k">${esc(p.name)}<br><span class="email">${esc(p.email)}</span></span>
-        <span class="v dim">${esc(p.role)} · ${esc(state)}</span>
+        <span class="v dim">${esc(state_)}</span>
+        ${roleControl}
         ${actions}
       </div>`;
     }).join("");
     $("people-rows").innerHTML = rows;
+
+    $("people-rows").querySelectorAll("select.role").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        sel.disabled = true;
+        try {
+          const res = await post("/api/people/role", { id: sel.dataset.id, role: sel.value });
+          const body = await res.json();
+          if (body.ok === false) throw new Error(body.error);
+          await loadPeople();
+          await loadAudit();
+        } catch (err) {
+          // The refusal is the useful part — show it, then put the control back
+          // where it was so the page is not claiming a change that did not happen.
+          alert(err.message || "That role change did not work.");
+          await loadPeople();
+        }
+      });
+    });
 
     $("people-rows").querySelectorAll("button[data-act]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -608,6 +652,7 @@
             await post("/api/people/status", { id, status: act });
           }
           await loadPeople();
+          await loadAudit();
         } catch (err) {
           btn.disabled = false;
           alert(err.message || "That did not work.");
@@ -634,6 +679,7 @@
       $("inv-name").value = "";
       $("inv-email").value = "";
       await loadPeople();
+      await loadAudit();
     } catch (err) {
       $("invite-out").hidden = false;
       $("invite-out").textContent = err.message || "That did not work.";
@@ -641,6 +687,62 @@
       btn.disabled = false;
     }
   });
+
+  // The record is the licence promise made readable: who asked what, and what
+  // the machine refused. A partner reads it; an administrator keeps the machine.
+  const ACTION_WORDS = {
+    person_admitted: "admitted",
+    person_role_changed: "changed a role",
+    person_suspended: "suspended a seat",
+    person_departed: "closed a seat",
+    person_active: "reinstated a seat",
+    invitation_issued: "issued an invitation",
+    credential_revoked: "revoked passkeys",
+    client_assigned: "assigned a client",
+    client_unassigned: "unassigned a client",
+    client_refused: "was refused a client",
+    draft_prepared: "prepared a draft",
+    draft_submitted: "submitted a draft",
+    draft_signed: "signed a draft",
+    draft_withdrawn: "withdrew a draft",
+    answer_failed: "asked and got no answer",
+    answer_given: "asked a question",
+  };
+
+  function when(at) {
+    const d = new Date((at || 0) * 1000);
+    if (!at) return "—";
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+      + " · " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  async function loadAudit() {
+    let data;
+    try {
+      data = await get("/api/audit?limit=40");
+    } catch (err) {
+      $("audit-sub").textContent = err.message || "Could not read the record.";
+      $("audit-rows").innerHTML = "";
+      return;
+    }
+    const entries = data.entries || [];
+    if (!entries.length) {
+      $("audit-sub").textContent = "Nothing has happened on this machine yet.";
+      $("audit-rows").innerHTML = "";
+      return;
+    }
+    $("audit-sub").textContent =
+      `The last ${entries.length} things done here, newest first. Every admission, ` +
+      `signature, assignment and refusal is on this list.`;
+    $("audit-rows").innerHTML = entries.map((e) => {
+      const what = ACTION_WORDS[e.action] || e.action.replace(/_/g, " ");
+      const about = e.client ? ` · ${e.client}` : "";
+      return `<div class="row">
+        <span class="k">${esc(e.who)} ${esc(what)}${esc(about)}</span>
+        <span class="v dim">${esc(when(e.at))}</span>
+      </div>`;
+    }).join("");
+  }
 
   async function loadDeadlines() {
     try {

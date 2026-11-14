@@ -291,3 +291,42 @@ def test_messages_round_trip_with_citations(store):
     assert [r["role"] for r in rows] == ["user", "assistant"]
     assert rows[1]["cites"] == ["clients/hargreaves.md:4"]
     assert rows[1]["unsettled"] == ["no confirmation of the 2026 change"]
+
+
+# ── roles ───────────────────────────────────────────────────────────────────
+
+
+def test_an_invited_partner_counts_as_a_signer(store):
+    """The hole the CLI found: a partner who has been invited but has not yet
+    enrolled can sign the moment they do, so demoting them empties the signing
+    pool just as surely as demoting an active one."""
+    adrian = _add(store, "Adrian", "a@firm.test", "partner")
+    assert store.get_person(adrian.id).status == "invited"
+
+    with pytest.raises(st.DeskError) as refusal:
+        store.set_role(adrian.id, "associate")
+    assert "last partner who can sign" in str(refusal.value)
+
+
+def test_a_suspended_partner_is_not_the_signing_pool(store):
+    """A suspended seat cannot sign, so a second suspended partner does not
+    license demoting the one live partner."""
+    adrian = _add(store, "Adrian", "a@firm.test", "partner")
+    store.set_status(adrian.id, "active")
+    other = _add(store, "Other", "b@firm.test", "partner")
+    store.set_status(other.id, "suspended")
+
+    with pytest.raises(st.DeskError):
+        store.set_role(adrian.id, "manager")
+
+
+def test_a_role_change_needs_no_reinvitation(store):
+    """A role is read per request; the passkey and the seat do not change."""
+    person = _add(store, "Junior", "j@firm.test", "associate")
+    store.add_credential(person.id, credential_id="c1", public_key=b"k", algorithm=-7)
+    before = [c["id"] for c in store.credentials_for(person.id)]
+    assert before, "the credential was not written"
+
+    store.set_role(person.id, "manager")
+    assert store.get_person(person.id).role == "manager"
+    assert [c["id"] for c in store.credentials_for(person.id)] == before
