@@ -371,6 +371,76 @@ def test_a_partner_cannot_suspend_their_own_seat(settings):
     run(scenario())
 
 
+# ── client threads ──────────────────────────────────────────────────────────
+
+
+def _add_person_with_session(client, *, name, email, role):
+    """Straight to the store: this is about the thread, not the ceremony."""
+    store = client.server.app[desk_app.DESK_KEY].store
+    person = store.admit_person(name=name, email=email, role=role)
+    store.add_credential(
+        person.id, credential_id=f"cred-{person.id}", public_key=b"k", algorithm=-7
+    )
+    return person, store.open_session(person.id)
+
+
+def test_a_client_thread_is_shared_and_carries_who_said_what(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        partner_client = await _client(settings)
+        associate_client = await _client(settings)
+        try:
+            await _enrol(partner_client, settings)
+            _person, token = _add_person_with_session(
+                partner_client, name="Peta Barkus", email="peta@firm.test", role="manager"
+            )
+            associate_client.session.cookie_jar.update_cookies({"pd_session": token})
+
+            # The client list comes from the practice library.
+            clients = await (await partner_client.get("/api/clients")).json()
+            assert len(clients["clients"]) == 8
+            slug = clients["clients"][0]["slug"]
+
+            # The partner writes in the shared thread.
+            await partner_client.post(
+                f"/api/chat?scope=client&client={slug}", json={"message": "What is due here?"}
+            )
+
+            # The manager sees it, attributed to the partner rather than to "You".
+            shared = await (
+                await associate_client.get(f"/api/thread?scope=client&client={slug}")
+            ).json()
+            assert shared["conversation"]["scope"] == "client"
+            her_view = [m for m in shared["messages"] if m["role"] == "user"]
+            assert her_view and her_view[0]["author"] == "Adrian Barkus"
+
+            # But not the partner's private thread.
+            private = await (await associate_client.get("/api/thread")).json()
+            assert private["messages"] == []
+        finally:
+            await partner_client.close()
+            await associate_client.close()
+
+    run(scenario())
+
+
+def test_a_client_thread_without_a_client_is_refused(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            response = await client.get("/api/thread?scope=client")
+            assert response.status == 400
+            assert "must name its client" in (await response.json())["error"]
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
 # ── deadlines ───────────────────────────────────────────────────────────────
 
 

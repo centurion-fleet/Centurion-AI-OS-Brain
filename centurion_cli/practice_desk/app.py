@@ -596,6 +596,45 @@ async def people_revoke(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "person": _person_payload(target)})
 
 
+async def clients_list(request: web.Request) -> web.Response:
+    """The clients the desk knows about, read from the practice library.
+
+    No assignment register exists yet, so every active person may see every
+    client thread. That is a real gap and it is named in the response, because a
+    permission model that looks complete and is not is worse than none.
+    """
+    await _require_person(request)
+    desk: Desk = request.app[DESK_KEY]
+    library = desk.settings.practice_library
+    if not library:
+        return web.json_response(
+            {
+                "ok": True,
+                "clients": [],
+                "reason": "no client library on this machine",
+                "assignment": "none",
+            }
+        )
+    from centurion_cli.practice_desk import deadlines as dl
+
+    records = dl.load_library(Path(library))
+    return web.json_response(
+        {
+            "ok": True,
+            "assignment": "every active person may see every client thread",
+            "clients": [
+                {
+                    "slug": r.slug,
+                    "name": r.name,
+                    "entity": r.entity,
+                    "year_end": r.year_end.isoformat() if r.year_end else None,
+                }
+                for r in records
+            ],
+        }
+    )
+
+
 async def deadline_list(request: web.Request) -> web.Response:
     """Every obligation inside the horizon, with the rule that produced it."""
     await _require_person(request)
@@ -635,18 +674,42 @@ async def deadline_list(request: web.Request) -> web.Response:
 async def thread(request: web.Request) -> web.Response:
     person = await _require_person(request)
     desk: Desk = request.app[DESK_KEY]
-    conv = desk.store.ensure_conversation(person=person)
+    scope, client_id = _scope_from(request)
+    conv = desk.store.ensure_conversation(person=person, scope=scope, client_id=client_id)
     return web.json_response(
         {
             "ok": True,
             "conversation": {
                 "id": conv["id"],
                 "scope": conv["scope"],
+                "client": conv.get("client_id"),
                 "title": conv["title"],
             },
-            "messages": desk.store.messages(conv["id"]),
+            "messages": _decorate(desk, desk.store.messages(conv["id"])),
         }
     )
+
+
+def _scope_from(request: web.Request) -> tuple[str, Optional[str]]:
+    raw = (request.query.get("scope") or "private").strip().lower()
+    scope = raw if raw in ("private", "client", "practice") else "private"
+    client_id = request.query.get("client")
+    if scope == "client" and not client_id:
+        raise DeskError("A client thread must name its client.")
+    return scope, client_id
+
+
+def _decorate(desk: Desk, messages: list[dict]) -> list[dict]:
+    """Put a name against every message. An unattributed shared record is not
+    a record of anything a partner can act on."""
+    names: Dict[str, str] = {}
+    for m in messages:
+        pid = m.get("person_id")
+        if pid and pid not in names:
+            author = desk.store.get_person(pid)
+            names[pid] = author.name if author else "someone who has left"
+        m["author"] = names.get(pid) if pid else None
+    return messages
 
 
 async def chat(request: web.Request) -> web.StreamResponse:
@@ -668,7 +731,8 @@ async def chat(request: web.Request) -> web.StreamResponse:
     if len(message) > 8000:
         raise DeskError("That message is too long for one turn.")
 
-    conv = desk.store.ensure_conversation(person=person)
+    scope, client_id = _scope_from(request)
+    conv = desk.store.ensure_conversation(person=person, scope=scope, client_id=client_id)
     desk.store.append_message(conv["id"], role="user", content=message, person_id=person.id)
     desk.store.record(person.id, "asked", scope=conv["scope"], detail=message[:200])
 
@@ -853,6 +917,7 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_get("/api/today", today)
     app.router.add_get("/api/thread", thread)
     app.router.add_get("/api/deadlines", deadline_list)
+    app.router.add_get("/api/clients", clients_list)
     app.router.add_get("/api/people", people_list)
     app.router.add_post("/api/people/invite", people_invite)
     app.router.add_post("/api/people/status", people_status)

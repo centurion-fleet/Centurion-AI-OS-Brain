@@ -287,6 +287,9 @@
         My thread
         <small id="conv-meta">nobody else sees this</small>
       </button>
+
+      <div class="group-label" id="clients-label" hidden>Clients</div>
+      <div id="client-list"></div>
     </div>
     <div class="rail-foot">
       <div class="who" id="who">—</div>
@@ -398,7 +401,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const shell = $("shell");
-  const state = { view: "today", person: null, messages: [], busy: false };
+  const state = { view: "today", person: null, messages: [], busy: false,
+                  scope: "private", client: null, clientName: null };
   const IDLE_MS = 15 * 60 * 1000;
   let lastActive = Date.now();
 
@@ -447,7 +451,19 @@
     if (view === "thread") setTimeout(() => $("input").focus(), 60);
   }
   document.querySelectorAll("[data-view]").forEach((b) =>
-    b.addEventListener("click", () => show(b.dataset.view)));
+    b.addEventListener("click", async () => {
+      if (b.classList.contains("conv")) {
+        state.scope = "private";
+        state.client = null;
+        state.clientName = null;
+        document.querySelectorAll(".conv").forEach((c) =>
+          c.setAttribute("aria-current", String(c === b)));
+        show("thread");
+        await loadThread();
+        return;
+      }
+      show(b.dataset.view);
+    }));
   $("drawer").addEventListener("click", () => shell.classList.toggle("drawer"));
   $("signout").addEventListener("click", async () => {
     await post("/api/signout", {}).catch(() => {});
@@ -630,10 +646,14 @@
         <div class="body">Ask me anything about the practice. I will name the file I am reading, and I will tell you what I could not settle rather than guessing.</div></div>`;
       return;
     }
+    const shared = state.scope !== "private";
     t.innerHTML = state.messages.map((m) => {
       const mine = m.role === "user";
+      const label = mine
+        ? (shared && m.author ? m.author : "You")
+        : "The practice's Centurion";
       return `<div class="msg ${mine ? "me" : "brain"}">
-        <span class="who">${mine ? "You" : "The practice's Centurion"}</span>
+        <span class="who">${esc(label)}</span>
         <div class="body">${esc(m.content)}</div>
       </div>`;
     }).join("");
@@ -641,10 +661,45 @@
     sc.scrollTop = sc.scrollHeight;
   }
 
+  function threadUrl() {
+    if (state.scope === "client" && state.client) {
+      return `/api/thread?scope=client&client=${encodeURIComponent(state.client)}`;
+    }
+    return "/api/thread";
+  }
+
   async function loadThread() {
-    const data = await get("/api/thread");
+    const data = await get(threadUrl());
     state.messages = data.messages || [];
     renderMessages();
+    $("firm-scope").textContent = state.scope === "client"
+      ? (state.clientName || "Client") : "Private";
+  }
+
+  async function loadClients() {
+    try {
+      const data = await get("/api/clients");
+      const clients = data.clients || [];
+      if (!clients.length) return;
+      $("clients-label").hidden = false;
+      $("client-list").innerHTML = clients.map((c) => `
+        <button class="conv client" data-slug="${esc(c.slug)}" data-name="${esc(c.name)}"
+                aria-current="false">
+          ${esc(c.name)}
+          <small>${esc(c.entity || "client")} · shared with the practice</small>
+        </button>`).join("");
+      $("client-list").querySelectorAll(".client").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          state.scope = "client";
+          state.client = btn.dataset.slug;
+          state.clientName = btn.dataset.name;
+          document.querySelectorAll(".conv").forEach((b) =>
+            b.setAttribute("aria-current", String(b === btn)));
+          show("thread");
+          await loadThread();
+        });
+      });
+    } catch (e) { /* a machine with no library simply shows no clients */ }
   }
 
   async function ask() {
@@ -670,7 +725,10 @@
 
     let answer = "";
     try {
-      const res = await post("/api/chat", { message: text });
+      const qs = state.scope === "client" && state.client
+        ? `?scope=client&client=${encodeURIComponent(state.client)}`
+        : "";
+      const res = await post("/api/chat" + qs, { message: text });
       if (!res.body) throw new Error("The desk returned nothing.");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -736,6 +794,7 @@
   (async () => {
     try {
       await loadToday();
+      await loadClients();
       await loadThread();
       show("today");
     } catch (err) {
