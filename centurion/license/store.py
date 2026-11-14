@@ -28,6 +28,31 @@ DEFAULT_RTO_TARGET_GBP = 5000.0
 NONCE_BYTES = 12
 KEY_BYTES = 32
 
+# ── Editions ─────────────────────────────────────────────────────────────────
+# One product, four editions. The edition is fixed at provisioning, bound to the
+# machine fingerprint, and NEVER changed by the product: an upgrade is a new
+# machine with a new entitlement. What the edition governs here is the user limit
+# (`seats`) and which instrument is unlocked. See business/EDITIONS.md.
+#
+#   brain        Centurion Brain           1 user, instrument greyed
+#   accountant   Centurion Accountant Brain 1 user, instrument live
+#   association  Centurion Association Brain 1 user, instrument live
+#   practice     Centurion Accountant Practice 2-10 named users, instrument + Firm
+EDITION_TIERS = ("brain", "accountant", "association", "practice")
+DEFAULT_TIER = "brain"
+PRACTICE_MIN_SEATS = 2
+PRACTICE_MAX_SEATS = 10
+
+
+def normalise_tier(tier: Optional[str]) -> str:
+    """Map anything unexpected onto the most restrictive edition.
+
+    Fail closed: an entitlement with a tier we do not recognise must not be
+    treated as the edition with the most capability.
+    """
+    value = (tier or "").strip().lower()
+    return value if value in EDITION_TIERS else DEFAULT_TIER
+
 
 @dataclass
 class Entitlement:
@@ -49,6 +74,37 @@ class Entitlement:
     revoke_reason: Optional[str] = None
     updated_at: float = field(default_factory=time.time)
     version: int = STORE_VERSION
+    # How many named users this entitlement permits. Defaults to 1 so a missing
+    # field is the safest edition rather than the most generous one.
+    seats: int = 1
+
+    def edition(self) -> str:
+        """The edition this machine is entitled to run, failing closed."""
+        return normalise_tier(self.tier)
+
+    def seat_limit(self) -> int:
+        """The number of named users this machine may carry, clamped.
+
+        Only `practice` can exceed one seat, and it is capped at ten — the honest
+        limit of one box, as published. A corrupt or inflated value cannot grant
+        eleven users, because the clamp does not trust the file.
+        """
+        if self.edition() != "practice":
+            return 1
+        try:
+            requested = int(self.seats)
+        except (TypeError, ValueError):
+            return PRACTICE_MIN_SEATS
+        return max(PRACTICE_MIN_SEATS, min(PRACTICE_MAX_SEATS, requested))
+
+    def instrument_unlocked(self) -> bool:
+        """True when the vertical instrument is live for this edition.
+
+        The Brain shows the instrument greyed out; every vertical edition and
+        Practice run it. This is the ONE place that decision is made, so a page
+        cannot disagree with the licence.
+        """
+        return self.edition() != "brain"
 
     def license_state(self) -> LicenseState:
         return parse_state(self.state)
