@@ -453,6 +453,10 @@ class ConfigUpdate(BaseModel):
     config: dict
 
 
+class LanguageUpdate(BaseModel):
+    language: str
+
+
 class EnvVarUpdate(BaseModel):
     key: str
     value: str
@@ -890,6 +894,63 @@ async def get_config():
     config = _normalize_config_for_web(load_config())
     # Strip internal keys that the frontend shouldn't see or send back
     return {k: v for k, v in config.items() if not k.startswith("_")}
+
+
+@app.get("/api/language")
+async def get_language_setting():
+    """The language this Brain is set to, and the ones it can be set to.
+
+    Deliberately its own endpoint rather than a field on PUT /api/config: a
+    dropdown must not have to send the whole configuration back to persist one
+    value, and a partial config write is how a saved form eats an unsaved edit.
+    """
+    from agent.i18n import (
+        SUPPORTED_LANGUAGES,
+        get_language,
+        language_name,
+    )
+
+    code = get_language()
+    return {
+        "language": code,
+        "name": language_name(code),
+        "supported": [
+            {"code": c, "name": language_name(c)} for c in SUPPORTED_LANGUAGES
+        ],
+    }
+
+
+@app.put("/api/language")
+async def set_language_setting(body: LanguageUpdate):
+    """Persist display.language so the interface AND the agent follow it.
+
+    The value is validated strictly: an unknown language is a 400, not a silent
+    fall-back to English. A setting that quietly becomes English is worse than a
+    setting that fails, because the person is left with an English machine and
+    nothing to explain it.
+    """
+    from agent.i18n import language_name, normalize_language, reset_language_cache
+
+    code = normalize_language(body.language)
+    if code is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language: {body.language!r}",
+        )
+    try:
+        config = load_config()
+        display = dict(config.get("display") or {})
+        display["language"] = code
+        config["display"] = display
+        save_config(config)
+        # A running process must see the change without a restart.
+        reset_language_cache()
+        return {"ok": True, "language": code, "name": language_name(code)}
+    except HTTPException:
+        raise
+    except Exception:
+        _log.exception("PUT /api/language failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/config/defaults")

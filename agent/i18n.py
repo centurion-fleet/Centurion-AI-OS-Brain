@@ -67,6 +67,30 @@ LANGUAGE_NAMES: dict[str, str] = {
 }
 
 
+def normalize_language(value: Any) -> "str | None":
+    """Strict public normaliser: the code, or None if we do not ship that language.
+
+    ``_normalize_lang`` falls back to English because a *reader* of an unknown
+    value should still get a usable string. A *writer* is a different question:
+    silently turning whatever somebody typed into English is how a French user
+    ends up with an English interface and no error to explain it. Callers that
+    persist a setting use this and refuse the value instead.
+    """
+    if not isinstance(value, str):
+        return None
+    key = value.strip().lower()
+    if not key:
+        return None
+    if key in SUPPORTED_LANGUAGES:
+        return key
+    if key in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[key]
+    base = key.split("-", 1)[0]
+    if base in SUPPORTED_LANGUAGES:
+        return base
+    return None
+
+
 def language_name(code: str | None = None) -> str:
     """Return the endonym for a language code, resolving aliases first.
 
@@ -129,25 +153,11 @@ def _locales_dir() -> Path:
 def _normalize_lang(value: Any) -> str:
     """Normalize a user-supplied language value to a supported code.
 
-    Accepts supported codes directly, common aliases (``chinese`` -> ``zh``),
-    and case-insensitive regional tags (``zh-CN`` -> ``zh``).  Returns the
-    default language for unknown values.
+    Delegates to :func:`normalize_language` and supplies the English fallback,
+    so the alias table is read in exactly one place. Two copies of a mapping is
+    how a code gets accepted on write and rejected on read.
     """
-    if not isinstance(value, str):
-        return DEFAULT_LANGUAGE
-    key = value.strip().lower()
-    if not key:
-        return DEFAULT_LANGUAGE
-    if key in SUPPORTED_LANGUAGES:
-        return key
-    if key in _LANGUAGE_ALIASES:
-        return _LANGUAGE_ALIASES[key]
-    # Try stripping a region suffix (e.g. "pt-br" -> "pt" won't be supported,
-    # but "zh-CN" -> "zh" will).
-    base = key.split("-", 1)[0]
-    if base in SUPPORTED_LANGUAGES:
-        return base
-    return DEFAULT_LANGUAGE
+    return normalize_language(value) or DEFAULT_LANGUAGE
 
 
 def _load_catalog(lang: str) -> dict[str, str]:

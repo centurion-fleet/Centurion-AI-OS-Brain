@@ -111,6 +111,21 @@ export const api = {
       body: JSON.stringify({ config }),
     }),
   getConfigRaw: () => fetchJSON<{ yaml: string }>("/api/config/raw"),
+  // The language the Brain is set to. Its own endpoint on purpose: a picker must
+  // not have to round-trip the whole configuration to persist one value, and a
+  // partial config write is how a saved form eats an unsaved edit elsewhere.
+  getLanguage: () =>
+    fetchJSON<{
+      language: string;
+      name: string;
+      supported: { code: string; name: string }[];
+    }>("/api/language"),
+  setLanguage: (language: string) =>
+    fetchJSON<{ ok: boolean; language: string; name: string }>("/api/language", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language }),
+    }),
   saveConfigRaw: (yaml_text: string) =>
     fetchJSON<{ ok: boolean }>("/api/config/raw", {
       method: "PUT",

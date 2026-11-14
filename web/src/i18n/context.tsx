@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import type { Locale, Translations } from "./types";
 import { en } from "./en";
 import { zh } from "./zh";
@@ -16,6 +24,7 @@ import { ga } from "./ga";
 import { pt } from "./pt";
 import { ru } from "./ru";
 import { hu } from "./hu";
+import { api } from "@/lib/api";
 
 const TRANSLATIONS: Record<Locale, Translations> = {
   en,
@@ -95,15 +104,58 @@ const I18nContext = createContext<I18nContextValue>({
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+  // localStorage holds what this browser last showed; the server holds what the
+  // Brain IS. Until the server answers, the local value is only a guess, so the
+  // first fetch wins — otherwise a stale browser value would silently overwrite
+  // a language the owner set on the machine itself.
+  const hydrated = useRef(false);
 
-  const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
-    try {
-      localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      // ignore
-    }
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getLanguage()
+      .then((res) => {
+        if (cancelled) return;
+        if (isLocale(res.language) && res.language !== locale) {
+          setLocaleState(res.language);
+        }
+        hydrated.current = true;
+        try {
+          localStorage.setItem(STORAGE_KEY, res.language);
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => {
+        // A dashboard opened without the server (SSR, tests) keeps the local
+        // value rather than flashing English over a working interface.
+        hydrated.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally once, on mount: the server is the source of truth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const setLocale = useCallback(
+    (l: Locale) => {
+      // Optimistic: the interface changes immediately, because a language menu
+      // that waits for a round trip feels broken.
+      setLocaleState(l);
+      try {
+        localStorage.setItem(STORAGE_KEY, l);
+      } catch {
+        // ignore
+      }
+      // Persisted so the Python side learns it: the agent reads
+      // display.language, and an interface-only switch is a decoration.
+      api.setLanguage(l).catch((err) => {
+        console.error("Could not save the language setting:", err);
+      });
+    },
+    [],
+  );
 
   const value: I18nContextValue = {
     locale,
@@ -111,11 +163,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     t: TRANSLATIONS[locale],
   };
 
-  return (
-    <I18nContext.Provider value={value}>
-      {children}
-    </I18nContext.Provider>
-  );
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {
