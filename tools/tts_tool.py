@@ -149,6 +149,55 @@ def _import_piper():
 # ===========================================================================
 DEFAULT_PROVIDER = "edge"
 DEFAULT_EDGE_VOICE = "en-US-AriaNeural"
+
+# A Brain set to Dutch should not read Dutch aloud in an American accent. Edge
+# ships a neural voice per locale, but the *names* are not something to hardcode
+# from memory -- a name that does not exist fails at synthesis time, on the
+# customer's machine, with an opaque error. So we ask Edge for its voice list
+# once, cache it, and match on the locale prefix. If the lookup fails (offline,
+# API change), we speak English rather than nothing: a wrong accent is a smaller
+# fault than silence.
+_EDGE_LOCALE_VOICES: list[dict] | None = None
+
+
+def _pick_voice_for_language(voices: list[dict], lang: str) -> "str | None":
+    """Choose a voice for ``lang`` from Edge's voice list, or None.
+
+    Pure, so the matching rule can be tested without a network call. A language
+    code may be a variant (``nl-be``); Edge only ships ``nl-NL`` and ``nl-BE``,
+    so we match on the base language first and prefer the exact tag when both
+    sides have one.
+    """
+    base = (lang or "").split("-")[0].lower()
+    if not base:
+        return None
+    exact = [v for v in voices if str(v.get("Locale", "")).lower() == lang.lower()]
+    same_base = [v for v in voices if str(v.get("Locale", "")).split("-")[0].lower() == base]
+    for group in (exact, same_base):
+        # Prefer a general-purpose voice over the multilingual variants: those
+        # accept any text but carry an accent from nowhere in particular.
+        general = [
+            v for v in group
+            if "multilingual" not in str(v.get("ShortName", "")).lower()
+        ]
+        for candidate in (general or group):
+            short = candidate.get("ShortName")
+            if short:
+                return str(short)
+    return None
+
+
+async def _default_voice_for_language(edge_tts, lang: str) -> str:
+    """The default voice for the configured interface language."""
+    global _EDGE_LOCALE_VOICES
+    try:
+        if _EDGE_LOCALE_VOICES is None:
+            _EDGE_LOCALE_VOICES = await edge_tts.list_voices()
+        voice = _pick_voice_for_language(_EDGE_LOCALE_VOICES or [], lang)
+        return voice or DEFAULT_EDGE_VOICE
+    except Exception as exc:  # network, API shape change, anything
+        logger.debug("Edge voice lookup failed, using default voice: %s", exc)
+        return DEFAULT_EDGE_VOICE
 DEFAULT_ELEVENLABS_VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Adam
 DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_ELEVENLABS_STREAMING_MODEL_ID = "eleven_flash_v2_5"
@@ -897,7 +946,12 @@ async def _generate_edge_tts(text: str, output_path: str, tts_config: Dict[str, 
     """
     _edge_tts = _import_edge_tts()
     edge_config = tts_config.get("edge", {})
-    voice = edge_config.get("voice", DEFAULT_EDGE_VOICE)
+    # An explicitly configured voice always wins -- a voice is a preference, and
+    # the interface language must not overrule a choice somebody made on purpose.
+    voice = edge_config.get("voice")
+    if not voice:
+        from agent.i18n import get_language  # local: keeps import cost off hot paths
+        voice = await _default_voice_for_language(_edge_tts, get_language())
     speed = float(edge_config.get("speed", tts_config.get("speed", 1.0)))
 
     kwargs = {"voice": voice}
