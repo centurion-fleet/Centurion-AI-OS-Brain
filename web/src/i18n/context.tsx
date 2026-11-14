@@ -24,23 +24,27 @@ import { ga } from "./ga";
 import { pt } from "./pt";
 import { ru } from "./ru";
 import { hu } from "./hu";
+import { nl } from "./nl";
+import { pl } from "./pl";
 import { api } from "@/lib/api";
 
 const TRANSLATIONS: Record<Locale, Translations> = {
   en,
+  fr,
+  de,
+  nl,
+  pl,
+  es,
+  it,
+  pt,
   zh,
   "zh-hant": zhHant,
   ja,
-  de,
-  es,
-  fr,
   tr,
   uk,
   af,
   ko,
-  it,
   ga,
-  pt,
   ru,
   hu,
 };
@@ -55,20 +59,26 @@ const TRANSLATIONS: Record<Locale, Translations> = {
 // any single jurisdiction). Endonyms are unambiguous and avoid the political
 // mismapping that flag pairings inevitably create.
 export const LOCALE_META: Record<Locale, { name: string }> = {
+  // Ordered by market, not alphabetically: the eleven locales the website
+  // sells are first, so a buyer whose page was in Dutch finds Dutch at the
+  // top of the list rather than eight entries down. The rest are kept -- a
+  // language we ship is a language somebody may read in.
   en: { name: "English" },
+  fr: { name: "Français" },
+  de: { name: "Deutsch" },
+  nl: { name: "Nederlands" },
+  pl: { name: "Polski" },
+  es: { name: "Español" },
+  it: { name: "Italiano" },
+  pt: { name: "Português" },
   zh: { name: "简体中文" },
   "zh-hant": { name: "繁體中文" },
   ja: { name: "日本語" },
-  de: { name: "Deutsch" },
-  es: { name: "Español" },
-  fr: { name: "Français" },
   tr: { name: "Türkçe" },
   uk: { name: "Українська" },
   af: { name: "Afrikaans" },
   ko: { name: "한국어" },
-  it: { name: "Italiano" },
   ga: { name: "Gaeilge" },
-  pt: { name: "Português" },
   ru: { name: "Русский" },
   hu: { name: "Magyar" },
 };

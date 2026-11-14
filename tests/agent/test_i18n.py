@@ -167,3 +167,46 @@ def test_t_missing_key_in_non_english_falls_back_to_english(tmp_path, monkeypatc
 def test_t_unknown_language_uses_english():
     """Unknown lang codes normalize to English, not to a key-path fallback."""
     assert i18n.t("approval.denied", lang="klingon") == i18n.t("approval.denied", lang="en")
+
+
+# ---------------------------------------------------------------------------
+# The two pickers -- Python and the web dashboard -- keep separate lists of
+# languages, in separate files, edited by different hands.  A language added to
+# one and forgotten in the other is invisible: the server rejects a value the
+# picker offers, or the picker hides a language the Brain can speak.  Pin them
+# to each other.
+# ---------------------------------------------------------------------------
+
+def test_web_locale_union_matches_supported_languages():
+    """The dashboard's Locale union must list exactly SUPPORTED_LANGUAGES."""
+    import re
+    from pathlib import Path
+
+    types_ts = Path(__file__).resolve().parents[2] / "web/src/i18n/types.ts"
+    source = types_ts.read_text(encoding="utf-8")
+    union = re.search(r"export type Locale =(.*?);", source, re.S)
+    assert union, "could not find the Locale union in web/src/i18n/types.ts"
+    web_locales = set(re.findall(r'"([a-z-]+)"', union.group(1)))
+    assert web_locales == set(i18n.SUPPORTED_LANGUAGES), (
+        f"web Locale union and SUPPORTED_LANGUAGES disagree: "
+        f"web-only={sorted(web_locales - set(i18n.SUPPORTED_LANGUAGES))} "
+        f"python-only={sorted(set(i18n.SUPPORTED_LANGUAGES) - web_locales)}"
+    )
+
+
+def test_web_catalog_exists_for_every_supported_language():
+    """Every language the Brain speaks must have a dashboard catalogue."""
+    from pathlib import Path
+
+    web_i18n = Path(__file__).resolve().parents[2] / "web/src/i18n"
+    missing = [
+        lang for lang in i18n.SUPPORTED_LANGUAGES
+        if not (web_i18n / f"{lang}.ts").is_file()
+    ]
+    assert not missing, f"missing web/src/i18n/*.ts catalogues for: {missing}"
+
+
+def test_every_supported_language_has_an_endonym():
+    """A code with no endonym shows up in the picker as nothing at all."""
+    missing = [lang for lang in i18n.SUPPORTED_LANGUAGES if lang not in i18n.LANGUAGE_NAMES]
+    assert not missing, f"missing LANGUAGE_NAMES entries for: {missing}"

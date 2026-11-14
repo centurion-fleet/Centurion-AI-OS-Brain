@@ -25,7 +25,10 @@ Language resolution order:
     3. ``display.language`` from config.yaml
     4. ``"en"`` (baseline)
 
-Supported languages: en, zh, ja, de, es, fr, tr, uk.  Unknown values fall back to en.
+Supported languages live in :data:`SUPPORTED_LANGUAGES` -- a catalogue file
+``locales/<lang>.yaml`` must exist for every code in that tuple, and
+``tests/agent/test_i18n.py`` asserts full key parity with English.  Unknown
+values fall back to en.
 """
 
 from __future__ import annotations
@@ -40,8 +43,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = (
-    "en", "zh", "zh-hant", "ja", "de", "es", "fr", "tr", "uk",
-    "af", "ko", "it", "ga", "pt", "ru", "hu",
+    "en", "fr", "de", "nl", "pl", "es", "it", "pt", "zh", "zh-hant", "ja",
+    "tr", "uk", "af", "ko", "ga", "ru", "hu",
 )
 DEFAULT_LANGUAGE = "en"
 
@@ -49,19 +52,21 @@ DEFAULT_LANGUAGE = "en"
 # have to recognise "French" to find his own. These are never shown as flags.
 LANGUAGE_NAMES: dict[str, str] = {
     "en": "English",
+    "fr": "Français",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+    "pl": "Polski",
+    "es": "Español",
+    "it": "Italiano",
+    "pt": "Português",
     "zh": "简体中文",
     "zh-hant": "繁體中文",
     "ja": "日本語",
-    "de": "Deutsch",
-    "es": "Español",
-    "fr": "Français",
     "tr": "Türkçe",
     "uk": "Українська",
     "af": "Afrikaans",
     "ko": "한국어",
-    "it": "Italiano",
     "ga": "Gaeilge",
-    "pt": "Português",
     "ru": "Русский",
     "hu": "Magyar",
 }
@@ -118,6 +123,12 @@ _LANGUAGE_ALIASES: dict[str, str] = {
     "french": "fr", "français": "fr", "france": "fr", "fr-fr": "fr", "fr-be": "fr", "fr-ca": "fr", "fr-ch": "fr",
     "ukrainian": "uk", "ukrainisch": "uk", "українська": "uk", "uk-ua": "uk", "ua": "uk",
     "turkish": "tr", "türkçe": "tr", "tr-tr": "tr",
+    # Dutch — the Netherlands and Belgium (Flemish is the same written
+    # language; "vlaams" routes here rather than to a catalogue we do not have).
+    "dutch": "nl", "nederlands": "nl", "nl-nl": "nl", "nl-be": "nl",
+    "flemish": "nl", "vlaams": "nl",
+    # Polish — the newest Central European market we sell into.
+    "polish": "pl", "polski": "pl", "pl-pl": "pl",
     # Afrikaans — South African Dutch-derived language; "af-ZA" is the common BCP-47 tag.
     "afrikaans": "af", "af-za": "af",
     # Korean
