@@ -52,3 +52,55 @@ def test_every_element_the_desk_reaches_for_exists():
     assert refs, "the desk script reaches for no elements at all?"
     missing = sorted(refs - ids)
     assert not missing, f"the script references elements that do not exist: {missing}"
+
+
+def _record_writes() -> set[str]:
+    """Every action name the register can write, read out of the Python source.
+
+    Two of them are f-strings — `person_{status}` and `draft_{to}` — so the
+    closed sets of status and draft state are expanded here. If a new action is
+    added without a phrase on the page, this test fails rather than the page
+    quietly printing `client_access_refused` at a partner.
+    """
+    source = ""
+    for name in ("store.py", "app.py"):
+        source += (STATIC.parent / name).read_text()
+
+    found = set()
+    for pattern in (
+        r'_audit\(\s*conn,\s*[^,]+,\s*f?"([a-z_]+)"',
+        r'\.record\(\s*[^,]+,\s*f?"([a-z_]+)"',
+        r'action=f?"([a-z_]+)"',
+    ):
+        found |= set(re.findall(pattern, source))
+
+    if 'f"person_{status}"' in source:
+        found |= {f"person_{s}" for s in ("invited", "active", "suspended", "departed")}
+    if 'f"draft_{to}"' in source:
+        found |= {"draft_awaiting_signature", "draft_signed", "draft_withdrawn"}
+    return found
+
+
+def test_every_action_the_register_writes_has_a_phrase_on_the_page():
+    html = (STATIC / "desk.html").read_text()
+    block = re.search(r"const ACTION_WORDS = \{(.*?)\n  \};", html, re.S)
+    assert block, "ACTION_WORDS has moved or been renamed"
+    mapped = set(re.findall(r"^\s*([a-z_]+):", block.group(1), re.M))
+
+    written = _record_writes()
+    assert written, "no action names found in the source — the extraction is stale"
+    missing = sorted(written - mapped)
+    assert not missing, (
+        f"the register writes actions the record cannot put into words: {missing}. "
+        "Add them to ACTION_WORDS in desk.html."
+    )
+
+
+def test_the_phrase_map_invents_no_actions_that_do_not_exist():
+    """A key with no writer behind it is a phrase waiting to describe nothing."""
+    html = (STATIC / "desk.html").read_text()
+    block = re.search(r"const ACTION_WORDS = \{(.*?)\n  \};", html, re.S)
+    mapped = set(re.findall(r"^\s*([a-z_]+):", block.group(1), re.M))
+    written = _record_writes()
+    invented = sorted(mapped - written)
+    assert not invented, f"ACTION_WORDS names actions nothing writes: {invented}"

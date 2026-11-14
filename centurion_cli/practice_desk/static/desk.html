@@ -690,23 +690,31 @@
 
   // The record is the licence promise made readable: who asked what, and what
   // the machine refused. A partner reads it; an administrator keeps the machine.
+  // The keys are the exact action names the register writes, not a paraphrase —
+  // a test checks this map against the Python source, so a new action cannot
+  // arrive on the page as a raw identifier.
   const ACTION_WORDS = {
-    person_admitted: "admitted",
+    person_admitted: "was admitted as",
     person_role_changed: "changed a role",
-    person_suspended: "suspended a seat",
-    person_departed: "closed a seat",
-    person_active: "reinstated a seat",
-    invitation_issued: "issued an invitation",
-    credential_revoked: "revoked passkeys",
-    client_assigned: "assigned a client",
-    client_unassigned: "unassigned a client",
-    client_refused: "was refused a client",
-    draft_prepared: "prepared a draft",
-    draft_submitted: "submitted a draft",
+    person_invited: "was invited",
+    person_active: "was reinstated",
+    person_suspended: "was suspended",
+    person_departed: "left the practice",
+    invitation_issued: "was issued an invitation",
+    passkey_enrolled: "enrolled a passkey",
+    passkey_revoked: "revoked a passkey",
+    all_passkeys_revoked: "had every passkey revoked",
+    signed_in: "signed in",
+    asked: "asked a question",
+    answered: "got an answer",
+    answer_failed: "asked and got no answer",
+    client_assigned: "was assigned a client",
+    client_unassigned: "was unassigned a client",
+    client_access_refused: "was refused a client's files",
+    draft_created: "prepared a draft",
+    draft_awaiting_signature: "submitted a draft for signature",
     draft_signed: "signed a draft",
     draft_withdrawn: "withdrew a draft",
-    answer_failed: "asked and got no answer",
-    answer_given: "asked a question",
   };
 
   function when(at) {
