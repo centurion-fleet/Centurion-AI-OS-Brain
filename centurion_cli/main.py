@@ -12793,6 +12793,18 @@ Examples:
     backup_parser.add_argument(
         "-l", "--label", help="Label for the snapshot (only used with --quick)"
     )
+    backup_parser.add_argument(
+        "-e",
+        "--encrypt",
+        action="store_true",
+        help="Encrypt the archive (AES-256-GCM) into a .cbk container. REQUIRED for any "
+        "backup that leaves the machine: the plain zip contains client files in the clear.",
+    )
+    backup_parser.add_argument(
+        "--passphrase-file",
+        help="Read the backup passphrase from this file instead of prompting "
+        "(for a scheduled/unattended backup; the file must be protected by the OS).",
+    )
     backup_parser.set_defaults(func=cmd_backup)
 
     # =========================================================================
@@ -12819,7 +12831,11 @@ Examples:
         "Centurion home directory, restoring configuration, skills, "
         "sessions, and data",
     )
-    import_parser.add_argument("zipfile", help="Path to the backup zip file")
+    import_parser.add_argument("zipfile", help="Path to the backup zip file, or a .cbk encrypted container")
+    import_parser.add_argument(
+        "--passphrase-file",
+        help="Read the container passphrase from this file instead of prompting",
+    )
     import_parser.add_argument(
         "--force",
         "-f",

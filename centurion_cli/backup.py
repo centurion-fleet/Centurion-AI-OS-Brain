@@ -23,6 +23,10 @@ from typing import Any, Dict, List, Optional
 
 from centurion_constants import get_default_centurion_root, get_centurion_home, display_centurion_home
 
+# Encrypted container support. Imported at module level so both the backup and
+# restore paths share one implementation of the format.
+from centurion_cli import backup_crypto as _bc
+
 logger = logging.getLogger(__name__)
 
 
@@ -160,8 +164,12 @@ def run_backup(args) -> None:
         stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
         out_path = Path.home() / f"centurion-backup-{stamp}.zip"
 
-    # Ensure the suffix is .zip
-    if out_path.suffix.lower() != ".zip":
+    # Ensure the suffix is .zip. The plain archive is always written first; with
+    # --encrypt it is then replaced by <stem>.cbk, so a user who types `-o x.cbk`
+    # gets exactly x.cbk and not x.cbk.cbk.
+    if out_path.suffix.lower() == ".cbk":
+        out_path = out_path.with_suffix(".zip")
+    elif out_path.suffix.lower() != ".zip":
         out_path = out_path.with_suffix(out_path.suffix + ".zip")
 
     # Ensure parent directory exists
@@ -255,6 +263,34 @@ def run_backup(args) -> None:
         if len(errors) > 10:
             print(f"  ... and {len(errors) - 10} more")
 
+    if getattr(args, "encrypt", False):
+        # The archive leaves this machine, so it is encrypted before it does.
+        print("\nEncrypting archive ...")
+        pf = getattr(args, "passphrase_file", None)
+        try:
+            passphrase = (
+                _bc.read_passphrase_file(pf) if pf else _bc.prompt_passphrase(confirm=True)
+            )
+            container = out_path.with_suffix(".cbk")
+            enc = _bc.encrypt_file(out_path, container, passphrase, remove_source=True)
+            print(f"  Archive:     {container}")
+            print(f"  Size:        {_format_size(enc['archive_bytes'])}")
+            print(f"  Records:     {enc['records']} (AES-256-GCM, scrypt)")
+            verified = _bc.verify_archive(container, passphrase)
+            print(
+                f"  Verified:    yes — decrypted, digest matched, "
+                f"{verified['files']} entries CRC-checked"
+            )
+        except _bc.BackupCryptoError as exc:
+            print(f"\nError: {exc}")
+            print("The unencrypted zip has been KEPT at the path below; delete it yourself once resolved.")
+            print(f"  {out_path}")
+            sys.exit(1)
+
+        print("\nKeep the passphrase somewhere you control. We do not hold it and cannot recover it.")
+        print(f"\nRestore with: centurion import {container.name}")
+        return
+
     print(f"\nRestore with: centurion import {out_path.name}")
 
 
@@ -314,13 +350,41 @@ def _detect_prefix(zf: zipfile.ZipFile) -> str:
 
 
 def run_import(args) -> None:
-    """Restore a Centurion backup from a zip file."""
+    """Restore a Centurion backup from a zip file, or from an encrypted container."""
     zip_path = Path(args.zipfile).expanduser().resolve()
 
     if not zip_path.is_file():
         print(f"Error: File not found: {zip_path}")
         sys.exit(1)
 
+    # An encrypted container (`.cbk`) is decrypted to a temporary zip first. The
+    # passphrase is the customer's and is never written anywhere by this process.
+    _decrypted_tmp: Optional[Path] = None
+    if _bc.is_encrypted(zip_path):
+        print("Encrypted backup container detected.")
+        pf = getattr(args, "passphrase_file", None)
+        passphrase = (
+            _bc.read_passphrase_file(pf) if pf else _bc.prompt_passphrase(confirm=False)
+        )
+        try:
+            fd, tmp_name = tempfile.mkstemp(prefix="centurion-restore-", suffix=".zip")
+            os.close(fd)
+            _decrypted_tmp = Path(tmp_name)
+            stats = _bc.decrypt_file(zip_path, _decrypted_tmp, passphrase)
+        except _bc.BackupCryptoError as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
+        print(f"Decrypted OK — {_format_size(stats['plaintext_bytes'])}, digest matched.")
+        zip_path = _decrypted_tmp
+
+    try:
+        _run_import_from_zip(args, zip_path)
+    finally:
+        if _decrypted_tmp is not None:
+            _decrypted_tmp.unlink(missing_ok=True)
+
+
+def _run_import_from_zip(args, zip_path: Path) -> None:
     if not zipfile.is_zipfile(zip_path):
         print(f"Error: Not a valid zip file: {zip_path}")
         sys.exit(1)
