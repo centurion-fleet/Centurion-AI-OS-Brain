@@ -239,7 +239,7 @@ plugins = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["centurion", "centurion.*", "agent", "agent.*", "tools", "tools.*", "centurion_cli", "gateway", "gateway.*", "tui_gateway", "tui_gateway.*", "cron", "acp_adapter", "plugins", "plugins.*", "providers", "providers.*"]
+include = ["centurion", "centurion.*", "agent", "agent.*", "tools", "tools.*", "centurion_cli", "centurion_cli.*", "gateway", "gateway.*", "tui_gateway", "tui_gateway.*", "cron", "acp_adapter", "plugins", "plugins.*", "providers", "providers.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
