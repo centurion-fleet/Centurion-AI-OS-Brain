@@ -56,7 +56,7 @@ python3 -m venv "${VENV_DST}"
 # so lazy pip install at runtime fails for customers — preinstall here.
 # Messaging: Telegram + WhatsApp only (no Discord/Slack). Remote uses api_server.
 "${VENV_DST}/bin/pip" install --no-cache-dir \
-  "${REPO_DST}[anthropic,edge-tts,firecrawl]" \
+  "${REPO_DST}[anthropic,edge-tts,firecrawl,practice]" \
   "python-telegram-bot[webhooks]==22.6" \
   "aiohttp==3.13.4" \
   "brotlicffi==1.2.0.1" \

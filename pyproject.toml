@@ -100,6 +100,12 @@ matrix = ["mautrix[encryption]==0.21.0", "Markdown==3.10.2", "aiosqlite==0.22.1"
 # here to keep the dependency local to wecom_callback's threat model.
 wecom = ["defusedxml==0.7.1"]
 cli = ["simple-term-menu==1.6.6"]
+# Practice desk — the signed-in browser client for the Practice edition. cbor2
+# decodes the COSE key and the attestation object the browser hands back, and
+# cryptography verifies the assertion signature; without either the desk cannot
+# start. Pinned for the same reason as everything else here: the passkey path is
+# a security boundary and a silent transitive bump should not reach it.
+practice = ["cbor2==6.1.3", "cryptography==49.0.0"]
 tts-premium = ["elevenlabs==1.59.0"]
 voice = [
   # Local STT pulls in wheel-only transitive deps (ctranslate2, onnxruntime),
