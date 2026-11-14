@@ -208,10 +208,16 @@ def test_today_reports_unmeasured_panes_as_null_never_zero(settings):
             await _enrol(client, settings)
             data = await (await client.get("/api/today")).json()
 
-            for key, pane in data["panes"].items():
+            # The drafts register now exists, so that pane is a real count (zero,
+            # because nothing has been submitted). Every pane without a register
+            # behind it still refuses to invent one.
+            assert data["panes"]["drafts_awaiting_signature"]["value"] == 0
+            for key in ("clients_chased_no_reply", "hours_returned_this_month",
+                        "deadlines_inside_14_days"):
+                pane = data["panes"][key]
                 assert pane["value"] is None, f"{key} invented a value"
                 assert pane["reason"], f"{key} gave no reason"
-            assert len(data["unmeasured"]) == 4
+            assert len(data["unmeasured"]) == 3
             assert data["seats"]["held"] == 1
         finally:
             await client.close()
@@ -453,6 +459,169 @@ def test_a_client_thread_without_a_client_is_refused(settings):
     run(scenario())
 
 
+# ── drafts: the thing a partner signs ───────────────────────────────────────
+
+
+def test_a_draft_moves_from_prepared_to_signed_and_records_both_people(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            created = await (
+                await client.post("/api/drafts", json={"body": "Dear Sirs, your year end.", "kind": "letter"})
+            ).json()
+            draft = created["draft"]
+            assert draft["status"] == "draft"
+
+            submitted = await (
+                await client.post("/api/drafts/action", json={"id": draft["id"], "action": "submit"})
+            ).json()
+            assert submitted["draft"]["status"] == "awaiting_signature"
+
+            today = await (await client.get("/api/today")).json()
+            assert today["panes"]["drafts_awaiting_signature"]["value"] == 1
+
+            signed = await (
+                await client.post("/api/drafts/action", json={"id": draft["id"], "action": "sign"})
+            ).json()
+            assert signed["draft"]["status"] == "signed"
+            assert signed["draft"]["signed_by"]
+            assert signed["draft"]["signed_at"]
+
+            today = await (await client.get("/api/today")).json()
+            assert today["panes"]["drafts_awaiting_signature"]["value"] == 0
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_only_a_partner_signs(settings):
+    async def scenario():
+        boss = await _client(settings)
+        staff = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            worker, token = _add_person_with_session(
+                boss, name="Worker", email="worker@firm.test", role="associate"
+            )
+            staff.session.cookie_jar.update_cookies({"pd_session": token})
+
+            draft = (await (
+                await staff.post("/api/drafts", json={"body": "A covering email."})
+            ).json())["draft"]
+            await staff.post("/api/drafts/action", json={"id": draft["id"], "action": "submit"})
+
+            refused = await staff.post(
+                "/api/drafts/action", json={"id": draft["id"], "action": "sign"}
+            )
+            assert refused.status == 400
+            assert "Only a partner can sign" in (await refused.json())["error"]
+
+            # And the draft is still waiting, rather than silently signed.
+            still = await (await boss.get("/api/drafts?status=awaiting_signature")).json()
+            assert [d["id"] for d in still["drafts"]] == [draft["id"]]
+        finally:
+            await boss.close()
+            await staff.close()
+
+    run(scenario())
+
+
+def test_only_the_preparer_may_submit_a_draft(settings):
+    async def scenario():
+        boss = await _client(settings)
+        staff = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            worker, token = _add_person_with_session(
+                boss, name="Worker", email="worker@firm.test", role="manager"
+            )
+            staff.session.cookie_jar.update_cookies({"pd_session": token})
+
+            draft = (await (
+                await staff.post("/api/drafts", json={"body": "Prepared by the manager."})
+            ).json())["draft"]
+
+            refused = await boss.post(
+                "/api/drafts/action", json={"id": draft["id"], "action": "submit"}
+            )
+            assert refused.status == 400
+            assert "prepared" in (await refused.json())["error"]
+        finally:
+            await boss.close()
+            await staff.close()
+
+    run(scenario())
+
+
+def test_a_draft_cannot_be_signed_without_being_submitted_first(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            draft = (await (
+                await client.post("/api/drafts", json={"body": "Straight to signature."})
+            ).json())["draft"]
+            refused = await client.post(
+                "/api/drafts/action", json={"id": draft["id"], "action": "sign"}
+            )
+            assert refused.status == 400
+            assert "cannot become signed" in (await refused.json())["error"]
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_signing_your_own_draft_is_allowed_and_says_so_on_the_record(settings):
+    """A sole practitioner signs their own work. Pretending two people looked at
+    it would be a worse record than saying plainly that one did."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            draft = (await (
+                await client.post("/api/drafts", json={"body": "Sole practitioner letter."})
+            ).json())["draft"]
+            await client.post("/api/drafts/action", json={"id": draft["id"], "action": "submit"})
+            await client.post("/api/drafts/action", json={"id": draft["id"], "action": "sign"})
+
+            store = client.server.app[desk_app.DESK_KEY].store
+            actions = [(r["action"], r["detail"]) for r in store.audit_log(30)]
+            assert ("draft_signed", "signed by its own preparer") in actions
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_you_cannot_draft_on_a_client_you_are_not_assigned_to(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        boss = await _client(settings)
+        staff = await _client(settings)
+        try:
+            await _enrol(boss, settings)
+            _worker, token = _add_person_with_session(
+                boss, name="Worker", email="worker@firm.test", role="associate"
+            )
+            staff.session.cookie_jar.update_cookies({"pd_session": token})
+            refused = await staff.post(
+                "/api/drafts", json={"body": "Hello.", "client": "fenwick-farm"}
+            )
+            assert refused.status == 400
+            assert "not assigned" in (await refused.json())["error"]
+        finally:
+            await boss.close()
+            await staff.close()
+
+    run(scenario())
+
+
 # ── the Firm rule: who may see which client ─────────────────────────────────
 
 
@@ -669,9 +838,11 @@ def test_the_deadline_pane_is_measured_once_a_library_exists(settings, tmp_path)
             pane = data["panes"]["deadlines_inside_14_days"]
             assert pane["value"] is not None
             assert isinstance(pane["value"], int)
-            # The three panes with no register behind them still refuse to invent zero.
-            assert data["panes"]["drafts_awaiting_signature"]["value"] is None
-            assert len(data["unmeasured"]) == 3
+            # The panes with no register behind them still refuse to invent zero.
+            assert data["panes"]["clients_chased_no_reply"]["value"] is None
+            assert data["panes"]["hours_returned_this_month"]["value"] is None
+            assert data["panes"]["drafts_awaiting_signature"]["value"] == 0
+            assert len(data["unmeasured"]) == 2
         finally:
             await client.close()
 

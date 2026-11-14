@@ -317,6 +317,11 @@
 
         <div class="panes" id="panes"></div>
 
+        <div id="drafts-block" hidden>
+          <div class="section-h">Review queue — waiting for a partner's signature</div>
+          <div class="rows" id="draft-rows"></div>
+        </div>
+
         <div id="deadline-block" hidden>
           <div class="section-h">Next deadlines, computed from the client records</div>
           <div class="rows" id="deadline-rows"></div>
@@ -389,7 +394,7 @@
     </div>
     <div class="block">
       <h4>Drafts awaiting signature</h4>
-      <p class="flag">Not measured — no drafts register on this machine yet.</p>
+      <p id="firm-drafts">—</p>
     </div>
     <div class="block">
       <h4>Provenance</h4>
@@ -514,6 +519,13 @@
       </div>`;
     }).join("");
 
+    const awaiting = data.panes.drafts_awaiting_signature.value;
+    $("firm-drafts").textContent = awaiting === null || awaiting === undefined
+      ? "Not measured."
+      : (awaiting === 0
+          ? "Nothing waiting. A draft reaches this queue when its author submits it."
+          : `${awaiting} waiting for a signature. Only a partner can sign.`);
+
     const n = data.unmeasured.length;
     $("today-sub").textContent = n === 0
       ? "This is the practice as the machine sees it. Every pane is measured."
@@ -532,6 +544,7 @@
 
     // The stamp is a fact about Today, not about the thread. Hide it elsewhere
     // rather than leave a stale claim under a different heading.
+    loadDrafts();
     loadDeadlines();
     // People is a partner's screen. Hiding it from an associate is not security
     // (the routes refuse them regardless) — it is so they are not shown a door
@@ -661,13 +674,87 @@
       const label = mine
         ? (shared && m.author ? m.author : "You")
         : "The practice's Centurion";
+      const saveBtn = mine ? "" :
+        `<button class="mini keep" data-idx="${state.messages.indexOf(m)}">Save as draft</button>`;
       return `<div class="msg ${mine ? "me" : "brain"}">
         <span class="who">${esc(label)}</span>
         <div class="body">${esc(m.content)}</div>
+        ${saveBtn}
       </div>`;
     }).join("");
     const sc = $("scroll");
     sc.scrollTop = sc.scrollHeight;
+
+    t.querySelectorAll("button.keep").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const m = state.messages[Number(btn.dataset.idx)];
+        btn.disabled = true;
+        try {
+          await post("/api/drafts", {
+            body: m.content,
+            client: state.scope === "client" ? state.client : null,
+            kind: "letter",
+          });
+          btn.textContent = "Saved — not sent";
+          await loadDrafts();
+        } catch (err) {
+          btn.disabled = false;
+          alert(err.message || "That did not work.");
+        }
+      });
+    });
+  }
+
+  function clientLabel(slug) {
+    if (!slug) return "practice";
+    const row = assignRoster.find((c) => c.slug === slug);
+    return row ? row.name : slug;
+  }
+
+  async function loadDrafts() {
+    try {
+      const awaiting = await get("/api/drafts?status=awaiting_signature");
+      const mine = await get("/api/drafts?status=draft");
+      const rows = [];
+
+      (awaiting.drafts || []).forEach((d) => {
+        const signable = state.person && state.person.role === "partner";
+        rows.push(`<div class="row">
+          <span class="k">${esc(clientLabel(d.client_slug))} · ${esc(d.kind)}<br>
+            <span class="email">prepared by ${esc(d.prepared_by_name)}</span></span>
+          <span class="v dim">${signable ? "" : "waiting"}</span>
+          ${signable ? `<button class="mini" data-sign="${d.id}">Sign</button>` : ""}
+        </div>`);
+      });
+      (mine.drafts || []).forEach((d) => {
+        rows.push(`<div class="row">
+          <span class="k">${esc(clientLabel(d.client_slug))} · ${esc(d.kind)}<br>
+            <span class="email">your draft — not submitted</span></span>
+          <span class="v dim"></span>
+          <button class="mini" data-submit="${d.id}">Submit for signature</button>
+        </div>`);
+      });
+
+      if (!rows.length) { $("drafts-block").hidden = true; return; }
+      $("drafts-block").hidden = false;
+      $("draft-rows").innerHTML = rows.join("");
+      $("draft-rows").querySelectorAll("[data-sign]").forEach((b) =>
+        b.addEventListener("click", () => draftAction(b.dataset.sign, "sign")));
+      $("draft-rows").querySelectorAll("[data-submit]").forEach((b) =>
+        b.addEventListener("click", () => draftAction(b.dataset.submit, "submit")));
+    } catch (e) {
+      $("drafts-block").hidden = true;
+    }
+  }
+
+  async function draftAction(id, action) {
+    try {
+      await post("/api/drafts/action", { id, action });
+      await loadDrafts();
+      await loadToday();
+    } catch (err) {
+      alert(err.message || "That did not work.");
+    }
   }
 
   function threadUrl() {
@@ -756,10 +843,8 @@
         <button class="conv client" data-slug="${esc(c.slug)}" data-name="${esc(c.name)}"
                 aria-current="false">
           ${esc(c.name)}
-          <small>${esc(c.entity || "client")} · ${
-            c.assigned && c.assigned.length
-              ? "assigned: " + esc(c.assigned.join(", "))
-              : "not assigned to anyone"}</small>
+          <small>${esc(c.entity || "client")}${
+            c.assigned && c.assigned.length ? " · " + esc(c.assigned.join(", ")) : ""}</small>
         </button>`).join("");
       $("client-list").querySelectorAll(".client").forEach((btn) => {
         btn.addEventListener("click", async () => {

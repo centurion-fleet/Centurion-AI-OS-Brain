@@ -486,10 +486,12 @@ async def today(request: web.Request) -> web.Response:
                 "note": "computed from the client library — nothing inside fourteen days",
             }
 
+    awaiting = desk.store.awaiting_signature_count(person)
     panes = {
         "drafts_awaiting_signature": {
-            "value": None,
-            "reason": "no drafts register on this machine yet",
+            "value": awaiting,
+            "reason": None,
+            "note": "drafts submitted and waiting for a partner's signature",
         },
         "deadlines_inside_14_days": deadline_pane,
         "clients_chased_no_reply": {
@@ -695,6 +697,59 @@ async def client_assign(request: web.Request) -> web.Response:
             "assigned": [p.name for p in desk.store.assignees(client_id)],
         }
     )
+
+
+async def drafts_list(request: web.Request) -> web.Response:
+    person = await _require_person(request)
+    desk: Desk = request.app[DESK_KEY]
+    status = request.query.get("status")
+    if status and status not in desk.store.DRAFT_STATUSES:
+        raise DeskError("Unknown draft status.")
+    items = desk.store.drafts(person, status=status)
+    for d in items:
+        author = desk.store.get_person(d["prepared_by"])
+        d["prepared_by_name"] = author.name if author else "someone who has left"
+    return web.json_response({"ok": True, "drafts": items})
+
+
+async def draft_create(request: web.Request) -> web.Response:
+    person = await _require_person(request)
+    if not _same_origin(request):
+        return _error("That request did not come from the desk.", 403)
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+    draft = desk.store.create_draft(
+        person=person,
+        body=str(payload.get("body", "")),
+        client_slug=(str(payload.get("client")) if payload.get("client") else None),
+        kind=str(payload.get("kind", "letter")),
+        cites=payload.get("cites") or [],
+        unsettled=payload.get("unsettled") or [],
+    )
+    return web.json_response({"ok": True, "draft": draft})
+
+
+async def draft_action(request: web.Request) -> web.Response:
+    """submit / sign / withdraw. The verb decides which rule applies."""
+    person = await _require_person(request)
+    if not _same_origin(request):
+        return _error("That request did not come from the desk.", 403)
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+    action = str(payload.get("action", "")).strip()
+    draft_id = str(payload.get("id", "")).strip()
+    if not draft_id:
+        raise DeskError("Name the draft.")
+
+    if action == "submit":
+        draft = desk.store.submit_draft(draft_id, person=person)
+    elif action == "sign":
+        draft = desk.store.sign_draft(draft_id, person=person)
+    elif action == "withdraw":
+        draft = desk.store.withdraw_draft(draft_id, person=person)
+    else:
+        raise DeskError("Action must be submit, sign or withdraw.")
+    return web.json_response({"ok": True, "draft": draft})
 
 
 async def deadline_list(request: web.Request) -> web.Response:
@@ -1001,6 +1056,9 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_get("/api/deadlines", deadline_list)
     app.router.add_get("/api/clients", clients_list)
     app.router.add_post("/api/clients/assign", client_assign)
+    app.router.add_get("/api/drafts", drafts_list)
+    app.router.add_post("/api/drafts", draft_create)
+    app.router.add_post("/api/drafts/action", draft_action)
     app.router.add_get("/api/people", people_list)
     app.router.add_post("/api/people/invite", people_invite)
     app.router.add_post("/api/people/status", people_status)

@@ -191,6 +191,24 @@ class PracticeStore:
                     ON messages(conversation_id, id);
                 CREATE INDEX IF NOT EXISTS idx_sessions_expiry
                     ON sessions(expires_at);
+                CREATE TABLE IF NOT EXISTS drafts (
+                    id          TEXT PRIMARY KEY,
+                    client_slug TEXT,
+                    kind        TEXT NOT NULL,
+                    body        TEXT NOT NULL,
+                    cites       TEXT,
+                    unsettled   TEXT,
+                    prepared_by TEXT NOT NULL REFERENCES people(id),
+                    status      TEXT NOT NULL DEFAULT 'draft',
+                    signed_by   TEXT,
+                    signed_at   REAL,
+                    created_at  REAL NOT NULL,
+                    updated_at  REAL NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_drafts_status
+                    ON drafts(status, created_at);
+
                 CREATE TABLE IF NOT EXISTS assignments (
                     client_slug TEXT NOT NULL,
                     person_id   TEXT NOT NULL REFERENCES people(id),
@@ -520,6 +538,158 @@ class PracticeStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    # ── drafts: the thing a partner signs ───────────────────────────────────
+
+    DRAFT_STATUSES = ("draft", "awaiting_signature", "signed", "withdrawn")
+
+    def create_draft(
+        self,
+        *,
+        person: Person,
+        body: str,
+        client_slug: Optional[str] = None,
+        kind: str = "letter",
+        cites: Optional[List[str]] = None,
+        unsettled: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        body = (body or "").strip()
+        if not body:
+            raise DeskError("A draft with no words in it is not a draft.")
+        if client_slug and not self.may_see_client(person, client_slug):
+            raise DeskError(
+                f"You are not assigned to {client_slug}, so you cannot draft on it."
+            )
+        at = _now()
+        draft_id = secrets.token_urlsafe(9)
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO drafts(id, client_slug, kind, body, cites, unsettled,"
+                " prepared_by, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)",
+                (
+                    draft_id,
+                    client_slug,
+                    kind,
+                    body,
+                    json.dumps(cites or []),
+                    json.dumps(unsettled or []),
+                    person.id,
+                    at,
+                    at,
+                ),
+            )
+            self._audit(conn, person.id, "draft_created", client_id=client_slug, detail=draft_id)
+        return self.get_draft(draft_id)  # type: ignore[return-value]
+
+    def get_draft(self, draft_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+        return _draft(row) if row else None
+
+    def _transition(
+        self, draft_id: str, *, person: Person, allowed_from: tuple, to: str,
+        detail: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        draft = self.get_draft(draft_id)
+        if draft is None:
+            raise DeskError("That draft is not on this machine.")
+        if draft["status"] not in allowed_from:
+            raise DeskError(
+                f"That draft is {draft['status'].replace('_', ' ')}; it cannot become {to.replace('_', ' ')}."
+            )
+        at = _now()
+        with self.connect() as conn:
+            if to == "signed":
+                conn.execute(
+                    "UPDATE drafts SET status = ?, signed_by = ?, signed_at = ?, updated_at = ?"
+                    " WHERE id = ?",
+                    (to, person.id, at, at, draft_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ?",
+                    (to, at, draft_id),
+                )
+            self._audit(conn, person.id, f"draft_{to}", client_id=draft["client_slug"],
+                        detail=detail or draft_id)
+        return self.get_draft(draft_id)  # type: ignore[return-value]
+
+    def submit_draft(self, draft_id: str, *, person: Person) -> Dict[str, Any]:
+        """The preparer puts it in front of a partner. Only its author may."""
+        draft = self.get_draft(draft_id)
+        if draft is None:
+            raise DeskError("That draft is not on this machine.")
+        if draft["prepared_by"] != person.id:
+            raise DeskError("Only the person who prepared a draft can submit it.")
+        return self._transition(
+            draft_id, person=person, allowed_from=("draft",), to="awaiting_signature"
+        )
+
+    def sign_draft(self, draft_id: str, *, person: Person) -> Dict[str, Any]:
+        """Only a partner signs. This is the rule the whole product rests on."""
+        if person.role != "partner":
+            raise DeskError(
+                f"Only a partner can sign. You are signed in as {person.role}."
+            )
+        draft = self.get_draft(draft_id)
+        if draft is None:
+            raise DeskError("That draft is not on this machine.")
+        if draft["client_slug"] and not self.may_see_client(person, draft["client_slug"]):
+            raise DeskError("That draft is for a client you are not assigned to.")
+        if draft["prepared_by"] == person.id:
+            # Allowed, and flagged: a sole practitioner signs their own work, but
+            # the record says so rather than pretending two people looked at it.
+            return self._transition(
+                draft_id, person=person, allowed_from=("awaiting_signature",),
+                to="signed", detail="signed by its own preparer",
+            )
+        return self._transition(
+            draft_id, person=person, allowed_from=("awaiting_signature",), to="signed"
+        )
+
+    def withdraw_draft(self, draft_id: str, *, person: Person) -> Dict[str, Any]:
+        draft = self.get_draft(draft_id)
+        if draft is None:
+            raise DeskError("That draft is not on this machine.")
+        if person.role != "partner" and draft["prepared_by"] != person.id:
+            raise DeskError("Only its author or a partner can withdraw a draft.")
+        return self._transition(
+            draft_id, person=person,
+            allowed_from=("draft", "awaiting_signature"), to="withdrawn",
+        )
+
+    def drafts(
+        self,
+        person: Person,
+        *,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """What this person may see. A partner sees the practice's queue; everyone
+        else sees only what they prepared or what they are assigned to."""
+        rows = []
+        with self.connect() as conn:
+            sql = "SELECT * FROM drafts"
+            params: list = []
+            if status:
+                sql += " WHERE status = ?"
+                params.append(status)
+            sql += " ORDER BY created_at DESC LIMIT ?"
+            params.append(int(limit))
+            for row in conn.execute(sql, params).fetchall():
+                draft = _draft(row)
+                if draft["client_slug"] and not self.may_see_client(person, draft["client_slug"]):
+                    continue
+                if person.role != "partner" and draft["prepared_by"] != person.id:
+                    # A manager may see a colleague's draft on a client they share.
+                    if not draft["client_slug"]:
+                        continue
+                rows.append(draft)
+        return rows
+
+    def awaiting_signature_count(self, person: Person) -> int:
+        return sum(1 for d in self.drafts(person, status="awaiting_signature") if True)
+
     # ── assignments: who may see which client ───────────────────────────────
 
     def assign(self, client_slug: str, person_id: str, *, by: Optional[str] = None) -> None:
@@ -682,6 +852,13 @@ class PracticeStore:
             m["unsettled"] = json.loads(m["unsettled"]) if m["unsettled"] else []
             out.append(m)
         return out
+
+
+def _draft(row: sqlite3.Row) -> Dict[str, Any]:
+    d = dict(row)
+    d["cites"] = json.loads(d["cites"]) if d.get("cites") else []
+    d["unsettled"] = json.loads(d["unsettled"]) if d.get("unsettled") else []
+    return d
 
 
 def _person(row: sqlite3.Row) -> Person:
