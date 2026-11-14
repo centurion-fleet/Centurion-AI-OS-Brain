@@ -82,6 +82,15 @@ class Settings:
 
     def __post_init__(self) -> None:
         self.brain_key = resolve_brain_key(self.brain_key)
+        if self.practice_library is None:
+            try:
+                from centurion_constants import get_centurion_home
+
+                candidate = Path(get_centurion_home()) / "practice" / "library"
+                if candidate.is_dir():
+                    self.practice_library = candidate
+            except Exception:  # noqa: BLE001
+                self.practice_library = None
 
     @property
     def loopback(self) -> bool:
@@ -187,6 +196,19 @@ async def _json(request: web.Request) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise DeskError("That request was not readable.")
     return payload
+
+
+# Who may change who exists. A manager can run client work; only a partner or an
+# administrator may add, suspend or revoke a person.
+PEOPLE_ADMINS = ("partner", "administrator")
+
+
+def _require_people_admin(person: Person) -> None:
+    if person.role not in PEOPLE_ADMINS:
+        raise DeskError(
+            f"Only a partner or an administrator can change who is on this "
+            f"machine. You are signed in as {person.role}."
+        )
 
 
 def _person_payload(person: Person) -> Dict[str, Any]:
@@ -432,15 +454,37 @@ async def today(request: web.Request) -> web.Response:
     desk: Desk = request.app[DESK_KEY]
     usage = desk.store.seat_usage()
 
+    deadline_pane: Dict[str, Any] = {
+        "value": None,
+        "reason": "no client library on this machine",
+    }
+    deadline_detail: Dict[str, Any] = {"count": 0, "unsettled": [], "next": None}
+    if desk.settings.practice_library and (Path(desk.settings.practice_library) / "clients").is_dir():
+        from centurion_cli.practice_desk import deadlines as dl
+
+        found = dl.upcoming(desk.settings.practice_library, horizon_days=14)
+        summary = dl.summarise(found)
+        deadline_detail = summary
+        if summary["count"] or summary["unsettled"]:
+            deadline_pane = {
+                "value": summary["count"],
+                "reason": None,
+                "next": summary["next"],
+                "unsettled": len(summary["unsettled"]),
+            }
+        else:
+            deadline_pane = {
+                "value": 0,
+                "reason": None,
+                "note": "computed from the client library — nothing inside fourteen days",
+            }
+
     panes = {
         "drafts_awaiting_signature": {
             "value": None,
             "reason": "no drafts register on this machine yet",
         },
-        "deadlines_inside_14_days": {
-            "value": None,
-            "reason": "no deadline calendar computed yet",
-        },
+        "deadlines_inside_14_days": deadline_pane,
         "clients_chased_no_reply": {
             "value": None,
             "reason": "no client correspondence register yet",
@@ -461,6 +505,8 @@ async def today(request: web.Request) -> web.Response:
                 "refusal_at": desk.store.capacity_refusal(1),
             },
             "panes": panes,
+            "deadlines": deadline_detail,
+            "library": str(desk.settings.practice_library or ""),
             "unmeasured": [
                 name for name, pane in panes.items() if pane["value"] is None
             ],
@@ -469,6 +515,121 @@ async def today(request: web.Request) -> web.Response:
 
 
 # ── routes: conversation ────────────────────────────────────────────────────
+
+
+async def people_list(request: web.Request) -> web.Response:
+    """Who is on this machine, and which seats are free."""
+    person = await _require_person(request)
+    _require_people_admin(person)
+    desk: Desk = request.app[DESK_KEY]
+    people = []
+    for p in desk.store.list_people(include_departed=True):
+        creds = desk.store.credentials_for(p.id)
+        people.append(
+            {
+                **_person_payload(p),
+                "passkeys": len(creds),
+                "enrolled": p.enrolled_at is not None,
+                "last_seen": p.last_seen_at,
+            }
+        )
+    return web.json_response(
+        {
+            "ok": True,
+            "people": people,
+            "seats": desk.store.seat_usage(),
+            "refusal": desk.store.capacity_refusal(1),
+        }
+    )
+
+
+async def people_invite(request: web.Request) -> web.Response:
+    """Reserve a seat and return a one-time link. Refuses in the licence's words."""
+    person = await _require_person(request)
+    _require_people_admin(person)
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+
+    admitted = desk.store.admit_person(
+        name=str(payload.get("name", "")),
+        email=str(payload.get("email", "")),
+        role=str(payload.get("role", "associate")),
+        created_by=person.id,
+    )
+    token = desk.store.issue_invitation(admitted.id, by=person.id)
+    base = desk.settings.origin.rstrip("/")
+    return web.json_response(
+        {
+            "ok": True,
+            "person": _person_payload(admitted),
+            "link": f"{base}/#invite={token}",
+            "expires_in_minutes": 15,
+        }
+    )
+
+
+async def people_status(request: web.Request) -> web.Response:
+    person = await _require_person(request)
+    _require_people_admin(person)
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+    target = desk.store.get_person(str(payload.get("id", "")))
+    if target is None:
+        raise DeskError("That person is not on this machine.")
+    if target.id == person.id and payload.get("status") != "active":
+        raise DeskError("A partner cannot suspend their own seat. Ask another partner.")
+
+    status = str(payload.get("status", ""))
+    desk.store.set_status(target.id, status, by=person.id)
+    return web.json_response({"ok": True, "person": _person_payload(desk.store.get_person(target.id))})
+
+
+async def people_revoke(request: web.Request) -> web.Response:
+    person = await _require_person(request)
+    _require_people_admin(person)
+    desk: Desk = request.app[DESK_KEY]
+    payload = await _json(request)
+    target = desk.store.get_person(str(payload.get("id", "")))
+    if target is None:
+        raise DeskError("That person is not on this machine.")
+    desk.store.revoke_all_credentials(target.id, by=person.id)
+    return web.json_response({"ok": True, "person": _person_payload(target)})
+
+
+async def deadline_list(request: web.Request) -> web.Response:
+    """Every obligation inside the horizon, with the rule that produced it."""
+    await _require_person(request)
+    desk: Desk = request.app[DESK_KEY]
+    library = desk.settings.practice_library
+    if not library:
+        return web.json_response(
+            {"ok": True, "obligations": [], "reason": "no client library on this machine"}
+        )
+    from centurion_cli.practice_desk import deadlines as dl
+
+    horizon = 45
+    try:
+        horizon = max(1, min(365, int(request.query.get("days", "45"))))
+    except ValueError:
+        pass
+    found = dl.upcoming(library, horizon_days=horizon)
+    return web.json_response(
+        {
+            "ok": True,
+            "horizon_days": horizon,
+            "obligations": [
+                {
+                    "client": o.client,
+                    "kind": o.kind,
+                    "due": o.due.isoformat(),
+                    "days": o.days_remaining,
+                    "rule": o.rule,
+                    "unsettled": o.unsettled,
+                }
+                for o in found
+            ],
+        }
+    )
 
 
 async def thread(request: web.Request) -> web.Response:
@@ -563,11 +724,21 @@ async def _stream_from_brain(desk: Desk, person: Person, history: list):
         yield "__ERROR__The desk is not connected to a Brain."
         return
 
+    library = desk.settings.practice_library
+    library_line = (
+        f"The practice's own records are in {library}. Read them with your file "
+        "tools before answering a question about a client, a deadline or the "
+        "house style. Cite the path and line you used. "
+        if library
+        else "No practice library is attached to this desk, so answer only from "
+        "what you are told in the conversation and say when you are doing so. "
+    )
     system = (
         f"You are the Centurion of this accounting practice, speaking to "
         f"{person.name} ({person.role}). Answer in the practice's own voice: "
         "short, direct, and name the file and line you are relying on. "
-        "If you cannot settle something, say which part you could not settle "
+        + library_line
+        + "If you cannot settle something, say which part you could not settle "
         "rather than filling the gap. Nothing you draft is sent to a client "
         "without a human signature."
     )
@@ -681,6 +852,11 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app.router.add_get("/api/me", me)
     app.router.add_get("/api/today", today)
     app.router.add_get("/api/thread", thread)
+    app.router.add_get("/api/deadlines", deadline_list)
+    app.router.add_get("/api/people", people_list)
+    app.router.add_post("/api/people/invite", people_invite)
+    app.router.add_post("/api/people/status", people_status)
+    app.router.add_post("/api/people/revoke", people_revoke)
     app.router.add_post("/api/chat", chat)
 
     app.router.add_get("/healthz", _health)

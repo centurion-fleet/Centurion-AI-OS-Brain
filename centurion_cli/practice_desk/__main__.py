@@ -21,6 +21,56 @@ def _store(args):
     return open_store(Path(args.db) if getattr(args, "db", None) else None)
 
 
+def cmd_demo(args) -> int:
+    """Write the sample practice. Idempotent, and says where it went."""
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    if args.to:
+        root = Path(args.to)
+    else:
+        from centurion_constants import get_centurion_home
+
+        root = Path(get_centurion_home()) / "practice"
+
+    library = build_demo_library(root)
+    clients = sorted((library / "clients").glob("*.md"))
+    print(f"Sample practice written to {library}")
+    print(f"{len(clients)} clients, a house style and an engagement letter precedent.")
+    print("It describes no real person, firm or client — say so when you screen-share.")
+    return 0
+
+
+def cmd_deadlines(args) -> int:
+    from centurion_cli.practice_desk import deadlines as dl
+
+    if args.library:
+        library = Path(args.library)
+    else:
+        from centurion_constants import get_centurion_home
+
+        library = Path(get_centurion_home()) / "practice" / "library"
+
+    if not (library / "clients").is_dir():
+        print(f"No client library at {library}. Build one with: practice-desk demo", file=sys.stderr)
+        return 2
+
+    found = dl.upcoming(library, horizon_days=args.days)
+    if not found:
+        print(f"Nothing due in the next {args.days} days.")
+        return 0
+    print(f"{'DUE':12} {'DAYS':>4}  {'CLIENT':26} OBLIGATION")
+    for o in found:
+        flag = "!" if o.unsettled else " "
+        print(f"{o.due.isoformat():12} {o.days_remaining:>4}  {o.client[:26]:26} {o.kind}{flag}")
+    unsettled = [o for o in found if o.unsettled]
+    if unsettled:
+        print()
+        print("Unsettled — reported, not guessed:")
+        for o in unsettled:
+            print(f"  {o.client}: {o.unsettled}")
+    return 0
+
+
 def cmd_serve(args) -> int:
     settings = Settings(
         rp_id=args.rp_id,
@@ -34,6 +84,7 @@ def cmd_serve(args) -> int:
         db_path=Path(args.db) if args.db else None,
         tls_cert=args.tls_cert,
         tls_key=args.tls_key,
+        practice_library=Path(args.library) if args.library else None,
     )
     serve(settings)
     return 0
@@ -136,6 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--brain-url", default="http://127.0.0.1:18789")
     p_serve.add_argument("--brain-key", default="")
     p_serve.add_argument("--brain-model", default="centurion")
+    p_serve.add_argument("--library", help="path to the practice library (clients/)")
     p_serve.add_argument("--tls-cert")
     p_serve.add_argument("--tls-key")
     p_serve.set_defaults(func=cmd_serve)
@@ -164,6 +216,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_revoke.add_argument("--email", required=True)
     p_revoke.add_argument("--by")
     p_revoke.set_defaults(func=cmd_revoke)
+
+    p_demo = sub.add_parser("demo", help="write the sample practice (fictional clients)")
+    p_demo.add_argument("--to", help="parent directory (default: the Centurion home)")
+    p_demo.set_defaults(func=cmd_demo)
+
+    p_dl = sub.add_parser("deadlines", help="what is due, computed from the client library")
+    p_dl.add_argument("--days", type=int, default=45)
+    p_dl.add_argument("--library")
+    p_dl.set_defaults(func=cmd_deadlines)
 
     p_audit = sub.add_parser("audit", help="what has happened on this machine")
     p_audit.add_argument("--limit", type=int, default=40)

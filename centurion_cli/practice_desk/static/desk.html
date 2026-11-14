@@ -225,6 +225,18 @@
     padding:12px 24px; font-size:13.5px; font-weight:600; cursor:pointer;
   }
 
+  .row.person .email{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
+                     text-transform:none;color:var(--ink-faint)}
+  .mini{
+    background:transparent; border:1px solid var(--line); color:var(--steel-hi);
+    border-radius:2px; padding:5px 9px; font-size:10.5px; cursor:pointer;
+    font-family:var(--mono); letter-spacing:.08em; text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .mini:hover{border-color:var(--steel); color:var(--ink)}
+  .mini:disabled{opacity:.4; cursor:not-allowed}
+  .sub.flag{color:#B9906A}
+
   /* ── narrow ──────────────────────────────────────────────────────────── */
   .mobile-bar{display:none}
   @media (max-width:900px){
@@ -267,6 +279,7 @@
     <nav class="nav">
       <button data-view="today" aria-current="true"><span class="dot"></span>Today</button>
       <button data-view="thread"><span class="dot"></span>Thread</button>
+      <button data-view="people" id="nav-people" hidden><span class="dot"></span>People</button>
     </nav>
     <div class="rail-scroll">
       <div class="group-label">Private</div>
@@ -301,8 +314,40 @@
 
         <div class="panes" id="panes"></div>
 
+        <div id="deadline-block" hidden>
+          <div class="section-h">Next deadlines, computed from the client records</div>
+          <div class="rows" id="deadline-rows"></div>
+        </div>
+
         <div class="section-h">The machine</div>
         <div class="rows" id="machine-rows"></div>
+      </section>
+
+      <!-- PEOPLE -->
+      <section class="view" id="view-people" hidden>
+        <div class="date">Who is on this machine</div>
+        <h2 class="greet" id="people-greet">People</h2>
+        <p class="sub" id="people-sub">A seat is a named person with a passkey. The licence decides how many.</p>
+
+        <div class="section-h">Admit a person</div>
+        <form id="invite-form" autocomplete="off" style="display:grid;grid-template-columns:1fr 1fr 140px auto;gap:8px;margin-bottom:10px">
+          <input id="inv-name" placeholder="Full name" required
+                 style="background:var(--field-2);border:1px solid var(--line);border-radius:2px;color:var(--ink);padding:10px 12px;font-family:var(--sans);font-size:13px;outline:none">
+          <input id="inv-email" type="email" placeholder="Work email" required
+                 style="background:var(--field-2);border:1px solid var(--line);border-radius:2px;color:var(--ink);padding:10px 12px;font-family:var(--sans);font-size:13px;outline:none">
+          <select id="inv-role"
+                  style="background:var(--field-2);border:1px solid var(--line);border-radius:2px;color:var(--ink);padding:10px 8px;font-family:var(--sans);font-size:13px;outline:none">
+            <option value="associate">Associate</option>
+            <option value="manager">Manager</option>
+            <option value="partner">Partner</option>
+            <option value="administrator">Administrator</option>
+          </select>
+          <button class="send" type="submit" id="inv-submit" style="height:auto;padding:10px 16px">Invite</button>
+        </form>
+        <div class="hint" id="invite-out" hidden></div>
+
+        <div class="section-h" style="margin-top:22px">Seats</div>
+        <div class="rows" id="people-rows"></div>
       </section>
 
       <!-- THREAD -->
@@ -388,11 +433,14 @@
     document.querySelectorAll("[data-view]").forEach((b) => {
       b.setAttribute("aria-current", String(b.dataset.view === view));
     });
-    $("view-today").hidden = view !== "today";
-    $("view-thread").hidden = view !== "thread";
+    ["today", "thread", "people"].forEach((name) => {
+      const el = $("view-" + name);
+      if (el) el.hidden = name !== view;
+    });
     $("composer").hidden = view !== "thread";
+    if (view === "people") loadPeople();
     $("stamp").hidden = view !== "today";
-    const titles = { today: "Today", thread: "Thread" };
+    const titles = { today: "Today", thread: "Thread", people: "People" };
     $("title").textContent = titles[view];
     $("mtitle").textContent = titles[view];
     shell.classList.remove("drawer");
@@ -459,11 +507,119 @@
 
     // The stamp is a fact about Today, not about the thread. Hide it elsewhere
     // rather than leave a stale claim under a different heading.
+    loadDeadlines();
+    // People is a partner's screen. Hiding it from an associate is not security
+    // (the routes refuse them regardless) — it is so they are not shown a door
+    // that says no.
+    $("nav-people").hidden = !["partner", "administrator"].includes(data.person.role);
     $("stamp").hidden = false;
     $("stamp").textContent = data.unmeasured.length
       ? `${data.unmeasured.length} panes unmeasured`
       : "all measured";
     $("stamp").className = "stamp" + (data.unmeasured.length ? " warn" : " ok");
+  }
+
+  const ROLE_HELP = {
+    partner: "signs, changes the library, admits people, sees every client",
+    manager: "prepares drafts and submits them for signature; cannot sign",
+    associate: "drafts only on clients assigned to them",
+    administrator: "people and the machine; no client files",
+  };
+
+  async function loadPeople() {
+    let data;
+    try {
+      data = await get("/api/people");
+    } catch (err) {
+      $("people-sub").textContent = err.message || "Could not read the people register.";
+      $("people-rows").innerHTML = "";
+      return;
+    }
+    const held = data.seats.held;
+    $("people-greet").textContent = `${held} seat${held === 1 ? "" : "s"} held`;
+    $("people-sub").textContent = data.refusal
+      ? data.refusal
+      : "A seat is a named person with a passkey. There is room for another.";
+    $("people-sub").className = "sub" + (data.refusal ? " flag" : "");
+
+    const rows = data.people.map((p) => {
+      const state = p.status === "active"
+        ? (p.passkeys ? "active" : "active, no passkey")
+        : p.status;
+      const actions = p.status === "active"
+        ? `<button class="mini" data-act="suspend" data-id="${p.id}">Suspend</button>
+           <button class="mini" data-act="revoke" data-id="${p.id}">Revoke passkeys</button>`
+        : `<button class="mini" data-act="active" data-id="${p.id}">Reinstate</button>`;
+      return `<div class="row person">
+        <span class="k">${esc(p.name)}<br><span class="email">${esc(p.email)}</span></span>
+        <span class="v dim">${esc(p.role)} · ${esc(state)}</span>
+        ${actions}
+      </div>`;
+    }).join("");
+    $("people-rows").innerHTML = rows;
+
+    $("people-rows").querySelectorAll("button[data-act]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const act = btn.dataset.act;
+        const id = btn.dataset.id;
+        btn.disabled = true;
+        try {
+          if (act === "revoke") {
+            await post("/api/people/revoke", { id });
+          } else {
+            await post("/api/people/status", { id, status: act });
+          }
+          await loadPeople();
+        } catch (err) {
+          btn.disabled = false;
+          alert(err.message || "That did not work.");
+        }
+      });
+    });
+  }
+
+  $("invite-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("inv-submit");
+    btn.disabled = true;
+    try {
+      const data = await (await post("/api/people/invite", {
+        name: $("inv-name").value.trim(),
+        email: $("inv-email").value.trim(),
+        role: $("inv-role").value,
+      })).json();
+      if (data.ok === false) throw new Error(data.error);
+      $("invite-out").hidden = false;
+      $("invite-out").innerHTML =
+        `Link for ${esc(data.person.name)} — works once, expires in ${data.expires_in_minutes} minutes:<br>` +
+        `<code style="color:var(--bronze-hi);word-break:break-all">${esc(data.link)}</code>`;
+      $("inv-name").value = "";
+      $("inv-email").value = "";
+      await loadPeople();
+    } catch (err) {
+      $("invite-out").hidden = false;
+      $("invite-out").textContent = err.message || "That did not work.";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function loadDeadlines() {
+    try {
+      const data = await get("/api/deadlines?days=45");
+      const items = data.obligations || [];
+      if (!items.length) { $("deadline-block").hidden = true; return; }
+      $("deadline-block").hidden = false;
+      $("deadline-rows").innerHTML = items.slice(0, 12).map((o) => {
+        const when = o.unsettled ? "unsettled" : `${o.days} day${o.days === 1 ? "" : "s"}`;
+        return `<div class="row">
+          <span class="k">${esc(o.client)} · ${esc(o.kind)}</span>
+          <span class="v${o.unsettled ? " dim" : ""}" title="${esc(o.unsettled || o.rule)}">${esc(when)}</span>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      $("deadline-block").hidden = true;
+    }
   }
 
   // ── thread ──────────────────────────────────────────────────────────────

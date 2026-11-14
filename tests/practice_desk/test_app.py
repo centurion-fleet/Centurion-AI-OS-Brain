@@ -263,6 +263,165 @@ def test_the_health_endpoint_says_how_many_seats_are_held(settings):
     run(scenario())
 
 
+# ── people ──────────────────────────────────────────────────────────────────
+
+
+def test_a_partner_can_admit_a_person_and_gets_a_working_link(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)   # Adrian, partner
+            response = await client.post(
+                "/api/people/invite",
+                json={"name": "Peta Barkus", "email": "peta@firm.test", "role": "manager"},
+            )
+            data = await response.json()
+            assert response.status == 200, data
+            assert data["link"].startswith(ORIGIN + "/#invite=")
+            assert "peta@firm.test" in json.dumps(data)
+
+            listed = await (await client.get("/api/people")).json()
+            emails = {p["email"] for p in listed["people"]}
+            assert emails == {"adrian@firm.test", "peta@firm.test"}
+            assert listed["seats"]["held"] == 2
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_an_associate_cannot_admit_anyone(settings):
+    """The sentence matters: it names the role rather than saying 'forbidden'."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings, name="Adrian Barkus", email="adrian@firm.test",
+                         role="partner")
+            # admit + enrol an associate directly through the store
+            store = client.server.app[desk_app.DESK_KEY].store
+            associate = store.admit_person(name="Junior", email="junior@firm.test",
+                                           role="associate")
+            store.add_credential(associate.id, credential_id="c2", public_key=b"k", algorithm=-7)
+            from centurion_cli.practice_desk.store import _hash_token  # noqa: PLC0415
+
+            token = store.open_session(associate.id)
+        finally:
+            await client.close()
+
+        # A second client carrying the associate's session.
+        client2 = await _client(settings)
+        try:
+            client2.session.cookie_jar.update_cookies({"pd_session": token})
+            for path in ("/api/people",):
+                response = await client2.get(path)
+                assert response.status == 400
+                assert "associate" in (await response.json())["error"]
+            response = await client2.post(
+                "/api/people/invite", json={"name": "X", "email": "x@firm.test"}
+            )
+            assert response.status == 400
+        finally:
+            await client2.close()
+
+    run(scenario())
+
+
+def test_the_eleventh_person_is_refused_in_the_licences_own_words(settings, monkeypatch):
+    import centurion.license.edition as edition_mod
+
+    monkeypatch.setattr(edition_mod, "current_edition", lambda: FakeEdition(2))
+
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            ok = await client.post(
+                "/api/people/invite", json={"name": "Second", "email": "second@firm.test"}
+            )
+            assert ok.status == 200
+
+            refused = await client.post(
+                "/api/people/invite", json={"name": "Third", "email": "third@firm.test"}
+            )
+            assert refused.status == 400
+            message = (await refused.json())["error"]
+            assert "2 named users" in message
+            assert "bigger edition" in message
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_a_partner_cannot_suspend_their_own_seat(settings):
+    """Otherwise the last partner locks the practice out of its own machine."""
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            me = await (await client.get("/api/me")).json()
+            response = await client.post(
+                "/api/people/status", json={"id": me["person"]["id"], "status": "suspended"}
+            )
+            assert response.status == 400
+            assert "own seat" in (await response.json())["error"]
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+# ── deadlines ───────────────────────────────────────────────────────────────
+
+
+def test_the_deadline_list_is_computed_from_the_client_library(settings, tmp_path):
+    """Guards the route itself: a handler reaching for the wrong app key 500s,
+    which the page reads as 'could not read the record' and nobody is told why."""
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            response = await client.get("/api/deadlines?days=45")
+            assert response.status == 200
+            data = await response.json()
+            assert data["ok"] is True
+            assert data["obligations"], "the sample practice produced no obligations"
+            first = data["obligations"][0]
+            for key in ("client", "kind", "due", "days", "rule"):
+                assert key in first, key
+            assert isinstance(first["due"], str), "a date must not reach JSON as an object"
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_the_deadline_pane_is_measured_once_a_library_exists(settings, tmp_path):
+    from centurion_cli.practice_desk.demo import build_demo_library
+
+    settings.practice_library = build_demo_library(tmp_path)
+
+    async def scenario():
+        client = await _client(settings)
+        try:
+            await _enrol(client, settings)
+            data = await (await client.get("/api/today")).json()
+            pane = data["panes"]["deadlines_inside_14_days"]
+            assert pane["value"] is not None
+            assert isinstance(pane["value"], int)
+            # The three panes with no register behind them still refuse to invent zero.
+            assert data["panes"]["drafts_awaiting_signature"]["value"] is None
+            assert len(data["unmeasured"]) == 3
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
 # ── the stream ──────────────────────────────────────────────────────────────
 
 
