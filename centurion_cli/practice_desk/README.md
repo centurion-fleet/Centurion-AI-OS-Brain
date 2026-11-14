@@ -12,17 +12,20 @@ not here.
 
 ```bash
 # 1. the sample practice (fictional clients) — optional, for demonstrations
-python -m centurion_cli.practice_desk demo
+centurion practice-desk demo
 
 # 2. admit the first person and get a one-time link
-python -m centurion_cli.practice_desk invite --name "Adrian Barkus" \
+centurion practice-desk invite --name "Adrian Barkus" \
     --email adrian@firm.example --role partner --origin http://127.0.0.1:8765
 
 # 3. serve
-python -m centurion_cli.practice_desk serve \
+centurion practice-desk serve \
     --host 127.0.0.1 --port 8765 \
-    --origin http://127.0.0.1:8765 --rp-id 127.0.0.1
+    --origin http://127.0.0.1:8765 --rp-id 127.0.0.1 --library ~/centurion/practice/library
 ```
+
+`python -m centurion_cli.practice_desk <verb>` does the same thing if the CLI is not
+on PATH.
 
 Open the link, enrol a passkey, and the desk opens on **Today**.
 

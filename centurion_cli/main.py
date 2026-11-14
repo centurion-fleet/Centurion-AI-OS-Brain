@@ -11270,7 +11270,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
     {
         "acp", "adrian", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
-        "config", "cron", "curator", "dashboard", "debug", "doctor",
+        "config", "cron", "curator", "dashboard", "debug", "doctor", "practice-desk",
         "dump", "fallback", "fleet", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "platform", "plugins", "portal", "postinstall", "profile", "provider", "proxy",
@@ -12787,6 +12787,13 @@ Examples:
         help="One or more paste URLs to delete (e.g. https://paste.rs/abc123)",
     )
     debug_parser.set_defaults(func=cmd_debug)
+
+    # =========================================================================
+    # practice-desk command — the signed-in browser client for a practice
+    # =========================================================================
+    from centurion_cli.practice_desk.cli import register_cli as _register_practice_desk
+
+    _register_practice_desk(subparsers)
 
     # =========================================================================
     # backup command

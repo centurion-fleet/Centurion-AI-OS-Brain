@@ -230,6 +230,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("--limit", type=int, default=40)
     p_audit.set_defaults(func=cmd_audit)
 
+    # `--db` is accepted before or after the verb. After is the form people
+    # actually type, so each subparser carries it too.
+    for sub_parser in (
+        p_serve, p_invite, p_people, p_suspend, p_revoke, p_demo, p_dl, p_audit
+    ):
+        sub_parser.add_argument(
+            "--db", default=argparse.SUPPRESS, help="path to practice.db"
+        )
+
     return parser
 
 
