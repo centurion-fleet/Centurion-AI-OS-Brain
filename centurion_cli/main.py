@@ -1753,6 +1753,15 @@ def cmd_chat(args):
             pass
 
     # Product license phone-home (soft; no-op unless license.enabled).
+    # Read the edition first: the machine must know which of the four it is
+    # before any surface decides whether an instrument is greyed or live.
+    try:
+        from centurion.license.edition import resolve_edition
+
+        resolve_edition()
+    except Exception:
+        pass
+
     try:
         from centurion_cli.cloud_client import check_subscription_on_startup
 
@@ -11560,6 +11569,16 @@ def main():
         return
     if _try_termux_fast_cli_launch():
         return
+
+    # Read the edition once, before any command runs: the machine has to know
+    # which of the four it is before a surface decides whether an instrument is
+    # greyed or live. Soft — a licensing problem must not stop the CLI.
+    try:
+        from centurion.license.edition import resolve_edition
+
+        resolve_edition()
+    except Exception:
+        pass
 
     from centurion_cli._parser import build_top_level_parser
 

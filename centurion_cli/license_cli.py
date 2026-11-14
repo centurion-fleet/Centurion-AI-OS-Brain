@@ -25,6 +25,7 @@ def _cfg():
 
 
 def _cmd_status(_args) -> int:
+    from centurion.license.edition import current_edition
     from centurion.license.enforcement import evaluate, locked_user_message
     from centurion.license.fingerprint import fingerprint_short
     from centurion.license.phone_home import is_phone_home_due
@@ -33,14 +34,29 @@ def _cmd_status(_args) -> int:
     config = _cfg()
     ent = load_entitlement()
     decision = evaluate(ent, config=config)
+    edition = current_edition()
 
     print()
     print(color("  Centurion License", Colors.MAGENTA))
     print(color("  ─────────────────", Colors.MAGENTA))
     print(f"  State:        {ent.state}")
+    print(f"  Edition:      {edition.label}")
+    print(f"  Seats:        {edition.seat_limit}")
+    print(
+        f"  Instrument:   {'live' if edition.instrument_unlocked else 'greyed (Accountant edition)'}"
+    )
     print(f"  Tier:         {ent.tier or '—'}")
     print(f"  License ID:   {ent.license_id or '—'}")
     print(f"  Fingerprint:  {fingerprint_short(ent.machine_fingerprint)}")
+    if not edition.fingerprint_matches:
+        print(
+            color(
+                "  Binding:      this entitlement is bound to another machine",
+                Colors.YELLOW,
+            )
+        )
+    if edition.tampered:
+        print(color(f"  Edition held: {edition.note}", Colors.YELLOW))
     if ent.customer_name:
         print(f"  Customer:     {ent.customer_name}")
     if ent.shipment_id:

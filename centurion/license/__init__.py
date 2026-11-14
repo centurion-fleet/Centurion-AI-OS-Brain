@@ -15,6 +15,13 @@ from centurion.license.activate import (
     redeem_purchase_token,
     request_reissue,
 )
+from centurion.license.edition import (
+    Edition,
+    current_edition,
+    edition_label,
+    rebind_refusal,
+    resolve_edition,
+)
 from centurion.license.enforcement import (
     EnforcementDecision,
     EnforcementMode,
@@ -52,6 +59,7 @@ from centurion.license.store import (
 __all__ = [
     "ActivateResult",
     "CheckinResult",
+    "Edition",
     "EnforcementDecision",
     "EnforcementMode",
     "Entitlement",
@@ -62,6 +70,8 @@ __all__ = [
     "can_transition",
     "collect_identity_parts",
     "compute_fingerprint",
+    "current_edition",
+    "edition_label",
     "enforcement_enabled",
     "evaluate",
     "fingerprint_short",
@@ -73,7 +83,9 @@ __all__ = [
     "maybe_phone_home_on_startup",
     "phone_home",
     "redeem_purchase_token",
+    "rebind_refusal",
     "request_reissue",
+    "resolve_edition",
     "requires_phone_home",
     "save_entitlement",
     "seed_entitlement",

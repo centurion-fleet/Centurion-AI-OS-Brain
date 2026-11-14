@@ -289,10 +289,30 @@ def request_reissue(
     reason: str,
     proof_of_purchase: Optional[str] = None,
     old_fingerprint: Optional[str] = None,
+    requested_edition: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> ActivateResult:
-    """Request hardware re-issuance after machine failure (server/support flow)."""
+    """Request hardware re-issuance after machine failure (server/support flow).
+
+    A re-bind is a repair, never an upgrade (business/EDITIONS.md §1). A request
+    that would land on a different edition is refused here, before it is sent,
+    so no support conversation can quietly become a licence change. The licence
+    server applies the same rule independently.
+    """
+    from centurion.license.edition import rebind_refusal
+
     ent = load_entitlement()
+
+    refusal = rebind_refusal(ent.edition(), requested_edition)
+    if refusal:
+        append_audit(
+            "reissue_refused_edition_change",
+            current_edition=ent.edition(),
+            requested_edition=requested_edition,
+            reason=reason,
+        )
+        return ActivateResult(ok=False, error=refusal)
+
     fp = compute_fingerprint()
     base = get_license_server_url(config)
     payload = {
@@ -302,6 +322,11 @@ def request_reissue(
         "new_fingerprint": fp,
         "reason": reason,
         "proof_of_purchase": proof_of_purchase,
+        # The edition being repaired. The server must issue the same one back:
+        # a replacement box is provisioned to the customer's edition, and a
+        # reissue is never the moment to change it.
+        "edition": ent.edition(),
+        "seats": ent.seat_limit(),
     }
     try:
         data = _post_json(f"{base.rstrip('/')}/license/reissue", payload)
@@ -309,10 +334,24 @@ def request_reissue(
         append_audit("reissue_failed", error=str(exc))
         return ActivateResult(ok=False, error=f"Reissue request failed: {exc}")
 
+    # If the server answered with an edition, it must be the one we asked about.
+    # A different one back would be the upgrade this product does not have.
+    returned = data.get("edition") or data.get("tier")
+    returned_refusal = rebind_refusal(ent.edition(), returned)
+    if returned_refusal:
+        append_audit(
+            "reissue_refused_server_edition_change",
+            current_edition=ent.edition(),
+            returned_edition=returned,
+            license_id=ent.license_id,
+        )
+        return ActivateResult(ok=False, error=returned_refusal)
+
     append_audit(
         "reissue_requested",
         license_id=ent.license_id,
         status=data.get("status"),
+        edition=ent.edition(),
     )
 
     return ActivateResult(

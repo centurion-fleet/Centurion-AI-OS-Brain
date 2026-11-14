@@ -31,6 +31,9 @@ class CheckinResult:
     ok: bool
     state: Optional[str] = None
     tier: Optional[str] = None
+    # How many named users the server says this edition carries. None means the
+    # server did not speak to it, and the local value stands.
+    seats: Optional[int] = None
     balance_paid_gbp: Optional[float] = None
     balance_target_gbp: Optional[float] = None
     next_check_by: Optional[float] = None
@@ -139,6 +142,10 @@ def phone_home(
         "install_id": get_install_id(),
         "machine_fingerprint": fp,
         "tier": ent.tier,
+        # The edition and the seat limit the machine believes it is running, so
+        # the server can answer "no" rather than the machine discovering it late.
+        "edition": ent.edition(),
+        "seats": ent.seat_limit(),
         "os_version": f"{_platform.system()} {_platform.release()}",
         "centurion_version": centurion_version,
         "last_state": ent.state,
@@ -166,6 +173,7 @@ def phone_home(
         ok=bool(data.get("ok", True)),
         state=data.get("state"),
         tier=data.get("tier") or data.get("level"),
+        seats=_as_int(data.get("seats")),
         balance_paid_gbp=_as_float(data.get("balance_paid_gbp")),
         balance_target_gbp=_as_float(data.get("balance_target_gbp")),
         next_check_by=_prefer_next_check_unix(data),
@@ -206,6 +214,10 @@ def apply_checkin_result(
 
     if result.tier:
         entitlement.tier = str(result.tier)
+    if result.seats is not None:
+        # The server is authoritative for seats as well as tier. The local
+        # clamp in Entitlement.seat_limit() still refuses anything above ten.
+        entitlement.seats = int(result.seats)
     if result.state:
         try:
             new_state = parse_state(result.state)
@@ -223,6 +235,14 @@ def apply_checkin_result(
             entitlement.next_check_by = now + check_interval_seconds(config)
 
     save_entitlement(entitlement)
+    # The edition may have changed under us; the next current_edition() call must
+    # resolve again rather than serve a stale snapshot.
+    try:
+        from centurion.license.edition import reset_cache
+
+        reset_cache()
+    except Exception:
+        pass
     return entitlement
 
 
@@ -245,6 +265,15 @@ def _as_float(value: Any) -> Optional[float]:
         return None
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None
 
@@ -274,6 +303,16 @@ def _prefer_next_check_unix(data: Dict[str, Any]) -> Optional[float]:
 
 def maybe_phone_home_on_startup(config: Optional[Dict[str, Any]] = None) -> Optional[CheckinResult]:
     """Non-blocking-ish startup check: only runs when license.enabled and due."""
+    # Read the edition before anything else, whether or not a check-in is due.
+    # The machine has to know which of the four it is before it renders an
+    # instrument, and this is the one boot path that runs on every launch.
+    try:
+        from centurion.license.edition import resolve_edition
+
+        resolve_edition()
+    except Exception as exc:
+        logger.debug("Edition resolution at boot failed: %s", exc)
+
     license_cfg = _license_config(config)
     from utils import is_truthy_value
 
