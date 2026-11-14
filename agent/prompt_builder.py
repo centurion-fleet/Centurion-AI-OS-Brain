@@ -321,6 +321,50 @@ def build_personal_name_lock(display_name: str) -> str:
     )
 
 
+def build_language_lock() -> str:
+    """Tell the agent what language the person is reading and speaking.
+
+    Empty for English, so the default prompt is byte-identical to what it was
+    before this existed — a setting nobody changed must not alter a prompt that
+    has been verified.
+
+    Three design rules, each with a reason:
+
+    * **The setting is a default, the person's message is current.** If somebody
+      writes in Italian while their interface is set to French, the message wins
+      for that conversation. Arguing with a person about their own language is
+      the fastest way to look like a machine.
+    * **Code and identifiers do not translate.** A French sentence around an
+      English filename, never a translated filename. A translated command does
+      not run.
+    * **Never announce it.** A reply that opens *"certainly, I will answer in
+      French"* has spent the first line on itself.
+    """
+    try:
+        from agent.i18n import get_language, language_name, DEFAULT_LANGUAGE
+    except Exception:
+        return ""
+
+    try:
+        code = get_language()
+    except Exception:
+        return ""
+    if not code or code == DEFAULT_LANGUAGE:
+        return ""
+
+    name = language_name(code)
+    return (
+        f"## Language\n\n"
+        f"The person you are speaking with has set their language to {name} ({code}).\n"
+        f"Reply in {name}, in every message, without being asked and without announcing it.\n\n"
+        f"Keep in their original form: code, file paths, command lines, tool names, "
+        f"identifiers, API keys, and quoted artefacts. A sentence in {name} around an "
+        f"English filename — never a translated filename.\n\n"
+        f"If they write to you in another language, follow them for that conversation "
+        f"without comment: their message is more current than their setting."
+    )
+
+
 def soul_identity_fingerprint() -> str:
     """Cheap fingerprint of SOUL.md so sessions can detect identity edits."""
     soul_path = get_centurion_home() / "SOUL.md"

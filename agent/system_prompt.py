@@ -32,6 +32,7 @@ from agent.prompt_builder import (
     PRODUCT_IDENTITY_LOCK,
     ETHICS_HARD_LOCK,
     build_personal_name_lock,
+    build_language_lock,
     resolve_centurion_display_name,
     soul_identity_fingerprint,
     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
@@ -107,6 +108,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
 
     # Platform ethics — hard constraint, not Soul-only prose.
     stable_parts.append(ETHICS_HARD_LOCK)
+
+    # The language the person chose. Sits above the Soul because a Soul is
+    # written in one language and read by people who speak others: an English
+    # Soul does not mean an English conversation. Empty when the setting is
+    # English, so the default prompt is byte-identical to what it was.
+    _language_lock = build_language_lock()
+    if _language_lock:
+        stable_parts.append(_language_lock)
 
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
     # Some execution modes (cron) still want CENTURION_HOME persona while keeping

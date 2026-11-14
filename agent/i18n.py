@@ -45,6 +45,38 @@ SUPPORTED_LANGUAGES: tuple[str, ...] = (
 )
 DEFAULT_LANGUAGE = "en"
 
+# Endonyms, because a language is not a country and a French buyer should not
+# have to recognise "French" to find his own. These are never shown as flags.
+LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "zh": "简体中文",
+    "zh-hant": "繁體中文",
+    "ja": "日本語",
+    "de": "Deutsch",
+    "es": "Español",
+    "fr": "Français",
+    "tr": "Türkçe",
+    "uk": "Українська",
+    "af": "Afrikaans",
+    "ko": "한국어",
+    "it": "Italiano",
+    "ga": "Gaeilge",
+    "pt": "Português",
+    "ru": "Русский",
+    "hu": "Magyar",
+}
+
+
+def language_name(code: str | None = None) -> str:
+    """Return the endonym for a language code, resolving aliases first.
+
+    Used where a person has to recognise their own language in a list, and where
+    the agent has to be told what language it is being asked to speak.
+    """
+    resolved = _normalize_lang(code) if code else get_language()
+    return LANGUAGE_NAMES.get(resolved, LANGUAGE_NAMES[DEFAULT_LANGUAGE])
+
+
 # Accept a few natural aliases so users who type "chinese" / "zh-CN" / "jp"
 # get the right catalog instead of silently falling back to English.
 _LANGUAGE_ALIASES: dict[str, str] = {
