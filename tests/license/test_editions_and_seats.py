@@ -90,3 +90,20 @@ def test_an_old_entitlement_without_seats_still_loads_as_one_user():
     restored = Entitlement.from_dict(legacy)
     assert restored.seats == 1
     assert restored.seat_limit() == 1
+
+
+def test_the_mirrored_seat_limit_in_edition_py_agrees_with_the_entitlement():
+    """Drift alarm, not duplication.
+
+    `centurion/license/edition.py::_seat_limit_for` deliberately mirrors
+    `Entitlement.seat_limit()` so a tier held back at boot still gets a limit.
+    Two implementations of one rule is exactly how a published figure starts
+    disagreeing with itself — so if either side changes alone, this fails.
+    """
+    from centurion.license.edition import _seat_limit_for
+
+    for tier in list(EDITION_TIERS) + ["enterprise", "", None]:
+        for seats in (0, 1, 2, 6, 10, 11, 99, "ten", None, 3.7):
+            assert _seat_limit_for(tier, seats) == Entitlement(tier=tier, seats=seats).seat_limit(), (
+                f"edition.py and store.py disagree for tier={tier!r} seats={seats!r}"
+            )
