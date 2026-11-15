@@ -83,14 +83,40 @@ prepared draft and signature is written to `audit` and readable two ways:
 A refusal is recorded too — including a refusal to open a client's files. The
 attempt is the interesting part, not only the success.
 
+## First run — the customer never sees a terminal
+
+⚠️ **Nothing below is for a customer.** The commands in "Run it" are for
+development and for us. The product's own first run is a page:
+
+On a machine with nobody on it, **every route leads to `/setup`** — a two-field
+wizard: the practice's name, then the partner who owns it. It creates the first
+partner by clicking, because every other way of creating a person needs a
+signed-in partner and a brand-new machine has none. The wizard refuses to run a
+second time, so it can never be used to sidestep `people_invite`.
+
+The account is then claimed with a passkey in the ordinary sign-in flow. No
+password is set, written down, or shared at any point.
+
+### The certificate is issued by the machine
+
+A passkey cannot be registered over plain HTTP on a network address, so a desk
+serving anything but loopback needs TLS. Nobody is asked for a certificate: on
+first network bind, `serve()` mints a CA and a leaf for this machine, writes them
+beside the practice database (`tls/`, key at `0600`), and reuses them on every
+later boot — reissuing only when the address changes or the leaf expires.
+
+**The join step for a colleague's machine is one download and one double-click:**
+`/setup/ca.crt`. Installing it is what makes that machine trust this one.
+
 ## What is deliberately missing
 
 - **Clients chased / hours returned.** The panes return `null` with a stated
   reason rather than a zero. There is no correspondence register and no work log
   behind them yet, and a confident zero over a register that was never written is
   a lie a partner will act on.
-- **A hostname with TLS.** See above. Loopback works today; a second machine does
-  not until that name exists.
+- **A public name.** The machine can only issue a certificate for names and
+  addresses it actually holds; reaching a practice from outside its own network
+  is a tunnel question (the practice's tunnel, not ours) and is not built.
 
 ## Tests
 

@@ -37,6 +37,7 @@ import json
 import mimetypes
 import os
 import secrets
+import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +45,7 @@ from typing import Any, Dict, Optional
 
 from aiohttp import ClientSession, ClientTimeout, web
 
+from centurion_cli.practice_desk import setup as setup_flow
 from centurion_cli.practice_desk import webauthn
 from centurion_cli.practice_desk.store import (
     DeskError,
@@ -293,9 +295,64 @@ async def no_cache_middleware(request: web.Request, handler):
 
 async def index(request: web.Request) -> web.StreamResponse:
     desk: Desk = request.app[DESK_KEY]
+    # A machine with nobody on it has not been set up. Sending anyone to a sign-in
+    # page there is a dead end: nobody can sign in, and nobody can invite anybody.
+    if not setup_flow.is_set_up(desk.store):
+        raise web.HTTPFound("/setup")
     signed_in = desk.store.resolve_session(_session_token(request)) is not None
     page = "desk.html" if signed_in else "signin.html"
     return web.FileResponse(STATIC_DIR / page)
+
+
+async def setup_page(request: web.Request) -> web.Response:
+    """The first-run wizard. Deliberately reachable before anyone exists."""
+    desk: Desk = request.app[DESK_KEY]
+    return web.Response(
+        text=setup_flow.page(desk.store), content_type="text/html", charset="utf-8"
+    )
+
+
+async def setup_practice(request: web.Request) -> web.Response:
+    """Create the practice and its first partner, by clicking.
+
+    This is the only route in the product that makes a person without a
+    signed-in partner behind it, and it exists for exactly one call: the first.
+    It refuses the moment anybody is on the machine, so it cannot be used twice
+    and cannot be used to sidestep `people_invite`.
+    """
+    desk: Desk = request.app[DESK_KEY]
+    if setup_flow.is_set_up(desk.store):
+        raise DeskError("This practice is already set up. Ask a partner for an invitation.")
+
+    payload = await _json(request)
+    practice = setup_flow.set_practice_name(desk.store, str(payload.get("practice", "")))
+    person = desk.store.admit_person(
+        name=str(payload.get("name", "")),
+        email=str(payload.get("email", "")),
+        role="partner",
+    )
+    token = desk.store.issue_invitation(person.id, by=person.id)
+    setup_flow.mark_setup_complete(desk.store)
+    desk.store.record(person.id, "practice_set_up", detail=practice)
+    base = desk.settings.origin.rstrip("/")
+    return web.json_response(
+        {"ok": True, "practice": practice, "link": f"{base}/#invite={token}"}
+    )
+
+
+async def setup_ca(request: web.Request) -> web.StreamResponse:
+    """The practice's own certificate, for the other machines in the firm."""
+    desk: Desk = request.app[DESK_KEY]
+    ca = Path(desk.store.path).parent / "tls" / setup_flow.CA_FILENAME
+    if not ca.is_file():
+        raise web.HTTPNotFound(text="This machine has not issued a certificate yet.")
+    return web.FileResponse(
+        ca,
+        headers={
+            "Content-Type": "application/x-x509-ca-cert",
+            "Content-Disposition": f'attachment; filename="{setup_flow.CA_FILENAME}"',
+        },
+    )
 
 
 async def static_file(request: web.Request) -> web.StreamResponse:
@@ -1146,6 +1203,9 @@ def create_app(settings: Optional[Settings] = None) -> web.Application:
     app[DESK_KEY] = Desk(settings=settings, store=store)
 
     app.router.add_get("/", index)
+    app.router.add_get("/setup", setup_page)
+    app.router.add_get("/setup/ca.crt", setup_ca)
+    app.router.add_post("/api/setup/practice", setup_practice)
     app.router.add_get("/static/{name}", static_file)
 
     app.router.add_post("/api/invite", invite_redeem)
@@ -1188,20 +1248,68 @@ async def _health(request: web.Request) -> web.Response:
     )
 
 
-def serve(settings: Settings) -> None:
-    """Run the desk. Refuses the two configurations that cannot work.
+def _local_addresses() -> list[str]:
+    """Every address this box answers on, so the certificate covers the one used.
 
-    A passkey cannot be registered over plain HTTP on a LAN address, and a desk
-    bound to the world without TLS is a practice's client files on a clear
-    channel. Both refusals name the fix.
+    A leaf that omits the address a colleague actually typed produces a browser
+    warning, and a warning on first contact is a support call about trust.
     """
-    if not settings.tls_cert and not settings.loopback:
-        raise SystemExit(
-            "Refusing to serve the desk on a network address without TLS.\n"
-            "Browsers will not register a passkey over plain HTTP, and client files\n"
-            "must not travel in clear. Either bind to 127.0.0.1, or pass\n"
-            "--tls-cert and --tls-key."
+    found: set[str] = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            found.add(info[4][0])
+    except OSError:
+        pass
+    # The address a default-route socket would use — usually the LAN one.
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.settimeout(0.2)
+            probe.connect(("192.0.2.1", 9))  # TEST-NET-1, no packet is sent
+            found.add(probe.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(a for a in found if ":" not in a)
+
+
+def _default_tls_dir() -> Path:
+    from centurion_constants import get_centurion_home
+
+    return Path(get_centurion_home()) / "practice" / "tls"
+
+
+def serve(settings: Settings) -> None:
+    """Run the desk. Issues its own certificate rather than asking for one.
+
+    A passkey cannot be registered over plain HTTP on a network address, and a
+    desk bound to the world without TLS is a practice's client files on a clear
+    channel. Those two facts used to be a refusal with instructions; they are now
+    a mint. The machine makes a CA and a leaf for itself the first time it is
+    asked to serve anything but loopback, and reuses them afterwards — because a
+    customer who has to produce a certificate is a customer we have lost.
+
+    The CA is served at /setup/ca.crt for the firm's other machines; installing it
+    is the join step, and it is a double-click.
+    """
+    if not settings.loopback and not settings.tls_cert:
+        hosts = [socket.gethostname().split(".")[0], socket.gethostname(), "localhost"]
+        ips = ["127.0.0.1"]
+        if settings.host not in ("0.0.0.0", "::", ""):
+            ips.append(settings.host)
+        ips.extend(_local_addresses())
+        tls = setup_flow.ensure_local_tls(
+            Path(settings.db_path).parent / "tls" if settings.db_path else _default_tls_dir(),
+            names=hosts,
+            ips=ips,
         )
+        settings.tls_cert = str(tls.cert)
+        settings.tls_key = str(tls.key)
+        if settings.origin.startswith("http://"):
+            # The origin is what invitations are built from; it must name the
+            # scheme the desk is actually served on.
+            settings.origin = "https://" + settings.origin[len("http://") :]
+        if tls.created:
+            print(f"  Certificate  {tls.cert}")
+            print(f"  CA for the firm's other machines: {tls.ca}")
 
     app = create_app(settings)
     print(

@@ -1052,13 +1052,50 @@ def test_a_failed_brain_call_is_reported_and_not_recorded_as_an_answer(settings)
     run(scenario())
 
 
-def test_the_desk_refuses_to_serve_a_network_address_without_tls(settings):
-    """Browsers will not register a passkey over plain HTTP on a LAN address."""
+def test_a_network_address_is_served_over_a_certificate_the_machine_issues(settings, monkeypatch):
+    """The contract changed on 15 Nov 2026, and this test carries the new one.
+
+    It used to be a refusal: "either bind to loopback, or pass --tls-cert". That
+    put a certificate in a customer's hands, and a customer who has to produce a
+    certificate is a customer we have lost. So the machine mints its own CA and
+    leaf the first time it is asked to serve a network address, and the origin is
+    corrected to the scheme it is actually speaking — invitations are built from
+    that string.
+    """
     settings.host = "0.0.0.0"
     settings.tls_cert = None
-    with pytest.raises(SystemExit) as caught:
+    settings.origin = "http://127.0.0.1:8765"
+
+    captured = {}
+
+    def _donot_run(app, **kwargs):
+        captured.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(desk_app.web, "run_app", _donot_run)
+    with pytest.raises(SystemExit):
         desk_app.serve(settings)
-    assert "TLS" in str(caught.value)
+
+    assert settings.tls_cert, "a network bind must end up with a certificate"
+    assert Path(settings.tls_cert).is_file()
+    assert settings.tls_key and Path(settings.tls_key).is_file()
+    assert settings.origin.startswith("https://"), "invitations must not say http"
+    assert captured["ssl_context"] is not None, "and the socket must actually use it"
+
+
+def test_a_loopback_desk_needs_no_certificate_and_gets_none(settings, monkeypatch):
+    """localhost is a secure context. Minting there would be noise."""
+    settings.host = "127.0.0.1"
+    settings.tls_cert = None
+
+    def _donot_run(app, **kwargs):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(desk_app.web, "run_app", _donot_run)
+    with pytest.raises(SystemExit):
+        desk_app.serve(settings)
+
+    assert settings.tls_cert is None
 
 
 # ── roles: what a person is allowed to be ───────────────────────────────────
