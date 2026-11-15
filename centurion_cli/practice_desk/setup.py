@@ -373,10 +373,11 @@ _PAGE = """<!doctype html>
       are in. No passwords, no software to install.</li></ul>
 
   <h2>Your other machines</h2>
-  <ul><li>If a colleague works on a different computer, that computer has to trust
-      this one. <a id="ca" href="/setup/ca.crt" style="color:var(--bronze)">Download the
+  <ul><li>Send a colleague this address: <b id="addr">%%ADDRESS%%</b></li>
+  <li>Before they open it the first time, that computer has to trust this one.
+      <a id="ca" href="/setup/ca.crt" style="color:var(--bronze)">Download the
       practice certificate</a> and double-click it on their machine &mdash; that is
-      the whole step.</li></ul>
+      the whole step. No password to remember, no software to install.</li></ul>
 
   <h2>Your backups</h2>
   <ul><li>Weekly, onto a drive you keep. The machine prints your recovery key the
@@ -436,13 +437,27 @@ document.querySelectorAll('#pname,#oname,#oemail').forEach((el) =>
 """
 
 
-def page(store) -> str:
-    """The wizard, with the practice name already in it when there is one."""
+def page(store, address: str = "") -> str:
+    """The wizard, with the practice name already in it when there is one.
+
+    `address` is the one a colleague types on their own machine. A firm cannot
+    be told "go to the desk" — it needs the actual string, so the wizard shows
+    the address the desk is really served on rather than an example.
+    """
     name = practice_name(store) or ""
     html = _PAGE.format(css=_CSS)
     if name:
         html = html.replace(
             'placeholder="Courtwright &amp; Co"', f'value="{_escape(name)}"', 1
+        )
+    if address:
+        html = html.replace("%%ADDRESS%%", _escape(address), 1)
+    else:
+        html = html.replace(
+            '<b id="addr">%%ADDRESS%%</b>',
+            "<span id=\"addr\" style=\"color:var(--dim)\">this machine's network "
+            "name — it appears here once the desk is served to your network</span>",
+            1,
         )
     return html
 

@@ -34,11 +34,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import ipaddress
 import mimetypes
 import os
 import secrets
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,6 +86,7 @@ class Settings:
 
     def __post_init__(self) -> None:
         self.brain_key = resolve_brain_key(self.brain_key)
+        self._adopt_network_name()
         self._check_origin_matches_rp_id()
         if self.practice_library is None:
             try:
@@ -99,6 +101,38 @@ class Settings:
     @property
     def loopback(self) -> bool:
         return self.host in ("127.0.0.1", "::1", "localhost")
+
+    def _adopt_network_name(self) -> None:
+        """Serve to a firm's network under the name that network resolves.
+
+        An appliance is asked to serve to the LAN, not given an address. A bare
+        IP cannot carry a passkey, and 0.0.0.0 is not something anyone types, so
+        the name mDNS already publishes for this machine is adopted for both the
+        origin and the RP ID. Nobody edits a flag for this.
+        """
+        if self.loopback:
+            return
+        short = socket.gethostname().split(".")[0]
+        parts = urlsplit(self.origin)
+        host = (parts.hostname or "").lower()
+        if not (
+            host in ("", "0.0.0.0", "::", "127.0.0.1", "localhost")
+            or host in _local_addresses()
+        ):
+            return
+        self.origin = urlunsplit(
+            (
+                parts.scheme or "http",
+                # The port comes from --port, not from the placeholder origin: a
+                # desk told to serve on 9445 must not advertise 8765.
+                f"{short}.local:{self.port}",
+                parts.path,
+                parts.query,
+                parts.fragment,
+            )
+        )
+        if self.rp_id in ("", "localhost", "127.0.0.1") or _looks_like_ip(self.rp_id):
+            self.rp_id = f"{short}.local"
 
     def _check_origin_matches_rp_id(self) -> None:
         """Refuse a desk the browser will reject at the last click.
@@ -336,7 +370,9 @@ async def setup_page(request: web.Request) -> web.Response:
     """The first-run wizard. Deliberately reachable before anyone exists."""
     desk: Desk = request.app[DESK_KEY]
     return web.Response(
-        text=setup_flow.page(desk.store), content_type="text/html", charset="utf-8"
+        text=setup_flow.page(desk.store, address=_join_address(desk.settings)),
+        content_type="text/html",
+        charset="utf-8",
     )
 
 
@@ -1276,6 +1312,27 @@ async def _health(request: web.Request) -> web.Response:
     )
 
 
+def _looks_like_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _join_address(settings: "Settings") -> str:
+    """The exact string a colleague types on their own machine.
+
+    On loopback there is nothing to send anyone, so the wizard says so rather
+    than printing 127.0.0.1 at a firm. On a network the desk is reached by
+    name, never by bare address: a passkey cannot be registered against an IP,
+    so the name is the thing the certificate and the RP ID are both bound to.
+    """
+    if settings.loopback:
+        return ""
+    return settings.origin.rstrip("/")
+
+
 def _local_addresses() -> list[str]:
     """Every address this box answers on, so the certificate covers the one used.
 
@@ -1319,7 +1376,11 @@ def serve(settings: Settings) -> None:
     is the join step, and it is a double-click.
     """
     if not settings.loopback and not settings.tls_cert:
-        hosts = [socket.gethostname().split(".")[0], socket.gethostname(), "localhost"]
+        short = socket.gethostname().split(".")[0]
+        # The mDNS name is the one that resolves on a firm's network with no
+        # DNS server and no terminal. A bare IP cannot carry a passkey, so this
+        # is the address the practice is actually given.
+        hosts = [f"{short}.local", short, socket.gethostname(), "localhost"]
         ips = ["127.0.0.1"]
         if settings.host not in ("0.0.0.0", "::", ""):
             ips.append(settings.host)

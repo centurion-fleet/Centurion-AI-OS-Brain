@@ -349,3 +349,89 @@ def test_a_bare_ip_cannot_be_pretended_into_a_domain_name():
             origin="https://practice.firm.local:9443",
             brain_url="",
         )
+
+
+# ── the address a colleague is given ────────────────────────────────────────
+# A firm is never told "go to the desk" — it is given a string. On a network
+# that string has to be a name: a browser will not bind a passkey to a bare IP,
+# and 0.0.0.0 is not something a person types.
+
+
+def _network_settings(tmp_path, monkeypatch, **over):
+    import centurion.license.edition as edition_mod
+
+    monkeypatch.setattr(edition_mod, "current_edition", lambda: FakeEdition(10))
+    base = dict(
+        rp_id="localhost",
+        origin="http://localhost:8765",
+        host="0.0.0.0",
+        port=9445,
+        brain_url="",
+        db_path=tmp_path / "practice.db",
+        tls_cert=None,
+    )
+    base.update(over)
+    return desk_app.Settings(**base)
+
+
+def test_serving_to_a_network_adopts_the_name_that_network_resolves(tmp_path, monkeypatch):
+    import socket
+
+    short = socket.gethostname().split(".")[0]
+    made = _network_settings(tmp_path, monkeypatch)
+    assert made.origin == f"http://{short}.local:9445"
+    assert made.rp_id == f"{short}.local"
+
+
+def test_the_port_in_the_address_is_the_port_it_serves_on(tmp_path, monkeypatch):
+    import socket
+
+    short = socket.gethostname().split(".")[0]
+    made = _network_settings(tmp_path, monkeypatch, port=9446)
+    assert made.origin.endswith(":9446")
+    assert made.origin == f"http://{short}.local:9446"
+
+
+def test_an_address_the_firm_typed_is_left_untouched(tmp_path, monkeypatch):
+    made = _network_settings(
+        tmp_path,
+        monkeypatch,
+        origin="https://desk.firm.co.uk:9443",
+        rp_id="desk.firm.co.uk",
+        port=9443,
+    )
+    assert made.origin == "https://desk.firm.co.uk:9443"
+    assert made.rp_id == "desk.firm.co.uk"
+
+
+def test_the_wizard_gives_a_colleague_the_string_to_type(tmp_path, monkeypatch):
+    import socket
+
+    short = socket.gethostname().split(".")[0]
+    made = _network_settings(tmp_path, monkeypatch)
+    made.origin = "https://" + made.origin[len("http://") :]
+
+    async def scenario():
+        client = await _client(made)
+        try:
+            page = await (await client.get("/setup")).text()
+            assert f"{short}.local:9445" in page
+            assert "%%ADDRESS%%" not in page
+            assert "0.0.0.0" not in page
+        finally:
+            await client.close()
+
+    run(scenario())
+
+
+def test_a_loopback_desk_does_not_send_a_firm_to_127_0_0_1(settings):
+    async def scenario():
+        client = await _client(settings)
+        try:
+            page = await (await client.get("/setup")).text()
+            assert "127.0.0.1" not in page
+            assert "network name" in page
+        finally:
+            await client.close()
+
+    run(scenario())
