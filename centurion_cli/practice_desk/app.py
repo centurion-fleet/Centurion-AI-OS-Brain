@@ -978,7 +978,7 @@ async def chat(request: web.Request) -> web.StreamResponse:
     failure: Optional[str] = None
 
     try:
-        async for chunk in _stream_from_brain(desk, person, history):
+        async for chunk in _stream_from_brain(desk, person, history, conv_id=conv["id"]):
             if chunk.startswith("__ERROR__"):
                 failure = chunk[len("__ERROR__"):]
                 break
@@ -1002,8 +1002,20 @@ async def chat(request: web.Request) -> web.StreamResponse:
     return response
 
 
-async def _stream_from_brain(desk: Desk, person: Person, history: list):
-    """Yield text deltas from the Brain's own endpoint."""
+async def _stream_from_brain(desk: Desk, person: Person, history: list, *, conv_id: str):
+    """Yield text deltas from the Brain's own endpoint.
+
+    `conv_id` is not decoration. Without it the Brain derives a session key from
+    the system prompt and the first user message, which means ten accountants can
+    land in one agent session by accident — and then one person's working memory
+    is another person's context. The desk's own register and the agent's history
+    must be keyed by the SAME identifier, or the two records disagree about what
+    the practice was told.
+
+    Private threads get a session per person (one conversation per owner); client
+    threads get one session per client, because that is the whole point of a
+    shared thread.
+    """
     settings = desk.settings
     if not settings.brain_url:
         yield "__ERROR__The desk is not connected to a Brain."
@@ -1034,7 +1046,12 @@ async def _stream_from_brain(desk: Desk, person: Person, history: list):
     }
     if person.role != "partner":
         body["toolsets"] = list(PRACTICE_TOOLSETS)
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        # One agent session per desk conversation. See the docstring: without
+        # this the Brain invents a key and two people can share one session.
+        "X-Centurion-Session-Id": f"practice-desk-{conv_id}",
+    }
     if settings.brain_key:
         headers["Authorization"] = f"Bearer {settings.brain_key}"
 

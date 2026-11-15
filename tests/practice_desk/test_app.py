@@ -874,9 +874,13 @@ def test_a_non_partner_browser_session_is_narrowed_before_it_reaches_the_brain(s
             settings.brain_url = str(brain_server.make_url("")).rstrip("/")
             desk = desk_app.Desk(settings=settings, store=store)
 
-            async for _ in desk_app._stream_from_brain(desk, partner, [{"role": "user", "content": "hi"}]):
+            async for _ in desk_app._stream_from_brain(
+                desk, partner, [{"role": "user", "content": "hi"}], conv_id="conv-partner"
+            ):
                 pass
-            async for _ in desk_app._stream_from_brain(desk, associate, [{"role": "user", "content": "hi"}]):
+            async for _ in desk_app._stream_from_brain(
+                desk, associate, [{"role": "user", "content": "hi"}], conv_id="conv-junior"
+            ):
                 pass
         finally:
             await brain_server.close()
@@ -898,10 +902,12 @@ class FakeBrain:
 
     def __init__(self) -> None:
         self.requests: list[dict] = []
+        self.headers: list[dict] = []
 
     async def chat(self, request: web.Request) -> web.StreamResponse:
         body = await request.json()
         self.requests.append(body)
+        self.headers.append(dict(request.headers))
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
         await response.prepare(request)
         for word in ("Your year end ", "is 31 March."):
@@ -911,6 +917,70 @@ class FakeBrain:
         await response.write(b"data: [DONE]\n\n")
         await response.write_eof()
         return response
+
+
+def test_each_person_gets_their_own_agent_session_on_the_machine(settings):
+    """Ten accountants, one Brain — and never one shared conversation.
+
+    The Brain is an OpenAI-compatible endpoint that, given no session key, INVENTS
+    one from the system prompt and the first user message. Two associates called
+    the same thing asking the same question would then share an agent session,
+    and one person's working context would be another person's answer. The desk
+    must name the session itself, and name it with the id it already stores, so
+    the practice's record and the agent's history are the same conversation.
+    """
+    brain = FakeBrain()
+    brain_app = web.Application()
+    brain_app.router.add_post("/v1/chat/completions", brain.chat)
+    brain_server = TestServer(brain_app)
+
+    store = st.PracticeStore(settings.db_path)
+    one = store.admit_person(name="Aisha Khan", email="a@firm.test", role="associate")
+    two = store.admit_person(name="Aisha Khan", email="b@firm.test", role="associate")
+
+    async def scenario():
+        await brain_server.start_server()
+        try:
+            settings.brain_url = str(brain_server.make_url("")).rstrip("/")
+            desk = desk_app.Desk(settings=settings, store=store)
+
+            # Same name, same role, same question — the derivation trap.
+            for person in (one, two):
+                conv = store.ensure_conversation(person=person)
+                async for _ in desk_app._stream_from_brain(
+                    desk,
+                    person,
+                    [{"role": "user", "content": "When is Hargreaves' year end?"}],
+                    conv_id=conv["id"],
+                ):
+                    pass
+        finally:
+            await brain_server.close()
+
+    run(scenario())
+
+    sent = [h.get("X-Centurion-Session-Id") for h in brain.headers]
+    assert all(sent), "the desk must name the agent session, not let the Brain invent one"
+    assert sent[0] != sent[1], "two people must never share one agent session"
+
+    conv_one = store.ensure_conversation(person=one)["id"]
+    assert sent[0] == f"practice-desk-{conv_one}"
+
+    # And the system prompt still says who is asking — the session key is the
+    # boundary, the prompt is the attribution. Both are needed.
+    assert "Aisha Khan" in brain.requests[0]["messages"][0]["content"]
+
+
+def test_a_client_thread_is_one_session_shared_by_everyone_assigned(settings):
+    """The mirror rule: a shared thread is shared on the machine too."""
+    store = st.PracticeStore(settings.db_path)
+    partner = store.admit_person(name="Adrian", email="p@firm.test", role="partner")
+    first = store.ensure_conversation(person=partner, scope="client", client_id="hargreaves")
+    second = store.ensure_conversation(person=partner, scope="client", client_id="hargreaves")
+    assert first["id"] == second["id"]
+
+    private = store.ensure_conversation(person=partner)
+    assert private["id"] != first["id"], "a client thread is not the person's private thread"
 
 
 def test_chat_streams_from_the_brain_and_lands_in_the_record(settings):
