@@ -12832,6 +12832,13 @@ Examples:
         "(for a scheduled/unattended backup; the file must be protected by the OS).",
     )
     backup_parser.add_argument(
+        "--no-recovery-key",
+        action="store_true",
+        help="With --encrypt: do not wrap the archive with this machine's printed "
+        "recovery key. Only for a machine that holds no client records. The default "
+        "is to wrap it, so a lost passphrase stays a recoverable mistake.",
+    )
+    backup_parser.add_argument(
         "--status",
         action="store_true",
         help="Show the backup record: last verified backup, next due, and whether "
@@ -12873,6 +12880,12 @@ Examples:
     import_parser.add_argument(
         "--passphrase-file",
         help="Read the container passphrase from this file instead of prompting",
+    )
+    import_parser.add_argument(
+        "--recovery-key-file",
+        help="Read the printed recovery key from this file. Use this when the "
+        "passphrase is lost: the archive was wrapped with both, so either opens it. "
+        "Press Enter at the passphrase prompt and supply this instead.",
     )
     import_parser.add_argument(
         "--force",

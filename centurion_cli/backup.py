@@ -169,6 +169,67 @@ def _carries_client_records() -> tuple[bool, str]:
     return True, edition_label(tier)
 
 
+RECOVERY_KEY_FILENAME = "recovery_key.txt"
+
+
+def _machine_recovery_key(centurion_root: Path) -> tuple[str, bool]:
+    """This machine's printed recovery key — created once, then reused.
+
+    One key per machine, not one per archive: the sheet lives in the practice's
+    safe beside the backup drive, and every archive that drive ever holds must be
+    openable by it. A fresh key per backup would make the sheet meaningless after
+    the second week.
+
+    The key is stored 0600 on the machine so the backup command can reuse it
+    without asking. That does not weaken the threat model, which is the drive in
+    the drawer: an attacker already holding this machine has the unencrypted data
+    anyway. It is deliberately NOT derived from the machine's identity, because a
+    key we could re-derive is a key we could hold.
+
+    Returns (key, created_now).
+    """
+    path = Path(centurion_root) / "backup" / RECOVERY_KEY_FILENAME
+    if path.exists():
+        existing = path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing, False
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    key = _bc.generate_recovery_key()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(key + "\n")
+    return key, True
+
+
+def _print_recovery_sheet(recovery_key: str, *, created: bool) -> None:
+    """The one thing this machine may never leave unsaid twice.
+
+    If the sheet is not written down, the archive is exactly as recoverable as it
+    was before this feature existed — which is to say, not at all. So the first
+    backup states it loudly and names the drawer; later ones say only that the
+    existing sheet still applies.
+    """
+    bar = "─" * 64
+    if created:
+        print()
+        print(bar)
+        print("  YOUR RECOVERY KEY — WRITE THIS DOWN NOW")
+        print(f"    {recovery_key}")
+        print()
+        print("  Copy it onto paper, put the paper in the practice safe, with the")
+        print("  backup drive. It is the second way into every backup this machine")
+        print("  makes. If the passphrase is ever lost, this key restores the archive.")
+        print("  We do not hold it, cannot read your backup, and cannot reissue it.")
+        print(bar)
+        print(f"  Stored on this machine at: backup/{RECOVERY_KEY_FILENAME}")
+    else:
+        print(
+            "  Recovery:    using this machine's existing printed recovery key "
+            "(sheet already issued)"
+        )
+
+
 def _prune_container_rotation(directory: Path, keep: int = CONTAINER_ROTATION_KEEP) -> List[Path]:
     """Keep the newest `keep` scheduled archives in `directory`; delete older.
 
@@ -367,16 +428,32 @@ def run_backup(args) -> None:
             passphrase = (
                 _bc.read_passphrase_file(pf) if pf else _bc.prompt_passphrase(confirm=True)
             )
+            recovery_key, key_created = (
+                (None, False)
+                if getattr(args, "no_recovery_key", False)
+                else _machine_recovery_key(get_default_centurion_root())
+            )
             container = out_path.with_suffix(".cbk")
-            enc = _bc.encrypt_file(out_path, container, passphrase, remove_source=True)
+            enc = _bc.encrypt_file(
+                out_path,
+                container,
+                passphrase,
+                remove_source=True,
+                recovery_key=recovery_key,
+            )
             print(f"  Archive:     {container}")
             print(f"  Size:        {_format_size(enc['archive_bytes'])}")
             print(f"  Records:     {enc['records']} (AES-256-GCM, scrypt)")
-            verified = _bc.verify_archive(container, passphrase)
+            verified = _bc.verify_archive(container, passphrase, recovery_key=recovery_key)
             print(
                 f"  Verified:    yes — decrypted, digest matched, "
                 f"{verified['files']} entries CRC-checked"
             )
+            if recovery_key:
+                print(
+                    "  Recovery:    printed key wrapped in — either the passphrase "
+                    "or the printed key opens this archive"
+                )
             _bs.record_backup(
                 path=str(container),
                 size_bytes=enc["archive_bytes"],
@@ -399,6 +476,8 @@ def run_backup(args) -> None:
             sys.exit(1)
 
         print("\nKeep the passphrase somewhere you control. We do not hold it and cannot recover it.")
+        if recovery_key:
+            _print_recovery_sheet(recovery_key, created=key_created)
         print(f"\nRestore with: centurion import {container.name}")
         return
 
@@ -488,17 +567,27 @@ def run_import(args) -> None:
     if _bc.is_encrypted(zip_path):
         print("Encrypted backup container detected.")
         pf = getattr(args, "passphrase_file", None)
+        rkf = getattr(args, "recovery_key_file", None)
+        recovery_key = _bc.read_recovery_key_file(rkf) if rkf else None
+        # With a recovery key in hand the passphrase is optional: the archive was
+        # wrapped with both, and the whole point is that the lost one is not fatal.
         passphrase = (
-            _bc.read_passphrase_file(pf) if pf else _bc.prompt_passphrase(confirm=False)
+            _bc.read_passphrase_file(pf)
+            if pf
+            else ("" if recovery_key else _bc.prompt_passphrase(confirm=False))
         )
         try:
             fd, tmp_name = tempfile.mkstemp(prefix="centurion-restore-", suffix=".zip")
             os.close(fd)
             _decrypted_tmp = Path(tmp_name)
-            stats = _bc.decrypt_file(zip_path, _decrypted_tmp, passphrase)
+            stats = _bc.decrypt_file(
+                zip_path, _decrypted_tmp, passphrase, recovery_key=recovery_key
+            )
         except _bc.BackupCryptoError as exc:
             print(f"Error: {exc}")
             sys.exit(1)
+        if stats.get("recovery_slot"):
+            print("Opened with the printed recovery key — the passphrase was not used.")
         print(f"Decrypted OK — {_format_size(stats['plaintext_bytes'])}, digest matched.")
         zip_path = _decrypted_tmp
 
