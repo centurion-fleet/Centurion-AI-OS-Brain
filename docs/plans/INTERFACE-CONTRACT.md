@@ -127,11 +127,68 @@ off, and an update ships the moment it is built.
 
 ---
 
+## Identity — the Gate 1 addition
+
+### `GET /api/identity`
+```json
+{"claimed": true, "people": 2, "me": {"id": "…", "name": "…", "role": "owner"},
+ "rp_id": "ships-ai.local", "origin": "https://ships-ai.local:18789"}
+```
+Unauthenticated on purpose: a client has to know whether this Brain is claimed
+before it can decide between "set up" and "sign in". Reveals nobody's details.
+
+### `POST /api/identity/claim` `{name, email}`
+The first person becomes the owner. **Only from loopback or with the machine's
+key** — `403 claim_requires_local_access` otherwise, so a Brain on a network
+cannot be taken by whoever finds it first. Returns a registration ceremony:
+
+```json
+{"ok": true, "person": {"...": "..."}, "challenge": "…",
+ "options": {"rp": {"id": "…"}, "challenge": "…", …rest of PublicKeyCredentialCreationOptions}}
+```
+
+If the fingerprint prompt is dismissed, calling claim again **resumes** the same
+person rather than stranding a Brain that has an owner who cannot sign in.
+Once the owner holds a passkey, claim is `409 already_claimed`.
+
+### `POST /api/identity/register`
+Body: `{challenge, clientDataJSON, attestationObject, id, transports?, label?}`.
+Verifies the attestation against this Brain's rp_id and origin, stores the
+credential, and returns `{token, person}` — the session starts immediately.
+
+### `POST /api/identity/signin/options` → `{challenge, options}`
+Discoverable credentials: no email needed, the authenticator picks the passkey.
+Throttled per address — `429 rate_limited`.
+
+### `POST /api/identity/signin` `{challenge, id, clientDataJSON, authenticatorData, signature}`
+Returns `{token, person}`. Refusals, all distinct: `ceremony_expired`,
+`passkey_unknown`, `signature_refused`, `person_inactive`, `rate_limited`.
+
+### `POST /api/identity/signout`
+Closes **this** session, not every session. A phone taken by a partner does not
+sign the desk out.
+
+### `POST /api/identity/invite` `{name, email, role}` *(owner or admin, or the machine key)*
+Returns `{person, link}` where the link carries a one-use, fifteen-minute token.
+A member gets `403 role_refused`.
+
+### `GET /api/me`
+`{"principal": {"kind": "person", "id": "…", "role": "owner"}, "people": 2}`
+or `{"kind": "service"}` for the machine's own key. Every request the adapter
+handles now carries `centurion_principal`, so anything downstream can answer
+*who* rather than *something*.
+
+**Auth:** `Authorization: Bearer <session token>` for a person, or the shared
+machine key. Session tokens are stored hashed; the throttle lives in the
+database so a restart grants nobody a fresh budget.
+
+---
+
 ## What is deliberately not in the contract yet
 
-- **Identity.** `GET /api/me` arrives at Gate 1 with passkeys, roles and
-  sign-in rate limiting. Until then every request carries the one shared key.
 - **Missions, plans, approvals as first-class objects.** They exist in the iOS
   app's own service layer; the contract for the web client is frozen at Gate 2
   against what the Desk actually needs, not guessed now.
 - **Files.** Upload and delivery shapes land with the Desk.
+- **Passkey management.** Adding a second passkey, revoking one, and transferring
+  ownership exist in the store and are not yet exposed as routes.

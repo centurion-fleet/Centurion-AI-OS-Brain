@@ -30,6 +30,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import socket as _socket
 import re
 import sqlite3
@@ -527,6 +528,64 @@ def _openai_error(message: str, err_type: str = "invalid_request_error", param: 
 _MAX_TRANSCRIPT_CHARS = 4000
 
 
+def _b64url(raw: bytes) -> str:
+    import base64
+
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+# Passkey ceremonies are borrowed from the identity package rather than
+# reimplemented here: one implementation, tested once, used by the Brain and by
+# anything else that puts a person in front of a passkey prompt.
+
+def _registration_options(*, rp_id: str, challenge: bytes, person) -> Dict[str, Any]:
+    from centurion_identity import webauthn
+
+    return webauthn.registration_options(
+        rp_id=rp_id,
+        rp_name="Centurion",
+        challenge=challenge,
+        user_id=person.id.encode(),
+        user_name=person.email,
+        display_name=person.name,
+    )
+
+
+def _assertion_options(*, rp_id: str, challenge: bytes) -> Dict[str, Any]:
+    from centurion_identity import webauthn
+
+    return webauthn.assertion_options(rp_id=rp_id, challenge=challenge, allow_ids=[])
+
+
+def _verify_registration(*, body, expected_challenge, expected_origin, rp_id):
+    from centurion_identity import webauthn
+
+    return webauthn.verify_registration(
+        client_data_json=webauthn.b64url_decode(str(body.get("clientDataJSON", ""))),
+        attestation_object=webauthn.b64url_decode(str(body.get("attestationObject", ""))),
+        expected_challenge=expected_challenge,
+        expected_origin=expected_origin,
+        rp_id=rp_id,
+    )
+
+
+def _verify_assertion(
+    *, body, stored_public_key, stored_sign_count, expected_challenge, expected_origin, rp_id
+):
+    from centurion_identity import webauthn
+
+    return webauthn.verify_assertion(
+        client_data_json=webauthn.b64url_decode(str(body.get("clientDataJSON", ""))),
+        authenticator_data=webauthn.b64url_decode(str(body.get("authenticatorData", ""))),
+        signature=webauthn.b64url_decode(str(body.get("signature", ""))),
+        stored_public_key=stored_public_key,
+        stored_sign_count=stored_sign_count,
+        expected_challenge=expected_challenge,
+        expected_origin=expected_origin,
+        rp_id=rp_id,
+    )
+
+
 def _title_from_preview(preview: Optional[str]) -> str:
     """A thread with no title still needs a name in a list."""
     text = " ".join((preview or "").split())
@@ -711,6 +770,8 @@ class APIServerAdapter(BasePlatformAdapter):
         # in-flight run by run_id.
         self._run_approval_sessions: Dict[str, str] = {}
         self._session_db: Optional[Any] = None  # Lazy-init SessionDB for session continuity
+        self._identity_store: Optional[Any] = None  # Lazy-init IdentityStore (who is asking)
+        self._ceremonies: Dict[str, Dict[str, Any]] = {}  # in-flight passkey ceremonies
 
     @staticmethod
     def _parse_cors_origins(value: Any) -> tuple[str, ...]:
@@ -837,6 +898,14 @@ class APIServerAdapter(BasePlatformAdapter):
         """
         Validate Bearer token from Authorization header.
 
+        Two kinds of caller are accepted:
+
+        * the shared API key — a machine talking to a machine, and the only
+          thing that existed before Gate 1;
+        * a person's session token, minted by a passkey sign-in — a human in a
+          client. When one is presented the person is attached to the request,
+          so anything downstream can answer "who" rather than "something".
+
         Returns None if auth is OK, or a 401 web.Response on failure.
         If no API key is configured, all requests are allowed (only when API
         server is local).
@@ -848,7 +917,18 @@ class APIServerAdapter(BasePlatformAdapter):
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
             if hmac.compare_digest(token, self._api_key):
+                request["centurion_principal"] = {"kind": "service"}
                 return None  # Auth OK
+            person = self._person_for_token(token)
+            if person is not None:
+                request["centurion_principal"] = {
+                    "kind": "person",
+                    "id": person.id,
+                    "name": person.name,
+                    "email": person.email,
+                    "role": person.role,
+                }
+                return None
 
         logger.warning(
             "API server rejected invalid API key: %s",
@@ -858,6 +938,35 @@ class APIServerAdapter(BasePlatformAdapter):
             {"error": {"message": "Invalid API key", "type": "invalid_request_error", "code": "invalid_api_key"}},
             status=401,
         )
+
+    # ------------------------------------------------------------------
+    # Identity — who is asking
+    # ------------------------------------------------------------------
+
+    def _identity(self):
+        """The Brain's identity store, opened on first use.
+
+        Kept lazy so a host that only ever uses the shared key never creates a
+        database it does not need.
+        """
+        if self._identity_store is None:
+            try:
+                from centurion_identity import IdentityStore
+
+                self._identity_store = IdentityStore()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Identity store unavailable: %s", exc)
+                return None
+        return self._identity_store
+
+    def _person_for_token(self, token: str):
+        store = self._identity()
+        if store is None or not token:
+            return None
+        try:
+            return store.resolve_session(token)
+        except Exception:  # noqa: BLE001
+            return None
 
     # ------------------------------------------------------------------
     # Session header helpers
@@ -1312,6 +1421,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 "threads": True,
                 "thread_transcript": True,
                 "client_served_by_brain": True,
+                "identity": True,
+                "passkey_signin": True,
+                "roles": list(("owner", "admin", "member")),
                 "cors": bool(self._cors_origins),
             },
             "endpoints": {
@@ -1328,8 +1440,355 @@ class APIServerAdapter(BasePlatformAdapter):
                 "threads": {"method": "GET", "path": "/api/threads"},
                 "thread": {"method": "GET", "path": "/api/threads/{session_id}"},
                 "client": {"method": "GET", "path": "/desk"},
+                "identity_state": {"method": "GET", "path": "/api/identity"},
+                "identity_claim": {"method": "POST", "path": "/api/identity/claim"},
+                "identity_register": {"method": "POST", "path": "/api/identity/register"},
+                "identity_signin_options": {"method": "POST", "path": "/api/identity/signin/options"},
+                "identity_signin": {"method": "POST", "path": "/api/identity/signin"},
+                "identity_signout": {"method": "POST", "path": "/api/identity/signout"},
+                "identity_invite": {"method": "POST", "path": "/api/identity/invite"},
+                "me": {"method": "GET", "path": "/api/me"},
             },
         })
+
+    # ── identity: who is asking ─────────────────────────────────────────────
+    # Before Gate 1 a Brain had one key, so a firm with five people had one
+    # credential between them. Now each person has a passkey, and everything
+    # downstream can ask who did a thing.
+
+    def _remember_ceremony(self, handle: str, record: Dict[str, Any]) -> None:
+        now = time.time()
+        # A ceremony is a promise that lasts two minutes. Expired ones are
+        # dropped on every write so this dictionary cannot grow without bound.
+        for stale in [k for k, v in self._ceremonies.items() if v["expires_at"] < now]:
+            self._ceremonies.pop(stale, None)
+        record["expires_at"] = now + 120
+        self._ceremonies[handle] = record
+
+    def _take_ceremony(self, handle: str, kind: str) -> Optional[Dict[str, Any]]:
+        record = self._ceremonies.pop(handle, None)
+        if not record or record["expires_at"] < time.time() or record["kind"] != kind:
+            return None
+        return record
+
+    @staticmethod
+    def _brain_origin(request: "web.Request") -> str:
+        scheme = request.headers.get("X-Forwarded-Proto") or request.scheme
+        host = request.headers.get("X-Forwarded-Host") or request.host
+        return f"{scheme}://{host}"
+
+    @staticmethod
+    def _brain_rp_id(request: "web.Request") -> str:
+        host = request.headers.get("X-Forwarded-Host") or request.host or ""
+        return host.split(":")[0].lower()
+
+    def _caller_address(self, request: "web.Request") -> str:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.remote or "unknown"
+
+    def _is_loopback(self, request: "web.Request") -> bool:
+        return self._caller_address(request) in ("127.0.0.1", "::1", "localhost")
+
+    def _presents_service_key(self, request: "web.Request") -> bool:
+        header = request.headers.get("Authorization", "")
+        if not (self._api_key and header.startswith("Bearer ")):
+            return False
+        return hmac.compare_digest(header[7:].strip(), self._api_key)
+
+    async def _handle_identity_state(self, request: "web.Request") -> "web.Response":
+        """GET /api/identity — is this Brain claimed, and is anyone signed in?"""
+        store = self._identity()
+        if store is None:
+            return web.json_response(
+                _openai_error("Identity is unavailable on this host", code="identity_unavailable"),
+                status=503,
+            )
+
+        me = None
+        header = request.headers.get("Authorization", "")
+        if header.startswith("Bearer "):
+            person = self._person_for_token(header[7:].strip())
+            if person is not None:
+                me = person.public()
+
+        return web.json_response(
+            {
+                "claimed": store.is_claimed(),
+                "people": store.people_count(),
+                "me": me,
+                "rp_id": self._brain_rp_id(request),
+                "origin": self._brain_origin(request),
+            }
+        )
+
+    async def _handle_identity_claim(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/claim — the first person, taken from the machine.
+
+        Physical access is the first credential. On loopback, or with the
+        machine's own key, the first person becomes owner and is handed a
+        registration ceremony. From anywhere else this is refused, so a Brain
+        exposed to a network cannot be claimed by whoever finds it first.
+        """
+        store = self._identity()
+        if store is None:
+            return web.json_response(
+                _openai_error("Identity is unavailable on this host", code="identity_unavailable"),
+                status=503,
+            )
+        if not (self._is_loopback(request) or self._presents_service_key(request)):
+            return web.json_response(
+                _openai_error(
+                    "The first person has to be set up on the machine itself, or with its key.",
+                    code="claim_requires_local_access",
+                ),
+                status=403,
+            )
+
+        if store.is_claimed():
+            owner = next((p for p in store.list_people() if p.role == "owner"), None)
+            if owner is None or store.credentials_for(owner.id):
+                return web.json_response(
+                    _openai_error(
+                        "This Brain already has an owner. Ask them for an invitation.",
+                        code="already_claimed",
+                    ),
+                    status=409,
+                )
+            person = owner  # claim was started but the passkey never landed
+        else:
+            try:
+                body = await request.json()
+            except Exception:  # noqa: BLE001
+                return web.json_response(_openai_error("Invalid JSON"), status=400)
+            try:
+                person = store.claim(str(body.get("name", "")), str(body.get("email", "")))
+            except Exception as exc:  # noqa: BLE001
+                return web.json_response(_openai_error(str(exc), code="claim_refused"), status=400)
+
+        challenge = secrets.token_bytes(32)
+        handle = _b64url(challenge)
+        self._remember_ceremony(
+            handle, {"kind": "register", "person_id": person.id, "challenge": challenge}
+        )
+        logger.info("Identity: claim ceremony opened for %s", person.email)
+        return web.json_response(
+            {
+                "ok": True,
+                "person": person.public(),
+                "challenge": handle,
+                "options": _registration_options(
+                    rp_id=self._brain_rp_id(request), challenge=challenge, person=person
+                ),
+            }
+        )
+
+    async def _handle_identity_register(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/register — finish a passkey registration."""
+        store = self._identity()
+        if store is None:
+            return web.json_response(
+                _openai_error("Identity is unavailable on this host", code="identity_unavailable"),
+                status=503,
+            )
+        if not store.allow_attempt(f"register:{self._caller_address(request)}", limit=10, window_seconds=60):
+            return web.json_response(
+                _openai_error("Too many attempts. Wait a minute.", code="rate_limited"), status=429
+            )
+
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return web.json_response(_openai_error("Invalid JSON"), status=400)
+
+        ceremony = self._take_ceremony(str(body.get("challenge", "")), "register")
+        if ceremony is None:
+            return web.json_response(
+                _openai_error("That registration expired. Start again.", code="ceremony_expired"),
+                status=400,
+            )
+        person = store.get_person(ceremony["person_id"])
+        if person is None:
+            return web.json_response(_openai_error("No such person", code="unknown_person"), status=404)
+
+        try:
+            credential = _verify_registration(
+                body=body,
+                expected_challenge=ceremony["challenge"],
+                expected_origin=self._brain_origin(request),
+                rp_id=self._brain_rp_id(request),
+            )
+        except Exception as exc:  # noqa: BLE001
+            store.note_refusal(person.id, f"register: {exc}")
+            return web.json_response(
+                _openai_error(f"That passkey could not be verified: {exc}", code="passkey_refused"),
+                status=400,
+            )
+
+        store.add_credential(
+            person.id,
+            credential_id=credential.credential_id,
+            public_key=credential.public_key,
+            sign_count=credential.sign_count,
+            label=str(body.get("label", "")),
+            transports=body.get("transports") or [],
+            algorithm=getattr(credential, "algorithm", None),
+        )
+        token = store.open_session(person.id, user_agent=request.headers.get("User-Agent", ""))
+        logger.info("Identity: passkey registered for %s", person.email)
+        return web.json_response({"ok": True, "token": token, "person": person.public()})
+
+    async def _handle_identity_signin_options(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/signin/options — begin signing in."""
+        store = self._identity()
+        if store is None:
+            return web.json_response(
+                _openai_error("Identity is unavailable on this host", code="identity_unavailable"),
+                status=503,
+            )
+        address = self._caller_address(request)
+        if not store.allow_attempt(f"signin:{address}", limit=20, window_seconds=60):
+            store.note_refusal(None, f"signin throttled from {address}")
+            return web.json_response(
+                _openai_error("Too many sign-in attempts. Wait a minute.", code="rate_limited"),
+                status=429,
+            )
+
+        challenge = secrets.token_bytes(32)
+        handle = _b64url(challenge)
+        self._remember_ceremony(handle, {"kind": "signin", "challenge": challenge})
+        return web.json_response(
+            {
+                "ok": True,
+                "challenge": handle,
+                "options": _assertion_options(
+                    rp_id=self._brain_rp_id(request), challenge=challenge
+                ),
+            }
+        )
+
+    async def _handle_identity_signin(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/signin — finish signing in, mint a session."""
+        store = self._identity()
+        if store is None:
+            return web.json_response(
+                _openai_error("Identity is unavailable on this host", code="identity_unavailable"),
+                status=503,
+            )
+        address = self._caller_address(request)
+        if not store.allow_attempt(f"signin-finish:{address}", limit=20, window_seconds=60):
+            return web.json_response(
+                _openai_error("Too many sign-in attempts. Wait a minute.", code="rate_limited"),
+                status=429,
+            )
+
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return web.json_response(_openai_error("Invalid JSON"), status=400)
+
+        ceremony = self._take_ceremony(str(body.get("challenge", "")), "signin")
+        if ceremony is None:
+            return web.json_response(
+                _openai_error("That sign-in expired. Try again.", code="ceremony_expired"),
+                status=400,
+            )
+
+        credential_id = str(body.get("id", "") or body.get("credentialId", ""))
+        stored = store.credential_by_id(credential_id)
+        if stored is None:
+            store.note_refusal(None, f"unknown passkey {credential_id[:12]} from {address}")
+            return web.json_response(
+                _openai_error("That passkey is not recognised on this Brain.", code="passkey_unknown"),
+                status=401,
+            )
+        person = store.get_person(stored["person_id"])
+        if person is None or not person.active:
+            store.note_refusal(stored["person_id"], "sign-in for inactive person")
+            return web.json_response(
+                _openai_error("That account is not active.", code="person_inactive"), status=403
+            )
+
+        try:
+            result = _verify_assertion(
+                body=body,
+                stored_public_key=stored["public_key"],
+                stored_sign_count=int(stored["sign_count"] or 0),
+                expected_challenge=ceremony["challenge"],
+                expected_origin=self._brain_origin(request),
+                rp_id=self._brain_rp_id(request),
+            )
+        except Exception as exc:  # noqa: BLE001
+            store.note_refusal(person.id, f"signin: {exc}")
+            return web.json_response(
+                _openai_error(f"That signature could not be verified: {exc}", code="signature_refused"),
+                status=401,
+            )
+
+        store.touch_credential(credential_id, result.sign_count)
+        token = store.open_session(person.id, user_agent=request.headers.get("User-Agent", ""))
+        logger.info("Identity: %s signed in", person.email)
+        return web.json_response({"ok": True, "token": token, "person": person.public()})
+
+    async def _handle_identity_signout(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/signout — close this session, not every session."""
+        store = self._identity()
+        if store is None:
+            return web.json_response(_openai_error("Identity unavailable", code="identity_unavailable"), status=503)
+        header = request.headers.get("Authorization", "")
+        if header.startswith("Bearer "):
+            store.close_session(header[7:].strip())
+        return web.json_response({"ok": True})
+
+    async def _handle_identity_me(self, request: "web.Request") -> "web.Response":
+        """GET /api/me — who is this request?"""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        principal = request.get("centurion_principal") or {"kind": "service"}
+        store = self._identity()
+        return web.json_response(
+            {
+                "principal": principal,
+                "people": store.people_count() if store else 0,
+            }
+        )
+
+    async def _handle_identity_invite(self, request: "web.Request") -> "web.Response":
+        """POST /api/identity/invite — add a person and hand back a one-use link."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        store = self._identity()
+        if store is None:
+            return web.json_response(_openai_error("Identity unavailable", code="identity_unavailable"), status=503)
+
+        principal = request.get("centurion_principal") or {}
+        if principal.get("kind") == "person" and principal.get("role") not in ("owner", "admin"):
+            return web.json_response(
+                _openai_error("Only an owner or an admin can add people.", code="role_refused"),
+                status=403,
+            )
+
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return web.json_response(_openai_error("Invalid JSON"), status=400)
+
+        try:
+            person = store.admit(
+                str(body.get("name", "")),
+                str(body.get("email", "")),
+                role=str(body.get("role", "member")),
+                created_by=principal.get("id"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return web.json_response(_openai_error(str(exc), code="invite_refused"), status=400)
+
+        token = store.issue_invitation(person.id, by=principal.get("id"))
+        link = f"{self._brain_origin(request).rstrip('/')}/#invite={token}"
+        return web.json_response({"ok": True, "person": person.public(), "link": link})
 
     # ── threads: reopening a conversation ───────────────────────────────────
     # A messenger shows you today's conversation and forgets the rest. A client
@@ -3880,6 +4339,18 @@ class APIServerAdapter(BasePlatformAdapter):
             # party is between a customer and their own machine.
             self._app.router.add_get("/api/threads", self._handle_threads)
             self._app.router.add_get("/api/threads/{session_id}", self._handle_thread)
+            # Identity: the first person is claimed from the machine, everyone
+            # else arrives by a one-use link and enrols a passkey.
+            self._app.router.add_get("/api/identity", self._handle_identity_state)
+            self._app.router.add_post("/api/identity/claim", self._handle_identity_claim)
+            self._app.router.add_post("/api/identity/register", self._handle_identity_register)
+            self._app.router.add_post(
+                "/api/identity/signin/options", self._handle_identity_signin_options
+            )
+            self._app.router.add_post("/api/identity/signin", self._handle_identity_signin)
+            self._app.router.add_post("/api/identity/signout", self._handle_identity_signout)
+            self._app.router.add_post("/api/identity/invite", self._handle_identity_invite)
+            self._app.router.add_get("/api/me", self._handle_identity_me)
             self._app.router.add_get("/desk", self._handle_desk_static)
             self._app.router.add_get("/desk/{path:.*}", self._handle_desk_static)
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
