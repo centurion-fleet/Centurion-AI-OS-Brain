@@ -9,16 +9,9 @@ import {
 } from "react";
 import type { Locale, Translations } from "./types";
 import { en } from "./en";
-import { zh } from "./zh";
-import { zhHant } from "./zh-hant";
-import { ja } from "./ja";
 import { de } from "./de";
 import { es } from "./es";
 import { fr } from "./fr";
-import { tr } from "./tr";
-import { uk } from "./uk";
-import { af } from "./af";
-import { ko } from "./ko";
 import { it } from "./it";
 import { ga } from "./ga";
 import { pt } from "./pt";
@@ -38,13 +31,6 @@ const TRANSLATIONS: Record<Locale, Translations> = {
   es,
   it,
   pt,
-  zh,
-  "zh-hant": zhHant,
-  ja,
-  tr,
-  uk,
-  af,
-  ko,
   ga,
   ru,
   hu,
@@ -56,29 +42,22 @@ const TRANSLATIONS: Record<Locale, Translations> = {
 // can share the same list.
 //
 // We intentionally do NOT pair locales with country flags. Languages are not
-// countries (English ≠ GB, Portuguese ≠ PT, Spanish ≠ ES, Chinese variants ≠
-// any single jurisdiction). Endonyms are unambiguous and avoid the political
-// mismapping that flag pairings inevitably create.
+// countries (English ≠ GB, Portuguese ≠ PT, Spanish ≠ ES, Irish ≠ any single
+// jurisdiction). Endonyms are unambiguous and avoid the political mismapping
+// that flag pairings inevitably create.
 export const LOCALE_META: Record<Locale, { name: string }> = {
-  // Ordered by market, not alphabetically: the eleven locales the website
-  // sells are first, so a buyer whose page was in Dutch finds Dutch at the
-  // top of the list rather than eight entries down. The rest are kept -- a
-  // language we ship is a language somebody may read in.
+  // English first, then the European Union markets in the order the website
+  // sells them, then Russian. Every entry here has a catalogue and a country
+  // page behind it -- the picker never offers a language the Brain handed
+  // down from a fork but does not sell into.
   en: { name: "English" },
-  fr: { name: "Français" },
   de: { name: "Deutsch" },
+  fr: { name: "Français" },
   nl: { name: "Nederlands" },
   pl: { name: "Polski" },
   es: { name: "Español" },
   it: { name: "Italiano" },
   pt: { name: "Português" },
-  zh: { name: "简体中文" },
-  "zh-hant": { name: "繁體中文" },
-  ja: { name: "日本語" },
-  tr: { name: "Türkçe" },
-  uk: { name: "Українська" },
-  af: { name: "Afrikaans" },
-  ko: { name: "한국어" },
   ga: { name: "Gaeilge" },
   ru: { name: "Русский" },
   hu: { name: "Magyar" },

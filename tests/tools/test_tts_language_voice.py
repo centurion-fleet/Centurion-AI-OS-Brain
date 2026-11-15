@@ -1,6 +1,6 @@
 """Edge voice matching: the interface language should decide the accent.
 
-The Brain can speak eighteen languages but used to read all of them in one
+The Brain can speak eleven languages but used to read all of them in one
 American voice -- a Dutch sentence in English phonemes is not Dutch, it is
 noise with Dutch spelling. These tests pin the matching rule only; the network
 call to Edge's voice list is stubbed, because a test that needs the internet is

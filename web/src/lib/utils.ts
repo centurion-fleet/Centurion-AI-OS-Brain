@@ -21,7 +21,7 @@ export const themedChrome = "font-mondwest text-display";
  * These used to be hardcoded English — "35m ago" sat inside a Dutch dashboard,
  * which is the sort of thing that makes a translated product feel translated
  * rather than native. `Intl.RelativeTimeFormat` is built into every browser we
- * support and knows the plural rules of all eighteen languages, so this is
+ * support and knows the plural rules of every language we ship, so this is
  * localised without a single catalogue key to translate or keep in sync.
  */
 const FORMATTERS = new Map<string, Intl.RelativeTimeFormat>();

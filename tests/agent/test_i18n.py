@@ -79,22 +79,35 @@ def test_catalog_placeholders_match_english(lang: str):
 # ---------------------------------------------------------------------------
 
 def test_normalize_lang_accepts_supported():
-    assert i18n._normalize_lang("zh") == "zh"
+    assert i18n._normalize_lang("nl") == "nl"
     assert i18n._normalize_lang("EN") == "en"
 
 
 def test_normalize_lang_accepts_aliases():
-    assert i18n._normalize_lang("chinese") == "zh"
-    assert i18n._normalize_lang("zh-CN") == "zh"
     assert i18n._normalize_lang("Deutsch") == "de"
     assert i18n._normalize_lang("español") == "es"
-    assert i18n._normalize_lang("jp") == "ja"
-    assert i18n._normalize_lang("Ukrainian") == "uk"
-    assert i18n._normalize_lang("uk-UA") == "uk"
-    assert i18n._normalize_lang("ua") == "uk"
-    assert i18n._normalize_lang("Turkish") == "tr"
-    assert i18n._normalize_lang("tr-TR") == "tr"
-    assert i18n._normalize_lang("türkçe") == "tr"
+    assert i18n._normalize_lang("Irish") == "ga"
+    assert i18n._normalize_lang("Gaeilge") == "ga"
+    assert i18n._normalize_lang("ga-IE") == "ga"
+    assert i18n._normalize_lang("Hungarian") == "hu"
+    assert i18n._normalize_lang("Magyar") == "hu"
+    assert i18n._normalize_lang("ru-RU") == "ru"
+    # The website's two English codes collapse onto the one English catalogue.
+    assert i18n._normalize_lang("en-AU") == "en"
+    assert i18n._normalize_lang("en-US") == "en"
+
+
+@pytest.mark.parametrize("dropped", ["zh", "zh-hant", "ja", "ko", "tr", "uk", "af"])
+def test_dropped_languages_are_not_offered(dropped: str):
+    """Languages we do not sell into must not resolve to anything.
+
+    Kept as a named test rather than deleted with the catalogues: if a stale
+    config or a re-fork reintroduces one of these codes, the picker would offer
+    a language the Brain cannot speak, and nobody would notice until a buyer
+    hit it. normalize_language() returns None so a writer refuses the value.
+    """
+    assert dropped not in i18n.SUPPORTED_LANGUAGES
+    assert i18n.normalize_language(dropped) is None
 
 
 def test_normalize_lang_unknown_falls_back():
@@ -106,14 +119,14 @@ def test_normalize_lang_unknown_falls_back():
 def test_env_var_override(monkeypatch):
     """CENTURION_LANGUAGE wins over config."""
     i18n.reset_language_cache()
-    monkeypatch.setenv("CENTURION_LANGUAGE", "ja")
-    assert i18n.get_language() == "ja"
+    monkeypatch.setenv("CENTURION_LANGUAGE", "hu")
+    assert i18n.get_language() == "hu"
 
 
 def test_env_var_normalized(monkeypatch):
     i18n.reset_language_cache()
-    monkeypatch.setenv("CENTURION_LANGUAGE", "Chinese")
-    assert i18n.get_language() == "zh"
+    monkeypatch.setenv("CENTURION_LANGUAGE", "Magyar")
+    assert i18n.get_language() == "hu"
 
 
 def test_default_when_nothing_set(monkeypatch):
@@ -131,9 +144,9 @@ def test_default_when_nothing_set(monkeypatch):
 
 def test_t_explicit_lang():
     assert i18n.t("approval.denied", lang="en").endswith("Denied")
-    assert i18n.t("approval.denied", lang="zh").endswith("已拒绝")
-    assert i18n.t("approval.denied", lang="uk").endswith("Відхилено")
-    assert i18n.t("approval.denied", lang="tr").endswith("Reddedildi")
+    assert i18n.t("approval.denied", lang="de").endswith("Abgelehnt")
+    assert i18n.t("approval.denied", lang="hu").endswith("Elutasítva")
+    assert i18n.t("approval.denied", lang="ga").endswith("Diúltaithe")
 
 
 def test_t_formats_placeholders():
@@ -153,11 +166,11 @@ def test_t_missing_key_in_non_english_falls_back_to_english(tmp_path, monkeypatc
     fake_locales = tmp_path / "locales"
     fake_locales.mkdir()
     (fake_locales / "en.yaml").write_text("foo: English Foo\n", encoding="utf-8")
-    (fake_locales / "zh.yaml").write_text("# intentionally empty\n", encoding="utf-8")
+    (fake_locales / "nl.yaml").write_text("# intentionally empty\n", encoding="utf-8")
     monkeypatch.setattr(i18n, "_locales_dir", lambda: fake_locales)
     i18n.reset_language_cache()
     try:
-        assert i18n.t("foo", lang="zh") == "English Foo"
+        assert i18n.t("foo", lang="nl") == "English Foo"
     finally:
         # Clear the cache on teardown so subsequent tests don't see the
         # fake "foo: English Foo" catalog instead of the real locales/*.yaml.

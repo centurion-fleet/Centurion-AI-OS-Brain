@@ -50,7 +50,7 @@ def test_french_names_the_language_and_its_code(monkeypatch):
         ("fr-FR", "Français"),
         ("FR", "Français"),
         ("français", "Français"),
-        ("zh-CN", "简体中文"),
+        ("ga-IE", "Gaeilge"),
     ],
 )
 def test_aliases_and_regional_tags_resolve(monkeypatch, value, expected):
@@ -90,5 +90,5 @@ def test_every_supported_language_has_an_endonym():
 def test_endonyms_are_not_flags_or_english_exonyms():
     """A person must recognise their own language without translating first."""
     assert i18n.language_name("fr") == "Français"
-    assert i18n.language_name("ja") == "日本語"
+    assert i18n.language_name("hu") == "Magyar"
     assert i18n.language_name("de") == "Deutsch"

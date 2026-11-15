@@ -7,13 +7,6 @@ export type Locale =
   | "es"
   | "it"
   | "pt"
-  | "zh"
-  | "zh-hant"
-  | "ja"
-  | "tr"
-  | "uk"
-  | "af"
-  | "ko"
   | "ga"
   | "ru"
   | "hu";

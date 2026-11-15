@@ -18,7 +18,7 @@ Usage::
     from agent.i18n import t
     print(t("approval.choose_long"))                       # current lang
     print(t("gateway.draining", count=3))                  # {count} formatted
-    print(t("approval.choose_long", lang="zh"))            # explicit override
+    print(t("approval.choose_long", lang="de"))            # explicit override
 
 Language resolution order:
     1. Explicit ``lang=`` argument passed to :func:`t`
@@ -43,9 +43,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# The markets Centurion actually sells into: the European Union plus Russian.
+# Codes are the ones the website publishes pages for; en-AU/en-US resolve to
+# "en" through the alias table rather than shipping a duplicate catalogue.
 SUPPORTED_LANGUAGES: tuple[str, ...] = (
-    "en", "fr", "de", "nl", "pl", "es", "it", "pt", "zh", "zh-hant", "ja",
-    "tr", "uk", "af", "ko", "ga", "ru", "hu",
+    "en", "fr", "de", "nl", "pl", "es", "it", "pt", "ga", "ru", "hu",
 )
 DEFAULT_LANGUAGE = "en"
 
@@ -60,13 +62,6 @@ LANGUAGE_NAMES: dict[str, str] = {
     "es": "Español",
     "it": "Italiano",
     "pt": "Português",
-    "zh": "简体中文",
-    "zh-hant": "繁體中文",
-    "ja": "日本語",
-    "tr": "Türkçe",
-    "uk": "Українська",
-    "af": "Afrikaans",
-    "ko": "한국어",
     "ga": "Gaeilge",
     "ru": "Русский",
     "hu": "Magyar",
@@ -107,33 +102,26 @@ def language_name(code: str | None = None) -> str:
     return LANGUAGE_NAMES.get(resolved, LANGUAGE_NAMES[DEFAULT_LANGUAGE])
 
 
-# Accept a few natural aliases so users who type "chinese" / "zh-CN" / "jp"
-# get the right catalog instead of silently falling back to English.
+# Accept a few natural aliases so a user who types "Deutsch" or "es-ES" gets
+# the right catalog instead of silently falling back to English.
+#
+# Codes for languages we no longer ship (zh, zh-hant, ja, ko, tr, uk, af) are
+# deliberately absent rather than kept as dead routes: an alias pointing at a
+# code with no catalogue would normalise to something unsupported, and
+# normalize_language() would then hand back a language we cannot speak. Absent
+# names fall through to English cleanly, and a persisted setting of one of those
+# codes is rejected on write instead of being silently accepted.
 _LANGUAGE_ALIASES: dict[str, str] = {
-    "english": "en", "en-us": "en", "en-gb": "en",
-    # Simplified Chinese — explicit codes route here; bare "chinese" / "mandarin"
-    # also default to Simplified since that's the larger user base.
-    "chinese": "zh", "mandarin": "zh", "zh-cn": "zh", "zh-hans": "zh", "zh-sg": "zh",
-    # Traditional Chinese — distinct catalog.  Cover Taiwan / Hong Kong / Macau
-    # locale tags plus the common "traditional" alias.
-    "traditional-chinese": "zh-hant", "traditional_chinese": "zh-hant",
-    "zh-tw": "zh-hant", "zh-hk": "zh-hant", "zh-mo": "zh-hant",
-    "japanese": "ja", "jp": "ja", "ja-jp": "ja",
+    "english": "en", "en-us": "en", "en-gb": "en", "en-au": "en", "en-ie": "en",
     "german": "de", "deutsch": "de", "de-de": "de", "de-at": "de", "de-ch": "de",
     "spanish": "es", "español": "es", "espanol": "es", "es-es": "es", "es-mx": "es", "es-ar": "es",
     "french": "fr", "français": "fr", "france": "fr", "fr-fr": "fr", "fr-be": "fr", "fr-ca": "fr", "fr-ch": "fr",
-    "ukrainian": "uk", "ukrainisch": "uk", "українська": "uk", "uk-ua": "uk", "ua": "uk",
-    "turkish": "tr", "türkçe": "tr", "tr-tr": "tr",
     # Dutch — the Netherlands and Belgium (Flemish is the same written
     # language; "vlaams" routes here rather than to a catalogue we do not have).
     "dutch": "nl", "nederlands": "nl", "nl-nl": "nl", "nl-be": "nl",
     "flemish": "nl", "vlaams": "nl",
     # Polish — the newest Central European market we sell into.
     "polish": "pl", "polski": "pl", "pl-pl": "pl",
-    # Afrikaans — South African Dutch-derived language; "af-ZA" is the common BCP-47 tag.
-    "afrikaans": "af", "af-za": "af",
-    # Korean
-    "korean": "ko", "한국어": "ko", "ko-kr": "ko",
     # Italian
     "italian": "it", "italiano": "it", "it-it": "it", "it-ch": "it",
     # Irish (Gaeilge) — ga is the BCP-47 code
