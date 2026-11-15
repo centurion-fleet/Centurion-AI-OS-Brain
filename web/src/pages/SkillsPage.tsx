@@ -336,12 +336,10 @@ export default function SkillsPage() {
                     {t.skills.title}
                   </CardTitle>
                   <Badge tone="secondary" className="text-xs">
-                    {t.skills.resultCount
-                      .replace("{count}", String(searchMatchedSkills.length))
-                      .replace(
-                        "{s}",
-                        searchMatchedSkills.length !== 1 ? "s" : "",
-                      )}
+                    {t.skills.resultCount.replace(
+                      "{count}",
+                      String(searchMatchedSkills.length),
+                    )}
                   </Badge>
                 </div>
               </CardHeader>
@@ -380,9 +378,10 @@ export default function SkillsPage() {
                       : t.skills.all}
                   </CardTitle>
                   <Badge tone="secondary" className="text-xs">
-                    {t.skills.skillCount
-                      .replace("{count}", String(activeSkills.length))
-                      .replace("{s}", activeSkills.length !== 1 ? "s" : "")}
+                    {t.skills.skillCount.replace(
+                      "{count}",
+                      String(activeSkills.length),
+                    )}
                   </Badge>
                 </div>
               </CardHeader>

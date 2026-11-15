@@ -414,9 +414,10 @@ function ProviderGroupCard({
             </a>
           )}
           <span className="text-xs text-text-tertiary">
-            {t.env.keysCount
-              .replace("{count}", String(group.entries.length))
-              .replace("{s}", group.entries.length !== 1 ? "s" : "")}
+            {t.env.keysCount.replace(
+              "{count}",
+              String(group.entries.length),
+            )}
           </span>
         </div>
       </ListItem>
