@@ -1,0 +1,354 @@
+# Centurion static-message catalog -- Latvian (lv) / latviešu
+# Machine-assisted translation reviewed for structure only; native review pending.
+
+approval:
+  dangerous_header: "⚠️  BĪSTAMA KOMANDA: {description}"
+  choose_long:     "      [o]reizi  |  [s]sesija  |  [a]vienmēr  |  [d]noraidīt"
+  choose_short:    "      [o]reizi  |  [s]sesija  |  [d]noraidīt"
+  prompt_long:     "      Izvēle [o/s/a/D]: "
+  prompt_short:    "      Izvēle [o/s/D]: "
+  timeout:         "      ⏱ Noildze - komanda noraidīta"
+  allowed_once:    "      ✓ Atļauts vienreiz"
+  allowed_session: "      ✓ Atļauts šai sesijai"
+  allowed_always:  "      ✓ Pievienots pastāvīgajam atļauto sarakstam"
+  denied:          "      ✗ Noraidīts"
+  cancelled:       "      ✗ Atcelts"
+  blocklist_message: "Šī komanda ir bezierunu bloķēto sarakstā, un to nevar apstiprināt."
+
+gateway:
+  approval_expired: "⚠️ Apstiprinājums ir beidzies (aģents vairs negaida). Lūdziet aģentam mēģināt vēlreiz."
+  draining:         "⏳ Pirms restartēšanas iztukšo {count} aktīvus aģentus..."
+  goal_cleared:     "✓ Mērķis notīrīts."
+  no_active_goal:   "Nav aktīva mērķa."
+  config_read_failed: "⚠️ Nevarēja nolasīt config.yaml: {error}"
+  config_save_failed: "⚠️ Nevarēja saglabāt konfigurāciju: {error}"
+
+  model:
+    error_prefix:           "Kļūda: {error}"
+    switched:               "Modelis nomainīts uz `{model}`"
+    provider_label:         "Pakalpojumu sniedzējs: {provider}"
+    context_label:          "Konteksts: {tokens} marķieru"
+    max_output_label:       "Maks. izvade: {tokens} marķieru"
+    cost_label:             "Izmaksas: {cost}"
+    capabilities_label:     "Iespējas: {capabilities}"
+    prompt_caching_enabled: "Uzvedņu kešatmiņa: iespējota"
+    warning_prefix:         "Brīdinājums: {warning}"
+    saved_global:           "Saglabāts config.yaml (`--global`)"
+    session_only_hint:      "_(tikai šī sesija — pievienojiet `--global`, lai saglabātu)_"
+    current_label:          "Pašreizējais: `{model}` pie {provider}"
+    current_tag:            " (pašreizējais)"
+    more_models_suffix:     " (+{count} vairāk)"
+    usage_switch_model:     "`/model <name>` — nomainīt modeli"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — nomainīt pakalpojumu sniedzēju"
+    usage_persist:          "`/model <name> --global` — saglabāt"
+
+  agents:
+    header:                "🤖 **Aktīvie aģenti un uzdevumi**"
+    active_agents:         "**Aktīvie aģenti:** {count}"
+    this_chat:             " · šī tērzēšana"
+    more:                  "... un vēl {count}"
+    running_processes:     "**Darbojošies fona procesi:** {count}"
+    async_jobs:            "**Vārtejas asinhronie darbi:** {count}"
+    none:                  "Nav aktīvu aģentu vai darbojošos uzdevumu."
+    state_starting:        "startē"
+    state_running:         "darbojas"
+
+  approve:
+    no_pending:            "Nav nevienas komandas, kas gaida apstiprinājumu."
+    once_singular:         "✅ Komanda apstiprināta. Aģents turpina..."
+    once_plural:           "✅ Komandas apstiprinātas ({count} komandas). Aģents turpina..."
+    session_singular:      "✅ Komanda apstiprināta (shēma apstiprināta šai sesijai). Aģents turpina..."
+    session_plural:        "✅ Komandas apstiprinātas (shēma apstiprināta šai sesijai) ({count} komandas). Aģents turpina..."
+    always_singular:       "✅ Komanda apstiprināta (shēma apstiprināta pastāvīgi). Aģents turpina..."
+    always_plural:         "✅ Komandas apstiprinātas (shēma apstiprināta pastāvīgi) ({count} komandas). Aģents turpina..."
+
+  background:
+    usage:                 "Lietojums: /background <prompt>\nPiemērs: /background Apkopo šodienas svarīgākās HN ziņas\n\nIzpilda uzvedni atsevišķā sesijā. Vari turpināt sarunu — rezultāts parādīsies šeit, kad būs gatavs."
+    started:               "🔄 Fona uzdevums palaists: \"{preview}\"\nUzdevuma ID: {task_id}\nVari turpināt sarunu — rezultāti parādīsies, kad būs gatavi."
+
+  branch:
+    db_unavailable:        "Sesiju datubāze nav pieejama."
+    no_conversation:       "Nav sarunas, ko sazarvēt — vispirms nosūti ziņojumu."
+    create_failed:         "Neizdevās izveidot zaru: {error}"
+    switch_failed:         "Zars izveidots, bet neizdevās uz to pārslēgties."
+    branched_one:          "⑂ Sazarvots uz **{title}** (nokopēts {count} ziņojums)\nOriģināls: `{parent}`\nZars: `{new}`\nIzmanto `/resume`, lai atgrieztos pie oriģināla."
+    branched_many:         "⑂ Sazarvots uz **{title}** (nokopēti {count} ziņojumi)\nOriģināls: `{parent}`\nZars: `{new}`\nIzmanto `/resume`, lai atgrieztos pie oriģināla."
+
+  commands:
+    usage:                 "Lietojums: `/commands [page]`"
+    skill_header:          "⚡ **Prasmju komandas**:"
+    default_desc:          "Prasmes komanda"
+    none:                  "Nav pieejamu komandu."
+    header:                "📚 **Komandas** (kopā {total}, lapa {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← iepriekšējā"
+    nav_next:              "nākamā → `/commands {page}`"
+    out_of_range:          "_(Pieprasītā lapa {requested} bija ārpus diapazona, rāda lapu {page}.)_"
+
+  compress:
+    not_enough:            "Nav pietiekami daudz sarunas, lai saspiestu (nepieciešami vismaz 4 ziņojumi)."
+    no_provider:           "Nav konfigurēts pakalpojumu sniedzējs — saspiešana nav iespējama."
+    nothing_to_do:         "Pagaidām nav ko saspiest (transkripts joprojām ir viss aizsargātais konteksts)."
+    focus_line:            "Fokuss: \"{topic}\""
+    summary_failed:        "⚠️ Kopsavilkuma ģenerēšana neizdevās ({error}). {count} vēsturiski ziņojumi tika noņemti un aizstāti ar vietturi; iepriekšējo kontekstu vairs nevar atgūt. Ieteicams pārbaudīt auxiliary.compression modeļa konfigurāciju."
+    aborted:               "⚠️ Saspiešana pārtraukta ({error}). Neviens ziņojums netika izmests — saruna nav mainīta. Palaid /compress, lai mēģinātu vēlreiz, /reset tīrai sesijai vai pārbaudi auxiliary.compression modeļa konfigurāciju."
+    aux_failed:            "ℹ️ Konfigurētais saspiešanas modelis `{model}` neizdevās ({error}). Atjaunots, izmantojot galveno modeli — konteksts ir neskarts — taču pārbaudi `auxiliary.compression.model` failā config.yaml."
+    failed:                "Saspiešana neizdevās: {error}"
+
+  debug:
+    upload_failed:         "✗ Neizdevās augšupielādēt atkļūdošanas atskaiti: {error}"
+    header:                "**Atkļūdošanas atskaite augšupielādēta:**"
+    auto_delete:           "⏱ Ielīmes tiks automātiski dzēstas pēc 6 stundām."
+    full_logs_hint:        "Lai augšupielādētu pilnus žurnālus, izmanto `centurion debug share` CLI vidē."
+    share_hint:            "Kopīgo šīs saites ar Centurion komandu, lai saņemtu atbalstu."
+
+  deny:
+    stale:                 "❌ Komanda noraidīta (apstiprinājums bija novecojis)."
+    no_pending:            "Nav nevienas komandas, ko noraidīt."
+    denied_singular:       "❌ Komanda noraidīta."
+    denied_plural:         "❌ Komandas noraidītas ({count} komandas)."
+
+  fast:
+    not_supported:         "⚡ /fast ir pieejams tikai OpenAI modeļiem, kas atbalsta Priority Processing."
+    status:                "⚡ Priority Processing\n\nPašreizējais režīms: `{mode}`\n\n_Lietojums:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Nezināms arguments: `{arg}`\n\n**Derīgas opcijas:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (saglabāts konfigurācijā)\n_(stāsies spēkā ar nākamo ziņojumu)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (tikai šī sesija)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Izpildes kājene: **{state}**\nLauki: `{fields}`\nPlatforma: `{platform}`"
+    usage:                 "Lietojums: `/footer [on|off|status]`"
+    saved:                 "📎 Izpildes kājene: **{state}**{example}\n_(saglabāts globāli — stāsies spēkā ar nākamo ziņojumu)_"
+    example_line:          "\nPiemērs: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "Mērķi šajā sesijā nav pieejami."
+    no_goal_set:           "Mērķis nav iestatīts."
+    paused:                "⏸ Mērķis apturēts: {goal}"
+    no_resume:             "Nav mērķa, ko atsākt."
+    resumed:               "▶ Mērķis atsākts: {goal}\nNosūti jebkuru ziņojumu, lai turpinātu, vai gaidi — nākamo soli veikšu nākamajā gājienā."
+    invalid:               "Nederīgs mērķis: {error}"
+    set:                   "⊙ Mērķis iestatīts ({budget} gājienu budžets): {goal}\nTurpināšu strādāt, līdz mērķis būs izpildīts, līdz tu to apturēsi/notīrīsi vai līdz budžets tiks iztērēts.\nVadība: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Centurion komandas**\n"
+    skill_header:          "\n⚡ **Prasmju komandas** ({count} aktīvas):"
+    more_use_commands:     "\n... un vēl {count}. Izmanto `/commands`, lai iegūtu pilnu lapoto sarakstu."
+
+  insights:
+    invalid_days:          "Nederīga --days vērtība: {value}"
+    error:                 "Kļūda, ģenerējot ieskatus: {error}"
+
+  kanban:
+    error_prefix:          "⚠ kanban kļūda: {error}"
+    subscribed_suffix:     "(abonēts — saņemsi paziņojumu, kad {task_id} pabeigsies vai iestrēgs)"
+    truncated_suffix:      "… (saīsināts; izmanto `centurion kanban …` terminālī, lai iegūtu pilnu izvadi)"
+    no_output:             "(nav izvades)"
+
+  personality:
+    none_configured:       "Failā `{path}/config.yaml` nav konfigurēta neviena personība"
+    header:                "🎭 **Pieejamās personības**\n"
+    none_option:           "• `none` — (bez personības pārklājuma)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nLietojums: `/personality <name>`"
+    save_failed:           "⚠️ Neizdevās saglabāt personības maiņu: {error}"
+    cleared:               "🎭 Personība notīrīta — tiek izmantota aģenta pamatuzvedība.\n_(stāsies spēkā ar nākamo ziņojumu)_"
+    set_to:                "🎭 Personība iestatīta uz **{name}**\n_(stāsies spēkā ar nākamo ziņojumu)_"
+    unknown:               "Nezināma personība: `{name}`\n\nPieejamās: {available}"
+
+  profile:
+    header:                "👤 **Profils:** `{profile}`"
+    home:                  "📂 **Mājas direktorijs:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (noklusējums)"
+    level_disabled:            "none (atspējots)"
+    scope_session:             "sesijas ignorēšana"
+    scope_global:              "globālā konfigurācija"
+    status:                    "🧠 **Spriešanas iestatījumi**\n\n**Pūles:** `{level}`\n**Tvērums:** {scope}\n**Attēlojums:** {display}\n\n_Lietojums:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "ieslēgts ✓"
+    display_off:               "izslēgts"
+    display_set_on:            "🧠 ✓ Spriešanas attēlojums: **IESLĒGTS**\nModeļa domāšana tiks rādīta pirms katras atbildes platformā **{platform}**."
+    display_set_off:           "🧠 ✓ Spriešanas attēlojums: **IZSLĒGTS** platformā **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` netiek atbalstīts. Izmanto `/reasoning <level> --global`, lai mainītu globālo noklusējumu."
+    reset_done:                "🧠 ✓ Sesijas spriešanas ignorēšana notīrīta; atgriežas pie globālās konfigurācijas."
+    unknown_arg:               "⚠️ Nezināms arguments: `{arg}`\n\n**Derīgi līmeņi:** none, minimal, low, medium, high, xhigh\n**Attēlojums:** show, hide\n**Saglabāšana:** pievieno `--global`, lai saglabātu arī ārpus šīs sesijas"
+    set_global:                "🧠 ✓ Spriešanas pūles iestatītas uz `{effort}` (saglabāts konfigurācijā)\n_(stāsies spēkā ar nākamo ziņojumu)_"
+    set_global_save_failed:    "🧠 ✓ Spriešanas pūles iestatītas uz `{effort}` (tikai sesija — konfigurācijas saglabāšana neizdevās)\n_(stāsies spēkā ar nākamo ziņojumu)_"
+    set_session:               "🧠 ✓ Spriešanas pūles iestatītas uz `{effort}` (tikai sesija — pievieno `--global`, lai saglabātu)\n_(stāsies spēkā ar nākamo ziņojumu)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp atcelts. MCP rīki nav mainīti."
+    always_followup:       "ℹ️ Turpmākie `/reload-mcp` izsaukumi tiks izpildīti bez apstiprinājuma. Ieslēdz no jauna ar `approvals.mcp_reload_confirm: true` failā config.yaml."
+    confirm_prompt:        "⚠️ **Apstiprini /reload-mcp**\n\nMCP serveru pārlāde atjauno šīs sesijas rīku kopumu un **anulē pakalpojumu sniedzēja uzvedņu kešatmiņu** — nākamais ziņojums no jauna nosūtīs visus ievades marķierus. Modeļiem ar garu kontekstu vai lielām spriešanas pūlēm tas var būt dārgi.\n\nIzvēlies:\n• **Apstiprināt vienreiz** — pārlādēt tagad\n• **Vienmēr apstiprināt** — pārlādēt tagad un pastāvīgi apklusināt šo uzvedni\n• **Atcelt** — atstāt MCP rīkus nemainītus\n\n_Teksta alternatīva: atbildi `/approve`, `/always` vai `/cancel`._"
+    header:                "🔄 **MCP serveri pārlādēti**\n"
+    reconnected:           "♻️ Atkārtoti pievienots: {names}"
+    added:                 "➕ Pievienots: {names}"
+    removed:               "➖ Noņemts: {names}"
+    none_connected:        "Nav pievienotu MCP serveru."
+    tools_available:       "\n🔧 {tools} rīku pieejami no {servers} serveriem"
+    failed:                "❌ MCP pārlāde neizdevās: {error}"
+
+  reload_skills:
+    header:                "🔄 **Prasmes pārlādētas**\n"
+    no_new:                "Nav atklātu jaunu prasmju."
+    total:                 "\n📚 Pieejamas {count} prasmes"
+    added_header:          "➕ **Pievienotās prasmes:**"
+    removed_header:        "➖ **Noņemtās prasmes:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ Prasmju pārlāde neizdevās: {error}"
+
+  reset:
+    header_default:        "✨ Sesija atiestatīta! Sākam no jauna."
+    header_new:            "✨ Jauna sesija sākta!"
+    header_titled:         "✨ Jauna sesija sākta: {title}"
+    title_rejected:        "\n⚠️ Nosaukums noraidīts: {error}"
+    title_error_untitled:  "\n⚠️ {error} — sesija sākta bez nosaukuma."
+    title_empty_untitled:  "\n⚠️ Nosaukums pēc tīrīšanas ir tukšs — sesija sākta bez nosaukuma."
+    tip:                   "\n✦ Padoms: {tip}"
+
+  restart:
+    in_progress:           "⏳ Vārtejas restarts jau notiek..."
+    restarting:            "♻ Restartē vārteju. Ja 60 sekunžu laikā nesaņem paziņojumu, restartē no konsoles ar `centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Sesiju datubāze nav pieejama."
+    no_named_sessions:     "Nav atrastu nosauktu sesiju.\nIzmanto `/title Mana Sesija`, lai nosauktu pašreizējo sesiju, un vēlāk atgriezies pie tās ar `/resume Mana Sesija`."
+    list_header:           "📋 **Nosauktās sesijas**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nLietojums: `/resume <session name>`"
+    list_footer_numbered:  "\nLietojums: `/resume <session name>` vai `/resume <number>` (piem., `/resume 1` — jaunākā)"
+    list_failed:           "Nevarēja uzskaitīt sesijas: {error}"
+    out_of_range:          "Atsākšanas indekss {index} ir ārpus diapazona.\nIzmanto `/resume` bez argumentiem, lai redzētu pieejamās sesijas."
+    not_found:             "Nav atrasta sesija, kas atbilst '**{name}**'.\nIzmanto `/resume` bez argumentiem, lai redzētu pieejamās sesijas."
+    already_on:            "📌 Jau esi sesijā **{name}**."
+    switch_failed:         "Neizdevās pārslēgt sesiju."
+    resumed_one:           "↻ Sesija **{title}** atsākta ({count} ziņojums). Saruna atjaunota."
+    resumed_many:          "↻ Sesija **{title}** atsākta ({count} ziņojumi). Saruna atjaunota."
+    resumed_no_count:      "↻ Sesija **{title}** atsākta. Saruna atjaunota."
+
+  retry:
+    no_previous:           "Nav iepriekšēja ziņojuma, ko atkārtot."
+
+  rollback:
+    not_enabled:           "Kontrolpunkti nav iespējoti.\nIespējo failā config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Nav atrastu kontrolpunktu ceļam {cwd}"
+    invalid_number:        "Nederīgs kontrolpunkta numurs. Izmanto 1-{max}."
+    restored:              "✅ Atjaunots uz kontrolpunktu {hash}: {reason}\nStāvokļa kopija pirms atjaunošanas tika saglabāta automātiski."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Neizdevās saglabāt mājas kanālu: {error}"
+    success:               "✅ Mājas kanāls iestatīts uz **{name}** (ID: {chat_id}).\nCron darbi un starpplatformu ziņojumi tiks piegādāti šeit."
+
+  status:
+    header:                "📊 **Centurion vārtejas statuss**"
+    session_id:            "**Sesijas ID:** `{session_id}`"
+    title:                 "**Nosaukums:** {title}"
+    created:               "**Izveidota:** {timestamp}"
+    last_activity:         "**Pēdējā aktivitāte:** {timestamp}"
+    tokens:                "**Marķieri:** {tokens}"
+    agent_running:         "**Aģents darbojas:** {state}"
+    state_yes:             "Jā ⚡"
+    state_no:              "Nē"
+    queued:                "**Rindā gaidītie turpinājumi:** {count}"
+    platforms:             "**Pievienotās platformas:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Apturēts. Aģents vēl nebija sācis — vari turpināt šo sesiju."
+    stopped:               "⚡ Apturēts. Vari turpināt šo sesiju."
+    no_active:             "Nav aktīva uzdevuma, ko apturēt."
+
+  title:
+    db_unavailable:        "Sesiju datubāze nav pieejama."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ Nosaukums pēc tīrīšanas ir tukšs. Lūdzu, izmanto drukājamas rakstzīmes."
+    set_to:                "✏️ Sesijas nosaukums iestatīts: **{title}**"
+    not_found:             "Sesija nav atrasta datubāzē."
+    current_with_title:    "📌 Sesija: `{session_id}`\nNosaukums: **{title}**"
+    current_no_title:      "📌 Sesija: `{session_id}`\nNosaukums nav iestatīts. Lietojums: `/title Mans Sesijas Nosaukums`"
+
+  topic:
+    not_telegram_dm:         "Komanda /topic ir pieejama tikai Telegram privātajās tērzēšanās."
+    no_session_db:           "Sesiju datubāze nav pieejama."
+    unauthorized:            "Tev nav atļaujas izmantot /topic šajā botā."
+    restore_needs_topic:     "Lai atjaunotu sesiju, vispirms izveido vai atver Telegram tematu, pēc tam tajā nosūti /topic <session-id>. Lai izveidotu jaunu tematu, atver Visas ziņas un nosūti tur jebkuru ziņojumu."
+    topics_disabled:         "Telegram temati šim botam vēl nav iespējoti.\n\nKā tos iespējot:\n1. Atver @BotFather.\n2. Izvēlies savu botu.\n3. Atver Bot Settings → Threads Settings.\n4. Ieslēdz Threaded Mode un pārliecinies, ka lietotāji drīkst veidot jaunas pavedienu grupas.\n\nPēc tam vēlreiz nosūti /topic."
+    topics_user_disallowed:  "Telegram temati ir iespējoti, taču lietotājiem nav atļauts veidot tematus.\n\nAtver @BotFather → izvēlies savu botu → Bot Settings → Threads Settings, pēc tam izslēdz 'Disallow users to create new threads'.\n\nPēc tam vēlreiz nosūti /topic."
+    enable_failed:           "Neizdevās iespējot Telegram tematu režīmu: {error}"
+    bound_status:            "Šis temats ir saistīts ar:\nSesija: {label}\nID: {session_id}\n\nIzmanto /new, lai aizstātu šo tematu ar jaunu sesiju.\nParalēlam darbam atver Visas ziņas un nosūti tur ziņojumu, lai izveidotu citu tematu."
+    thread_ready:            "Telegram vairāku sesiju temati ir iespējoti.\n\nŠis temats tiks izmantots kā neatkarīga Centurion sesija. Izmanto /new, lai aizstātu šī temata pašreizējo sesiju. Paralēlam darbam atver Visas ziņas un nosūti tur ziņojumu, lai izveidotu citu tematu."
+    untitled_session:        "Sesija bez nosaukuma"
+
+  undo:
+    nothing:               "Nav ko atsaukt."
+    removed:               "↩️ Atsaukts {count} ziņojums(-i).\nNoņemts: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update ir pieejams tikai no ziņojumapmaiņas platformām. Palaid `centurion update` no termināļa."
+    not_git_repo:            "✗ Nav git repozitorijs — atjaunināšana nav iespējama."
+    centurion_cmd_not_found:    "✗ Nevarēja atrast komandu `centurion`. Centurion darbojas, taču atjaunināšanas komanda nevarēja atrast izpildāmo failu PATH ceļā vai ar pašreizējo Python interpretatoru. Mēģini manuāli palaist `centurion update` terminālī."
+    start_failed:            "✗ Neizdevās sākt atjaunināšanu: {error}"
+    starting:                "⚕ Sāk Centurion atjaunināšanu… Straumēšu progresu šeit."
+
+  usage:
+    rate_limits:              "⏱️ **Ātruma ierobežojumi:** {state}"
+    header_session:           "📊 **Sesijas marķieru patēriņš**"
+    label_model:              "Modelis: `{model}`"
+    label_input_tokens:       "Ievades marķieri: {count}"
+    label_cache_read:         "Kešatmiņas lasīšanas marķieri: {count}"
+    label_cache_write:        "Kešatmiņas rakstīšanas marķieri: {count}"
+    label_output_tokens:      "Izvades marķieri: {count}"
+    label_total:              "Kopā: {count}"
+    label_api_calls:          "API izsaukumi: {count}"
+    label_cost:               "Izmaksas: {prefix}${amount}"
+    label_cost_included:      "Izmaksas: iekļautas"
+    label_context:            "Konteksts: {used} / {total} ({pct} %)"
+    label_compressions:       "Saspiešanas: {count}"
+    header_session_info:      "📊 **Sesijas informācija**"
+    label_messages:           "Ziņojumi: {count}"
+    label_estimated_context:  "Aptuvenais konteksts: ~{count} marķieru"
+    detailed_after_first:     "_(Detalizēts patēriņš būs pieejams pēc pirmās aģenta atbildes)_"
+    no_data:                  "Šai sesijai nav pieejamu patēriņa datu."
+
+  verbose:
+    not_enabled:           "Komanda `/verbose` nav iespējota ziņojumapmaiņas platformām.\n\nIespējo to failā `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Rīku gaita: **IZSLĒGTA** — rīku darbība netiek rādīta."
+    mode_new:              "⚙️ Rīku gaita: **JAUNS** — rāda, kad rīks mainās (priekšskatījuma garums: `display.tool_preview_length`, noklusējums 40)."
+    mode_all:              "⚙️ Rīku gaita: **VISI** — rāda katru rīka izsaukumu (priekšskatījuma garums: `display.tool_preview_length`, noklusējums 40)."
+    mode_verbose:          "⚙️ Rīku gaita: **DETAĻI** — katrs rīka izsaukums ar pilniem argumentiem."
+    saved_suffix:          "_(saglabāts platformai **{platform}** — stāsies spēkā ar nākamo ziņojumu)_"
+    save_failed:           "_(neizdevās saglabāt konfigurācijā: {error})_"
+
+  voice:
+    enabled_voice_only:    "Balss režīms iespējots.\nAtbildēšu ar balsi, kad sūtīsi balss ziņojumus.\nIzmanto /voice tts, lai saņemtu balss atbildes uz visiem ziņojumiem."
+    disabled_text:         "Balss režīms atspējots. Atbildes tikai tekstā."
+    tts_enabled:           "Automātiskais TTS iespējots.\nVisas atbildes ietvers balss ziņojumu."
+    status_mode:           "Balss režīms: {label}"
+    status_channel:        "Balss kanāls: #{channel}"
+    status_participants:   "Dalībnieki: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (runā)"
+    enabled_short:         "Balss režīms iespējots."
+    disabled_short:        "Balss režīms atspējots."
+    label_off:             "Izslēgts (tikai teksts)"
+    label_voice_only:      "Ieslēgts (balss atbilde uz balss ziņojumiem)"
+    label_all:             "TTS (balss atbilde uz visiem ziņojumiem)"
+
+  yolo:
+    disabled:                   "⚠️ YOLO režīms **IZSLĒGTS** šai sesijai — bīstamām komandām būs nepieciešams apstiprinājums."
+    enabled:                    "⚡ YOLO režīms **IESLĒGTS** šai sesijai — visas komandas tiek apstiprinātas automātiski. Izmanto piesardzīgi."
+
+  shared:
+    session_db_unavailable:      "Sesiju datubāze nav pieejama."
+    session_db_unavailable_prefix: "Sesiju datubāze nav pieejama"
+    session_not_found:           "Sesija nav atrasta datubāzē."
+    warn_passthrough:            "⚠️ {error}"

@@ -7,9 +7,22 @@ export type Locale =
   | "es"
   | "it"
   | "pt"
-  | "ga"
   | "ru"
-  | "hu";
+  | "hu"
+  | "bg"
+  | "cs"
+  | "da"
+  | "el"
+  | "et"
+  | "fi"
+  | "hr"
+  | "lt"
+  | "lv"
+  | "mt"
+  | "ro"
+  | "sk"
+  | "sl"
+  | "sv";
 
 export interface Translations {
   // ── Common ──

@@ -50,7 +50,7 @@ def test_french_names_the_language_and_its_code(monkeypatch):
         ("fr-FR", "Français"),
         ("FR", "Français"),
         ("français", "Français"),
-        ("ga-IE", "Gaeilge"),
+        ("sl-SI", "Slovenščina"),
     ],
 )
 def test_aliases_and_regional_tags_resolve(monkeypatch, value, expected):

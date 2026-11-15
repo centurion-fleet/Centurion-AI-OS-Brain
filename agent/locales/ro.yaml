@@ -1,0 +1,361 @@
+# Centurion static-message catalog -- Romanian (ro) / română
+# Machine-assisted translation reviewed for structure only; native review pending.
+# See locales/en.yaml for the source of truth; keep keys in sync.
+
+approval:
+  # CLI approval prompt -- shown when a dangerous command needs user review.
+  dangerous_header: "⚠️  COMANDĂ PERICULOASĂ: {description}"
+  choose_long:     "      [o]dată  |  [s]sesiune  |  [a]întotdeauna  |  [d]refuz"
+  choose_short:    "      [o]dată  |  [s]sesiune  |  [d]refuz"
+  prompt_long:     "      Alegere [o/s/a/D]: "
+  prompt_short:    "      Alegere [o/s/D]: "
+  timeout:         "      ⏱ Timp expirat - comanda este refuzată"
+  allowed_once:    "      ✓ Permis o dată"
+  allowed_session: "      ✓ Permis pentru această sesiune"
+  allowed_always:  "      ✓ Adăugat la lista de permisiuni permanente"
+  denied:          "      ✗ Refuzat"
+  cancelled:       "      ✗ Anulat"
+  blocklist_message: "Această comandă se află pe lista de blocare necondiționată și nu poate fi aprobată."
+
+gateway:
+  # Messenger replies to slash commands and implicit state changes.
+  approval_expired: "⚠️ Aprobarea a expirat (agentul nu mai așteaptă). Cere agentului să încerce din nou."
+  draining:         "⏳ Se finalizează {count} agent(i) activ(i) înainte de repornire..."
+  goal_cleared:     "✓ Obiectiv șters."
+  no_active_goal:   "Niciun obiectiv activ."
+  config_read_failed: "⚠️ Nu s-a putut citi config.yaml: {error}"
+  config_save_failed: "⚠️ Nu s-a putut salva configurația: {error}"
+
+  # /model command output -- shown after a model switch or when listing models.
+  # Provider names, model IDs, capability strings, and cost figures are NOT
+  # translated -- they're identifiers/values, not prose.  Only the labels
+  # ("Provider:", "Context:", etc.) and the help/footer lines are localized.
+  model:
+    error_prefix:           "Eroare: {error}"
+    switched:               "Model schimbat cu `{model}`"
+    provider_label:         "Furnizor: {provider}"
+    context_label:          "Context: {tokens} tokeni"
+    max_output_label:       "Ieșire maximă: {tokens} tokeni"
+    cost_label:             "Cost: {cost}"
+    capabilities_label:     "Capabilități: {capabilities}"
+    prompt_caching_enabled: "Memorare prompt: activată"
+    warning_prefix:         "Avertisment: {warning}"
+    saved_global:           "Salvat în config.yaml (`--global`)"
+    session_only_hint:      "_(doar sesiunea curentă — adaugă `--global` pentru a păstra)_"
+    current_label:          "Curent: `{model}` la {provider}"
+    current_tag:            " (curent)"
+    more_models_suffix:     " (+{count} altele)"
+    usage_switch_model:     "`/model <name>` — schimbă modelul"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — schimbă furnizorul"
+    usage_persist:          "`/model <name> --global` — păstrează"
+
+  agents:
+    header:                "🤖 **Agenți și sarcini active**"
+    active_agents:         "**Agenți activi:** {count}"
+    this_chat:             " · acest chat"
+    more:                  "... și încă {count}"
+    running_processes:     "**Procese de fundal în execuție:** {count}"
+    async_jobs:            "**Sarcini asincrone ale gateway-ului:** {count}"
+    none:                  "Niciun agent activ sau sarcină în execuție."
+    state_starting:        "pornire"
+    state_running:         "rulează"
+
+  approve:
+    no_pending:            "Nicio comandă în așteptare de aprobat."
+    once_singular:         "✅ Comandă aprobată. Agentul își reia lucrul..."
+    once_plural:           "✅ Comenzi aprobate ({count} comenzi). Agentul își reia lucrul..."
+    session_singular:      "✅ Comandă aprobată (model aprobat pentru această sesiune). Agentul își reia lucrul..."
+    session_plural:        "✅ Comenzi aprobate (model aprobat pentru această sesiune) ({count} comenzi). Agentul își reia lucrul..."
+    always_singular:       "✅ Comandă aprobată (model aprobat permanent). Agentul își reia lucrul..."
+    always_plural:         "✅ Comenzi aprobate (model aprobat permanent) ({count} comenzi). Agentul își reia lucrul..."
+
+  background:
+    usage:                 "Utilizare: /background <prompt>\nExemplu: /background Rezumă știrile HN de top de astăzi\n\nRulează promptul într-o sesiune separată. Poți continua conversația — rezultatul va apărea aici când este gata."
+    started:               "🔄 Sarcină de fundal pornită: \"{preview}\"\nID sarcină: {task_id}\nPoți continua conversația — rezultatele vor apărea când sunt gata."
+
+  branch:
+    db_unavailable:        "Baza de date a sesiunilor nu este disponibilă."
+    no_conversation:       "Nicio conversație de ramificat — trimite mai întâi un mesaj."
+    create_failed:         "Crearea ramurii a eșuat: {error}"
+    switch_failed:         "Ramura a fost creată, dar comutarea pe ea a eșuat."
+    branched_one:          "⑂ Ramificat la **{title}** ({count} mesaj copiat)\nOriginal: `{parent}`\nRamura: `{new}`\nFolosește `/resume` pentru a reveni la original."
+    branched_many:         "⑂ Ramificat la **{title}** ({count} mesaje copiate)\nOriginal: `{parent}`\nRamura: `{new}`\nFolosește `/resume` pentru a reveni la original."
+
+  commands:
+    usage:                 "Utilizare: `/commands [page]`"
+    skill_header:          "⚡ **Comenzi de abilități**:"
+    default_desc:          "Comandă de abilitate"
+    none:                  "Nicio comandă disponibilă."
+    header:                "📚 **Comenzi** ({total} în total, pagina {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← anterior"
+    nav_next:              "următor → `/commands {page}`"
+    out_of_range:          "_(Pagina solicitată {requested} era în afara intervalului, se afișează pagina {page}.)_"
+
+  compress:
+    not_enough:            "Nu există suficientă conversație pentru comprimare (sunt necesare cel puțin 4 mesaje)."
+    no_provider:           "Niciun furnizor configurat -- nu se poate comprima."
+    nothing_to_do:         "Încă nimic de comprimat (transcriptul este încă tot context protejat)."
+    focus_line:            "Focus: \"{topic}\""
+    summary_failed:        "⚠️ Generarea rezumatului a eșuat ({error}). {count} mesaj(e) istorice au fost eliminate și înlocuite cu un substituent; contextul anterior nu mai poate fi recuperat. Verifică configurația modelului auxiliary.compression."
+    aborted:               "⚠️ Comprimare abandonată ({error}). Niciun mesaj nu a fost eliminat — conversația este neschimbată. Rulează /compress pentru a reîncerca, /reset pentru o sesiune curată sau verifică configurația modelului auxiliary.compression."
+    aux_failed:            "ℹ️ Modelul de comprimare configurat `{model}` a eșuat ({error}). Recuperat folosind modelul principal — contextul este intact — dar ar fi bine să verifici `auxiliary.compression.model` în config.yaml."
+    failed:                "Comprimarea a eșuat: {error}"
+
+  debug:
+    upload_failed:         "✗ Încărcarea raportului de depanare a eșuat: {error}"
+    header:                "**Raport de depanare încărcat:**"
+    auto_delete:           "⏱ Paste-urile se șterg automat în 6 ore."
+    full_logs_hint:        "Pentru încărcarea jurnalelor complete, folosește `centurion debug share` din CLI."
+    share_hint:            "Partajează aceste linkuri cu echipa Centurion pentru asistență."
+
+  deny:
+    stale:                 "❌ Comandă refuzată (aprobarea era expirată)."
+    no_pending:            "Nicio comandă în așteptare de refuzat."
+    denied_singular:       "❌ Comandă refuzată."
+    denied_plural:         "❌ Comenzi refuzate ({count} comenzi)."
+
+  fast:
+    not_supported:         "⚡ /fast este disponibil doar pentru modelele OpenAI care acceptă Priority Processing."
+    status:                "⚡ Priority Processing\n\nMod curent: `{mode}`\n\n_Utilizare:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Argument necunoscut: `{arg}`\n\n**Opțiuni valide:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (salvat în configurație)\n_(intră în vigoare la următorul mesaj)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (doar această sesiune)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Subsol de execuție: **{state}**\nCâmpuri: `{fields}`\nPlatformă: `{platform}`"
+    usage:                 "Utilizare: `/footer [on|off|status]`"
+    saved:                 "📎 Subsol de execuție: **{state}**{example}\n_(salvat global — intră în vigoare la următorul mesaj)_"
+    example_line:          "\nExemplu: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "Obiectivele nu sunt disponibile în această sesiune."
+    no_goal_set:           "Niciun obiectiv stabilit."
+    paused:                "⏸ Obiectiv suspendat: {goal}"
+    no_resume:             "Niciun obiectiv de reluat."
+    resumed:               "▶ Obiectiv reluat: {goal}\nTrimite orice mesaj pentru a continua sau așteaptă — voi face pasul următor la tura următoare."
+    invalid:               "Obiectiv invalid: {error}"
+    set:                   "⊙ Obiectiv stabilit (buget de {budget} ture): {goal}\nVoi continua până când obiectivul este îndeplinit, îl suspendezi/ștergi, sau bugetul este epuizat.\nComenzi: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Comenzi Centurion**\n"
+    skill_header:          "\n⚡ **Comenzi de abilități** ({count} active):"
+    more_use_commands:     "\n... și încă {count}. Folosește `/commands` pentru lista completă paginată."
+
+  insights:
+    invalid_days:          "Valoare --days invalidă: {value}"
+    error:                 "Eroare la generarea analizelor: {error}"
+
+  kanban:
+    error_prefix:          "⚠ eroare kanban: {error}"
+    subscribed_suffix:     "(abonat — vei fi notificat când {task_id} se încheie sau se blochează)"
+    truncated_suffix:      "… (trunchiat; folosește `centurion kanban …` în terminal pentru ieșirea completă)"
+    no_output:             "(fără ieșire)"
+
+  personality:
+    none_configured:       "Nicio personalitate configurată în `{path}/config.yaml`"
+    header:                "🎭 **Personalități disponibile**\n"
+    none_option:           "• `none` — (fără suprapunere de personalitate)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nUtilizare: `/personality <name>`"
+    save_failed:           "⚠️ Salvarea modificării personalității a eșuat: {error}"
+    cleared:               "🎭 Personalitate ștearsă — se folosește comportamentul de bază al agentului.\n_(intră în vigoare la următorul mesaj)_"
+    set_to:                "🎭 Personalitate setată la **{name}**\n_(intră în vigoare la următorul mesaj)_"
+    unknown:               "Personalitate necunoscută: `{name}`\n\nDisponibile: {available}"
+
+  profile:
+    header:                "👤 **Profil:** `{profile}`"
+    home:                  "📂 **Director principal:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (implicit)"
+    level_disabled:            "none (dezactivat)"
+    scope_session:             "suprascriere de sesiune"
+    scope_global:              "configurație globală"
+    status:                    "🧠 **Setări de raționament**\n\n**Efort:** `{level}`\n**Domeniu:** {scope}\n**Afișare:** {display}\n\n_Utilizare:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "pornit ✓"
+    display_off:               "oprit"
+    display_set_on:            "🧠 ✓ Afișare raționament: **PORNIT**\nGândirea modelului va fi afișată înainte de fiecare răspuns pe **{platform}**."
+    display_set_off:           "🧠 ✓ Afișare raționament: **OPRIT** pentru **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` nu este acceptat. Folosește `/reasoning <level> --global` pentru a schimba valoarea implicită globală."
+    reset_done:                "🧠 ✓ Suprascrierea raționamentului pentru sesiune a fost ștearsă; se revine la configurația globală."
+    unknown_arg:               "⚠️ Argument necunoscut: `{arg}`\n\n**Niveluri valide:** none, minimal, low, medium, high, xhigh\n**Afișare:** show, hide\n**Persistare:** adaugă `--global` pentru a salva dincolo de această sesiune"
+    set_global:                "🧠 ✓ Efort de raționament setat la `{effort}` (salvat în configurație)\n_(intră în vigoare la următorul mesaj)_"
+    set_global_save_failed:    "🧠 ✓ Efort de raționament setat la `{effort}` (doar sesiunea — salvarea configurației a eșuat)\n_(intră în vigoare la următorul mesaj)_"
+    set_session:               "🧠 ✓ Efort de raționament setat la `{effort}` (doar sesiunea — adaugă `--global` pentru a păstra)\n_(intră în vigoare la următorul mesaj)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp anulat. Instrumentele MCP nu s-au schimbat."
+    always_followup:       "ℹ️ Viitoarele apeluri `/reload-mcp` vor rula fără confirmare. Reactivează cu `approvals.mcp_reload_confirm: true` în config.yaml."
+    confirm_prompt:        "⚠️ **Confirmă /reload-mcp**\n\nReîncărcarea serverelor MCP reconstruiește setul de instrumente pentru această sesiune și **invalidează memoria cache a promptului furnizorului** — următorul mesaj va retrimite toți tokenii de intrare. La modelele cu context lung sau raționament ridicat acest lucru poate fi costisitor.\n\nAlege:\n• **Aprobă o dată** — reîncarcă acum\n• **Aprobă mereu** — reîncarcă acum și elimină definitiv acest prompt\n• **Anulează** — lasă instrumentele MCP neschimbate\n\n_Alternativă text: răspunde cu `/approve`, `/always` sau `/cancel`._"
+    header:                "🔄 **Servere MCP reîncărcate**\n"
+    reconnected:           "♻️ Reconectat: {names}"
+    added:                 "➕ Adăugat: {names}"
+    removed:               "➖ Eliminat: {names}"
+    none_connected:        "Niciun server MCP conectat."
+    tools_available:       "\n🔧 {tools} instrument(e) disponibile de la {servers} server(e)"
+    failed:                "❌ Reîncărcarea MCP a eșuat: {error}"
+
+  reload_skills:
+    header:                "🔄 **Abilități reîncărcate**\n"
+    no_new:                "Nicio abilitate nouă detectată."
+    total:                 "\n📚 {count} abilitate(i) disponibile"
+    added_header:          "➕ **Abilități adăugate:**"
+    removed_header:        "➖ **Abilități eliminate:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ Reîncărcarea abilităților a eșuat: {error}"
+
+  reset:
+    header_default:        "✨ Sesiune resetată! Începem de la zero."
+    header_new:            "✨ Sesiune nouă pornită!"
+    header_titled:         "✨ Sesiune nouă pornită: {title}"
+    title_rejected:        "\n⚠️ Titlu respins: {error}"
+    title_error_untitled:  "\n⚠️ {error} — sesiunea a pornit fără titlu."
+    title_empty_untitled:  "\n⚠️ Titlul este gol după curățare — sesiunea a pornit fără titlu."
+    tip:                   "\n✦ Sfat: {tip}"
+
+  restart:
+    in_progress:           "⏳ Repornirea gateway-ului este deja în curs..."
+    restarting:            "♻ Se repornește gateway-ul. Dacă nu primești notificare în 60 de secunde, repornește din consolă cu `centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Baza de date a sesiunilor nu este disponibilă."
+    no_named_sessions:     "Nu s-au găsit sesiuni denumite.\nFolosește `/title Sesiunea mea` pentru a-ți denumi sesiunea curentă, apoi `/resume Sesiunea mea` pentru a reveni la ea mai târziu."
+    list_header:           "📋 **Sesiuni denumite**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nUtilizare: `/resume <nume sesiune>`"
+    list_footer_numbered:  "\nUtilizare: `/resume <nume sesiune>` sau `/resume <număr>` (de ex. `/resume 1` pentru cea mai recentă)"
+    list_failed:           "Nu s-au putut lista sesiunile: {error}"
+    out_of_range:          "Indexul de reluare {index} este în afara intervalului.\nFolosește `/resume` fără argumente pentru a vedea sesiunile disponibile."
+    not_found:             "Nu s-a găsit nicio sesiune care să corespundă cu '**{name}**'.\nFolosește `/resume` fără argumente pentru a vedea sesiunile disponibile."
+    already_on:            "📌 Ești deja în sesiunea **{name}**."
+    switch_failed:         "Comutarea sesiunii a eșuat."
+    resumed_one:           "↻ Sesiune **{title}** reluată ({count} mesaj). Conversație restaurată."
+    resumed_many:          "↻ Sesiune **{title}** reluată ({count} mesaje). Conversație restaurată."
+    resumed_no_count:      "↻ Sesiune **{title}** reluată. Conversație restaurată."
+
+  retry:
+    no_previous:           "Niciun mesaj anterior de reîncercat."
+
+  rollback:
+    not_enabled:           "Punctele de control nu sunt activate.\nActivează în config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Nu s-au găsit puncte de control pentru {cwd}"
+    invalid_number:        "Număr de punct de control invalid. Folosește 1-{max}."
+    restored:              "✅ Restaurat la punctul de control {hash}: {reason}\nUn instantaneu pre-rollback a fost salvat automat."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Salvarea canalului principal a eșuat: {error}"
+    success:               "✅ Canal principal setat la **{name}** (ID: {chat_id}).\nSarcinile cron și mesajele între platforme vor fi livrate aici."
+
+  status:
+    header:                "📊 **Stare gateway Centurion**"
+    session_id:            "**ID sesiune:** `{session_id}`"
+    title:                 "**Titlu:** {title}"
+    created:               "**Creat:** {timestamp}"
+    last_activity:         "**Ultima activitate:** {timestamp}"
+    tokens:                "**Tokeni:** {tokens}"
+    agent_running:         "**Agent în execuție:** {state}"
+    state_yes:             "Da ⚡"
+    state_no:              "Nu"
+    queued:                "**Continuări în coadă:** {count}"
+    platforms:             "**Platforme conectate:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Oprit. Agentul nu începuse încă — poți continua această sesiune."
+    stopped:               "⚡ Oprit. Poți continua această sesiune."
+    no_active:             "Nicio sarcină activă de oprit."
+
+  title:
+    db_unavailable:        "Baza de date a sesiunilor nu este disponibilă."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ Titlul este gol după curățare. Folosește caractere imprimabile."
+    set_to:                "✏️ Titlu de sesiune setat: **{title}**"
+    not_found:             "Sesiunea nu a fost găsită în baza de date."
+    current_with_title:    "📌 Sesiune: `{session_id}`\nTitlu: **{title}**"
+    current_no_title:      "📌 Sesiune: `{session_id}`\nNiciun titlu setat. Utilizare: `/title Numele sesiunii mele`"
+
+  topic:
+    not_telegram_dm:         "Comanda /topic este disponibilă doar în chat-urile private Telegram."
+    no_session_db:           "Baza de date a sesiunilor nu este disponibilă."
+    unauthorized:            "Nu ești autorizat să folosești /topic pe acest bot."
+    restore_needs_topic:     "Pentru a restaura o sesiune, creează sau deschide mai întâi un topic Telegram, apoi trimite /topic <session-id> în acel topic. Pentru a crea un topic nou, deschide All Messages și trimite acolo orice mesaj."
+    topics_disabled:         "Topicurile Telegram nu sunt încă activate pentru acest bot.\n\nCum le activezi:\n1. Deschide @BotFather.\n2. Alege botul tău.\n3. Deschide Bot Settings → Threads Settings.\n4. Activează Threaded Mode și asigură-te că utilizatorii pot crea threaduri noi.\n\nApoi trimite din nou /topic."
+    topics_user_disallowed:  "Topicurile Telegram sunt activate, dar utilizatorii nu au voie să creeze topicuri.\n\nDeschide @BotFather → alege botul tău → Bot Settings → Threads Settings, apoi dezactivează 'Disallow users to create new threads'.\n\nApoi trimite din nou /topic."
+    enable_failed:           "Activarea modului topic Telegram a eșuat: {error}"
+    bound_status:            "Acest topic este legat de:\nSesiune: {label}\nID: {session_id}\n\nFolosește /new pentru a înlocui acest topic cu o sesiune nouă.\nPentru lucru în paralel, deschide All Messages și trimite un mesaj acolo pentru a crea un alt topic."
+    thread_ready:            "Topicurile Telegram multi-sesiune sunt activate.\n\nAcest topic va fi folosit ca sesiune Centurion independentă. Folosește /new pentru a înlocui sesiunea curentă a acestui topic. Pentru lucru în paralel, deschide All Messages și trimite un mesaj acolo pentru a crea un alt topic."
+    untitled_session:        "Sesiune fără titlu"
+
+  undo:
+    nothing:               "Nimic de anulat."
+    removed:               "↩️ {count} mesaj(e) anulate.\nEliminat: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update este disponibil doar din platformele de mesagerie. Rulează `centurion update` din terminal."
+    not_git_repo:            "✗ Nu este un depozit git — nu se poate actualiza."
+    centurion_cmd_not_found:    "✗ Nu s-a putut localiza comanda `centurion`. Centurion rulează, dar comanda de actualizare nu a găsit executabilul în PATH sau prin interpretorul Python curent. Încearcă să rulezi manual `centurion update` în terminal."
+    start_failed:            "✗ Pornirea actualizării a eșuat: {error}"
+    starting:                "⚕ Se pornește actualizarea Centurion… Voi transmite progresul aici."
+
+  usage:
+    rate_limits:              "⏱️ **Limite de rată:** {state}"
+    header_session:           "📊 **Utilizare tokeni sesiune**"
+    label_model:              "Model: `{model}`"
+    label_input_tokens:       "Tokeni de intrare: {count}"
+    label_cache_read:         "Tokeni citiți din cache: {count}"
+    label_cache_write:        "Tokeni scriși în cache: {count}"
+    label_output_tokens:      "Tokeni de ieșire: {count}"
+    label_total:              "Total: {count}"
+    label_api_calls:          "Apeluri API: {count}"
+    label_cost:               "Cost: {prefix}${amount}"
+    label_cost_included:      "Cost: inclus"
+    label_context:            "Context: {used} / {total} ({pct}%)"
+    label_compressions:       "Comprimări: {count}"
+    header_session_info:      "📊 **Info sesiune**"
+    label_messages:           "Mesaje: {count}"
+    label_estimated_context:  "Context estimat: ~{count} tokeni"
+    detailed_after_first:     "_(Utilizare detaliată disponibilă după primul răspuns al agentului)_"
+    no_data:                  "Nu există date de utilizare disponibile pentru această sesiune."
+
+  verbose:
+    not_enabled:           "Comanda `/verbose` nu este activată pentru platformele de mesagerie.\n\nActiveaz-o în `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Progres instrumente: **OFF** — nu se afișează activitatea instrumentelor."
+    mode_new:              "⚙️ Progres instrumente: **NEW** — afișat la schimbarea instrumentului (lungime previzualizare: `display.tool_preview_length`, implicit 40)."
+    mode_all:              "⚙️ Progres instrumente: **ALL** — fiecare apel de instrument afișat (lungime previzualizare: `display.tool_preview_length`, implicit 40)."
+    mode_verbose:          "⚙️ Progres instrumente: **VERBOSE** — fiecare apel de instrument cu argumente complete."
+    saved_suffix:          "_(salvat pentru **{platform}** — intră în vigoare la următorul mesaj)_"
+    save_failed:           "_(nu s-a putut salva în configurație: {error})_"
+
+  voice:
+    enabled_voice_only:    "Mod vocal activat.\nVoi răspunde cu voce când trimiți mesaje vocale.\nFolosește /voice tts pentru a primi răspunsuri vocale la toate mesajele."
+    disabled_text:         "Mod vocal dezactivat. Doar răspunsuri text."
+    tts_enabled:           "TTS automat activat.\nToate răspunsurile vor include un mesaj vocal."
+    status_mode:           "Mod vocal: {label}"
+    status_channel:        "Canal vocal: #{channel}"
+    status_participants:   "Participanți: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (vorbește)"
+    enabled_short:         "Mod vocal activat."
+    disabled_short:        "Mod vocal dezactivat."
+    label_off:             "Oprit (doar text)"
+    label_voice_only:      "Pornit (răspuns vocal la mesaje vocale)"
+    label_all:             "TTS (răspuns vocal la toate mesajele)"
+
+  yolo:
+    disabled:                   "⚠️ Modul YOLO **OPRIT** pentru această sesiune — comenzile periculoase vor necesita aprobare."
+    enabled:                    "⚡ Modul YOLO **PORNIT** pentru această sesiune — toate comenzile sunt aprobate automat. Folosește cu prudență."
+
+  shared:
+    session_db_unavailable:      "Baza de date a sesiunilor nu este disponibilă."
+    session_db_unavailable_prefix: "Baza de date a sesiunilor nu este disponibilă"
+    session_not_found:           "Sesiunea nu a fost găsită în baza de date."
+    warn_passthrough:            "⚠️ {error}"

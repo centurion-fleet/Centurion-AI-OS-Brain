@@ -43,11 +43,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# The markets Centurion actually sells into: the European Union plus Russian.
+# The markets Centurion sells into: every official language of the European
+# Union except Irish, plus Russian. Irish is out because the Irish market is
+# served in English and a catalogue nobody reads is maintenance, not coverage.
+#
 # Codes are the ones the website publishes pages for; en-AU/en-US resolve to
 # "en" through the alias table rather than shipping a duplicate catalogue.
 SUPPORTED_LANGUAGES: tuple[str, ...] = (
-    "en", "fr", "de", "nl", "pl", "es", "it", "pt", "ga", "ru", "hu",
+    "en", "fr", "de", "nl", "pl", "es", "it", "pt", "ru", "hu",
+    "bg", "cs", "da", "el", "et", "fi", "hr", "lt", "lv", "mt", "ro", "sk", "sl", "sv",
 )
 DEFAULT_LANGUAGE = "en"
 
@@ -62,9 +66,22 @@ LANGUAGE_NAMES: dict[str, str] = {
     "es": "Español",
     "it": "Italiano",
     "pt": "Português",
-    "ga": "Gaeilge",
     "ru": "Русский",
     "hu": "Magyar",
+    "bg": "Български",
+    "cs": "Čeština",
+    "da": "Dansk",
+    "el": "Ελληνικά",
+    "et": "Eesti",
+    "fi": "Suomi",
+    "hr": "Hrvatski",
+    "lt": "Lietuvių",
+    "lv": "Latviešu",
+    "mt": "Malti",
+    "ro": "Română",
+    "sk": "Slovenčina",
+    "sl": "Slovenščina",
+    "sv": "Svenska",
 }
 
 
@@ -124,16 +141,27 @@ _LANGUAGE_ALIASES: dict[str, str] = {
     "polish": "pl", "polski": "pl", "pl-pl": "pl",
     # Italian
     "italian": "it", "italiano": "it", "it-it": "it", "it-ch": "it",
-    # Irish (Gaeilge) — ga is the BCP-47 code
-    "irish": "ga", "gaeilge": "ga", "ga-ie": "ga",
-    # Portuguese — bare "portuguese" routes to European Portuguese; pt-br
-    # is in the same family but rendered identically here (no separate br catalog).
     "portuguese": "pt", "português": "pt", "portugues": "pt",
     "pt-pt": "pt", "pt-br": "pt", "brazilian": "pt", "brasileiro": "pt",
     # Russian
     "russian": "ru", "русский": "ru", "ru-ru": "ru",
     # Hungarian
     "hungarian": "hu", "magyar": "hu", "hu-hu": "hu",
+    # The rest of the European Union, in the order the picker lists them.
+    "bulgarian": "bg", "български": "bg", "bg-bg": "bg",
+    "czech": "cs", "čeština": "cs", "cestina": "cs", "cs-cz": "cs",
+    "danish": "da", "dansk": "da", "da-dk": "da",
+    "greek": "el", "ελληνικά": "el", "ellinika": "el", "el-gr": "el",
+    "estonian": "et", "eesti": "et", "et-ee": "et",
+    "finnish": "fi", "suomi": "fi", "fi-fi": "fi",
+    "croatian": "hr", "hrvatski": "hr", "hr-hr": "hr",
+    "lithuanian": "lt", "lietuvių": "lt", "lietuviu": "lt", "lt-lt": "lt",
+    "latvian": "lv", "latviešu": "lv", "latviesu": "lv", "lv-lv": "lv",
+    "maltese": "mt", "malti": "mt", "mt-mt": "mt",
+    "romanian": "ro", "română": "ro", "romana": "ro", "ro-ro": "ro",
+    "slovak": "sk", "slovenčina": "sk", "slovencina": "sk", "sk-sk": "sk",
+    "slovene": "sl", "slovenian": "sl", "slovenščina": "sl", "sl-si": "sl",
+    "swedish": "sv", "svenska": "sv", "sv-se": "sv",
 }
 
 _catalog_cache: dict[str, dict[str, str]] = {}

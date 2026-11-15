@@ -13,9 +13,10 @@ import { cn } from "@/lib/utils";
  * of all supported locales when clicked.  Persists choice to localStorage via
  * the I18n context.
  *
- * Replaces the older two-state EN↔ZH toggle now that we ship 11 locales
- * (en, de, fr, nl, pl, es, it, pt, ga, ru, hu) — the European Union markets we
- * sell into, plus Russian.
+ * Replaces the older two-state EN↔ZH toggle now that we ship 24 languages
+ * (en, fr, de, nl, pl, es, it, pt, ru, hu, bg, cs, da, el, et, fi, hr, lt, lv,
+ * mt, ro, sk, sl, sv) — every official language of the European Union except
+ * Irish, plus Russian.
  *
  * No country flags by design — languages aren't countries, and flag pairings
  * inevitably create political mismappings (e.g. Mandarin variants ≠ any single

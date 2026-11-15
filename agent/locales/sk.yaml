@@ -1,0 +1,361 @@
+# Centurion static-message catalog -- Slovak (sk) / slovenčina
+# Machine-assisted translation reviewed for structure only; native review pending.
+# See locales/en.yaml for the source of truth; keep keys in sync.
+
+approval:
+  # CLI approval prompt -- shown when a dangerous command needs user review.
+  dangerous_header: "⚠️  NEBEZPEČNÝ PRÍKAZ: {description}"
+  choose_long:     "      [o]raz  |  [s]relácia  |  [a]vždy  |  [d]zamietnuť"
+  choose_short:    "      [o]raz  |  [s]relácia  |  [d]zamietnuť"
+  prompt_long:     "      Voľba [o/s/a/D]: "
+  prompt_short:    "      Voľba [o/s/D]: "
+  timeout:         "      ⏱ Časový limit vypršal - príkaz zamietnutý"
+  allowed_once:    "      ✓ Povolené raz"
+  allowed_session: "      ✓ Povolené pre túto reláciu"
+  allowed_always:  "      ✓ Pridané do trvalého zoznamu povolení"
+  denied:          "      ✗ Zamietnuté"
+  cancelled:       "      ✗ Zrušené"
+  blocklist_message: "Tento príkaz je na bezpodmienečnom blokovacom zozname a nemožno ho schváliť."
+
+gateway:
+  # Messenger replies to slash commands and implicit state changes.
+  approval_expired: "⚠️ Schválenie vypršalo (agent už nečaká). Požiadajte agenta, aby to skúsil znova."
+  draining:         "⏳ Čaká sa na dokončenie {count} aktívnych agentov pred reštartom..."
+  goal_cleared:     "✓ Cieľ vymazaný."
+  no_active_goal:   "Žiadny aktívny cieľ."
+  config_read_failed: "⚠️ Nepodarilo sa prečítať config.yaml: {error}"
+  config_save_failed: "⚠️ Nepodarilo sa uložiť konfiguráciu: {error}"
+
+  # /model command output -- shown after a model switch or when listing models.
+  # Provider names, model IDs, capability strings, and cost figures are NOT
+  # translated -- they're identifiers/values, not prose.  Only the labels
+  # ("Provider:", "Context:", etc.) and the help/footer lines are localized.
+  model:
+    error_prefix:           "Chyba: {error}"
+    switched:               "Model prepnutý na `{model}`"
+    provider_label:         "Poskytovateľ: {provider}"
+    context_label:          "Kontext: {tokens} tokenov"
+    max_output_label:       "Max. výstup: {tokens} tokenov"
+    cost_label:             "Cena: {cost}"
+    capabilities_label:     "Schopnosti: {capabilities}"
+    prompt_caching_enabled: "Ukladanie promptu: zapnuté"
+    warning_prefix:         "Upozornenie: {warning}"
+    saved_global:           "Uložené do config.yaml (`--global`)"
+    session_only_hint:      "_(len táto relácia — pridajte `--global` na trvalé uloženie)_"
+    current_label:          "Aktuálny: `{model}` u {provider}"
+    current_tag:            " (aktuálny)"
+    more_models_suffix:     " (+{count} ďalších)"
+    usage_switch_model:     "`/model <name>` — prepnúť model"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — prepnúť poskytovateľa"
+    usage_persist:          "`/model <name> --global` — uložiť natrvalo"
+
+  agents:
+    header:                "🤖 **Aktívni agenti a úlohy**"
+    active_agents:         "**Aktívni agenti:** {count}"
+    this_chat:             " · toto vlákno"
+    more:                  "... a ďalších {count}"
+    running_processes:     "**Bežiace procesy na pozadí:** {count}"
+    async_jobs:            "**Asynchrónne úlohy brány:** {count}"
+    none:                  "Žiadni aktívni agenti ani bežiace úlohy."
+    state_starting:        "spúšťa sa"
+    state_running:         "beží"
+
+  approve:
+    no_pending:            "Žiadny príkaz čakajúci na schválenie."
+    once_singular:         "✅ Príkaz schválený. Agent pokračuje..."
+    once_plural:           "✅ Príkazy schválené ({count} príkazov). Agent pokračuje..."
+    session_singular:      "✅ Príkaz schválený (vzor schválený pre túto reláciu). Agent pokračuje..."
+    session_plural:        "✅ Príkazy schválené (vzor schválený pre túto reláciu) ({count} príkazov). Agent pokračuje..."
+    always_singular:       "✅ Príkaz schválený (vzor schválený natrvalo). Agent pokračuje..."
+    always_plural:         "✅ Príkazy schválené (vzor schválený natrvalo) ({count} príkazov). Agent pokračuje..."
+
+  background:
+    usage:                 "Použitie: /background <prompt>\nPríklad: /background Zhrň dnešné najlepšie správy z HN\n\nSpustí prompt v samostatnej relácii. Môžete pokračovať v konverzácii — výsledok sa tu zobrazí po dokončení."
+    started:               "🔄 Úloha na pozadí spustená: \"{preview}\"\nID úlohy: {task_id}\nMôžete pokračovať v konverzácii — výsledky sa zobrazia po dokončení."
+
+  branch:
+    db_unavailable:        "Databáza relácií nie je dostupná."
+    no_conversation:       "Žiadna konverzácia na rozvetvenie — najprv pošlite správu."
+    create_failed:         "Vytvorenie vetvy zlyhalo: {error}"
+    switch_failed:         "Vetva bola vytvorená, ale prepnutie na ňu zlyhalo."
+    branched_one:          "⑂ Rozvetvené na **{title}** ({count} skopírovaná správa)\nPôvodné: `{parent}`\nVetva: `{new}`\nPoužite `/resume` na návrat k pôvodnému."
+    branched_many:         "⑂ Rozvetvené na **{title}** ({count} skopírovaných správ)\nPôvodné: `{parent}`\nVetva: `{new}`\nPoužite `/resume` na návrat k pôvodnému."
+
+  commands:
+    usage:                 "Použitie: `/commands [page]`"
+    skill_header:          "⚡ **Príkazy zručností**:"
+    default_desc:          "Príkaz zručnosti"
+    none:                  "Žiadne dostupné príkazy."
+    header:                "📚 **Príkazy** (celkom {total}, strana {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← predchádzajúca"
+    nav_next:              "ďalšia → `/commands {page}`"
+    out_of_range:          "_(Požadovaná strana {requested} bola mimo rozsahu, zobrazuje sa strana {page}.)_"
+
+  compress:
+    not_enough:            "Málo konverzácie na kompresiu (potrebné aspoň 4 správy)."
+    no_provider:           "Žiadny nakonfigurovaný poskytovateľ -- kompresia nie je možná."
+    nothing_to_do:         "Zatiaľ nie je čo komprimovať (prepis je stále celý chránený kontext)."
+    focus_line:            "Zameranie: \"{topic}\""
+    summary_failed:        "⚠️ Generovanie zhrnutia zlyhalo ({error}). {count} historických správ bolo odstránených a nahradených zástupným textom; predchádzajúci kontext už nie je obnoviteľný. Skontrolujte konfiguráciu modelu auxiliary.compression."
+    aborted:               "⚠️ Kompresia prerušená ({error}). Žiadna správa nebola vynechaná — konverzácia je nezmenená. Spustite /compress na opakovanie, /reset pre čistú reláciu alebo skontrolujte konfiguráciu modelu auxiliary.compression."
+    aux_failed:            "ℹ️ Nakonfigurovaný komprimačný model `{model}` zlyhal ({error}). Obnovené pomocou hlavného modelu — kontext je nedotknutý — ale odporúčame skontrolovať `auxiliary.compression.model` v config.yaml."
+    failed:                "Kompresia zlyhala: {error}"
+
+  debug:
+    upload_failed:         "✗ Nahranie diagnostického hlásenia zlyhalo: {error}"
+    header:                "**Diagnostické hlásenie nahrané:**"
+    auto_delete:           "⏱ Vložené texty sa automaticky vymažú po 6 hodinách."
+    full_logs_hint:        "Na nahranie úplných logov použite `centurion debug share` v CLI."
+    share_hint:            "Zdieľajte tieto odkazy s tímom Centurion pre podporu."
+
+  deny:
+    stale:                 "❌ Príkaz zamietnutý (schválenie bolo zastarané)."
+    no_pending:            "Žiadny príkaz čakajúci na zamietnutie."
+    denied_singular:       "❌ Príkaz zamietnutý."
+    denied_plural:         "❌ Príkazy zamietnuté ({count} príkazov)."
+
+  fast:
+    not_supported:         "⚡ /fast je dostupné len pre modely OpenAI, ktoré podporujú Priority Processing."
+    status:                "⚡ Priority Processing\n\nAktuálny režim: `{mode}`\n\n_Použitie:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Neznámy argument: `{arg}`\n\n**Platné možnosti:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (uložené do konfigurácie)\n_(platí od ďalšej správy)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (len táto relácia)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Päta behu: **{state}**\nPolia: `{fields}`\nPlatforma: `{platform}`"
+    usage:                 "Použitie: `/footer [on|off|status]`"
+    saved:                 "📎 Päta behu: **{state}**{example}\n_(uložené globálne — platí od ďalšej správy)_"
+    example_line:          "\nPríklad: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "Ciele nie sú v tejto relácii dostupné."
+    no_goal_set:           "Žiadny cieľ nie je nastavený."
+    paused:                "⏸ Cieľ pozastavený: {goal}"
+    no_resume:             "Žiadny cieľ na obnovenie."
+    resumed:               "▶ Cieľ obnovený: {goal}\nPošlite akúkoľvek správu na pokračovanie, alebo počkajte — ďalší krok urobím v ďalšom kole."
+    invalid:               "Neplatný cieľ: {error}"
+    set:                   "⊙ Cieľ nastavený (rozpočet {budget} kôl): {goal}\nBudem pracovať, kým cieľ nebude splnený, kým ho nepozastavíte/nevymažete alebo kým sa rozpočet nevyčerpá.\nOvládanie: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Príkazy Centurion**\n"
+    skill_header:          "\n⚡ **Príkazy zručností** ({count} aktívnych):"
+    more_use_commands:     "\n... a ďalších {count}. Úplný stránkovaný zoznam získate príkazom `/commands`."
+
+  insights:
+    invalid_days:          "Neplatná hodnota --days: {value}"
+    error:                 "Chyba pri generovaní prehľadov: {error}"
+
+  kanban:
+    error_prefix:          "⚠ chyba kanban: {error}"
+    subscribed_suffix:     "(odber zapnutý — budete upozornení, keď sa {task_id} dokončí alebo zablokuje)"
+    truncated_suffix:      "… (skrátené; úplný výstup získate príkazom `centurion kanban …` v termináli)"
+    no_output:             "(žiadny výstup)"
+
+  personality:
+    none_configured:       "V `{path}/config.yaml` nie je nakonfigurovaná žiadna osobnosť"
+    header:                "🎭 **Dostupné osobnosti**\n"
+    none_option:           "• `none` — (bez vrstvy osobnosti)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nPoužitie: `/personality <name>`"
+    save_failed:           "⚠️ Uloženie zmeny osobnosti zlyhalo: {error}"
+    cleared:               "🎭 Osobnosť vymazaná — používa sa základné správanie agenta.\n_(platí od ďalšej správy)_"
+    set_to:                "🎭 Osobnosť nastavená na **{name}**\n_(platí od ďalšej správy)_"
+    unknown:               "Neznáma osobnosť: `{name}`\n\nDostupné: {available}"
+
+  profile:
+    header:                "👤 **Profil:** `{profile}`"
+    home:                  "📂 **Domovský adresár:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (predvolené)"
+    level_disabled:            "none (vypnuté)"
+    scope_session:             "prepísanie relácie"
+    scope_global:              "globálna konfigurácia"
+    status:                    "🧠 **Nastavenia uvažovania**\n\n**Úsilie:** `{level}`\n**Rozsah:** {scope}\n**Zobrazenie:** {display}\n\n_Použitie:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "zapnuté ✓"
+    display_off:               "vypnuté"
+    display_set_on:            "🧠 ✓ Zobrazenie uvažovania: **ZAPNUTÉ**\nUvažovanie modelu sa zobrazí pred každou odpoveďou na **{platform}**."
+    display_set_off:           "🧠 ✓ Zobrazenie uvažovania: **VYPNUTÉ** pre **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` nie je podporované. Globálnu predvolenú hodnotu zmeníte príkazom `/reasoning <level> --global`."
+    reset_done:                "🧠 ✓ Prepísanie uvažovania pre reláciu bolo vymazané; používa sa globálna konfigurácia."
+    unknown_arg:               "⚠️ Neznámy argument: `{arg}`\n\n**Platné úrovne:** none, minimal, low, medium, high, xhigh\n**Zobrazenie:** show, hide\n**Trvalé uloženie:** pridajte `--global` na uloženie nad rámec tejto relácie"
+    set_global:                "🧠 ✓ Úsilie uvažovania nastavené na `{effort}` (uložené do konfigurácie)\n_(platí od ďalšej správy)_"
+    set_global_save_failed:    "🧠 ✓ Úsilie uvažovania nastavené na `{effort}` (len relácia — uloženie konfigurácie zlyhalo)\n_(platí od ďalšej správy)_"
+    set_session:               "🧠 ✓ Úsilie uvažovania nastavené na `{effort}` (len relácia — pridajte `--global` na trvalé uloženie)\n_(platí od ďalšej správy)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp zrušené. Nástroje MCP zostali nezmenené."
+    always_followup:       "ℹ️ Budúce volania `/reload-mcp` prebehnú bez potvrdenia. Opätovné zapnutie: `approvals.mcp_reload_confirm: true` v config.yaml."
+    confirm_prompt:        "⚠️ **Potvrdiť /reload-mcp**\n\nOpätovné načítanie serverov MCP obnoví sadu nástrojov pre túto reláciu a **zneplatní vyrovnávaciu pamäť promptu poskytovateľa** — ďalšia správa odošle znova všetky vstupné tokeny. Pri modeloch s dlhým kontextom alebo vysokým uvažovaním to môže byť drahé.\n\nVyberte:\n• **Schváliť raz** — načítať teraz\n• **Schváliť vždy** — načítať teraz a natrvalo potlačiť túto výzvu\n• **Zrušiť** — ponechať nástroje MCP nezmenené\n\n_Textová alternatíva: odpovedzte `/approve`, `/always` alebo `/cancel`._"
+    header:                "🔄 **Servery MCP znovu načítané**\n"
+    reconnected:           "♻️ Znovu pripojené: {names}"
+    added:                 "➕ Pridané: {names}"
+    removed:               "➖ Odstránené: {names}"
+    none_connected:        "Nie sú pripojené žiadne servery MCP."
+    tools_available:       "\n🔧 {tools} nástrojov dostupných z {servers} serverov"
+    failed:                "❌ Opätovné načítanie MCP zlyhalo: {error}"
+
+  reload_skills:
+    header:                "🔄 **Zručnosti znovu načítané**\n"
+    no_new:                "Nezistili sa žiadne nové zručnosti."
+    total:                 "\n📚 {count} dostupných zručností"
+    added_header:          "➕ **Pridané zručnosti:**"
+    removed_header:        "➖ **Odstránené zručnosti:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ Opätovné načítanie zručností zlyhalo: {error}"
+
+  reset:
+    header_default:        "✨ Relácia obnovená! Začíname odznova."
+    header_new:            "✨ Nová relácia spustená!"
+    header_titled:         "✨ Nová relácia spustená: {title}"
+    title_rejected:        "\n⚠️ Názov zamietnutý: {error}"
+    title_error_untitled:  "\n⚠️ {error} — relácia spustená bez názvu."
+    title_empty_untitled:  "\n⚠️ Názov je po vyčistení prázdny — relácia spustená bez názvu."
+    tip:                   "\n✦ Tip: {tip}"
+
+  restart:
+    in_progress:           "⏳ Reštart brány už prebieha..."
+    restarting:            "♻ Reštartujem bránu. Ak nedostanete upozornenie do 60 sekúnd, reštartujte z konzoly príkazom `centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Databáza relácií nie je dostupná."
+    no_named_sessions:     "Nenašli sa žiadne pomenované relácie.\nPomenujte aktuálnu reláciu príkazom `/title Moja relácia` a neskôr sa k nej vráťte príkazom `/resume Moja relácia`."
+    list_header:           "📋 **Pomenované relácie**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nPoužitie: `/resume <názov relácie>`"
+    list_footer_numbered:  "\nPoužitie: `/resume <názov relácie>` alebo `/resume <číslo>` (napr. `/resume 1` pre najnovšiu)"
+    list_failed:           "Relácie sa nepodarilo vypísať: {error}"
+    out_of_range:          "Index obnovenia {index} je mimo rozsahu.\nDostupné relácie zobrazíte príkazom `/resume` bez argumentov."
+    not_found:             "Nenašla sa žiadna relácia zodpovedajúca '**{name}**'.\nDostupné relácie zobrazíte príkazom `/resume` bez argumentov."
+    already_on:            "📌 Už ste v relácii **{name}**."
+    switch_failed:         "Prepnutie relácie zlyhalo."
+    resumed_one:           "↻ Relácia **{title}** obnovená ({count} správa). Konverzácia obnovená."
+    resumed_many:          "↻ Relácia **{title}** obnovená ({count} správ). Konverzácia obnovená."
+    resumed_no_count:      "↻ Relácia **{title}** obnovená. Konverzácia obnovená."
+
+  retry:
+    no_previous:           "Žiadna predchádzajúca správa na opakovanie."
+
+  rollback:
+    not_enabled:           "Kontrolné body nie sú zapnuté.\nZapnite ich v config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Pre {cwd} sa nenašli žiadne kontrolné body"
+    invalid_number:        "Neplatné číslo kontrolného bodu. Použite 1-{max}."
+    restored:              "✅ Obnovené na kontrolný bod {hash}: {reason}\nSnímka pred vrátením bola uložená automaticky."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Uloženie domovského kanála zlyhalo: {error}"
+    success:               "✅ Domovský kanál nastavený na **{name}** (ID: {chat_id}).\nCron úlohy a správy medzi platformami budú doručované sem."
+
+  status:
+    header:                "📊 **Stav brány Centurion**"
+    session_id:            "**ID relácie:** `{session_id}`"
+    title:                 "**Názov:** {title}"
+    created:               "**Vytvorené:** {timestamp}"
+    last_activity:         "**Posledná aktivita:** {timestamp}"
+    tokens:                "**Tokeny:** {tokens}"
+    agent_running:         "**Agent beží:** {state}"
+    state_yes:             "Áno ⚡"
+    state_no:              "Nie"
+    queued:                "**Zaradené pokračovania:** {count}"
+    platforms:             "**Pripojené platformy:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Zastavené. Agent ešte nezačal — môžete pokračovať v tejto relácii."
+    stopped:               "⚡ Zastavené. Môžete pokračovať v tejto relácii."
+    no_active:             "Žiadna aktívna úloha na zastavenie."
+
+  title:
+    db_unavailable:        "Databáza relácií nie je dostupná."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ Názov je po vyčistení prázdny. Použite tlačiteľné znaky."
+    set_to:                "✏️ Názov relácie nastavený: **{title}**"
+    not_found:             "Relácia sa v databáze nenašla."
+    current_with_title:    "📌 Relácia: `{session_id}`\nNázov: **{title}**"
+    current_no_title:      "📌 Relácia: `{session_id}`\nNázov nie je nastavený. Použitie: `/title Názov mojej relácie`"
+
+  topic:
+    not_telegram_dm:         "Príkaz /topic je dostupný len v súkromných chatoch Telegramu."
+    no_session_db:           "Databáza relácií nie je dostupná."
+    unauthorized:            "Nemáte oprávnenie používať /topic na tomto botovi."
+    restore_needs_topic:     "Na obnovenie relácie najprv vytvorte alebo otvorte tému v Telegrame a potom v nej pošlite /topic <session-id>. Novú tému vytvoríte tak, že otvoríte All Messages a pošlete tam akúkoľvek správu."
+    topics_disabled:         "Témy v Telegrame zatiaľ nie sú pre tohto bota zapnuté.\n\nAko ich zapnúť:\n1. Otvorte @BotFather.\n2. Vyberte svojho bota.\n3. Otvorte Bot Settings → Threads Settings.\n4. Zapnite Threaded Mode a uistite sa, že používatelia môžu vytvárať nové vlákna.\n\nPotom znova pošlite /topic."
+    topics_user_disallowed:  "Témy v Telegrame sú zapnuté, ale používatelia nesmú vytvárať témy.\n\nOtvorte @BotFather → vyberte svojho bota → Bot Settings → Threads Settings a vypnite 'Disallow users to create new threads'.\n\nPotom znova pošlite /topic."
+    enable_failed:           "Zapnutie režimu tém Telegramu zlyhalo: {error}"
+    bound_status:            "Táto téma je prepojená s:\nRelácia: {label}\nID: {session_id}\n\nPoužite /new na nahradenie tejto témy novou reláciou.\nPre paralelnú prácu otvorte All Messages a pošlite tam správu na vytvorenie ďalšej témy."
+    thread_ready:            "Viacrelačné témy Telegramu sú zapnuté.\n\nTáto téma sa použije ako samostatná relácia Centurion. Použite /new na nahradenie aktuálnej relácie tejto témy. Pre paralelnú prácu otvorte All Messages a pošlite tam správu na vytvorenie ďalšej témy."
+    untitled_session:        "Relácia bez názvu"
+
+  undo:
+    nothing:               "Nie je čo vrátiť."
+    removed:               "↩️ Vrátených {count} správ.\nOdstránené: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update je dostupné len z messaging platforiem. Spustite `centurion update` v termináli."
+    not_git_repo:            "✗ Nie je to git repozitár — aktualizácia nie je možná."
+    centurion_cmd_not_found:    "✗ Nepodarilo sa nájsť príkaz `centurion`. Centurion beží, ale aktualizačný príkaz nenašiel spustiteľný súbor v PATH ani cez aktuálny Python interpreter. Skúste `centurion update` spustiť ručne v termináli."
+    start_failed:            "✗ Spustenie aktualizácie zlyhalo: {error}"
+    starting:                "⚕ Spúšťam aktualizáciu Centurion… Priebeh budem streamovať sem."
+
+  usage:
+    rate_limits:              "⏱️ **Limity rýchlosti:** {state}"
+    header_session:           "📊 **Spotreba tokenov relácie**"
+    label_model:              "Model: `{model}`"
+    label_input_tokens:       "Vstupné tokeny: {count}"
+    label_cache_read:         "Tokeny čítané z cache: {count}"
+    label_cache_write:        "Tokeny zapísané do cache: {count}"
+    label_output_tokens:      "Výstupné tokeny: {count}"
+    label_total:              "Spolu: {count}"
+    label_api_calls:          "Volania API: {count}"
+    label_cost:               "Cena: {prefix}${amount}"
+    label_cost_included:      "Cena: zahrnutá"
+    label_context:            "Kontext: {used} / {total} ({pct}%)"
+    label_compressions:       "Kompresie: {count}"
+    header_session_info:      "📊 **Informácie o relácii**"
+    label_messages:           "Správy: {count}"
+    label_estimated_context:  "Odhadovaný kontext: ~{count} tokenov"
+    detailed_after_first:     "_(Podrobná spotreba je dostupná po prvej odpovedi agenta)_"
+    no_data:                  "Pre túto reláciu nie sú dostupné žiadne údaje o spotrebe."
+
+  verbose:
+    not_enabled:           "Príkaz `/verbose` nie je pre messaging platformy zapnutý.\n\nZapnite ho v `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Priebeh nástrojov: **OFF** — aktivita nástrojov sa nezobrazuje."
+    mode_new:              "⚙️ Priebeh nástrojov: **NEW** — zobrazí sa pri zmene nástroja (dĺžka náhľadu: `display.tool_preview_length`, predvolene 40)."
+    mode_all:              "⚙️ Priebeh nástrojov: **ALL** — zobrazí sa každé volanie nástroja (dĺžka náhľadu: `display.tool_preview_length`, predvolene 40)."
+    mode_verbose:          "⚙️ Priebeh nástrojov: **VERBOSE** — každé volanie nástroja s úplnými argumentmi."
+    saved_suffix:          "_(uložené pre **{platform}** — platí od ďalšej správy)_"
+    save_failed:           "_(nepodarilo sa uložiť do konfigurácie: {error})_"
+
+  voice:
+    enabled_voice_only:    "Hlasový režim zapnutý.\nNa hlasové správy budem odpovedať hlasom.\nPoužite /voice tts, aby ste dostali hlasové odpovede na všetky správy."
+    disabled_text:         "Hlasový režim vypnutý. Iba textové odpovede."
+    tts_enabled:           "Auto-TTS zapnuté.\nVšetky odpovede budú obsahovať hlasovú správu."
+    status_mode:           "Hlasový režim: {label}"
+    status_channel:        "Hlasový kanál: #{channel}"
+    status_participants:   "Účastníci: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (hovorí)"
+    enabled_short:         "Hlasový režim zapnutý."
+    disabled_short:        "Hlasový režim vypnutý."
+    label_off:             "Vypnuté (iba text)"
+    label_voice_only:      "Zapnuté (hlasová odpoveď na hlasové správy)"
+    label_all:             "TTS (hlasová odpoveď na všetky správy)"
+
+  yolo:
+    disabled:                   "⚠️ Režim YOLO **VYPNUTÝ** pre túto reláciu — nebezpečné príkazy budú vyžadovať schválenie."
+    enabled:                    "⚡ Režim YOLO **ZAPNUTÝ** pre túto reláciu — všetky príkazy sú automaticky schválené. Používajte opatrne."
+
+  shared:
+    session_db_unavailable:      "Databáza relácií nie je dostupná."
+    session_db_unavailable_prefix: "Databáza relácií nie je dostupná"
+    session_not_found:           "Relácia sa v databáze nenašla."
+    warn_passthrough:            "⚠️ {error}"

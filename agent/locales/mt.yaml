@@ -1,0 +1,354 @@
+# Centurion static-message catalog -- Maltese (mt) / Malti
+# Machine-assisted translation reviewed for structure only; native review pending.
+
+approval:
+  dangerous_header: "⚠️  KOMANDA PERIKOLUŻA: {description}"
+  choose_long:     "      [o]darba  |  [s]sessjoni  |  [a]dejjem  |  [d]irrifjuta"
+  choose_short:    "      [o]darba  |  [s]sessjoni  |  [d]irrifjuta"
+  prompt_long:     "      Għażla [o/s/a/D]: "
+  prompt_short:    "      Għażla [o/s/D]: "
+  timeout:         "      ⏱ Ħin skada - komanda miċħuda"
+  allowed_once:    "      ✓ Permess darba waħda"
+  allowed_session: "      ✓ Permess għal din is-sessjoni"
+  allowed_always:  "      ✓ Miżjud mal-lista permanenti tal-permessi"
+  denied:          "      ✗ Miċħud"
+  cancelled:       "      ✗ Ikkanċellat"
+  blocklist_message: "Din il-komanda tinsab fil-lista ta' blokk inkundizzjonata u ma tistax tiġi approvata."
+
+gateway:
+  approval_expired: "⚠️ L-approvazzjoni skadiet (l-aġent m'għadux jistenna). Itlob lill-aġent biex jerġa' jipprova."
+  draining:         "⏳ Qed ixxotta {count} aġent attiv qabel ir-restart..."
+  goal_cleared:     "✓ L-għan tneħħa."
+  no_active_goal:   "L-ebda għan attiv."
+  config_read_failed: "⚠️ Ma setax jinqara config.yaml: {error}"
+  config_save_failed: "⚠️ Ma setgħetx tiġi salvata l-konfigurazzjoni: {error}"
+
+  model:
+    error_prefix:           "Żball: {error}"
+    switched:               "Mudell mibdul għal `{model}`"
+    provider_label:         "Fornitur: {provider}"
+    context_label:          "Kuntest: {tokens} token"
+    max_output_label:       "Output massimu: {tokens} token"
+    cost_label:             "Spiża: {cost}"
+    capabilities_label:     "Kapaċitajiet: {capabilities}"
+    prompt_caching_enabled: "Cache tal-prompts: attivat"
+    warning_prefix:         "Twissija: {warning}"
+    saved_global:           "Issejvjat f'config.yaml (`--global`)"
+    session_only_hint:      "_(sessjoni biss — żid `--global` biex tibqa' salvata)_"
+    current_label:          "Attwali: `{model}` fuq {provider}"
+    current_tag:            " (attwali)"
+    more_models_suffix:     " (+{count} oħra)"
+    usage_switch_model:     "`/model <name>` — ibdel il-mudell"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — ibdel il-fornitur"
+    usage_persist:          "`/model <name> --global` — issejvja b'mod permanenti"
+
+  agents:
+    header:                "🤖 **Aġenti u Kompiti Attivi**"
+    active_agents:         "**Aġenti attivi:** {count}"
+    this_chat:             " · din il-chat"
+    more:                  "... u {count} oħra"
+    running_processes:     "**Proċessi fil-isfond li qed jaħdmu:** {count}"
+    async_jobs:            "**Xogħlijiet asinkroni tal-gateway:** {count}"
+    none:                  "L-ebda aġent attiv jew kompitu li qed jaħdem."
+    state_starting:        "qed jibda"
+    state_running:         "qed jaħdem"
+
+  approve:
+    no_pending:            "L-ebda komanda pendenti biex tiġi approvata."
+    once_singular:         "✅ Komanda approvata. L-aġent qed ikompli..."
+    once_plural:           "✅ Komandi approvati ({count} komandi). L-aġent qed ikompli..."
+    session_singular:      "✅ Komanda approvata (il-mudell approvat għal din is-sessjoni). L-aġent qed ikompli..."
+    session_plural:        "✅ Komandi approvati (il-mudell approvat għal din is-sessjoni) ({count} komandi). L-aġent qed ikompli..."
+    always_singular:       "✅ Komanda approvata (il-mudell approvat b'mod permanenti). L-aġent qed ikompli..."
+    always_plural:         "✅ Komandi approvati (il-mudell approvat b'mod permanenti) ({count} komandi). L-aġent qed ikompli..."
+
+  background:
+    usage:                 "Użu: /background <prompt>\nEżempju: /background Aqsam fil-qosor l-aqwa stejjer tal-HN illum\n\nIħaddem il-prompt f'sessjoni separata. Tista' tkompli titkellem — ir-riżultat jidher hawn meta jispiċċa."
+    started:               "🔄 Kompitu fil-isfond beda: \"{preview}\"\nID tal-kompitu: {task_id}\nTista' tkompli titkellem — ir-riżultati jidhru meta jispiċċaw."
+
+  branch:
+    db_unavailable:        "Id-database tas-sessjonijiet mhix disponibbli."
+    no_conversation:       "L-ebda konverżazzjoni biex tinqasam — ibgħat messaġġ l-ewwel."
+    create_failed:         "Ma rnexxilx joħloq il-fergħa: {error}"
+    switch_failed:         "Il-fergħa nħolqot imma ma rnexxilx jaqleb għaliha."
+    branched_one:          "⑂ Maqsum għal **{title}** ({count} messaġġ ikkupjat)\nOriġinali: `{parent}`\nFergħa: `{new}`\nUża `/resume` biex terġa' lura għall-oriġinali."
+    branched_many:         "⑂ Maqsum għal **{title}** ({count} messaġġi kkupjati)\nOriġinali: `{parent}`\nFergħa: `{new}`\nUża `/resume` biex terġa' lura għall-oriġinali."
+
+  commands:
+    usage:                 "Użu: `/commands [page]`"
+    skill_header:          "⚡ **Komandi tal-Ħiliet**:"
+    default_desc:          "Komanda tal-ħila"
+    none:                  "L-ebda komanda disponibbli."
+    header:                "📚 **Komandi** ({total} b'kollox, paġna {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← preċedenti"
+    nav_next:              "li jmiss → `/commands {page}`"
+    out_of_range:          "_(Il-paġna mitluba {requested} kienet barra mill-firxa, qed jintwera l-paġna {page}.)_"
+
+  compress:
+    not_enough:            "Mhux biżżejjed konverżazzjoni biex tiġi kkompressata (jeħtieġu mill-inqas 4 messaġġi)."
+    no_provider:           "L-ebda fornitur ikkonfigurat — ma jistax jiġi kkompressat."
+    nothing_to_do:         "Għad m'hemm xejn x'jiġi kkompressat (it-traskrizzjoni għadha kollha kuntest protett)."
+    focus_line:            "Fokus: \"{topic}\""
+    summary_failed:        "⚠️ Il-ġenerazzjoni tas-sommarju falliet ({error}). {count} messaġġ storiku tneħħa u ġie sostitwit b'placeholder; il-kuntest preċedenti m'għadux jista' jiġi rkuprat. Ikkunsidra li tiċċekkja l-konfigurazzjoni tal-mudell auxiliary.compression."
+    aborted:               "⚠️ Il-kompressioni ġiet abortita ({error}). L-ebda messaġġ ma tneħħa — il-konverżazzjoni mhix mibdula. Ħaddem /compress biex terġa' tipprova, /reset għal sessjoni nadifa, jew iċċekkja l-konfigurazzjoni tal-mudell auxiliary.compression."
+    aux_failed:            "ℹ️ Il-mudell tal-kompressioni kkonfigurat `{model}` falla ({error}). Ġie rkuprat bl-użu tal-mudell prinċipali — il-kuntest huwa intatt — imma tajjeb li tiċċekkja `auxiliary.compression.model` f'config.yaml."
+    failed:                "Il-kompressioni falliet: {error}"
+
+  debug:
+    upload_failed:         "✗ Ma rnexxilx itella' r-rapport tad-debug: {error}"
+    header:                "**Rapport tad-debug imtella':**"
+    auto_delete:           "⏱ Il-pastes jiġu mħassra awtomatikament wara 6 sigħat."
+    full_logs_hint:        "Biex ittella' logs sħaħ, uża `centurion debug share` mill-CLI."
+    share_hint:            "Aqsam dawn il-links mat-tim Centurion għall-appoġġ."
+
+  deny:
+    stale:                 "❌ Komanda miċħuda (l-approvazzjoni kienet skaduta)."
+    no_pending:            "L-ebda komanda pendenti biex tiġi miċħuda."
+    denied_singular:       "❌ Komanda miċħuda."
+    denied_plural:         "❌ Komandi miċħuda ({count} komandi)."
+
+  fast:
+    not_supported:         "⚡ /fast huwa disponibbli biss għall-mudelli OpenAI li jappoġġjaw Priority Processing."
+    status:                "⚡ Priority Processing\n\nModalità attwali: `{mode}`\n\n_Użu:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Argument mhux magħruf: `{arg}`\n\n**Għażliet validi:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (issejvjat fil-konfigurazzjoni)\n_(jibda japplika mill-messaġġ li jmiss)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (din is-sessjoni biss)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Footer tal-ħin tal-eżekuzzjoni: **{state}**\nOqsma: `{fields}`\nPjattaforma: `{platform}`"
+    usage:                 "Użu: `/footer [on|off|status]`"
+    saved:                 "📎 Footer tal-ħin tal-eżekuzzjoni: **{state}**{example}\n_(issejvjat globalment — jibda japplika mill-messaġġ li jmiss)_"
+    example_line:          "\nEżempju: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "L-għanijiet mhumiex disponibbli f'din is-sessjoni."
+    no_goal_set:           "L-ebda għan stabbilit."
+    paused:                "⏸ Għan impost: {goal}"
+    no_resume:             "L-ebda għan biex jitkompla."
+    resumed:               "▶ Għan tkompla: {goal}\nIbgħat kwalunkwe messaġġ biex tkompli, jew stenna — nieħu l-pass li jmiss fid-dawra li jmiss."
+    invalid:               "Għan invalidu: {error}"
+    set:                   "⊙ Għan stabbilit (budget ta' {budget} dawriet): {goal}\nNibqa' naħdem sakemm l-għan jitlesta, sakemm tpoġġih f'pawża/tneħħih, jew sakemm jispiċċa l-budget.\nKontrolli: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Komandi Centurion**\n"
+    skill_header:          "\n⚡ **Komandi tal-Ħiliet** ({count} attivi):"
+    more_use_commands:     "\n... u {count} oħra. Uża `/commands` għal-lista sħiħa b'paġni."
+
+  insights:
+    invalid_days:          "Valur --days invalidu: {value}"
+    error:                 "Żball fil-ġenerazzjoni tal-insights: {error}"
+
+  kanban:
+    error_prefix:          "⚠ żball fil-kanban: {error}"
+    subscribed_suffix:     "(abbonat — tiġi notifikat meta {task_id} jitlesta jew jitblokka)"
+    truncated_suffix:      "… (maqtugħ; uża `centurion kanban …` fit-terminal għall-output sħiħ)"
+    no_output:             "(l-ebda output)"
+
+  personality:
+    none_configured:       "L-ebda personalità kkonfigurata f'`{path}/config.yaml`"
+    header:                "🎭 **Personalitajiet Disponibbli**\n"
+    none_option:           "• `none` — (l-ebda saff ta' personalità)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nUżu: `/personality <name>`"
+    save_failed:           "⚠️ Ma rnexxilx isejvja l-bidla fil-personalità: {error}"
+    cleared:               "🎭 Personalità mneħħija — qed jintuża l-imġiba bażika tal-aġent.\n_(jibda japplika mill-messaġġ li jmiss)_"
+    set_to:                "🎭 Personalità stabbilita għal **{name}**\n_(jibda japplika mill-messaġġ li jmiss)_"
+    unknown:               "Personalità mhux magħrufa: `{name}`\n\nDisponibbli: {available}"
+
+  profile:
+    header:                "👤 **Profil:** `{profile}`"
+    home:                  "📂 **Home:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (predefinit)"
+    level_disabled:            "none (diżattivat)"
+    scope_session:             "override tas-sessjoni"
+    scope_global:              "konfigurazzjoni globali"
+    status:                    "🧠 **Settings tar-Raġunar**\n\n**Sforz:** `{level}`\n**Ambitu:** {scope}\n**Wiri:** {display}\n\n_Użu:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "mixgħul ✓"
+    display_off:               "mitfi"
+    display_set_on:            "🧠 ✓ Wiri tar-raġunar: **MIXGĦUL**\nIl-ħsieb tal-mudell jintwera qabel kull tweġiba fuq **{platform}**."
+    display_set_off:           "🧠 ✓ Wiri tar-raġunar: **MITFI** fuq **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` mhuwiex appoġġjat. Uża `/reasoning <level> --global` biex tibdel il-valur predefinit globali."
+    reset_done:                "🧠 ✓ L-override tar-raġunar tas-sessjoni tneħħa; qed nerġa' lura għall-konfigurazzjoni globali."
+    unknown_arg:               "⚠️ Argument mhux magħruf: `{arg}`\n\n**Livelli validi:** none, minimal, low, medium, high, xhigh\n**Wiri:** show, hide\n**Persistenza:** żid `--global` biex issejvja lil hinn minn din is-sessjoni"
+    set_global:                "🧠 ✓ Sforz tar-raġunar stabbilit għal `{effort}` (issejvjat fil-konfigurazzjoni)\n_(jibda japplika mill-messaġġ li jmiss)_"
+    set_global_save_failed:    "🧠 ✓ Sforz tar-raġunar stabbilit għal `{effort}` (sessjoni biss — is-sejv tal-konfigurazzjoni falla)\n_(jibda japplika mill-messaġġ li jmiss)_"
+    set_session:               "🧠 ✓ Sforz tar-raġunar stabbilit għal `{effort}` (sessjoni biss — żid `--global` biex tibqa' salvata)\n_(jibda japplika mill-messaġġ li jmiss)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp ikkanċellat. L-għodod MCP mhumiex mibdula."
+    always_followup:       "ℹ️ Sejħiet `/reload-mcp` fil-futur se jitħaddmu mingħajr konferma. Erġa' pprova permezz ta' `approvals.mcp_reload_confirm: true` f'config.yaml."
+    confirm_prompt:        "⚠️ **Ikkonferma /reload-mcp**\n\nIt-tagħbija mill-ġdid tas-servers MCP terġa' tibni s-sett tal-għodod għal din is-sessjoni u **tħassar il-cache tal-prompts tal-fornitur** — il-messaġġ li jmiss jerġa' jibgħat it-tokens kollha tal-input. Fuq mudelli b'kuntest twil jew b'raġunar qawwi dan jista' jiswa ħafna.\n\nAgħżel:\n• **Approva Darba** — itteħ il-ġdid issa\n• **Dejjem Approva** — itteħ il-ġdid issa u ssikket dan il-prompt b'mod permanenti\n• **Ikkanċella** — ħalli l-għodod MCP kif inhuma\n\n_Alternattiva bil-kitba: wieġeb `/approve`, `/always` jew `/cancel`._"
+    header:                "🔄 **Servers MCP Imtellgħin Mill-Ġdid**\n"
+    reconnected:           "♻️ Erġa' ngħaqad: {names}"
+    added:                 "➕ Miżjud: {names}"
+    removed:               "➖ Imneħħi: {names}"
+    none_connected:        "L-ebda server MCP konness."
+    tools_available:       "\n🔧 {tools} għodda disponibbli minn {servers} server"
+    failed:                "❌ It-tagħbija mill-ġdid tal-MCP falliet: {error}"
+
+  reload_skills:
+    header:                "🔄 **Ħiliet Imtellgħin Mill-Ġdid**\n"
+    no_new:                "Ma nstabu l-ebda ħila ġdida."
+    total:                 "\n📚 {count} ħila disponibbli"
+    added_header:          "➕ **Ħiliet Miżjuda:**"
+    removed_header:        "➖ **Ħiliet Imneħħija:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ It-tagħbija mill-ġdid tal-ħiliet falliet: {error}"
+
+  reset:
+    header_default:        "✨ Sessjoni rrisettjata! Nibdew mill-ġdid."
+    header_new:            "✨ Sessjoni ġdida bdiet!"
+    header_titled:         "✨ Sessjoni ġdida bdiet: {title}"
+    title_rejected:        "\n⚠️ Titlu miċħud: {error}"
+    title_error_untitled:  "\n⚠️ {error} — is-sessjoni bdiet mingħajr titlu."
+    title_empty_untitled:  "\n⚠️ It-titlu huwa vojt wara t-tindif — is-sessjoni bdiet mingħajr titlu."
+    tip:                   "\n✦ Suġġeriment: {tip}"
+
+  restart:
+    in_progress:           "⏳ Restart tal-gateway diġà għaddej..."
+    restarting:            "♻ Qed jirristartja l-gateway. Jekk ma tiġix notifikat fi 60 sekonda, erġa' ibda mill-console b'`centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Id-database tas-sessjonijiet mhix disponibbli."
+    no_named_sessions:     "Ma nstabu l-ebda sessjoni bl-isem.\nUża `/title Is-Sessjoni Tiegħi` biex tagħti isem lis-sessjoni attwali, imbagħad `/resume Is-Sessjoni Tiegħi` biex terġa' lura għaliha aktar tard."
+    list_header:           "📋 **Sessjonijiet bl-Isem**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nUżu: `/resume <session name>`"
+    list_footer_numbered:  "\nUżu: `/resume <session name>` jew `/resume <number>` (eż. `/resume 1` għall-aktar waħda riċenti)"
+    list_failed:           "Ma setgħux jiġu elenkati s-sessjonijiet: {error}"
+    out_of_range:          "L-indiċi tar-resume {index} huwa barra mill-firxa.\nUża `/resume` mingħajr argumenti biex tara s-sessjonijiet disponibbli."
+    not_found:             "Ma nstabet l-ebda sessjoni li taqbel ma' '**{name}**'.\nUża `/resume` mingħajr argumenti biex tara s-sessjonijiet disponibbli."
+    already_on:            "📌 Diġà qed taħdem fis-sessjoni **{name}**."
+    switch_failed:         "Ma rnexxilx jaqleb is-sessjoni."
+    resumed_one:           "↻ Sessjoni **{title}** kompliet ({count} messaġġ). Il-konverżazzjoni ġiet restawrata."
+    resumed_many:          "↻ Sessjoni **{title}** kompliet ({count} messaġġi). Il-konverżazzjoni ġiet restawrata."
+    resumed_no_count:      "↻ Sessjoni **{title}** kompliet. Il-konverżazzjoni ġiet restawrata."
+
+  retry:
+    no_previous:           "L-ebda messaġġ preċedenti biex jerġa' jiġi pprovat."
+
+  rollback:
+    not_enabled:           "Il-checkpoints mhumiex attivati.\nAttivahom f'config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Ma nstabu l-ebda checkpoint għal {cwd}"
+    invalid_number:        "Numru tal-checkpoint invalidu. Uża 1-{max}."
+    restored:              "✅ Restawrat għall-checkpoint {hash}: {reason}\nTqabbil tal-istat qabel ir-rollback ġie ssejvjat awtomatikament."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Ma rnexxilx isejvja l-kanal home: {error}"
+    success:               "✅ Kanal home stabbilit għal **{name}** (ID: {chat_id}).\nIx-xogħlijiet cron u l-messaġġi bejn il-pjattaformi se jiġu kkonsenjati hawn."
+
+  status:
+    header:                "📊 **Status tal-Gateway Centurion**"
+    session_id:            "**ID tas-Sessjoni:** `{session_id}`"
+    title:                 "**Titlu:** {title}"
+    created:               "**Maħluqa:** {timestamp}"
+    last_activity:         "**L-Aħħar Attività:** {timestamp}"
+    tokens:                "**Tokens:** {tokens}"
+    agent_running:         "**Aġent Qed Jaħdem:** {state}"
+    state_yes:             "Iva ⚡"
+    state_no:              "Le"
+    queued:                "**Segwimenti fil-kju:** {count}"
+    platforms:             "**Pjattaformi Konnessi:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Mwaqqaf. L-aġent kien għadu ma bediex — tista' tkompli din is-sessjoni."
+    stopped:               "⚡ Mwaqqaf. Tista' tkompli din is-sessjoni."
+    no_active:             "L-ebda kompitu attiv biex jitwaqqaf."
+
+  title:
+    db_unavailable:        "Id-database tas-sessjonijiet mhix disponibbli."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ It-titlu huwa vojt wara t-tindif. Jekk jogħġbok uża karattri stampabbli."
+    set_to:                "✏️ Titlu tas-sessjoni stabbilit: **{title}**"
+    not_found:             "Is-sessjoni ma nstabitx fid-database."
+    current_with_title:    "📌 Sessjoni: `{session_id}`\nTitlu: **{title}**"
+    current_no_title:      "📌 Sessjoni: `{session_id}`\nL-ebda titlu stabbilit. Użu: `/title Isem Is-Sessjoni Tiegħi`"
+
+  topic:
+    not_telegram_dm:         "Il-komanda /topic hija disponibbli biss fil-chats privati ta' Telegram."
+    no_session_db:           "Id-database tas-sessjonijiet mhix disponibbli."
+    unauthorized:            "M'intix awtorizzat tuża /topic fuq dan il-bot."
+    restore_needs_topic:     "Biex tirrestawra sessjoni, l-ewwel oħloq jew iftaħ topic ta' Telegram, imbagħad ibgħat /topic <session-id> ġewwa dak it-topic. Biex toħloq topic ġdid, iftaħ All Messages u ibgħat messaġġ hemmhekk."
+    topics_disabled:         "It-topics ta' Telegram għadhom mhumiex attivati għal dan il-bot.\n\nKif tattivahom:\n1. Iftaħ @BotFather.\n2. Agħżel il-bot tiegħek.\n3. Iftaħ Bot Settings → Threads Settings.\n4. Ixgħel Threaded Mode u kun żgur li l-utenti jistgħu joħolqu threads ġodda.\n\nImbagħad erġa' ibgħat /topic."
+    topics_user_disallowed:  "It-topics ta' Telegram huma attivati, imma l-utenti mhumiex permessi joħolqu topics.\n\nIftaħ @BotFather → agħżel il-bot tiegħek → Bot Settings → Threads Settings, imbagħad itfi 'Disallow users to create new threads'.\n\nImbagħad erġa' ibgħat /topic."
+    enable_failed:           "Ma rnexxilx jattiva l-modalità tat-topics ta' Telegram: {error}"
+    bound_status:            "Dan it-topic huwa marbut ma':\nSessjoni: {label}\nID: {session_id}\n\nUża /new biex tissostitwixxi dan it-topic b'sessjoni ġdida.\nGħal xogħol parallel, iftaħ All Messages u ibgħat messaġġ hemmhekk biex toħloq topic ieħor."
+    thread_ready:            "It-topics multi-sessjoni ta' Telegram huma attivati.\n\nDan it-topic se jintuża bħala sessjoni Centurion indipendenti. Uża /new biex tissostitwixxi s-sessjoni attwali ta' dan it-topic. Għal xogħol parallel, iftaħ All Messages u ibgħat messaġġ hemmhekk biex toħloq topic ieħor."
+    untitled_session:        "Sessjoni mingħajr titlu"
+
+  undo:
+    nothing:               "Xejn x'jiġi annullat."
+    removed:               "↩️ Ġie annullat {count} messaġġ.\nImneħħi: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update huwa disponibbli biss mill-pjattaformi tal-messaġġi. Ħaddem `centurion update` mit-terminal."
+    not_git_repo:            "✗ Mhuwiex repo git — ma jistax jiġi aġġornat."
+    centurion_cmd_not_found:    "✗ Ma setax jinstab il-kmand `centurion`. Centurion qed jaħdem, imma l-kmand tal-aġġornament ma sabx l-eżekutabbli fil-PATH jew permezz tal-interpreter Python attwali. Prova ħaddem `centurion update` manwalment fit-terminal tiegħek."
+    start_failed:            "✗ Ma rnexxilx jibda l-aġġornament: {error}"
+    starting:                "⚕ Qed jibda l-aġġornament ta' Centurion… Se nistrimja l-progress hawn."
+
+  usage:
+    rate_limits:              "⏱️ **Limiti tar-Rata:** {state}"
+    header_session:           "📊 **Użu tat-Tokens tas-Sessjoni**"
+    label_model:              "Mudell: `{model}`"
+    label_input_tokens:       "Tokens tal-input: {count}"
+    label_cache_read:         "Tokens tal-qari mill-cache: {count}"
+    label_cache_write:        "Tokens tal-kitba fil-cache: {count}"
+    label_output_tokens:      "Tokens tal-output: {count}"
+    label_total:              "Total: {count}"
+    label_api_calls:          "Sejħiet API: {count}"
+    label_cost:               "Spiża: {prefix}${amount}"
+    label_cost_included:      "Spiża: inkluża"
+    label_context:            "Kuntest: {used} / {total} ({pct}%)"
+    label_compressions:       "Kompressionijiet: {count}"
+    header_session_info:      "📊 **Informazzjoni tas-Sessjoni**"
+    label_messages:           "Messaġġi: {count}"
+    label_estimated_context:  "Kuntest stmat: ~{count} token"
+    detailed_after_first:     "_(Użu dettaljat disponibbli wara l-ewwel tweġiba tal-aġent)_"
+    no_data:                  "L-ebda data dwar l-użu disponibbli għal din is-sessjoni."
+
+  verbose:
+    not_enabled:           "Il-kmand `/verbose` mhuwiex attivat għall-pjattaformi tal-messaġġi.\n\nAttivah f'`config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Progress tal-għodda: **MITFI** — l-ebda attività tal-għodda ma tintwera."
+    mode_new:              "⚙️ Progress tal-għodda: **ĠDID** — jintwera meta l-għodda tinbidel (tul tal-preview: `display.tool_preview_length`, predefinit 40)."
+    mode_all:              "⚙️ Progress tal-għodda: **KOLLHA** — kull sejħa tal-għodda tintwera (tul tal-preview: `display.tool_preview_length`, predefinit 40)."
+    mode_verbose:          "⚙️ Progress tal-għodda: **VERBOSE** — kull sejħa tal-għodda bl-argumenti sħaħ."
+    saved_suffix:          "_(issejvjat għal **{platform}** — jibda japplika mill-messaġġ li jmiss)_"
+    save_failed:           "_(ma rnexxilx isejvja fil-konfigurazzjoni: {error})_"
+
+  voice:
+    enabled_voice_only:    "Modalità tal-vuċi attivata.\nNitkellem b'vuċi meta tibgħat messaġġi tal-vuċi.\nUża /voice tts biex tikseb tweġibiet bil-vuċi għall-messaġġi kollha."
+    disabled_text:         "Modalità tal-vuċi diżattivata. Tweġibiet bil-kitba biss."
+    tts_enabled:           "TTS awtomatiku attivat.\nIt-tweġibiet kollha se jinkludu messaġġ tal-vuċi."
+    status_mode:           "Modalità tal-vuċi: {label}"
+    status_channel:        "Kanal tal-vuċi: #{channel}"
+    status_participants:   "Parteċipanti: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (qed jitkellem)"
+    enabled_short:         "Modalità tal-vuċi attivata."
+    disabled_short:        "Modalità tal-vuċi diżattivata."
+    label_off:             "Mitfi (kitba biss)"
+    label_voice_only:      "Mixgħul (tweġiba bil-vuċi għall-messaġġi tal-vuċi)"
+    label_all:             "TTS (tweġiba bil-vuċi għall-messaġġi kollha)"
+
+  yolo:
+    disabled:                   "⚠️ Il-modalità YOLO **MITFI** għal din is-sessjoni — komandi perikolużi jeħtieġu approvazzjoni."
+    enabled:                    "⚡ Il-modalità YOLO **MIXGĦULA** għal din is-sessjoni — il-komandi kollha jiġu approvati awtomatikament. Użaha b'kawtela."
+
+  shared:
+    session_db_unavailable:      "Id-database tas-sessjonijiet mhix disponibbli."
+    session_db_unavailable_prefix: "Id-database tas-sessjonijiet mhix disponibbli"
+    session_not_found:           "Is-sessjoni ma nstabitx fid-database."
+    warn_passthrough:            "⚠️ {error}"

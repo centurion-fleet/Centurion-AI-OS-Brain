@@ -86,9 +86,11 @@ def test_normalize_lang_accepts_supported():
 def test_normalize_lang_accepts_aliases():
     assert i18n._normalize_lang("Deutsch") == "de"
     assert i18n._normalize_lang("español") == "es"
-    assert i18n._normalize_lang("Irish") == "ga"
-    assert i18n._normalize_lang("Gaeilge") == "ga"
-    assert i18n._normalize_lang("ga-IE") == "ga"
+    assert i18n._normalize_lang("Irish") != "ga"
+    assert i18n._normalize_lang("Slovenian") == "sl"
+    assert i18n._normalize_lang("sl-SI") == "sl"
+    assert i18n._normalize_lang("Malti") == "mt"
+    assert i18n._normalize_lang("Ελληνικά") == "el"
     assert i18n._normalize_lang("Hungarian") == "hu"
     assert i18n._normalize_lang("Magyar") == "hu"
     assert i18n._normalize_lang("ru-RU") == "ru"
@@ -97,7 +99,7 @@ def test_normalize_lang_accepts_aliases():
     assert i18n._normalize_lang("en-US") == "en"
 
 
-@pytest.mark.parametrize("dropped", ["zh", "zh-hant", "ja", "ko", "tr", "uk", "af"])
+@pytest.mark.parametrize("dropped", ["zh", "zh-hant", "ja", "ko", "tr", "uk", "af", "ga"])
 def test_dropped_languages_are_not_offered(dropped: str):
     """Languages we do not sell into must not resolve to anything.
 
@@ -146,7 +148,7 @@ def test_t_explicit_lang():
     assert i18n.t("approval.denied", lang="en").endswith("Denied")
     assert i18n.t("approval.denied", lang="de").endswith("Abgelehnt")
     assert i18n.t("approval.denied", lang="hu").endswith("Elutasítva")
-    assert i18n.t("approval.denied", lang="ga").endswith("Diúltaithe")
+    assert i18n.t("approval.denied", lang="sv").endswith("Nekat")
 
 
 def test_t_formats_placeholders():

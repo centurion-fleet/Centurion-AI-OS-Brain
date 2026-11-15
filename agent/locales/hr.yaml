@@ -1,0 +1,354 @@
+# Centurion static-message catalog -- Croatian (hr) / hrvatski
+# Machine-assisted translation reviewed for structure only; native review pending.
+
+approval:
+  dangerous_header: "⚠️  OPASNA NAREDBA: {description}"
+  choose_long:     "      [o]jednom  |  [s]sesija  |  [a]uvijek  |  [d]odbij"
+  choose_short:    "      [o]jednom  |  [s]sesija  |  [d]odbij"
+  prompt_long:     "      Odabir [o/s/a/D]: "
+  prompt_short:    "      Odabir [o/s/D]: "
+  timeout:         "      ⏱ Isteklo vrijeme - naredba odbijena"
+  allowed_once:    "      ✓ Dopušteno jednom"
+  allowed_session: "      ✓ Dopušteno za ovu sesiju"
+  allowed_always:  "      ✓ Dodano na trajni popis dopuštenih"
+  denied:          "      ✗ Odbijeno"
+  cancelled:       "      ✗ Otkazano"
+  blocklist_message: "Ova je naredba na bezuvjetnom popisu blokiranih i ne može se odobriti."
+
+gateway:
+  approval_expired: "⚠️ Odobrenje je isteklo (agent više ne čeka). Zamolite agenta da pokuša ponovno."
+  draining:         "⏳ Ispražnjavam {count} aktivnih agenata prije ponovnog pokretanja..."
+  goal_cleared:     "✓ Cilj obrisan."
+  no_active_goal:   "Nema aktivnog cilja."
+  config_read_failed: "⚠️ Nije moguće pročitati config.yaml: {error}"
+  config_save_failed: "⚠️ Nije moguće spremiti konfiguraciju: {error}"
+
+  model:
+    error_prefix:           "Pogreška: {error}"
+    switched:               "Model prebačen na `{model}`"
+    provider_label:         "Pružatelj: {provider}"
+    context_label:          "Kontekst: {tokens} tokena"
+    max_output_label:       "Maks. izlaz: {tokens} tokena"
+    cost_label:             "Trošak: {cost}"
+    capabilities_label:     "Mogućnosti: {capabilities}"
+    prompt_caching_enabled: "Predmemorija upita: omogućena"
+    warning_prefix:         "Upozorenje: {warning}"
+    saved_global:           "Spremljeno u config.yaml (`--global`)"
+    session_only_hint:      "_(samo ova sesija — dodajte `--global` za trajno spremanje)_"
+    current_label:          "Trenutno: `{model}` kod {provider}"
+    current_tag:            " (trenutno)"
+    more_models_suffix:     " (+{count} više)"
+    usage_switch_model:     "`/model <name>` — promijeni model"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — promijeni pružatelja"
+    usage_persist:          "`/model <name> --global` — trajno spremi"
+
+  agents:
+    header:                "🤖 **Aktivni agenti i zadaci**"
+    active_agents:         "**Aktivni agenti:** {count}"
+    this_chat:             " · ovaj razgovor"
+    more:                  "... i još {count}"
+    running_processes:     "**Pokrenuti pozadinski procesi:** {count}"
+    async_jobs:            "**Asinkroni poslovi pristupnika:** {count}"
+    none:                  "Nema aktivnih agenata ni pokrenutih zadataka."
+    state_starting:        "pokreće se"
+    state_running:         "radi"
+
+  approve:
+    no_pending:            "Nema naredbe koja čeka odobrenje."
+    once_singular:         "✅ Naredba odobrena. Agent nastavlja..."
+    once_plural:           "✅ Naredbe odobrene ({count} naredbi). Agent nastavlja..."
+    session_singular:      "✅ Naredba odobrena (uzorak odobren za ovu sesiju). Agent nastavlja..."
+    session_plural:        "✅ Naredbe odobrene (uzorak odobren za ovu sesiju) ({count} naredbi). Agent nastavlja..."
+    always_singular:       "✅ Naredba odobrena (uzorak trajno odobren). Agent nastavlja..."
+    always_plural:         "✅ Naredbe odobrene (uzorak trajno odobren) ({count} naredbi). Agent nastavlja..."
+
+  background:
+    usage:                 "Uporaba: /background <prompt>\nPrimjer: /background Sažmi današnje najvažnije HN priče\n\nIzvršava upit u zasebnoj sesiji. Možete nastaviti razgovarati — rezultat će se pojaviti ovdje kad završi."
+    started:               "🔄 Pozadinski zadatak pokrenut: \"{preview}\"\nID zadatka: {task_id}\nMožete nastaviti razgovarati — rezultati će se pojaviti kad završe."
+
+  branch:
+    db_unavailable:        "Baza sesija nije dostupna."
+    no_conversation:       "Nema razgovora za grananje — prvo pošaljite poruku."
+    create_failed:         "Stvaranje grane nije uspjelo: {error}"
+    switch_failed:         "Grana je stvorena, ali prebacivanje na nju nije uspjelo."
+    branched_one:          "⑂ Grananje u **{title}** ({count} poruka kopirana)\nIzvorno: `{parent}`\nGrana: `{new}`\nKoristite `/resume` za povratak na izvorno."
+    branched_many:         "⑂ Grananje u **{title}** ({count} poruka kopirano)\nIzvorno: `{parent}`\nGrana: `{new}`\nKoristite `/resume` za povratak na izvorno."
+
+  commands:
+    usage:                 "Uporaba: `/commands [page]`"
+    skill_header:          "⚡ **Naredbe vještina**:"
+    default_desc:          "Naredba vještine"
+    none:                  "Nema dostupnih naredbi."
+    header:                "📚 **Naredbe** (ukupno {total}, stranica {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← prethodna"
+    nav_next:              "sljedeća → `/commands {page}`"
+    out_of_range:          "_(Zatražena stranica {requested} bila je izvan raspona, prikazujem stranicu {page}.)_"
+
+  compress:
+    not_enough:            "Nema dovoljno razgovora za sažimanje (potrebne su najmanje 4 poruke)."
+    no_provider:           "Nije konfiguriran pružatelj — sažimanje nije moguće."
+    nothing_to_do:         "Još nema što sažeti (transkript je i dalje sav zaštićeni kontekst)."
+    focus_line:            "Fokus: \"{topic}\""
+    summary_failed:        "⚠️ Generiranje sažetka nije uspjelo ({error}). {count} povijesnih poruka uklonjeno je i zamijenjeno rezerviranim mjestom; raniji kontekst više nije moguće vratiti. Provjerite konfiguraciju modela auxiliary.compression."
+    aborted:               "⚠️ Sažimanje prekinuto ({error}). Nijedna poruka nije odbačena — razgovor je nepromijenjen. Pokrenite /compress za ponovni pokušaj, /reset za čistu sesiju ili provjerite konfiguraciju modela auxiliary.compression."
+    aux_failed:            "ℹ️ Konfigurirani model sažimanja `{model}` nije uspio ({error}). Oporavljeno glavnim modelom — kontekst je netaknut — ali provjerite `auxiliary.compression.model` u config.yaml."
+    failed:                "Sažimanje nije uspjelo: {error}"
+
+  debug:
+    upload_failed:         "✗ Slanje izvješća za otklanjanje pogrešaka nije uspjelo: {error}"
+    header:                "**Izvješće za otklanjanje pogrešaka poslano:**"
+    auto_delete:           "⏱ Zalijepci se automatski brišu za 6 sati."
+    full_logs_hint:        "Za slanje cijelih zapisa koristite `centurion debug share` iz CLI-ja."
+    share_hint:            "Podijelite ove poveznice s Centurion timom za podršku."
+
+  deny:
+    stale:                 "❌ Naredba odbijena (odobrenje je bilo zastarjelo)."
+    no_pending:            "Nema naredbe koja čeka odbijanje."
+    denied_singular:       "❌ Naredba odbijena."
+    denied_plural:         "❌ Naredbe odbijene ({count} naredbi)."
+
+  fast:
+    not_supported:         "⚡ /fast je dostupan samo za OpenAI modele koji podržavaju Priority Processing."
+    status:                "⚡ Priority Processing\n\nTrenutni način: `{mode}`\n\n_Uporaba:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Nepoznat argument: `{arg}`\n\n**Važeće opcije:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (spremljeno u konfiguraciju)\n_(primjenjuje se na sljedeću poruku)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (samo ova sesija)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Podnožje izvršavanja: **{state}**\nPolja: `{fields}`\nPlatforma: `{platform}`"
+    usage:                 "Uporaba: `/footer [on|off|status]`"
+    saved:                 "📎 Podnožje izvršavanja: **{state}**{example}\n_(spremljeno globalno — primjenjuje se na sljedeću poruku)_"
+    example_line:          "\nPrimjer: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "Ciljevi nisu dostupni u ovoj sesiji."
+    no_goal_set:           "Nema postavljenog cilja."
+    paused:                "⏸ Cilj pauziran: {goal}"
+    no_resume:             "Nema cilja za nastavak."
+    resumed:               "▶ Cilj nastavljen: {goal}\nPošaljite bilo koju poruku za nastavak ili pričekajte — poduzet ću sljedeći korak u sljedećem krugu."
+    invalid:               "Nevažeći cilj: {error}"
+    set:                   "⊙ Cilj postavljen (proračun od {budget} koraka): {goal}\nNastavit ću raditi dok cilj ne bude dovršen, dok ga ne pauzirate/obrišete ili dok se proračun ne potroši.\nKontrole: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Centurion naredbe**\n"
+    skill_header:          "\n⚡ **Naredbe vještina** ({count} aktivnih):"
+    more_use_commands:     "\n... i još {count}. Koristite `/commands` za cijeli popis po stranicama."
+
+  insights:
+    invalid_days:          "Nevažeća vrijednost --days: {value}"
+    error:                 "Pogreška pri generiranju uvida: {error}"
+
+  kanban:
+    error_prefix:          "⚠ kanban pogreška: {error}"
+    subscribed_suffix:     "(pretplaćeno — bit ćete obaviješteni kad {task_id} završi ili se blokira)"
+    truncated_suffix:      "… (skraćeno; koristite `centurion kanban …` u terminalu za cijeli izlaz)"
+    no_output:             "(nema izlaza)"
+
+  personality:
+    none_configured:       "Nije konfigurirana nijedna osobnost u `{path}/config.yaml`"
+    header:                "🎭 **Dostupne osobnosti**\n"
+    none_option:           "• `none` — (bez sloja osobnosti)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nUporaba: `/personality <name>`"
+    save_failed:           "⚠️ Spremanje promjene osobnosti nije uspjelo: {error}"
+    cleared:               "🎭 Osobnost obrisana — koristi se osnovno ponašanje agenta.\n_(primjenjuje se na sljedeću poruku)_"
+    set_to:                "🎭 Osobnost postavljena na **{name}**\n_(primjenjuje se na sljedeću poruku)_"
+    unknown:               "Nepoznata osobnost: `{name}`\n\nDostupno: {available}"
+
+  profile:
+    header:                "👤 **Profil:** `{profile}`"
+    home:                  "📂 **Početni direktorij:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (zadano)"
+    level_disabled:            "none (onemogućeno)"
+    scope_session:             "nadjačavanje sesije"
+    scope_global:              "globalna konfiguracija"
+    status:                    "🧠 **Postavke zaključivanja**\n\n**Napor:** `{level}`\n**Opseg:** {scope}\n**Prikaz:** {display}\n\n_Uporaba:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "uključeno ✓"
+    display_off:               "isključeno"
+    display_set_on:            "🧠 ✓ Prikaz zaključivanja: **UKLJUČENO**\nRazmišljanje modela bit će prikazano prije svakog odgovora na **{platform}**."
+    display_set_off:           "🧠 ✓ Prikaz zaključivanja: **ISKLJUČENO** na **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` nije podržano. Koristite `/reasoning <level> --global` za promjenu globalne zadane vrijednosti."
+    reset_done:                "🧠 ✓ Nadjačavanje zaključivanja za sesiju obrisano; vraćam se na globalnu konfiguraciju."
+    unknown_arg:               "⚠️ Nepoznat argument: `{arg}`\n\n**Važeće razine:** none, minimal, low, medium, high, xhigh\n**Prikaz:** show, hide\n**Trajno:** dodajte `--global` za spremanje izvan ove sesije"
+    set_global:                "🧠 ✓ Napor zaključivanja postavljen na `{effort}` (spremljeno u konfiguraciju)\n_(primjenjuje se na sljedeću poruku)_"
+    set_global_save_failed:    "🧠 ✓ Napor zaključivanja postavljen na `{effort}` (samo sesija — spremanje konfiguracije nije uspjelo)\n_(primjenjuje se na sljedeću poruku)_"
+    set_session:               "🧠 ✓ Napor zaključivanja postavljen na `{effort}` (samo sesija — dodajte `--global` za trajno spremanje)\n_(primjenjuje se na sljedeću poruku)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp otkazano. MCP alati nepromijenjeni."
+    always_followup:       "ℹ️ Budući pozivi `/reload-mcp` izvršavat će se bez potvrde. Ponovno omogućite putem `approvals.mcp_reload_confirm: true` u config.yaml."
+    confirm_prompt:        "⚠️ **Potvrdite /reload-mcp**\n\nPonovno učitavanje MCP poslužitelja obnavlja skup alata za ovu sesiju i **poništava predmemoriju upita pružatelja** — sljedeća poruka ponovno šalje sve ulazne tokene. Kod modela s dugim kontekstom ili teškim zaključivanjem to može biti skupo.\n\nOdaberite:\n• **Odobri jednom** — učitaj sada\n• **Uvijek odobri** — učitaj sada i trajno utišaj ovaj upit\n• **Otkaži** — ostavi MCP alate nepromijenjenima\n\n_Tekstualna zamjena: odgovorite `/approve`, `/always` ili `/cancel`._"
+    header:                "🔄 **MCP poslužitelji ponovno učitani**\n"
+    reconnected:           "♻️ Ponovno povezano: {names}"
+    added:                 "➕ Dodano: {names}"
+    removed:               "➖ Uklonjeno: {names}"
+    none_connected:        "Nema povezanih MCP poslužitelja."
+    tools_available:       "\n🔧 {tools} alata dostupno s {servers} poslužitelja"
+    failed:                "❌ Ponovno učitavanje MCP-a nije uspjelo: {error}"
+
+  reload_skills:
+    header:                "🔄 **Vještine ponovno učitane**\n"
+    no_new:                "Nisu otkrivene nove vještine."
+    total:                 "\n📚 {count} vještina dostupno"
+    added_header:          "➕ **Dodane vještine:**"
+    removed_header:        "➖ **Uklonjene vještine:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ Ponovno učitavanje vještina nije uspjelo: {error}"
+
+  reset:
+    header_default:        "✨ Sesija poništena! Počinjemo iznova."
+    header_new:            "✨ Nova sesija pokrenuta!"
+    header_titled:         "✨ Nova sesija pokrenuta: {title}"
+    title_rejected:        "\n⚠️ Naslov odbijen: {error}"
+    title_error_untitled:  "\n⚠️ {error} — sesija je pokrenuta bez naslova."
+    title_empty_untitled:  "\n⚠️ Naslov je prazan nakon čišćenja — sesija je pokrenuta bez naslova."
+    tip:                   "\n✦ Savjet: {tip}"
+
+  restart:
+    in_progress:           "⏳ Ponovno pokretanje pristupnika već je u tijeku..."
+    restarting:            "♻ Ponovno pokrećem pristupnik. Ako ne dobijete obavijest u roku od 60 sekundi, pokrenite iz konzole naredbom `centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Baza sesija nije dostupna."
+    no_named_sessions:     "Nema imenovanih sesija.\nKoristite `/title Moja Sesija` da biste imenovali trenutnu sesiju, a zatim se vratite na nju pomoću `/resume Moja Sesija`."
+    list_header:           "📋 **Imenovane sesije**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nUporaba: `/resume <session name>`"
+    list_footer_numbered:  "\nUporaba: `/resume <session name>` ili `/resume <number>` (npr. `/resume 1` za najnoviju)"
+    list_failed:           "Nije moguće izlistati sesije: {error}"
+    out_of_range:          "Indeks nastavka {index} je izvan raspona.\nKoristite `/resume` bez argumenata za popis dostupnih sesija."
+    not_found:             "Nije pronađena sesija koja odgovara '**{name}**'.\nKoristite `/resume` bez argumenata za popis dostupnih sesija."
+    already_on:            "📌 Već ste u sesiji **{name}**."
+    switch_failed:         "Prebacivanje sesije nije uspjelo."
+    resumed_one:           "↻ Sesija **{title}** nastavljena ({count} poruka). Razgovor vraćen."
+    resumed_many:          "↻ Sesija **{title}** nastavljena ({count} poruka). Razgovor vraćen."
+    resumed_no_count:      "↻ Sesija **{title}** nastavljena. Razgovor vraćen."
+
+  retry:
+    no_previous:           "Nema prethodne poruke za ponovni pokušaj."
+
+  rollback:
+    not_enabled:           "Kontrolne točke nisu omogućene.\nOmogućite u config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Nema pronađenih kontrolnih točaka za {cwd}"
+    invalid_number:        "Nevažeći broj kontrolne točke. Koristite 1-{max}."
+    restored:              "✅ Vraćeno na kontrolnu točku {hash}: {reason}\nSnimka stanja prije vraćanja spremljena je automatski."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Spremanje matičnog kanala nije uspjelo: {error}"
+    success:               "✅ Matični kanal postavljen na **{name}** (ID: {chat_id}).\nCron poslovi i poruke između platformi dostavljat će se ovdje."
+
+  status:
+    header:                "📊 **Status Centurion pristupnika**"
+    session_id:            "**ID sesije:** `{session_id}`"
+    title:                 "**Naslov:** {title}"
+    created:               "**Stvoreno:** {timestamp}"
+    last_activity:         "**Posljednja aktivnost:** {timestamp}"
+    tokens:                "**Tokeni:** {tokens}"
+    agent_running:         "**Agent radi:** {state}"
+    state_yes:             "Da ⚡"
+    state_no:              "Ne"
+    queued:                "**Nastavci u redu čekanja:** {count}"
+    platforms:             "**Povezane platforme:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Zaustavljeno. Agent još nije započeo — možete nastaviti ovu sesiju."
+    stopped:               "⚡ Zaustavljeno. Možete nastaviti ovu sesiju."
+    no_active:             "Nema aktivnog zadatka za zaustavljanje."
+
+  title:
+    db_unavailable:        "Baza sesija nije dostupna."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ Naslov je prazan nakon čišćenja. Koristite ispisive znakove."
+    set_to:                "✏️ Naslov sesije postavljen: **{title}**"
+    not_found:             "Sesija nije pronađena u bazi."
+    current_with_title:    "📌 Sesija: `{session_id}`\nNaslov: **{title}**"
+    current_no_title:      "📌 Sesija: `{session_id}`\nNaslov nije postavljen. Uporaba: `/title Moja Sesija`"
+
+  topic:
+    not_telegram_dm:         "Naredba /topic dostupna je samo u privatnim Telegram razgovorima."
+    no_session_db:           "Baza sesija nije dostupna."
+    unauthorized:            "Niste ovlašteni koristiti /topic na ovom botu."
+    restore_needs_topic:     "Za vraćanje sesije najprije stvorite ili otvorite Telegram temu, zatim pošaljite /topic <session-id> unutar te teme. Za stvaranje nove teme otvorite Sve poruke i pošaljite tamo bilo koju poruku."
+    topics_disabled:         "Telegram teme još nisu omogućene za ovaj bot.\n\nKako ih omogućiti:\n1. Otvorite @BotFather.\n2. Odaberite svog bota.\n3. Otvorite Bot Settings → Threads Settings.\n4. Uključite Threaded Mode i provjerite da korisnici smiju stvarati nove niti.\n\nZatim ponovno pošaljite /topic."
+    topics_user_disallowed:  "Telegram teme su omogućene, ali korisnici ne smiju stvarati teme.\n\nOtvorite @BotFather → odaberite svog bota → Bot Settings → Threads Settings, zatim isključite 'Disallow users to create new threads'.\n\nZatim ponovno pošaljite /topic."
+    enable_failed:           "Omogućavanje Telegram načina tema nije uspjelo: {error}"
+    bound_status:            "Ova je tema povezana s:\nSesija: {label}\nID: {session_id}\n\nKoristite /new da biste ovu temu zamijenili novom sesijom.\nZa paralelan rad otvorite Sve poruke i pošaljite tamo poruku da biste stvorili drugu temu."
+    thread_ready:            "Telegram teme s više sesija su omogućene.\n\nOva tema koristit će se kao neovisna Centurion sesija. Koristite /new da biste zamijenili trenutnu sesiju ove teme. Za paralelan rad otvorite Sve poruke i pošaljite tamo poruku da biste stvorili drugu temu."
+    untitled_session:        "Sesija bez naslova"
+
+  undo:
+    nothing:               "Nema što poništiti."
+    removed:               "↩️ Poništeno {count} poruka.\nUklonjeno: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update je dostupan samo s platformi za razmjenu poruka. Pokrenite `centurion update` iz terminala."
+    not_git_repo:            "✗ Nije git repozitorij — ažuriranje nije moguće."
+    centurion_cmd_not_found:    "✗ Nije moguće pronaći naredbu `centurion`. Centurion radi, ali naredba za ažuriranje nije pronašla izvršnu datoteku na PATH-u ni putem trenutnog Python tumača. Pokušajte ručno pokrenuti `centurion update` u terminalu."
+    start_failed:            "✗ Pokretanje ažuriranja nije uspjelo: {error}"
+    starting:                "⚕ Pokrećem Centurion ažuriranje… Prijenos napretka pratit ću ovdje."
+
+  usage:
+    rate_limits:              "⏱️ **Ograničenja brzine:** {state}"
+    header_session:           "📊 **Potrošnja tokena u sesiji**"
+    label_model:              "Model: `{model}`"
+    label_input_tokens:       "Ulazni tokeni: {count}"
+    label_cache_read:         "Tokeni čitanja predmemorije: {count}"
+    label_cache_write:        "Tokeni pisanja u predmemoriju: {count}"
+    label_output_tokens:      "Izlazni tokeni: {count}"
+    label_total:              "Ukupno: {count}"
+    label_api_calls:          "API pozivi: {count}"
+    label_cost:               "Trošak: {prefix}${amount}"
+    label_cost_included:      "Trošak: uključeno"
+    label_context:            "Kontekst: {used} / {total} ({pct} %)"
+    label_compressions:       "Sažimanja: {count}"
+    header_session_info:      "📊 **Podaci o sesiji**"
+    label_messages:           "Poruke: {count}"
+    label_estimated_context:  "Procijenjeni kontekst: ~{count} tokena"
+    detailed_after_first:     "_(Detaljna potrošnja dostupna je nakon prvog agentovog odgovora)_"
+    no_data:                  "Nema podataka o potrošnji za ovu sesiju."
+
+  verbose:
+    not_enabled:           "Naredba `/verbose` nije omogućena za platforme za razmjenu poruka.\n\nOmogućite je u `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Napredak alata: **ISKLJUČENO** — aktivnost alata se ne prikazuje."
+    mode_new:              "⚙️ Napredak alata: **NOVO** — prikazuje se kad se alat promijeni (duljina pretpregleda: `display.tool_preview_length`, zadano 40)."
+    mode_all:              "⚙️ Napredak alata: **SVE** — prikazuje se svaki poziv alata (duljina pretpregleda: `display.tool_preview_length`, zadano 40)."
+    mode_verbose:          "⚙️ Napredak alata: **OPŠIRNO** — svaki poziv alata s punim argumentima."
+    saved_suffix:          "_(spremljeno za **{platform}** — primjenjuje se na sljedeću poruku)_"
+    save_failed:           "_(spremanje u konfiguraciju nije uspjelo: {error})_"
+
+  voice:
+    enabled_voice_only:    "Glasovni način omogućen.\nOdgovarat ću glasom kad pošaljete glasovne poruke.\nKoristite /voice tts za glasovne odgovore na sve poruke."
+    disabled_text:         "Glasovni način onemogućen. Odgovori samo tekstom."
+    tts_enabled:           "Automatski TTS omogućen.\nSvi odgovori uključivat će glasovnu poruku."
+    status_mode:           "Glasovni način: {label}"
+    status_channel:        "Glasovni kanal: #{channel}"
+    status_participants:   "Sudionici: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (govori)"
+    enabled_short:         "Glasovni način omogućen."
+    disabled_short:        "Glasovni način onemogućen."
+    label_off:             "Isključeno (samo tekst)"
+    label_voice_only:      "Uključeno (glasovni odgovor na glasovne poruke)"
+    label_all:             "TTS (glasovni odgovor na sve poruke)"
+
+  yolo:
+    disabled:                   "⚠️ YOLO način **ISKLJUČEN** za ovu sesiju — opasne naredbe zahtijevaju odobrenje."
+    enabled:                    "⚡ YOLO način **UKLJUČEN** za ovu sesiju — sve naredbe automatski se odobravaju. Koristite s oprezom."
+
+  shared:
+    session_db_unavailable:      "Baza sesija nije dostupna."
+    session_db_unavailable_prefix: "Baza sesija nije dostupna"
+    session_not_found:           "Sesija nije pronađena u bazi."
+    warn_passthrough:            "⚠️ {error}"

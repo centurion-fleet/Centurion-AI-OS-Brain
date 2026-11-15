@@ -13,12 +13,25 @@ import { de } from "./de";
 import { es } from "./es";
 import { fr } from "./fr";
 import { it } from "./it";
-import { ga } from "./ga";
 import { pt } from "./pt";
 import { ru } from "./ru";
 import { hu } from "./hu";
 import { nl } from "./nl";
 import { pl } from "./pl";
+import { bg } from "./bg";
+import { cs } from "./cs";
+import { da } from "./da";
+import { el } from "./el";
+import { et } from "./et";
+import { fi } from "./fi";
+import { hr } from "./hr";
+import { lt } from "./lt";
+import { lv } from "./lv";
+import { mt } from "./mt";
+import { ro } from "./ro";
+import { sk } from "./sk";
+import { sl } from "./sl";
+import { sv } from "./sv";
 import { setCurrentLocale } from "./current";
 import { api } from "@/lib/api";
 
@@ -31,9 +44,22 @@ const TRANSLATIONS: Record<Locale, Translations> = {
   es,
   it,
   pt,
-  ga,
   ru,
   hu,
+  bg,
+  cs,
+  da,
+  el,
+  et,
+  fi,
+  hr,
+  lt,
+  lv,
+  mt,
+  ro,
+  sk,
+  sl,
+  sv,
 };
 
 // Display metadata for the language picker — endonym (native name) so users
@@ -46,21 +72,33 @@ const TRANSLATIONS: Record<Locale, Translations> = {
 // jurisdiction). Endonyms are unambiguous and avoid the political mismapping
 // that flag pairings inevitably create.
 export const LOCALE_META: Record<Locale, { name: string }> = {
-  // English first, then the European Union markets in the order the website
-  // sells them, then Russian. Every entry here has a catalogue and a country
-  // page behind it -- the picker never offers a language the Brain handed
-  // down from a fork but does not sell into.
+  // English, then the markets we publish pages for, then the remaining EU
+  // languages the Brain speaks. Every entry has a catalogue behind it: the
+  // picker never offers a language the Brain cannot answer in.
   en: { name: "English" },
-  de: { name: "Deutsch" },
   fr: { name: "Français" },
+  de: { name: "Deutsch" },
   nl: { name: "Nederlands" },
   pl: { name: "Polski" },
   es: { name: "Español" },
   it: { name: "Italiano" },
   pt: { name: "Português" },
-  ga: { name: "Gaeilge" },
   ru: { name: "Русский" },
   hu: { name: "Magyar" },
+  bg: { name: "Български" },
+  cs: { name: "Čeština" },
+  da: { name: "Dansk" },
+  el: { name: "Ελληνικά" },
+  et: { name: "Eesti" },
+  fi: { name: "Suomi" },
+  hr: { name: "Hrvatski" },
+  lt: { name: "Lietuvių" },
+  lv: { name: "Latviešu" },
+  mt: { name: "Malti" },
+  ro: { name: "Română" },
+  sk: { name: "Slovenčina" },
+  sl: { name: "Slovenščina" },
+  sv: { name: "Svenska" },
 };
 
 const SUPPORTED_LOCALES = Object.keys(TRANSLATIONS) as Locale[];

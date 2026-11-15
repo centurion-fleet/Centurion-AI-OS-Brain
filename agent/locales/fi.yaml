@@ -1,0 +1,354 @@
+# Centurion static-message catalog -- Finnish (fi) / suomi
+# Machine-assisted translation reviewed for structure only; native review pending.
+
+approval:
+  dangerous_header: "⚠️  VAARALLINEN KOMENTO: {description}"
+  choose_long:     "      [o]kerran  |  [s]istunto  |  [a]aina  |  [d]hylkää"
+  choose_short:    "      [o]kerran  |  [s]istunto  |  [d]hylkää"
+  prompt_long:     "      Valinta [o/s/a/D]: "
+  prompt_short:    "      Valinta [o/s/D]: "
+  timeout:         "      ⏱ Aikakatkaisu - komento hylätty"
+  allowed_once:    "      ✓ Sallittu kerran"
+  allowed_session: "      ✓ Sallittu tälle istunnolle"
+  allowed_always:  "      ✓ Lisätty pysyvään sallittujen luetteloon"
+  denied:          "      ✗ Hylätty"
+  cancelled:       "      ✗ Peruutettu"
+  blocklist_message: "Tämä komento on ehdottomalla estolistalla, eikä sitä voi hyväksyä."
+
+gateway:
+  approval_expired: "⚠️ Hyväksyntä vanhentui (agentti ei enää odota). Pyydä agenttia yrittämään uudelleen."
+  draining:         "⏳ Tyhjennetään {count} aktiivista agenttia ennen uudelleenkäynnistystä..."
+  goal_cleared:     "✓ Tavoite tyhjennetty."
+  no_active_goal:   "Ei aktiivista tavoitetta."
+  config_read_failed: "⚠️ Tiedoston config.yaml lukeminen epäonnistui: {error}"
+  config_save_failed: "⚠️ Asetusten tallentaminen epäonnistui: {error}"
+
+  model:
+    error_prefix:           "Virhe: {error}"
+    switched:               "Malli vaihdettu: `{model}`"
+    provider_label:         "Palveluntarjoaja: {provider}"
+    context_label:          "Konteksti: {tokens} tokenia"
+    max_output_label:       "Enimmäistuloste: {tokens} tokenia"
+    cost_label:             "Hinta: {cost}"
+    capabilities_label:     "Ominaisuudet: {capabilities}"
+    prompt_caching_enabled: "Kehotevälimuisti: käytössä"
+    warning_prefix:         "Varoitus: {warning}"
+    saved_global:           "Tallennettu tiedostoon config.yaml (`--global`)"
+    session_only_hint:      "_(vain tämä istunto — lisää `--global` säilyttääksesi)_"
+    current_label:          "Nykyinen: `{model}` palvelussa {provider}"
+    current_tag:            " (nykyinen)"
+    more_models_suffix:     " (+{count} lisää)"
+    usage_switch_model:     "`/model <name>` — vaihda malli"
+    usage_switch_provider:  "`/model <name> --provider <slug>` — vaihda palveluntarjoaja"
+    usage_persist:          "`/model <name> --global` — säilytä"
+
+  agents:
+    header:                "🤖 **Aktiiviset agentit ja tehtävät**"
+    active_agents:         "**Aktiiviset agentit:** {count}"
+    this_chat:             " · tämä keskustelu"
+    more:                  "... ja {count} lisää"
+    running_processes:     "**Käynnissä olevat taustaprosessit:** {count}"
+    async_jobs:            "**Yhdyskäytävän asynkroniset työt:** {count}"
+    none:                  "Ei aktiivisia agentteja tai käynnissä olevia tehtäviä."
+    state_starting:        "käynnistyy"
+    state_running:         "käynnissä"
+
+  approve:
+    no_pending:            "Ei hyväksyttävää odottavaa komentoa."
+    once_singular:         "✅ Komento hyväksytty. Agentti jatkaa..."
+    once_plural:           "✅ Komennot hyväksytty ({count} komentoa). Agentti jatkaa..."
+    session_singular:      "✅ Komento hyväksytty (kaava hyväksytty tälle istunnolle). Agentti jatkaa..."
+    session_plural:        "✅ Komennot hyväksytty (kaava hyväksytty tälle istunnolle) ({count} komentoa). Agentti jatkaa..."
+    always_singular:       "✅ Komento hyväksytty (kaava hyväksytty pysyvästi). Agentti jatkaa..."
+    always_plural:         "✅ Komennot hyväksytty (kaava hyväksytty pysyvästi) ({count} komentoa). Agentti jatkaa..."
+
+  background:
+    usage:                 "Käyttö: /background <prompt>\nEsimerkki: /background Tiivistä päivän tärkeimmät HN-tarinat\n\nSuorittaa kehotteen erillisessä istunnossa. Voit jatkaa keskustelua — tulos ilmestyy tänne, kun se on valmis."
+    started:               "🔄 Taustatehtävä aloitettu: \"{preview}\"\nTehtävätunnus: {task_id}\nVoit jatkaa keskustelua — tulokset ilmestyvät, kun ne ovat valmiita."
+
+  branch:
+    db_unavailable:        "Istuntotietokanta ei ole käytettävissä."
+    no_conversation:       "Ei haarautettavaa keskustelua — lähetä ensin viesti."
+    create_failed:         "Haaran luonti epäonnistui: {error}"
+    switch_failed:         "Haara luotiin, mutta siihen vaihtaminen epäonnistui."
+    branched_one:          "⑂ Haarautettu: **{title}** ({count} viesti kopioitu)\nAlkuperäinen: `{parent}`\nHaara: `{new}`\nKäytä `/resume` palataksesi alkuperäiseen."
+    branched_many:         "⑂ Haarautettu: **{title}** ({count} viestiä kopioitu)\nAlkuperäinen: `{parent}`\nHaara: `{new}`\nKäytä `/resume` palataksesi alkuperäiseen."
+
+  commands:
+    usage:                 "Käyttö: `/commands [page]`"
+    skill_header:          "⚡ **Taitokomennot**:"
+    default_desc:          "Taitokomento"
+    none:                  "Ei komentoja saatavilla."
+    header:                "📚 **Komennot** (yhteensä {total}, sivu {page}/{total_pages})"
+    nav_prev:              "`/commands {page}` ← edellinen"
+    nav_next:              "seuraava → `/commands {page}`"
+    out_of_range:          "_(Pyydetty sivu {requested} oli alueen ulkopuolella, näytetään sivu {page}.)_"
+
+  compress:
+    not_enough:            "Ei tarpeeksi keskustelua tiivistettäväksi (tarvitaan vähintään 4 viestiä)."
+    no_provider:           "Palveluntarjoajaa ei ole määritetty — tiivistäminen ei onnistu."
+    nothing_to_do:         "Ei vielä tiivistettävää (litterointi on yhä kokonaan suojattua kontekstia)."
+    focus_line:            "Kohde: \"{topic}\""
+    summary_failed:        "⚠️ Yhteenvedon luonti epäonnistui ({error}). {count} aiempaa viestiä poistettiin ja korvattiin paikkamerkillä; aiempaa kontekstia ei voi enää palauttaa. Tarkista auxiliary.compression-mallin asetukset."
+    aborted:               "⚠️ Tiivistäminen keskeytettiin ({error}). Yhtään viestiä ei pudotettu — keskustelu on ennallaan. Suorita /compress yrittääksesi uudelleen, /reset puhtaaseen istuntoon tai tarkista auxiliary.compression-mallin asetukset."
+    aux_failed:            "ℹ️ Määritetty tiivistysmoduuli `{model}` epäonnistui ({error}). Palautettu päämallilla — konteksti on ehjä — mutta voit tarkistaa `auxiliary.compression.model` -asetuksen tiedostosta config.yaml."
+    failed:                "Tiivistäminen epäonnistui: {error}"
+
+  debug:
+    upload_failed:         "✗ Virheenkorjausraportin lataaminen epäonnistui: {error}"
+    header:                "**Virheenkorjausraportti ladattu:**"
+    auto_delete:           "⏱ Liitokset poistetaan automaattisesti 6 tunnin kuluttua."
+    full_logs_hint:        "Jos haluat ladata täydet lokit, käytä komentoa `centurion debug share` CLI:ssä."
+    share_hint:            "Jaa nämä linkit Centurion-tiimille tukea varten."
+
+  deny:
+    stale:                 "❌ Komento hylätty (hyväksyntä oli vanhentunut)."
+    no_pending:            "Ei hylättävää odottavaa komentoa."
+    denied_singular:       "❌ Komento hylätty."
+    denied_plural:         "❌ Komennot hylätty ({count} komentoa)."
+
+  fast:
+    not_supported:         "⚡ /fast on saatavilla vain OpenAI-malleille, jotka tukevat Priority Processing -toimintoa."
+    status:                "⚡ Priority Processing\n\nNykyinen tila: `{mode}`\n\n_Käyttö:_ `/fast <normal|fast|status>`"
+    unknown_arg:           "⚠️ Tuntematon argumentti: `{arg}`\n\n**Kelvolliset vaihtoehdot:** normal, fast, status"
+    saved:                 "⚡ ✓ Priority Processing: **{label}** (tallennettu asetuksiin)\n_(astuu voimaan seuraavassa viestissä)_"
+    session_only:          "⚡ ✓ Priority Processing: **{label}** (vain tämä istunto)"
+    label_fast:            "FAST"
+    label_normal:          "NORMAL"
+    status_fast:           "fast"
+    status_normal:         "normal"
+
+  footer:
+    status:                "📎 Ajon aikainen alatunniste: **{state}**\nKentät: `{fields}`\nAlusta: `{platform}`"
+    usage:                 "Käyttö: `/footer [on|off|status]`"
+    saved:                 "📎 Ajon aikainen alatunniste: **{state}**{example}\n_(tallennettu globaalisti — astuu voimaan seuraavassa viestissä)_"
+    example_line:          "\nEsimerkki: `{preview}`"
+    state_on:              "ON"
+    state_off:             "OFF"
+
+  goal:
+    unavailable:           "Tavoitteet eivät ole käytettävissä tässä istunnossa."
+    no_goal_set:           "Tavoitetta ei ole asetettu."
+    paused:                "⏸ Tavoite keskeytetty: {goal}"
+    no_resume:             "Ei tavoitetta, jota jatkaa."
+    resumed:               "▶ Tavoite jatkuu: {goal}\nLähetä mikä tahansa viesti jatkaaksesi tai odota — otan seuraavan askeleen seuraavalla vuorolla."
+    invalid:               "Virheellinen tavoite: {error}"
+    set:                   "⊙ Tavoite asetettu ({budget} vuoron budjetti): {goal}\nJatkan työtä, kunnes tavoite on valmis, sinä keskeytät/tyhjennät sen tai budjetti loppuu.\nOhjaimet: /goal status · /goal pause · /goal resume · /goal clear"
+
+  help:
+    header:                "📖 **Centurion-komennot**\n"
+    skill_header:          "\n⚡ **Taitokomennot** ({count} aktiivista):"
+    more_use_commands:     "\n... ja {count} lisää. Käytä `/commands` saadaksesi täyden sivutetun luettelon."
+
+  insights:
+    invalid_days:          "Virheellinen --days-arvo: {value}"
+    error:                 "Virhe oivallusten luonnissa: {error}"
+
+  kanban:
+    error_prefix:          "⚠ kanban-virhe: {error}"
+    subscribed_suffix:     "(tilattu — sinulle ilmoitetaan, kun {task_id} valmistuu tai estyy)"
+    truncated_suffix:      "… (katkaistu; käytä `centurion kanban …` päätteessä saadaksesi täyden tulosteen)"
+    no_output:             "(ei tulostetta)"
+
+  personality:
+    none_configured:       "Persoonallisuuksia ei ole määritetty tiedostossa `{path}/config.yaml`"
+    header:                "🎭 **Saatavilla olevat persoonallisuudet**\n"
+    none_option:           "• `none` — (ei persoonallisuuspeittoa)"
+    item:                  "• `{name}` — {preview}"
+    usage:                 "\nKäyttö: `/personality <name>`"
+    save_failed:           "⚠️ Persoonallisuuden muutoksen tallentaminen epäonnistui: {error}"
+    cleared:               "🎭 Persoonallisuus tyhjennetty — käytetään agentin peruskäyttäytymistä.\n_(astuu voimaan seuraavassa viestissä)_"
+    set_to:                "🎭 Persoonallisuudeksi asetettu **{name}**\n_(astuu voimaan seuraavassa viestissä)_"
+    unknown:               "Tuntematon persoonallisuus: `{name}`\n\nSaatavilla: {available}"
+
+  profile:
+    header:                "👤 **Profiili:** `{profile}`"
+    home:                  "📂 **Kotihakemisto:** `{home}`"
+
+  reasoning:
+    level_default:             "medium (oletus)"
+    level_disabled:            "none (pois käytöstä)"
+    scope_session:             "istuntokohtainen ohitus"
+    scope_global:              "globaali asetus"
+    status:                    "🧠 **Päättelyasetukset**\n\n**Teho:** `{level}`\n**Laajuus:** {scope}\n**Näyttö:** {display}\n\n_Käyttö:_ `/reasoning <none|minimal|low|medium|high|xhigh|reset|show|hide> [--global]`"
+    display_on:                "päällä ✓"
+    display_off:               "pois"
+    display_set_on:            "🧠 ✓ Päättelyn näyttö: **PÄÄLLÄ**\nMallin ajattelu näytetään ennen jokaista vastausta alustalla **{platform}**."
+    display_set_off:           "🧠 ✓ Päättelyn näyttö: **POIS** alustalla **{platform}**"
+    reset_global_unsupported:  "⚠️ `/reasoning reset --global` ei ole tuettu. Muuta globaalia oletusta komennolla `/reasoning <level> --global`."
+    reset_done:                "🧠 ✓ Istunnon päättelyohitus tyhjennetty; palataan globaaliin asetukseen."
+    unknown_arg:               "⚠️ Tuntematon argumentti: `{arg}`\n\n**Kelvolliset tasot:** none, minimal, low, medium, high, xhigh\n**Näyttö:** show, hide\n**Säilytys:** lisää `--global` tallentaaksesi tämän istunnon ulkopuolelle"
+    set_global:                "🧠 ✓ Päättelytehoksi asetettu `{effort}` (tallennettu asetuksiin)\n_(astuu voimaan seuraavassa viestissä)_"
+    set_global_save_failed:    "🧠 ✓ Päättelytehoksi asetettu `{effort}` (vain istunto — asetusten tallennus epäonnistui)\n_(astuu voimaan seuraavassa viestissä)_"
+    set_session:               "🧠 ✓ Päättelytehoksi asetettu `{effort}` (vain istunto — lisää `--global` säilyttääksesi)\n_(astuu voimaan seuraavassa viestissä)_"
+
+  reload_mcp:
+    cancelled:             "🟡 /reload-mcp peruutettu. MCP-työkalut ennallaan."
+    always_followup:       "ℹ️ Tulevat `/reload-mcp`-kutsut suoritetaan ilman vahvistusta. Ota uudelleen käyttöön asetuksella `approvals.mcp_reload_confirm: true` tiedostossa config.yaml."
+    confirm_prompt:        "⚠️ **Vahvista /reload-mcp**\n\nMCP-palvelimien uudelleenlataus rakentaa työkalusarjan uudelleen tälle istunnolle ja **mitätöi palveluntarjoajan kehotevälimuistin** — seuraava viesti lähettää kaikki syötetokenit uudelleen. Pitkän kontekstin tai raskaan päättelyn malleilla tämä voi olla kallista.\n\nValitse:\n• **Hyväksy kerran** — lataa nyt\n• **Hyväksy aina** — lataa nyt ja vaienna tämä kehote pysyvästi\n• **Peruuta** — jätä MCP-työkalut ennalleen\n\n_Tekstivaihtoehto: vastaa `/approve`, `/always` tai `/cancel`._"
+    header:                "🔄 **MCP-palvelimet ladattu uudelleen**\n"
+    reconnected:           "♻️ Yhdistetty uudelleen: {names}"
+    added:                 "➕ Lisätty: {names}"
+    removed:               "➖ Poistettu: {names}"
+    none_connected:        "Ei yhdistettyjä MCP-palvelimia."
+    tools_available:       "\n🔧 {tools} työkalua saatavilla {servers} palvelimelta"
+    failed:                "❌ MCP-uudelleenlataus epäonnistui: {error}"
+
+  reload_skills:
+    header:                "🔄 **Taidot ladattu uudelleen**\n"
+    no_new:                "Uusia taitoja ei havaittu."
+    total:                 "\n📚 {count} taitoa saatavilla"
+    added_header:          "➕ **Lisätyt taidot:**"
+    removed_header:        "➖ **Poistetut taidot:**"
+    item_with_desc:        "    - {name}: {desc}"
+    item_no_desc:          "    - {name}"
+    failed:                "❌ Taitojen uudelleenlataus epäonnistui: {error}"
+
+  reset:
+    header_default:        "✨ Istunto nollattu! Aloitetaan puhtaalta pöydältä."
+    header_new:            "✨ Uusi istunto aloitettu!"
+    header_titled:         "✨ Uusi istunto aloitettu: {title}"
+    title_rejected:        "\n⚠️ Otsikko hylätty: {error}"
+    title_error_untitled:  "\n⚠️ {error} — istunto aloitettiin ilman otsikkoa."
+    title_empty_untitled:  "\n⚠️ Otsikko on tyhjä puhdistuksen jälkeen — istunto aloitettiin ilman otsikkoa."
+    tip:                   "\n✦ Vinkki: {tip}"
+
+  restart:
+    in_progress:           "⏳ Yhdyskäytävän uudelleenkäynnistys on jo käynnissä..."
+    restarting:            "♻ Käynnistetään yhdyskäytävää uudelleen. Jos et saa ilmoitusta 60 sekunnin kuluessa, käynnistä konsolista komennolla `centurion gateway restart`."
+
+  resume:
+    db_unavailable:        "Istuntotietokanta ei ole käytettävissä."
+    no_named_sessions:     "Nimettyjä istuntoja ei löytynyt.\nKäytä `/title Oma Istunto` nimetäksesi nykyisen istunnon ja palaa siihen myöhemmin komennolla `/resume Oma Istunto`."
+    list_header:           "📋 **Nimetyt istunnot**\n"
+    list_item:             "• **{title}**{preview_part}"
+    list_item_numbered:    "{index}. **{title}**{preview_part}"
+    list_preview_suffix:   " — _{preview}_"
+    list_footer:           "\nKäyttö: `/resume <session name>`"
+    list_footer_numbered:  "\nKäyttö: `/resume <session name>` tai `/resume <number>` (esim. `/resume 1` uusin)"
+    list_failed:           "Istuntojen luettelointi epäonnistui: {error}"
+    out_of_range:          "Jatkoindeksi {index} on alueen ulkopuolella.\nKäytä `/resume` ilman argumentteja nähdäksesi saatavilla olevat istunnot."
+    not_found:             "Istuntoa '**{name}**' ei löytynyt.\nKäytä `/resume` ilman argumentteja nähdäksesi saatavilla olevat istunnot."
+    already_on:            "📌 Olet jo istunnossa **{name}**."
+    switch_failed:         "Istunnon vaihtaminen epäonnistui."
+    resumed_one:           "↻ Istunto **{title}** jatkettu ({count} viesti). Keskustelu palautettu."
+    resumed_many:          "↻ Istunto **{title}** jatkettu ({count} viestiä). Keskustelu palautettu."
+    resumed_no_count:      "↻ Istunto **{title}** jatkettu. Keskustelu palautettu."
+
+  retry:
+    no_previous:           "Ei aiempaa viestiä, jota yrittää uudelleen."
+
+  rollback:
+    not_enabled:           "Tarkistuspisteet eivät ole käytössä.\nOta käyttöön tiedostossa config.yaml:\n```\ncheckpoints:\n  enabled: true\n```"
+    none_found:            "Tarkistuspisteitä ei löytynyt polulle {cwd}"
+    invalid_number:        "Virheellinen tarkistuspisteen numero. Käytä 1-{max}."
+    restored:              "✅ Palautettu tarkistuspisteeseen {hash}: {reason}\nPalautusta edeltävä tilannekuva tallennettiin automaattisesti."
+    restore_failed:        "❌ {error}"
+
+  set_home:
+    save_failed:           "Kotikanavan tallentaminen epäonnistui: {error}"
+    success:               "✅ Kotikanavaksi asetettu **{name}** (tunnus: {chat_id}).\nCron-työt ja alustojen väliset viestit toimitetaan tänne."
+
+  status:
+    header:                "📊 **Centurion-yhdyskäytävän tila**"
+    session_id:            "**Istuntotunnus:** `{session_id}`"
+    title:                 "**Otsikko:** {title}"
+    created:               "**Luotu:** {timestamp}"
+    last_activity:         "**Viimeisin toiminta:** {timestamp}"
+    tokens:                "**Tokenit:** {tokens}"
+    agent_running:         "**Agentti käynnissä:** {state}"
+    state_yes:             "Kyllä ⚡"
+    state_no:              "Ei"
+    queued:                "**Jonossa olevat jatkoviestit:** {count}"
+    platforms:             "**Yhdistetyt alustat:** {platforms}"
+
+  stop:
+    stopped_pending:       "⚡ Pysäytetty. Agentti ei ollut vielä aloittanut — voit jatkaa tätä istuntoa."
+    stopped:               "⚡ Pysäytetty. Voit jatkaa tätä istuntoa."
+    no_active:             "Ei pysäytettävää aktiivista tehtävää."
+
+  title:
+    db_unavailable:        "Istuntotietokanta ei ole käytettävissä."
+    warn_prefix:           "⚠️ {error}"
+    empty_after_clean:     "⚠️ Otsikko on tyhjä puhdistuksen jälkeen. Käytä tulostettavia merkkejä."
+    set_to:                "✏️ Istunnon otsikko asetettu: **{title}**"
+    not_found:             "Istuntoa ei löytynyt tietokannasta."
+    current_with_title:    "📌 Istunto: `{session_id}`\nOtsikko: **{title}**"
+    current_no_title:      "📌 Istunto: `{session_id}`\nOtsikkoa ei ole asetettu. Käyttö: `/title Oma Istunto`"
+
+  topic:
+    not_telegram_dm:         "/topic-komento on saatavilla vain Telegramin yksityiskeskusteluissa."
+    no_session_db:           "Istuntotietokanta ei ole käytettävissä."
+    unauthorized:            "Sinulla ei ole oikeuksia käyttää /topic-komentoa tässä botissa."
+    restore_needs_topic:     "Palauttaaksesi istunnon luo tai avaa ensin Telegram-aihe ja lähetä sitten /topic <session-id> kyseiseen aiheeseen. Luodaksesi uuden aiheen avaa Kaikki viestit ja lähetä sinne mikä tahansa viesti."
+    topics_disabled:         "Telegram-aiheet eivät ole vielä käytössä tässä botissa.\n\nNäin otat ne käyttöön:\n1. Avaa @BotFather.\n2. Valitse bottisi.\n3. Avaa Bot Settings → Threads Settings.\n4. Kytke Threaded Mode päälle ja varmista, että käyttäjät saavat luoda uusia ketjuja.\n\nLähetä sen jälkeen /topic uudelleen."
+    topics_user_disallowed:  "Telegram-aiheet on otettu käyttöön, mutta käyttäjät eivät saa luoda aiheita.\n\nAvaa @BotFather → valitse bottisi → Bot Settings → Threads Settings ja poista käytöstä 'Disallow users to create new threads'.\n\nLähetä sen jälkeen /topic uudelleen."
+    enable_failed:           "Telegram-aihetilan käyttöönotto epäonnistui: {error}"
+    bound_status:            "Tämä aihe on linkitetty:\nIstunto: {label}\nTunnus: {session_id}\n\nKorvaa tämä aihe uudella istunnolla komennolla /new.\nRinnakkaista työtä varten avaa Kaikki viestit ja lähetä sinne viesti luodaksesi toisen aiheen."
+    thread_ready:            "Telegramin moni-istuntotilat on otettu käyttöön.\n\nTätä aihetta käytetään itsenäisenä Centurion-istuntona. Korvaa tämän aiheen nykyinen istunto komennolla /new. Rinnakkaista työtä varten avaa Kaikki viestit ja lähetä sinne viesti luodaksesi toisen aiheen."
+    untitled_session:        "Nimetön istunto"
+
+  undo:
+    nothing:               "Ei kumottavaa."
+    removed:               "↩️ Kumottu {count} viestiä.\nPoistettu: \"{preview}\""
+
+  update:
+    platform_not_messaging:  "✗ /update on saatavilla vain viestintäalustoilta. Suorita `centurion update` päätteestä."
+    not_git_repo:            "✗ Ei git-varasto — päivitys ei onnistu."
+    centurion_cmd_not_found:    "✗ Komentoa `centurion` ei löytynyt. Centurion on käynnissä, mutta päivityskomento ei löytänyt suoritettavaa tiedostoa PATH-polusta tai nykyisestä Python-tulkkista. Yritä suorittaa `centurion update` manuaalisesti päätteessä."
+    start_failed:            "✗ Päivityksen käynnistys epäonnistui: {error}"
+    starting:                "⚕ Aloitetaan Centurion-päivitys… Striimaan edistymisen tänne."
+
+  usage:
+    rate_limits:              "⏱️ **Nopeusrajoitukset:** {state}"
+    header_session:           "📊 **Istunnon token-käyttö**"
+    label_model:              "Malli: `{model}`"
+    label_input_tokens:       "Syötetokenit: {count}"
+    label_cache_read:         "Välimuistin lukutokenit: {count}"
+    label_cache_write:        "Välimuistin kirjoitustokenit: {count}"
+    label_output_tokens:      "Tulostetokenit: {count}"
+    label_total:              "Yhteensä: {count}"
+    label_api_calls:          "API-kutsut: {count}"
+    label_cost:               "Hinta: {prefix}${amount}"
+    label_cost_included:      "Hinta: sisältyy"
+    label_context:            "Konteksti: {used} / {total} ({pct} %)"
+    label_compressions:       "Tiivistykset: {count}"
+    header_session_info:      "📊 **Istunnon tiedot**"
+    label_messages:           "Viestejä: {count}"
+    label_estimated_context:  "Arvioitu konteksti: ~{count} tokenia"
+    detailed_after_first:     "_(Yksityiskohtainen käyttö saatavilla ensimmäisen agenttivastauksen jälkeen)_"
+    no_data:                  "Tälle istunnolle ei ole käyttötietoja."
+
+  verbose:
+    not_enabled:           "`/verbose`-komento ei ole käytössä viestintäalustoilla.\n\nOta se käyttöön tiedostossa `config.yaml`:\n```yaml\ndisplay:\n  tool_progress_command: true\n```"
+    mode_off:              "⚙️ Työkalun edistyminen: **POIS** — työkalutoimintaa ei näytetä."
+    mode_new:              "⚙️ Työkalun edistyminen: **UUSI** — näytetään, kun työkalu vaihtuu (esikatselun pituus: `display.tool_preview_length`, oletus 40)."
+    mode_all:              "⚙️ Työkalun edistyminen: **KAIKKI** — jokainen työkalukutsu näytetään (esikatselun pituus: `display.tool_preview_length`, oletus 40)."
+    mode_verbose:          "⚙️ Työkalun edistyminen: **SANALLINEN** — jokainen työkalukutsu täysine argumentteineen."
+    saved_suffix:          "_(tallennettu alustalle **{platform}** — astuu voimaan seuraavassa viestissä)_"
+    save_failed:           "_(tallentaminen asetuksiin epäonnistui: {error})_"
+
+  voice:
+    enabled_voice_only:    "Äänitila käytössä.\nVastaan äänellä, kun lähetät ääniviestejä.\nKäytä /voice tts saadaksesi äänivastaukset kaikkiin viesteihin."
+    disabled_text:         "Äänitila pois käytöstä. Vastaukset vain tekstinä."
+    tts_enabled:           "Automaattinen TTS käytössä.\nKaikki vastaukset sisältävät ääniviestin."
+    status_mode:           "Äänitila: {label}"
+    status_channel:        "Äänikanava: #{channel}"
+    status_participants:   "Osallistujia: {count}"
+    status_member:         "  - {name}{status}"
+    speaking:              " (puhuu)"
+    enabled_short:         "Äänitila käytössä."
+    disabled_short:        "Äänitila pois käytöstä."
+    label_off:             "Pois (vain teksti)"
+    label_voice_only:      "Päällä (äänivastaus ääniviesteihin)"
+    label_all:             "TTS (äänivastaus kaikkiin viesteihin)"
+
+  yolo:
+    disabled:                   "⚠️ YOLO-tila **POIS** tässä istunnossa — vaaralliset komennot vaativat hyväksynnän."
+    enabled:                    "⚡ YOLO-tila **PÄÄLLÄ** tässä istunnossa — kaikki komennot hyväksytään automaattisesti. Käytä varoen."
+
+  shared:
+    session_db_unavailable:      "Istuntotietokanta ei ole käytettävissä."
+    session_db_unavailable_prefix: "Istuntotietokanta ei ole käytettävissä"
+    session_not_found:           "Istuntoa ei löytynyt tietokannasta."
+    warn_passthrough:            "⚠️ {error}"
