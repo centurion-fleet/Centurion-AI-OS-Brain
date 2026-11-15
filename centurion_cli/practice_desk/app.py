@@ -38,6 +38,7 @@ import mimetypes
 import os
 import secrets
 import socket
+from urllib.parse import urlsplit
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,6 +85,7 @@ class Settings:
 
     def __post_init__(self) -> None:
         self.brain_key = resolve_brain_key(self.brain_key)
+        self._check_origin_matches_rp_id()
         if self.practice_library is None:
             try:
                 from centurion_constants import get_centurion_home
@@ -97,6 +99,32 @@ class Settings:
     @property
     def loopback(self) -> bool:
         return self.host in ("127.0.0.1", "::1", "localhost")
+
+    def _check_origin_matches_rp_id(self) -> None:
+        """Refuse a desk the browser will reject at the last click.
+
+        A passkey is bound to an RP ID, and the browser will only register one
+        when the RP ID is the address in the bar or a parent domain of it. If
+        --rp-id and --origin disagree the wizard runs perfectly and then dies
+        on the fingerprint prompt, which is the worst possible moment. This
+        turns that into a refusal at startup.
+        """
+        host = (urlsplit(self.origin).hostname or "").lower()
+        rp = (self.rp_id or "").lower()
+        if not host or not rp:
+            raise ValueError("The desk needs both --origin and --rp-id.")
+        if host == rp or host.endswith("." + rp):
+            return
+        scheme = urlsplit(self.origin).scheme or "http"
+        raise ValueError(
+            f"--rp-id is {self.rp_id!r} but --origin is {self.origin!r}, so the "
+            f"address in the browser ({host}) does not match the name the passkey "
+            f"is bound to. The fingerprint prompt would fail. Use:\n"
+            f"  --origin {scheme}://{rp}"
+            f"{':' + str(urlsplit(self.origin).port) if urlsplit(self.origin).port else ''}"
+            f"  --rp-id {rp}\n"
+            f"…and open exactly that address. Or set --rp-id {host} to match."
+        )
 
 
 @dataclass

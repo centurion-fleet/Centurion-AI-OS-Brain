@@ -315,3 +315,37 @@ def test_the_wizard_shows_the_practice_name_it_was_given(settings):
             await client.close()
 
     run(scenario())
+
+
+# ── the address the browser is on ───────────────────────────────────────────
+# A passkey is bound to an RP ID and the browser only registers one when that
+# ID is the address in the bar or a parent domain of it. A desk configured with
+# a mismatched pair runs the whole wizard and then dies on the fingerprint
+# prompt — the worst possible moment to fail. Refuse at startup instead.
+
+
+def test_a_matching_pair_is_accepted():
+    desk_app.Settings(rp_id="localhost", origin="http://localhost:8765", brain_url="")
+    desk_app.Settings(
+        rp_id="firm.co.uk", origin="https://desk.firm.co.uk", brain_url=""
+    )
+
+
+def test_a_passkey_bound_to_a_different_name_is_refused_before_it_serves():
+    with pytest.raises(ValueError) as refused:
+        # The live-run mistake: served on 127.0.0.1 but bound to "localhost".
+        desk_app.Settings(
+            rp_id="localhost", origin="http://127.0.0.1:9443", brain_url=""
+        )
+    message = str(refused.value)
+    assert "--rp-id" in message and "--origin" in message
+    assert "http://localhost:9443" in message  # tells you the fix, not just the fault
+
+
+def test_a_bare_ip_cannot_be_pretended_into_a_domain_name():
+    with pytest.raises(ValueError):
+        desk_app.Settings(
+            rp_id="192.168.10.109",
+            origin="https://practice.firm.local:9443",
+            brain_url="",
+        )
