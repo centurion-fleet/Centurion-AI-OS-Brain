@@ -266,3 +266,42 @@ class TestOverHTTP:
         assert body["features"]["passkey_signin"] is True
         assert body["features"]["roles"] == ["owner", "admin", "member"]
         assert body["endpoints"]["identity_signin"]["path"] == "/api/identity/signin"
+
+
+class TestHardwareKeys:
+    """A YubiKey that only does a touch cannot verify a user.
+
+    The knob is the owner's, not the library's: a phone wants a fingerprint, a
+    blue Security Key can only offer presence. What must never happen is the
+    Brain accepting a ceremony it did not ask for.
+    """
+
+    @pytest.mark.asyncio
+    async def test_by_default_a_passkey_must_prove_a_person(self, store, monkeypatch):
+        monkeypatch.delenv("CENTURION_PASSKEY_UV", raising=False)
+        made = _make_adapter()
+        monkeypatch.setattr(made, "_identity", lambda: store)
+        async with TestClient(TestServer(_create_app(made))) as client:
+            body = await (await client.post(
+                "/api/identity/claim", json={"name": "Adrian", "email": "adrian@example.com"}
+            )).json()
+        assert body["options"]["authenticatorSelection"]["userVerification"] == "required"
+
+    @pytest.mark.asyncio
+    async def test_a_touch_only_key_can_be_allowed_on_purpose(self, store, monkeypatch):
+        monkeypatch.setenv("CENTURION_PASSKEY_UV", "preferred")
+        made = _make_adapter()
+        monkeypatch.setattr(made, "_identity", lambda: store)
+        async with TestClient(TestServer(_create_app(made))) as client:
+            body = await (await client.post(
+                "/api/identity/claim", json={"name": "Adrian", "email": "adrian@example.com"}
+            )).json()
+            options = await (await client.post("/api/identity/signin/options")).json()
+        assert body["options"]["authenticatorSelection"]["userVerification"] == "preferred"
+        assert options["options"]["userVerification"] == "preferred"
+
+    @pytest.mark.asyncio
+    async def test_a_nonsense_setting_falls_back_to_the_strict_one(self, store, monkeypatch):
+        monkeypatch.setenv("CENTURION_PASSKEY_UV", "whatever")
+        made = _make_adapter()
+        assert made._passkey_uv == "required"

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Centurion · Desk</title>
+<style>
+  :root{
+    --void:#0c0e11; --plate:#14171c; --line:#262a31; --ink:#efeae1; --dim:#948f86;
+    --bronze:#b08d57; --bronze-dim:#7d6440; --bad:#c4675c; --good:#7fa87a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    background:var(--void); color:var(--ink); min-height:100vh; padding:28px 18px 40px;
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; justify-content:center;
+  }
+  .card{width:100%; max-width:560px}
+  .mark{font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--bronze); margin-bottom:26px}
+  h1{font-size:clamp(26px,6vw,34px); line-height:1.12; letter-spacing:-.02em; font-weight:600;
+    margin-bottom:10px}
+  .lede{color:var(--dim); margin-bottom:26px}
+  label{display:block; font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--dim); margin:0 0 7px}
+  input{
+    width:100%; background:var(--plate); border:1px solid var(--line); color:var(--ink);
+    padding:13px 14px; border-radius:2px; font-size:16px; margin-bottom:16px;
+  }
+  input:focus{outline:none; border-color:var(--bronze-dim)}
+  button{
+    width:100%; background:var(--bronze); color:#12100c; border:0; border-radius:2px;
+    padding:14px 16px; font-size:15px; font-weight:600; cursor:pointer; margin-bottom:10px;
+  }
+  button:disabled{opacity:.5; cursor:default}
+  button.ghost{background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500}
+  .note{font-size:13px; color:var(--dim); margin-top:14px}
+  .err{color:var(--bad); font-size:13px; margin-top:12px; min-height:18px}
+  .step{display:none} .step.on{display:block}
+  .who{display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:22px}
+  .who b{font-weight:600} .who span{color:var(--dim); font-size:13px}
+  .thread{min-height:120px; margin-bottom:16px}
+  .msg{margin-bottom:16px; white-space:pre-wrap; word-break:break-word}
+  .msg.me{color:var(--dim)} .msg.me::before{content:"you · "; color:var(--bronze-dim)}
+  .msg.ai::before{content:"centurion · "; color:var(--bronze); font-size:12px;
+    letter-spacing:.1em; text-transform:uppercase}
+  textarea{width:100%; background:var(--plate); border:1px solid var(--line); color:var(--ink);
+    padding:13px 14px; border-radius:2px; font:inherit; resize:vertical; min-height:74px}
+  textarea:focus{outline:none; border-color:var(--bronze-dim)}
+  .row{display:flex; gap:10px; margin-top:10px} .row button{margin:0}
+  .kbd{font:12px/1.4 ui-monospace,Menlo,monospace; color:var(--dim); background:var(--plate);
+    border:1px solid var(--line); border-radius:2px; padding:2px 6px}
+  @media (max-width:430px){ body{padding:22px 15px 32px} }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="mark">Centurion · Desk</div>
+
+  <!-- 1. first run -->
+  <section class="step" id="s-claim">
+    <h1>This is your Brain.</h1>
+    <p class="lede">One person owns this machine. Give it a name to sign with, then touch your key or your fingerprint.</p>
+    <label for="name">Your name</label>
+    <input id="name" autocomplete="name" placeholder="Adrian Barkus">
+    <label for="email">Your email</label>
+    <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+    <button id="claim">Claim this Brain</button>
+    <p class="note">No password is created. The key you touch or the fingerprint you give <em>is</em> the account.</p>
+    <div class="err" id="claim-err"></div>
+  </section>
+
+  <!-- 2. sign in -->
+  <section class="step" id="s-signin">
+    <h1>Welcome back.</h1>
+    <p class="lede">Touch your key or use your fingerprint. There is nothing to type.</p>
+    <button id="signin">Sign in with a passkey</button>
+    <div class="err" id="signin-err"></div>
+  </section>
+
+  <!-- 3. the desk -->
+  <section class="step" id="s-desk">
+    <div class="who"><b id="who-name">—</b><span id="who-role"></span></div>
+    <div class="thread" id="thread">
+      <div class="msg ai">I am here. Ask me anything, and this page — not a messenger — is where the answer arrives.</div>
+    </div>
+    <textarea id="say" placeholder="Ask something…"></textarea>
+    <div class="row">
+      <button id="send">Send</button>
+      <button id="out" class="ghost" style="max-width:130px">Sign out</button>
+    </div>
+    <div class="err" id="desk-err"></div>
+    <p class="note">Fingerprint or key to get in. <span class="kbd">Enter</span> to send, <span class="kbd">Shift+Enter</span> for a new line.</p>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => document.querySelectorAll('.step').forEach((s) => s.classList.toggle('on', s.id === id));
+const TOKEN_KEY = 'desk.session';
+
+function b64urlToBytes(value) {
+  const pad = value.replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(pad + '='.repeat((4 - (pad.length % 4)) % 4));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+function bytesToB64url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let raw = '';
+  for (const b of bytes) raw += String.fromCharCode(b);
+  return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function token() { return localStorage.getItem(TOKEN_KEY) || ''; }
+function bearer() { return token() ? { Authorization: 'Bearer ' + token() } : {}; }
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? bearer() : { 'Content-Type': 'application/json', ...bearer() },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error?.message || data?.error?.code || ('HTTP ' + res.status));
+  return data;
+}
+
+// ── the ceremony ──────────────────────────────────────────────────────────
+async function createPasskey(options, challenge) {
+  const publicKey = {
+    ...options,
+    challenge: b64urlToBytes(options.challenge),
+    user: { ...options.user, id: b64urlToBytes(options.user.id) },
+  };
+  const credential = await navigator.credentials.create({ publicKey });
+  return {
+    challenge,
+    id: credential.id,
+    clientDataJSON: bytesToB64url(credential.response.clientDataJSON),
+    attestationObject: bytesToB64url(credential.response.attestationObject),
+    transports: credential.response.getTransports ? credential.response.getTransports() : [],
+  };
+}
+
+async function getPasskey(options, challenge) {
+  const publicKey = { ...options, challenge: b64urlToBytes(options.challenge) };
+  const assertion = await navigator.credentials.get({ publicKey });
+  return {
+    challenge,
+    id: assertion.id,
+    clientDataJSON: bytesToB64url(assertion.response.clientDataJSON),
+    authenticatorData: bytesToB64url(assertion.response.authenticatorData),
+    signature: bytesToB64url(assertion.response.signature),
+  };
+}
+
+// ── claim ─────────────────────────────────────────────────────────────────
+$('claim').addEventListener('click', async () => {
+  const button = $('claim');
+  button.disabled = true;
+  $('claim-err').textContent = '';
+  try {
+    if (!window.PublicKeyCredential) throw new Error('This browser cannot do passkeys. Use Firefox or Chrome.');
+    const started = await api('/api/identity/claim', {
+      name: $('name').value.trim(), email: $('email').value.trim(),
+    });
+    $('claim-err').textContent = 'Touch your key now…';
+    const credential = await createPasskey(started.options, started.challenge);
+    const done = await api('/api/identity/register', credential);
+    localStorage.setItem(TOKEN_KEY, done.token);
+    greet(done.person);
+  } catch (err) {
+    $('claim-err').textContent = readable(err);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// ── sign in ───────────────────────────────────────────────────────────────
+$('signin').addEventListener('click', async () => {
+  const button = $('signin');
+  button.disabled = true;
+  $('signin-err').textContent = '';
+  try {
+    const started = await api('/api/identity/signin/options', {});
+    const assertion = await getPasskey(started.options, started.challenge);
+    const done = await api('/api/identity/signin', assertion);
+    localStorage.setItem(TOKEN_KEY, done.token);
+    greet(done.person);
+  } catch (err) {
+    $('signin-err').textContent = readable(err);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('out').addEventListener('click', async () => {
+  try { await api('/api/identity/signout', {}); } catch (e) {}
+  localStorage.removeItem(TOKEN_KEY);
+  show('s-signin');
+});
+
+function readable(err) {
+  const message = String(err && err.message || err);
+  if (/not allowed|timed out|abort/i.test(message)) return 'That was cancelled. Try again when you are ready.';
+  if (/PIN/i.test(message)) return 'Your key wants its PIN. Set one in Yubico Authenticator if it has none.';
+  return message;
+}
+
+function greet(person) {
+  $('who-name').textContent = person.name;
+  $('who-role').textContent = person.role;
+  show('s-desk');
+  $('say').focus();
+}
+
+// ── talking to the Brain ──────────────────────────────────────────────────
+async function send() {
+  const text = $('say').value.trim();
+  if (!text) return;
+  const thread = $('thread');
+  thread.insertAdjacentHTML('beforeend', '<div class="msg me"></div>');
+  thread.lastElementChild.textContent = text;
+  $('say').value = '';
+  $('send').disabled = true;
+  $('desk-err').textContent = '';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg ai';
+  bubble.textContent = '';
+  thread.appendChild(bubble);
+
+  try {
+    const res = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...bearer() },
+      body: JSON.stringify({ model: 'centurion-os', stream: true,
+        messages: [{ role: 'user', content: text }] }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const chunk = JSON.parse(payload);
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          if (delta) { bubble.textContent += delta; thread.scrollIntoView({ block: 'end' }); }
+        } catch (e) { /* keep-alive frames */ }
+      }
+    }
+    if (!bubble.textContent) bubble.textContent = '(no reply)';
+  } catch (err) {
+    bubble.textContent = '';
+    $('desk-err').textContent = readable(err);
+  } finally {
+    $('send').disabled = false;
+    $('say').focus();
+  }
+}
+$('send').addEventListener('click', send);
+$('say').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+// ── where do we start? ────────────────────────────────────────────────────
+(async () => {
+  try {
+    const state = await api('/api/identity');
+    if (state.me) return greet(state.me);
+    show(state.claimed ? 's-signin' : 's-claim');
+  } catch (err) {
+    show('s-signin');
+    $('signin-err').textContent = readable(err);
+  }
+})();
+</script>
+</body>
+</html>

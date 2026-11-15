@@ -406,7 +406,7 @@ def verify_assertion(
 
 def registration_options(
     *, rp_id: str, rp_name: str, challenge: bytes, user_id: bytes, user_name: str,
-    display_name: str,
+    display_name: str, user_verification: str = "required",
 ) -> Dict[str, Any]:
     return {
         "challenge": b64url_encode(challenge),
@@ -424,10 +424,14 @@ def registration_options(
         "attestation": "none",
         # residentKey=required is the passkey form: the credential lives on the
         # device so a user does not have to type an email to be recognised.
+        # userVerification decides whether a fingerprint and a PIN on a phone are
+        # demanded, or whether the presence of a hardware key is enough. A
+        # blue Security Key cannot verify a user at all; a YubiKey 5 can, once a
+        # FIDO2 PIN is set. The Brain decides, not this function.
         "authenticatorSelection": {
             "residentKey": "required",
             "requireResidentKey": True,
-            "userVerification": "required",
+            "userVerification": user_verification,
         },
         "excludeCredentials": [],
     }

@@ -538,7 +538,7 @@ def _b64url(raw: bytes) -> str:
 # reimplemented here: one implementation, tested once, used by the Brain and by
 # anything else that puts a person in front of a passkey prompt.
 
-def _registration_options(*, rp_id: str, challenge: bytes, person) -> Dict[str, Any]:
+def _registration_options(*, rp_id: str, challenge: bytes, person, user_verification: str = "required") -> Dict[str, Any]:
     from centurion_identity import webauthn
 
     return webauthn.registration_options(
@@ -548,16 +548,19 @@ def _registration_options(*, rp_id: str, challenge: bytes, person) -> Dict[str, 
         user_id=person.id.encode(),
         user_name=person.email,
         display_name=person.name,
+        user_verification=user_verification,
     )
 
 
-def _assertion_options(*, rp_id: str, challenge: bytes) -> Dict[str, Any]:
+def _assertion_options(*, rp_id: str, challenge: bytes, user_verification: str = "required") -> Dict[str, Any]:
     from centurion_identity import webauthn
 
-    return webauthn.assertion_options(rp_id=rp_id, challenge=challenge, allow_ids=[])
+    return webauthn.assertion_options(
+        rp_id=rp_id, challenge=challenge, allow_ids=[], user_verification=user_verification
+    )
 
 
-def _verify_registration(*, body, expected_challenge, expected_origin, rp_id):
+def _verify_registration(*, body, expected_challenge, expected_origin, rp_id, require_user_verification=True):
     from centurion_identity import webauthn
 
     return webauthn.verify_registration(
@@ -566,11 +569,13 @@ def _verify_registration(*, body, expected_challenge, expected_origin, rp_id):
         expected_challenge=expected_challenge,
         expected_origin=expected_origin,
         rp_id=rp_id,
+        require_user_verification=require_user_verification,
     )
 
 
 def _verify_assertion(
-    *, body, stored_public_key, stored_sign_count, expected_challenge, expected_origin, rp_id
+    *, body, stored_public_key, stored_sign_count, expected_challenge, expected_origin, rp_id,
+    require_user_verification=True,
 ):
     from centurion_identity import webauthn
 
@@ -583,6 +588,7 @@ def _verify_assertion(
         expected_challenge=expected_challenge,
         expected_origin=expected_origin,
         rp_id=rp_id,
+        require_user_verification=require_user_verification,
     )
 
 
@@ -772,6 +778,13 @@ class APIServerAdapter(BasePlatformAdapter):
         self._session_db: Optional[Any] = None  # Lazy-init SessionDB for session continuity
         self._identity_store: Optional[Any] = None  # Lazy-init IdentityStore (who is asking)
         self._ceremonies: Dict[str, Dict[str, Any]] = {}  # in-flight passkey ceremonies
+        # How much a passkey must prove it is a person and not just a thing.
+        # "required" — a fingerprint or a FIDO2 PIN (every phone, YubiKey 5 with
+        # a PIN set). "preferred" — a hardware key that only does a touch is
+        # accepted, which is what a blue Security Key can offer. The Brain's
+        # owner decides; the default is the stricter one.
+        uv = (os.environ.get("CENTURION_PASSKEY_UV") or "required").strip().lower()
+        self._passkey_uv = uv if uv in ("required", "preferred", "discouraged") else "required"
 
     @staticmethod
     def _parse_cors_origins(value: Any) -> tuple[str, ...]:
@@ -1579,7 +1592,10 @@ class APIServerAdapter(BasePlatformAdapter):
                 "person": person.public(),
                 "challenge": handle,
                 "options": _registration_options(
-                    rp_id=self._brain_rp_id(request), challenge=challenge, person=person
+                    rp_id=self._brain_rp_id(request),
+                    challenge=challenge,
+                    person=person,
+                    user_verification=self._passkey_uv,
                 ),
             }
         )
@@ -1618,6 +1634,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 expected_challenge=ceremony["challenge"],
                 expected_origin=self._brain_origin(request),
                 rp_id=self._brain_rp_id(request),
+                require_user_verification=self._passkey_uv == "required",
             )
         except Exception as exc:  # noqa: BLE001
             store.note_refusal(person.id, f"register: {exc}")
@@ -1663,7 +1680,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 "ok": True,
                 "challenge": handle,
                 "options": _assertion_options(
-                    rp_id=self._brain_rp_id(request), challenge=challenge
+                    rp_id=self._brain_rp_id(request),
+                    challenge=challenge,
+                    user_verification=self._passkey_uv,
                 ),
             }
         )
@@ -1718,6 +1737,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 expected_challenge=ceremony["challenge"],
                 expected_origin=self._brain_origin(request),
                 rp_id=self._brain_rp_id(request),
+                require_user_verification=self._passkey_uv == "required",
             )
         except Exception as exc:  # noqa: BLE001
             store.note_refusal(person.id, f"signin: {exc}")
