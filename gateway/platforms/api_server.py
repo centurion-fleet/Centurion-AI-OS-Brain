@@ -521,6 +521,20 @@ def _openai_error(message: str, err_type: str = "invalid_request_error", param: 
     }
 
 
+# A transcript is for reading, not for carrying a 2 MB tool dump into a phone
+# over a slow link. Anything longer than this is cut and marked as cut, because
+# a silently shortened quote is worse than an obviously shortened one.
+_MAX_TRANSCRIPT_CHARS = 4000
+
+
+def _title_from_preview(preview: Optional[str]) -> str:
+    """A thread with no title still needs a name in a list."""
+    text = " ".join((preview or "").split())
+    if not text:
+        return "Untitled"
+    return text[:60] + ("…" if len(text) > 60 else "")
+
+
 if AIOHTTP_AVAILABLE:
     @web.middleware
     async def body_limit_middleware(request, handler):
@@ -1295,6 +1309,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 "approval_events": True,
                 "session_continuity_header": "X-Centurion-Session-Id",
                 "session_key_header": "X-Centurion-Session-Key",
+                "threads": True,
+                "thread_transcript": True,
+                "client_served_by_brain": True,
                 "cors": bool(self._cors_origins),
             },
             "endpoints": {
@@ -1308,8 +1325,161 @@ class APIServerAdapter(BasePlatformAdapter):
                 "run_events": {"method": "GET", "path": "/v1/runs/{run_id}/events"},
                 "run_approval": {"method": "POST", "path": "/v1/runs/{run_id}/approval"},
                 "run_stop": {"method": "POST", "path": "/v1/runs/{run_id}/stop"},
+                "threads": {"method": "GET", "path": "/api/threads"},
+                "thread": {"method": "GET", "path": "/api/threads/{session_id}"},
+                "client": {"method": "GET", "path": "/desk"},
             },
         })
+
+    # ── threads: reopening a conversation ───────────────────────────────────
+    # A messenger shows you today's conversation and forgets the rest. A client
+    # that is the product has to reopen yesterday, so the transcript is part of
+    # the contract, not a debug view.
+
+    async def _handle_threads(self, request: "web.Request") -> "web.Response":
+        """GET /api/threads — the conversations this Brain holds, most recent first."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        try:
+            limit = max(1, min(int(request.query.get("limit", 30)), 200))
+            offset = max(0, int(request.query.get("offset", 0)))
+        except (TypeError, ValueError):
+            return web.json_response(_openai_error("limit and offset must be integers"), status=400)
+
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(
+                _openai_error("Session store unavailable on this host", code="session_db_unavailable"),
+                status=503,
+            )
+
+        rows = db.list_sessions_rich(
+            limit=limit, offset=offset, order_by_last_active=True
+        )
+        return web.json_response(
+            {
+                "object": "list",
+                "threads": [
+                    {
+                        "id": row.get("id"),
+                        "title": row.get("title") or _title_from_preview(row.get("preview")),
+                        "size_of_conversation": row.get("message_count") or 0,
+                        "started_at": row.get("started_at"),
+                        "last_active": row.get("last_active"),
+                        "preview": row.get("preview") or "",
+                        "source": row.get("source") or "",
+                    }
+                    for row in rows
+                ],
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+
+    async def _handle_thread(self, request: "web.Request") -> "web.Response":
+        """GET /api/threads/{session_id} — one transcript, so a client can reopen it."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        requested = request.match_info["session_id"].strip()
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(
+                _openai_error("Session store unavailable on this host", code="session_db_unavailable"),
+                status=503,
+            )
+
+        session_id = requested
+        if not db.get_session(session_id):
+            # A client that holds a prefix from a link should still land.
+            session_id = db.resolve_session_id(requested) or ""
+        if not session_id:
+            return web.json_response(
+                _openai_error(f"No such thread: {requested}", code="thread_not_found"),
+                status=404,
+            )
+
+        messages = db.get_messages(session_id)
+        try:
+            limit = max(1, min(int(request.query.get("limit", 500)), 2000))
+        except (TypeError, ValueError):
+            limit = 500
+        window = messages[-limit:]
+
+        out = []
+        for msg in window:
+            content = msg.get("content")
+            if not isinstance(content, str):
+                content = json.dumps(content, ensure_ascii=False) if content is not None else ""
+            truncated = len(content) > _MAX_TRANSCRIPT_CHARS
+            out.append(
+                {
+                    "id": msg.get("id"),
+                    "role": msg.get("role"),
+                    "content": content[:_MAX_TRANSCRIPT_CHARS],
+                    "truncated": truncated,
+                    "created_at": msg.get("created_at") or msg.get("timestamp"),
+                    "tool_calls": [
+                        call.get("function", {}).get("name")
+                        for call in (msg.get("tool_calls") or [])
+                        if isinstance(call, dict)
+                    ],
+                }
+            )
+
+        return web.json_response(
+            {
+                "id": session_id,
+                "title": db.get_session_title(session_id) or "",
+                "size_of_conversation": len(messages),
+                "messages": out,
+                "returned": len(out),
+                "truncated": len(messages) > len(out),
+            }
+        )
+
+    async def _handle_desk_static(self, request: "web.Request") -> "web.Response":
+        """Serve the web client from the Brain itself.
+
+        The client is not hosted anywhere. That is the whole sovereignty point:
+        the page that talks to a customer's Brain is delivered by that Brain,
+        and taking it away is not something a third party can do.
+        """
+        root = Path(
+            os.environ.get("CENTURION_WEB_CLIENT_DIR", "")
+            or (Path(__file__).resolve().parent.parent.parent / "brain" / "desk" / "dist")
+        )
+        if not root.is_dir():
+            return web.json_response(
+                _openai_error(
+                    "No web client is built on this Brain yet. Expected a build at "
+                    f"{root} or CENTURION_WEB_CLIENT_DIR.",
+                    code="client_not_built",
+                ),
+                status=503,
+            )
+
+        relative = request.match_info.get("path", "") or "index.html"
+        target = (root / relative).resolve()
+        try:
+            target.relative_to(root.resolve())
+        except ValueError:
+            return web.json_response(_openai_error("Invalid path"), status=400)
+
+        if target.is_dir():
+            target = target / "index.html"
+        if not target.is_file():
+            # A single-page client owns its own routes; hand it index.html and
+            # let it decide, rather than 404 on every refresh.
+            target = root.resolve() / "index.html"
+            if not target.is_file():
+                return web.json_response(_openai_error("Not found"), status=404)
+
+        headers = {"Cache-Control": "no-cache"}
+        return web.FileResponse(target, headers=headers)
 
     async def _handle_chat_completions(self, request: "web.Request") -> "web.Response":
         """POST /v1/chat/completions — OpenAI Chat Completions format."""
@@ -3705,6 +3875,13 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/v1/health", self._handle_health)
             self._app.router.add_get("/v1/models", self._handle_models)
             self._app.router.add_get("/v1/capabilities", self._handle_capabilities)
+            # The client's own surface. Threads so a conversation can be
+            # reopened, and the client itself served from the Brain so no third
+            # party is between a customer and their own machine.
+            self._app.router.add_get("/api/threads", self._handle_threads)
+            self._app.router.add_get("/api/threads/{session_id}", self._handle_thread)
+            self._app.router.add_get("/desk", self._handle_desk_static)
+            self._app.router.add_get("/desk/{path:.*}", self._handle_desk_static)
             self._app.router.add_post("/v1/chat/completions", self._handle_chat_completions)
             self._app.router.add_post("/v1/responses", self._handle_responses)
             self._app.router.add_get("/v1/responses/{response_id}", self._handle_get_response)
