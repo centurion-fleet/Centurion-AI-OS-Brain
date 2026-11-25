@@ -8,12 +8,13 @@ body:
       value: |
         Sorry you're having trouble! Please fill out the details below so we can help.
 
+        **This form is for a reproducible installation or configuration defect** — a step that fails, an error traceback, an installer that stops. It is not a support desk: questions already answered in the docs may be closed with a link to the answer.
+
         **Quick checks first:**
         - Run `centurion debug share` and paste the links in the Debug Report section below
         - If you're in a chat session, you can use `/debug` instead — it does the same thing
         - Try `centurion update` to get the latest version
-        - Check the [README troubleshooting section](https://github.com/centurion-fleet/Centurion-AI-OS#troubleshooting)
-        - For general questions, consider the [Centurion support](https://www.1human1ai.com) for faster help
+        - Check the [README troubleshooting section](https://github.com/centurion-fleet/Centurion-AI-OS-Brain#troubleshooting)
 
   - type: textarea
     id: description

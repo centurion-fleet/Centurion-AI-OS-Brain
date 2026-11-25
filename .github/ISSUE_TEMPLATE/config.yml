@@ -1,11 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: 💬 Centurion Fleet Discord
-    url: https://www.1human1ai.com
-    about: For quick questions, showcasing projects, sharing skills, and community chat.
   - name: 📖 Documentation
-    url: https://github.com/centurion-fleet/Centurion-AI-OS/blob/main/README.md
-    about: Check the README and docs before opening an issue.
+    url: https://github.com/centurion-fleet/Centurion-AI-OS-Brain/tree/main/website/docs
+    about: Installation, configuration, tools, skills and troubleshooting. Check here before opening an issue — the answer is often already written.
   - name: 🤝 Contributing Guide
-    url: https://github.com/centurion-fleet/Centurion-AI-OS/blob/main/CONTRIBUTING.md
-    about: Read this before submitting a PR.
+    url: https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/CONTRIBUTING.md
+    about: Read the Scope section before opening a pull request. Core behaviour needs an agreed issue first.
+  - name: 💬 Centurion website
+    url: https://www.1human1ai.com
+    about: What Centurion is, the paid editions, and how to get in touch about an install. Issues here are for the open-source Brain, not customer support.

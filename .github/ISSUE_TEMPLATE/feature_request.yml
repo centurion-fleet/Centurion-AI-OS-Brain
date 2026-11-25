@@ -8,8 +8,9 @@ body:
       value: |
         Thanks for the suggestion! Before submitting, please consider:
 
-        - **Is this a new skill?** Most capabilities should be [skills, not tools](https://github.com/centurion-fleet/Centurion-AI-OS/blob/main/CONTRIBUTING.md#should-it-be-a-skill-or-a-tool). If it's a specialized integration (crypto, NFT, niche SaaS), it belongs on the Skills Hub, not bundled.
-        - **Search [existing issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues)** — someone may have already proposed this.
+        - **Is this a new skill?** Most capabilities should be [skills, not tools](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/CONTRIBUTING.md#should-it-be-a-skill-or-a-tool). If it's a specialized integration (crypto, NFT, niche SaaS), it belongs on the Skills Hub, not bundled.
+        - **Search [existing issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues)** — someone may have already proposed this.
+        - **Read the [Scope section](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/CONTRIBUTING.md#scope-what-we-take-and-what-this-tracker-is-not).** A feature request is a proposal, not a promise, and a pull request for core behaviour should follow an agreed issue rather than arrive with it.
 
   - type: textarea
     id: problem

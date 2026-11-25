@@ -4,6 +4,57 @@ Thank you for contributing to Centurion AI OS! This guide covers everything you 
 
 ---
 
+## Scope: What We Take, and What This Tracker Is Not
+
+This project is open source and genuinely welcomes help. It also has one maintainer who holds the whole architecture in context, so the boundary is stated plainly here rather than discovered by having a weekend's work closed.
+
+### Send it without asking first
+
+- **Bug reports** — crashes, wrong behaviour, data loss, security issues.
+- **Portability fixes** — the distro, architecture, locale, container or WSL2 setup where Centurion does not run for you.
+- **Documentation and examples** — anything that cost you an hour to work out.
+- **Skills** — in `optional-skills/`, or as a standalone repo in the Skills Hub.
+- **Tests** — coverage for behaviour that already exists.
+
+### Talk to us first — open an issue, not a PR
+
+- Changes to the agent loop, tool dispatch, session store, prompt construction or memory.
+- New core tools, toolsets or platform adapters.
+- Changes to config schema, on-disk layout or the public CLI surface.
+- Refactors that cross more than one subsystem.
+- Anything that looks like it belongs on the roadmap.
+
+This is not gatekeeping. The core is a few hundred interacting behaviours, and a large pull request arriving unannounced costs more to review than to write. A paragraph in an issue costs you five minutes and tells you whether the shape you have in mind is the shape we want — before you have spent the weekend on it.
+
+### What this tracker is not
+
+**GitHub Issues is not a support desk.** It is a record of reproducible defects and design proposals.
+
+If you are stuck installing or configuring Centurion, the order is: the README, then the [documentation](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/tree/main/website/docs), then the setup template. A question already answered in the docs may be closed with a link to the answer. That is not rudeness — it is the only thing that keeps the tracker searchable.
+
+If you bought an install, a sector pack or a Team deployment, your support runs through that agreement. It does not run through GitHub, and GitHub is not where it is tracked.
+
+### If you run Centurion every day
+
+The contribution we want most is not code. It is a person who uses the thing daily telling us precisely where it fails. If that is you: open issues that reproduce, argue with the design decisions in them, and say what you actually needed. That is worth more than a feature PR.
+
+---
+
+## How We Triage
+
+Every new issue and pull request is read at least once a day. What happens to it:
+
+1. **Reproduced.** If it reproduces, it gets a label and a priority and stays open.
+2. **Confirmed.** If the shape needs agreeing first, we say so in the issue rather than letting it sit unanswered.
+3. **Closed with a reason.** Duplicate, out of scope, or not reproducible — closed with one sentence saying which. Nothing is closed silently.
+4. **Escalated for a ruling.** Anything touching core behaviour gets a decision from the maintainer, and the ruling is written into the issue so the reasoning is public.
+
+An issue waiting on information from you is labelled `needs-info` and closed after 30 days. One comment reopens it — nothing is lost, and it costs you nothing to come back.
+
+Being read within a day is a commitment. **When** a fix ships is not. This is one maintainer and a roadmap, not a service level. If you need a date, ask for one in the issue and you will get an honest "not soon" rather than a hopeful one.
+
+---
+
 ## Contribution Priorities
 
 We value contributions in this order:
@@ -45,7 +96,7 @@ Bundled skills (in `skills/`) ship with every Centurion AI OS install. They shou
 
 If your skill is official and useful but not universally needed (e.g., a paid service integration, a heavyweight dependency), put it in **`optional-skills/`** — it ships with the repo but isn't activated by default. Users can discover it via `centurion skills browse` (labeled "official") and install it with `centurion skills install` (no third-party warning, builtin trust).
 
-If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — upload it to a skills registry and share it in the [project issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues). Users can install it with `centurion skills install`.
+If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — upload it to a skills registry and share it in the [project issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues). Users can install it with `centurion skills install`.
 
 ---
 
@@ -901,22 +952,25 @@ test(tools): add unit tests for file_operations
 
 ## Reporting Issues
 
-- Use [GitHub Issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues)
+- Use [GitHub Issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues)
 - Include: OS, Python version, Centurion AI OS version (`centurion version`), full error traceback
 - Include steps to reproduce
 - Check existing issues before creating duplicates
 - For security vulnerabilities, please report privately
+- Please read [Scope](#scope-what-we-take-and-what-this-tracker-is-not) first — issues are for reproducible defects and design proposals, not installation support
 
 ---
 
 ## Community
 
-- **Issues**: [github.com/centurion-fleet/Centurion-AI-OS/issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues) — for questions, showcasing projects, and sharing skills
-- **GitHub Discussions**: For design proposals and architecture discussions
-- **Skills Hub**: Upload specialized skills to a registry and share them with the community
+- **Issues**: [github.com/centurion-fleet/Centurion-AI-OS-Brain/issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues) — reproducible defects and design proposals
+- **Discussions**: design proposals, architecture arguments, and showing what you built with it
+- **Skills Hub**: upload specialized skills to a registry and share them with the community
 
 ---
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+Centurion AI OS is licensed under the [GNU Affero General Public License v3.0](LICENSE). By contributing, you agree that your contributions are licensed under the same terms.
+
+We also ask first-time contributors to sign the [Contributor Licence Agreement](CLA.md). It does not take any rights you would not already give under the AGPL — it lets the project offer commercial terms alongside the open licence, which is how the work gets funded. Read it before you send a pull request; if any part of it is unclear, ask in the pull request and it will be explained.
