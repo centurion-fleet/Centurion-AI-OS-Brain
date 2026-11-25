@@ -13,7 +13,7 @@ edition = "2024"
 # PROPRIETARY — see the LICENSE file at the repo root. SPDX has no stock
 # identifier for proprietary software; LicenseRef-Proprietary is the
 # correct form. Do not revert to an OSI identifier.
-license = "LicenseRef-Proprietary"
+license = "AGPL-3.0-or-later"
 rust-version = "1.85"
 
 [workspace.lints.rust]

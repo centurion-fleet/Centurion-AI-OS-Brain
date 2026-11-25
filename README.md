@@ -186,4 +186,17 @@ centurion              # start chatting
 
 ---
 
-Built on open-source agent infrastructure. MIT — see [LICENSE](LICENSE).
+## Licence
+
+Centurion AI OS — Brain is free software, licensed under the **GNU Affero General
+Public License v3.0 or later** (AGPL-3.0-or-later). See [LICENSE](LICENSE) for the
+full text and [NOTICE](NOTICE) for the copyright and dual-licensing statement.
+
+In plain terms: run it, read it, change it, host it for your own use, redistribute
+it. If you run a modified version as a network service for other people, the AGPL
+requires you to offer them the corresponding source.
+
+Centurion **Practice** — the multi-seat commercial edition — is a separate,
+proprietary product and is not covered by this licence.
+
+Contributions are welcome and accepted under the [Contributor Licence Agreement](CLA.md).

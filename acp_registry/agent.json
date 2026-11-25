@@ -8,7 +8,7 @@
   "authors": [
     "Centurion Fleet"
   ],
-  "license": "Proprietary",
+  "license": "AGPL-3.0-or-later",
   "distribution": {
     "uvx": {
       "package": "centurionai-os[acp]==7.1.0",

@@ -9,11 +9,14 @@ description = "Centurion AI OS — The self-improving sovereign AI agent that ru
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Centurion Fleet" }]
-# PROPRIETARY — see the LICENSE file ("All rights reserved / PROPRIETARY AND
-# CONFIDENTIAL"). Centurion AI OS is NOT an open-source grant. Do not
-# reintroduce an OSI identifier here: the package metadata is what a
-# downstream consumer is entitled to rely on.
-license = { text = "Proprietary" }
+classifiers = [
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Programming Language :: Python :: 3",
+]
+# AGPL-3.0-or-later — see LICENSE. The Brain is free software; Centurion
+# Practice (multi-seat) is licensed separately. The identifier here is what a
+# downstream consumer is entitled to rely on, so it must match LICENSE exactly.
+license = { text = "AGPL-3.0-or-later" }
 dependencies = [
   # Core — every direct dep is exact-pinned to ==X.Y.Z (no ranges).
   # Rationale: ranges allow PyPI to ship a fresh version of a transitive
