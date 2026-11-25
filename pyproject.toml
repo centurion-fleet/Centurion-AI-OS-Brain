@@ -8,7 +8,9 @@ version = "7.1.0"
 description = "Centurion AI OS — The self-improving sovereign AI agent that runs on your own hardware"
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [{ name = "Centurion Fleet" }]
+authors = [
+  { name = "Adrian Barkus", email = "hello@adrianbarkus.com" },
+]
 classifiers = [
   "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Programming Language :: Python :: 3",

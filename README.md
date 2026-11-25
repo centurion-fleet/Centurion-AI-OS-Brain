@@ -14,8 +14,12 @@
 # Centurion AI OS
 
 <p align="center">
-  <a href="https://github.com/centurion-fleet/Centurion-AI-OS"><img src="https://img.shields.io/badge/Docs-Centurion%20AI%20OS-FFD700?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://github.com/centurion-fleet/Centurion-AI-OS/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain"><img src="https://img.shields.io/badge/Docs-Centurion%20AI%20OS-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge" alt="License: AGPL-3.0-or-later"></a>
+</p>
+
+<p align="center">
+  Created and maintained by <a href="https://github.com/TheSpaceFox"><b>Adrian Barkus</b></a> &middot; <a href="https://adrianbarkus.com">adrianbarkus.com</a>
 </p>
 
 **Centurion AI OS** is the self-improving sovereign AI agent — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on your own hardware, a $5 VPS, or a GPU cluster. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
@@ -39,17 +43,17 @@ Use any model you want — [OpenRouter](https://openrouter.ai) (200+ models), [N
 ### Linux, macOS, WSL2, Termux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS-Brain/main/scripts/install.sh | bash
 ```
 
 ### Windows (native, PowerShell) — Early Beta
 
-> **Heads up:** Native Windows support is **early beta**. It installs and runs, but hasn't been road-tested as broadly as our Linux/macOS/WSL2 paths. Please [file issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues) when you hit rough edges. For the most battle-tested Windows setup today, run the Linux/macOS one-liner above inside **WSL2**.
+> **Heads up:** Native Windows support is **early beta**. It installs and runs, but hasn't been road-tested as broadly as our Linux/macOS/WSL2 paths. Please [file issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues) when you hit rough edges. For the most battle-tested Windows setup today, run the Linux/macOS one-liner above inside **WSL2**.
 
 Run this in PowerShell:
 
 ```powershell
-iex (irm https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS/main/scripts/install.ps1)
+iex (irm https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS-Brain/main/scripts/install.ps1)
 ```
 
 The installer handles everything: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **and a portable Git Bash** (MinGit, unpacked to `%LOCALAPPDATA%\centurion\git` — no admin required). Centurion AI OS uses this bundled Git Bash to run shell commands.
@@ -167,8 +171,8 @@ We welcome contributions!
 Quick start for contributors:
 
 ```bash
-git clone https://github.com/centurion-fleet/Centurion-AI-OS.git
-cd Centurion-AI-OS
+git clone https://github.com/centurion-fleet/Centurion-AI-OS-Brain.git
+cd Centurion-AI-OS-Brain
 uv venv .venv --python 3.11
 source .venv/bin/activate
 uv pip install -e ".[all,dev]"
@@ -181,7 +185,7 @@ centurion              # start chatting
 ## Community
 
 - 📚 [Skills Hub](https://agentskills.io)
-- 🐛 [Issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues)
+- 🐛 [Issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues)
 - 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for agent hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
 
 ---

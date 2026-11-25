@@ -1,10 +1,8 @@
-# Optional ownership hints for multi-platform client trees.
-# (Uncomment / replace GitHub teams when ready.)
+# Default owner: the founder reviews everything.
+* @TheSpaceFox
 
-# brain/linux/ @centurion/brain-linux
-# brain/macos/ @centurion/brain-macos
-# brain/service/ @centurion/brain-core
-# brain/web-dashboard/ @centurion/brain-core
-# remote/ios/ @centurion/remote-ios
-# remote/android/ @centurion/remote-android
-# shared/ @centurion/brain-core
+# Licence, legal and contributor terms.
+/LICENSE @TheSpaceFox
+/NOTICE @TheSpaceFox
+/CLA.md @TheSpaceFox
+/AUTHORS.md @TheSpaceFox
