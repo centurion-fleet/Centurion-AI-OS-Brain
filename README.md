@@ -14,15 +14,18 @@
 # Centurion AI OS
 
 <p align="center">
-  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain"><img src="https://img.shields.io/badge/Docs-Centurion%20AI%20OS-FFD700?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge" alt="License: AGPL-3.0-or-later"></a>
+  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain"><img src="https://img.shields.io/badge/Download-Linux%20build-FFD700?style=for-the-badge" alt="Download"></a>
+  <a href="https://github.com/centurion-fleet/Centurion-AI-OS-Brain/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-green?style=for-the-badge" alt="License: AGPL-3.0"></a>
+  <a href="https://www.1human1ai.com/download"><img src="https://img.shields.io/badge/Key-free-333?style=for-the-badge" alt="Get a key"></a>
 </p>
 
-<p align="center">
-  Created and maintained by <a href="https://github.com/TheSpaceFox"><b>Adrian Barkus</b></a> &middot; <a href="https://adrianbarkus.com">adrianbarkus.com</a>
-</p>
+**Centurion is a private AI that runs on a machine you own, in a building you control.** It is one agent with a terminal, a memory, a scheduler and a set of messaging channels, and it does the work of a colleague rather than the work of a chat window. Nothing it reads is sent to us: the model API you point it at is your commercial relationship, and your files never leave the machine.
 
-**Centurion AI OS** is the self-improving sovereign AI agent — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on your own hardware, a $5 VPS, or a GPU cluster. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
+This repository is the Brain — the general product. It is free software under **AGPL-3.0**, permanently, with no feature held back and no seat count. Three things are not free and are not in this repository: the sector editions (the trade knowledge and workflows for accountancy and for member associations), the multi-user Team layer, and having a person put it in for you. Those are what [the paid rungs](https://www.1human1ai.com/what-to-buy) buy.
+
+**It runs on Linux.** x86_64, 8 GB of RAM at the floor and 32 GB to be comfortable, 100 GB of disk, no GPU required — a small desktop or a used office PC is the intended machine, and the model is an API call rather than a local weight. The tested path is Fedora; Debian and Ubuntu work and are not yet packaged.
+
+**A key is not required to run it.** The software does not stop working, and it will not ask again if you say no. A key turns on updates, the community, and being helped — [get one free, in one field](https://www.1human1ai.com/key) — and the whole of that arrangement is written out at [the download page](https://www.1human1ai.com/download).
 
 Use any model you want — [OpenRouter](https://openrouter.ai) (200+ models), [NovitaAI](https://novita.ai), [NVIDIA NIM](https://build.nvidia.com), [Xiaomi MiMo](https://platform.xiaomimimo.com), [z.ai/GLM](https://z.ai), [Kimi/Moonshot](https://platform.moonshot.ai), [MiniMax](https://www.minimax.io), [Hugging Face](https://huggingface.co), OpenAI, LM Studio, or your own endpoint. Switch with `centurion model` — no code changes, no lock-in.
 
@@ -38,38 +41,38 @@ Use any model you want — [OpenRouter](https://openrouter.ai) (200+ models), [N
 
 ---
 
-## Quick Install
+## Install
 
-### Linux, macOS, WSL2, Termux
+**Option 1 — the built package.** Download the current release from [Releases](../../releases/latest), check it, install it:
+
+```bash
+sha256sum centurion-brain-*.rpm          # must match the .sha256 file beside it
+sudo dnf install ./centurion-brain-*.rpm
+```
+
+**Option 2 — from source.** The one-liner sets up Python, uv, Node and ripgrep, then installs the agent:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS-Brain/main/scripts/install.sh | bash
 ```
 
-### Windows (native, PowerShell) — Early Beta
-
-> **Heads up:** Native Windows support is **early beta**. It installs and runs, but hasn't been road-tested as broadly as our Linux/macOS/WSL2 paths. Please [file issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues) when you hit rough edges. For the most battle-tested Windows setup today, run the Linux/macOS one-liner above inside **WSL2**.
-
-Run this in PowerShell:
-
-```powershell
-iex (irm https://raw.githubusercontent.com/centurion-fleet/Centurion-AI-OS-Brain/main/scripts/install.ps1)
-```
-
-The installer handles everything: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **and a portable Git Bash** (MinGit, unpacked to `%LOCALAPPDATA%\centurion\git` — no admin required). Centurion AI OS uses this bundled Git Bash to run shell commands.
-
-If you already have Git installed, the installer detects it and uses that instead.  Otherwise a ~45MB MinGit download is all you need — it won't touch or interfere with any system Git.
-
-> **Android / Termux:** See the Termux guide in the docs. On Termux, Centurion AI OS installs a curated `.[termux]` extra because the full `.[all]` extra pulls Android-incompatible voice dependencies.
->
-> **Windows:** Native Windows is **early beta**. Native install lives under `%LOCALAPPDATA%\centurion`; WSL2 installs under `~/.centurion` as on Linux. The browser-based dashboard chat pane currently needs WSL2 (POSIX PTY); classic CLI and gateway run natively on Windows.
-
-After installation:
+Then:
 
 ```bash
-source ~/.bashrc    # reload shell (or: source ~/.zshrc)
-centurion             # start chatting!
+centurion setup     # pick your model provider and paste the API key
+centurion           # start
 ```
+
+Either way, the first thing you do is point it at a model — OpenRouter, Anthropic, OpenAI, a local endpoint, whichever you already pay for. No model is bundled.
+
+---
+
+## The key, the community, the docs
+
+- **The software is free and complete without a key.** Nothing is withheld and nothing expires.
+- **A key turns on three things:** updates as they ship, the community, and being helped by a person. It is free — [one field, thirty seconds](https://www.1human1ai.com/key).
+- **Installation instructions and the FAQ are public** and always will be: [1human1ai.com/install](https://www.1human1ai.com/install).
+- **Questions about the software belong in [Discussions](../../discussions).** A reproducible defect belongs in [Issues](../../issues) — read [CONTRIBUTING.md](CONTRIBUTING.md) first, which says what we take without a discussion and what needs one.
 
 ---
 
@@ -171,8 +174,8 @@ We welcome contributions!
 Quick start for contributors:
 
 ```bash
-git clone https://github.com/centurion-fleet/Centurion-AI-OS-Brain.git
-cd Centurion-AI-OS-Brain
+git clone https://github.com/centurion-fleet/Centurion-AI-OS.git
+cd Centurion-AI-OS
 uv venv .venv --python 3.11
 source .venv/bin/activate
 uv pip install -e ".[all,dev]"
@@ -185,22 +188,9 @@ centurion              # start chatting
 ## Community
 
 - 📚 [Skills Hub](https://agentskills.io)
-- 🐛 [Issues](https://github.com/centurion-fleet/Centurion-AI-OS-Brain/issues)
+- 🐛 [Issues](https://github.com/centurion-fleet/Centurion-AI-OS/issues)
 - 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for agent hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
 
 ---
 
-## Licence
-
-Centurion AI OS — Brain is free software, licensed under the **GNU Affero General
-Public License v3.0 or later** (AGPL-3.0-or-later). See [LICENSE](LICENSE) for the
-full text and [NOTICE](NOTICE) for the copyright and dual-licensing statement.
-
-In plain terms: run it, read it, change it, host it for your own use, redistribute
-it. If you run a modified version as a network service for other people, the AGPL
-requires you to offer them the corresponding source.
-
-Centurion **Practice** — the multi-seat commercial edition — is a separate,
-proprietary product and is not covered by this licence.
-
-Contributions are welcome and accepted under the [Contributor Licence Agreement](CLA.md).
+Built on open-source agent infrastructure. MIT — see [LICENSE](LICENSE).
